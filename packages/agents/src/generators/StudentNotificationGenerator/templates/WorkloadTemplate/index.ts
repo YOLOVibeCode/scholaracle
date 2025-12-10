@@ -1,0 +1,1 @@
+export { WorkloadTemplate } from './WorkloadTemplate';

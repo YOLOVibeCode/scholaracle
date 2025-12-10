@@ -1,0 +1,1 @@
+export { PositiveTemplate } from './PositiveTemplate';

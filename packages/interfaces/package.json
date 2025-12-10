@@ -1,0 +1,21 @@
+{
+  "name": "@scholaracle/interfaces",
+  "version": "1.0.0",
+  "description": "Interface definitions for Scholaracle notification system (ISP)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"No tests for interfaces package\"",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@scholaracle/contracts": "workspace:*"
+  }
+}
+
