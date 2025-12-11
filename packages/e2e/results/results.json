@@ -1,0 +1,2855 @@
+{
+  "config": {
+    "configFile": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/playwright.config.ts",
+    "rootDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+    "forbidOnly": true,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 5,
+    "metadata": {
+      "actualWorkers": 4
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ],
+      [
+        "list",
+        null
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "results/junit.xml"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "results/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "critical",
+        "name": "critical",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/00-critical\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "auth",
+        "name": "auth",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/01-auth\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "dashboard",
+        "name": "dashboard",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/02-dashboard.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "navigation",
+        "name": "navigation",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/03-navigation.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "feature",
+        "name": "feature",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/04-feature.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "integration",
+        "name": "integration",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/05-integration\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "error",
+        "name": "error",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/06-error\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/0[1-4]-.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/0[1-4]-.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      },
+      {
+        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 4
+        },
+        "id": "mobile",
+        "name": "mobile",
+        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "/03-navigation.*\\.spec\\.ts/"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
+    "workers": 4,
+    "webServer": {
+      "command": "pnpm --filter @scholaracle/web dev",
+      "url": "http://localhost:3000",
+      "reuseExistingServer": true,
+      "timeout": 120000,
+      "stdout": "pipe",
+      "stderr": "pipe"
+    }
+  },
+  "suites": [
+    {
+      "title": "00-critical.spec.ts",
+      "file": "00-critical.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@critical Layer 0: Critical Infrastructure",
+          "file": "00-critical.spec.ts",
+          "line": 17,
+          "column": 6,
+          "specs": [
+            {
+              "title": "CRIT-001: App loads without crash",
+              "ok": true,
+              "tags": [
+                "critical"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "critical",
+                  "projectName": "critical",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 710,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-11T19:53:57.444Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4d1f3adcf1fd23d3881d-3148d72a80583a6ce6d7",
+              "file": "00-critical.spec.ts",
+              "line": 20,
+              "column": 7
+            },
+            {
+              "title": "CRIT-002: Login page accessible",
+              "ok": true,
+              "tags": [
+                "critical"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "critical",
+                  "projectName": "critical",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 402,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-11T19:53:58.351Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4d1f3adcf1fd23d3881d-3391e7b671afa291d8ea",
+              "file": "00-critical.spec.ts",
+              "line": 47,
+              "column": 7
+            },
+            {
+              "title": "CRIT-003: API health check",
+              "ok": false,
+              "tags": [
+                "critical"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "critical",
+                  "projectName": "critical",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 312,
+                      "error": {
+                        "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+                        "stack": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:3002\n    at /Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests/00-critical.spec.ts:59:36",
+                        "location": {
+                          "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                          "column": 3002,
+                          "line": 1
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                            "column": 3002,
+                            "line": 1
+                          },
+                          "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:3002\n    at /Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests/00-critical.spec.ts:59:36"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-11T19:53:58.757Z",
+                      "annotations": [],
+                      "attachments": [],
+                      "errorLocation": {
+                        "file": "apiRequestContext.get: connect ECONNREFUSED :",
+                        "column": 3002,
+                        "line": 1
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4d1f3adcf1fd23d3881d-0889747d90f5ee25600e",
+              "file": "00-critical.spec.ts",
+              "line": 56,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "01-auth.spec.ts",
+      "file": "01-auth.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@auth Layer 1: Authentication",
+          "file": "01-auth.spec.ts",
+          "line": 15,
+          "column": 6,
+          "specs": [
+            {
+              "title": "AUTH-001: Parent can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-92ce9551832d645ca2e4",
+              "file": "01-auth.spec.ts",
+              "line": 16,
+              "column": 7
+            },
+            {
+              "title": "AUTH-002: Parent can logout",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-7cba6e490f7ff66af425",
+              "file": "01-auth.spec.ts",
+              "line": 26,
+              "column": 7
+            },
+            {
+              "title": "AUTH-003: Super Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-4fb5fb8ffb478c3a6fcc",
+              "file": "01-auth.spec.ts",
+              "line": 40,
+              "column": 7
+            },
+            {
+              "title": "AUTH-004: Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-45a4e9f90e46b4262ae6",
+              "file": "01-auth.spec.ts",
+              "line": 50,
+              "column": 7
+            },
+            {
+              "title": "AUTH-005: Support can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-02c461fc0c446c09a0c5",
+              "file": "01-auth.spec.ts",
+              "line": 60,
+              "column": 7
+            },
+            {
+              "title": "AUTH-006: Billing can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-f350c0da708ac4795164",
+              "file": "01-auth.spec.ts",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "AUTH-007: Analyst can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-859b075d7c37d2a5a13c",
+              "file": "01-auth.spec.ts",
+              "line": 80,
+              "column": 7
+            },
+            {
+              "title": "AUTH-008: Invalid credentials rejected",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "auth",
+                  "projectName": "auth",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-cb1c4b26f41cc9aa4149",
+              "file": "01-auth.spec.ts",
+              "line": 90,
+              "column": 7
+            },
+            {
+              "title": "AUTH-001: Parent can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-7d1a3eaa56fedd6725b0",
+              "file": "01-auth.spec.ts",
+              "line": 16,
+              "column": 7
+            },
+            {
+              "title": "AUTH-002: Parent can logout",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-342549dca5ed429ab8fb",
+              "file": "01-auth.spec.ts",
+              "line": 26,
+              "column": 7
+            },
+            {
+              "title": "AUTH-003: Super Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-bafed0ce9e4db640abb6",
+              "file": "01-auth.spec.ts",
+              "line": 40,
+              "column": 7
+            },
+            {
+              "title": "AUTH-004: Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-570737a4ad15375208d1",
+              "file": "01-auth.spec.ts",
+              "line": 50,
+              "column": 7
+            },
+            {
+              "title": "AUTH-005: Support can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-673a5a25f12a5532ec36",
+              "file": "01-auth.spec.ts",
+              "line": 60,
+              "column": 7
+            },
+            {
+              "title": "AUTH-006: Billing can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-e4f5d4476daf9972399f",
+              "file": "01-auth.spec.ts",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "AUTH-007: Analyst can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-267198b1d193d668dad3",
+              "file": "01-auth.spec.ts",
+              "line": 80,
+              "column": 7
+            },
+            {
+              "title": "AUTH-008: Invalid credentials rejected",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-f80746e28f2c26b98f70",
+              "file": "01-auth.spec.ts",
+              "line": 90,
+              "column": 7
+            },
+            {
+              "title": "AUTH-001: Parent can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-591ea26056ebb9435e14",
+              "file": "01-auth.spec.ts",
+              "line": 16,
+              "column": 7
+            },
+            {
+              "title": "AUTH-002: Parent can logout",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-657e081a24177ed7d4fe",
+              "file": "01-auth.spec.ts",
+              "line": 26,
+              "column": 7
+            },
+            {
+              "title": "AUTH-003: Super Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-09743fdc64e7e50f8df8",
+              "file": "01-auth.spec.ts",
+              "line": 40,
+              "column": 7
+            },
+            {
+              "title": "AUTH-004: Admin can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-14d8440733f88539f774",
+              "file": "01-auth.spec.ts",
+              "line": 50,
+              "column": 7
+            },
+            {
+              "title": "AUTH-005: Support can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-4a6386dd292951dc141e",
+              "file": "01-auth.spec.ts",
+              "line": 60,
+              "column": 7
+            },
+            {
+              "title": "AUTH-006: Billing can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-1b865a8dd6c93af6c8ed",
+              "file": "01-auth.spec.ts",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "AUTH-007: Analyst can login",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-eb7d7c7cdec98b30365e",
+              "file": "01-auth.spec.ts",
+              "line": 80,
+              "column": 7
+            },
+            {
+              "title": "AUTH-008: Invalid credentials rejected",
+              "ok": true,
+              "tags": [
+                "auth"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "791b3c4e0869e77b2651-483d1456263e1b277123",
+              "file": "01-auth.spec.ts",
+              "line": 90,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "02-dashboard-admin.spec.ts",
+      "file": "02-dashboard-admin.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@dashboard Layer 2: Admin Dashboard Pages",
+          "file": "02-dashboard-admin.spec.ts",
+          "line": 17,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-A-001: Admin Home renders (super_admin)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-33736fc328d522404b2b",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-002: Customers List renders (all roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-be6c80510b0aa2ded91a",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 27,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-003: Customer Detail renders (super_admin)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-f302109b81df0d643b83",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 42,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-004: Payments page renders (billing roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-a47009672fb24f56b043",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 63,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-005: Subscriptions page renders (billing roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-d896d5faf56253865119",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 77,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-006: Communications page renders (support roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-ce8ce0c5a27ba7aecb63",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 91,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-007: Reports page renders (analyst roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-7f570796ae6f330af96e",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 105,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-008: System Settings renders (super_admin only)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-825639ca909fa01b4128",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 119,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-009: Audit Logs renders (super_admin only)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-2562086c5ecc76574ebe",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 127,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-010: Analytics Overview renders (analyst roles)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-8ba466c90427332c5a5e",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 135,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-011: Support cannot access Settings",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-64ab91328ac2fa9aff58",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 150,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-012: Support cannot access Payments",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-1dce1d938ae9fc21a75c",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 155,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-013: Billing cannot access Communications",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-186f38305b4f4501e0a8",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 160,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-014: Analyst cannot access Settings",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-fc9584e74c5e5016b7eb",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 165,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-015: Admin cannot access Settings",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-a564f8e2c7ce8364deb4",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 170,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-016: Admin cannot access Audit Logs",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-921f451516b245bc35dd",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 175,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-017: Billing cannot access Communications",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-607b782ace34bba9394e",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 180,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-018: Analyst can access Payments",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-371dd5ea0d12651518ab",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 185,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-019: Analyst can access Reports",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-ce4a210b468630f30e38",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 190,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-020: Support can access Customers",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "91595cd527973b515e78-3ac4330b6ffb11f63de0",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 195,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "02-dashboard-parent.spec.ts",
+      "file": "02-dashboard-parent.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@dashboard Layer 2: Parent Dashboard Pages",
+          "file": "02-dashboard-parent.spec.ts",
+          "line": 13,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-P-001: Dashboard Home renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-bd606aaa987c91581dd5",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-002: Students List page renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-0875a729e61ce38cdced",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 26,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-003: Add Student page renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-f4609cf916a85d7e999b",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 35,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-004: Student Detail page renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-a1e00d95dd8688c16627",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 44,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-005: Alerts page renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-a8edf0f0f92f2e841b57",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 65,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-006: Settings page renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-94e079a221cd2ac43f81",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 74,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-007: Notification Settings section renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-223f02769a3bcc4faf7d",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 82,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-008: Grade Thresholds section renders",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-fe27553d71749643e929",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 98,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "03-navigation-admin.spec.ts",
+      "file": "03-navigation-admin.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@navigation Layer 3: Admin Navigation",
+          "file": "03-navigation-admin.spec.ts",
+          "line": 16,
+          "column": 6,
+          "specs": [
+            {
+              "title": "NAV-A-001: Dashboard link works (all roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-2d8111c9b609e029ab8c",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 17,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-002: Customers link works (all roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-a6ed2e99342c0b9f09ce",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 31,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-003: Payments link works (billing roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-aac8b9ef87f17927fb22",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 39,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-004: Subscriptions link works (billing roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-2e84f609a200288226ef",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 58,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-005: Communications link works (support roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-eb7b6a7177314cb3836b",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 66,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-006: Reports link works (analyst roles)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-cebdab37a324fc139d43",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 74,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-007: Settings link works (super_admin only)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-f157549b008e424d6982",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 82,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-008: Audit Logs link works (super_admin only)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-452ec7def9cb36339c51",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 95,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-009: Customer detail navigation",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-0a67aee85d68c5ae2a7a",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 108,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-010: Customer detail tabs",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-50454306f748e8736a16",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 121,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-011: Back to customers list",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-ca49a46fc4a0ae27c1e5",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 144,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-012: Quick actions menu",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-2d6b26a7589bb64db9c8",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 168,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-013: Unauthorized redirect (support → settings)",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-5578c304b8e94e32068e",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 184,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-014: Search navigation",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-97656c0eefcb07615271",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 197,
+              "column": 7
+            },
+            {
+              "title": "NAV-A-015: Pagination navigation",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "964aae6494a0f3fb946a-ae9d128585fb64c5a8a1",
+              "file": "03-navigation-admin.spec.ts",
+              "line": 214,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "03-navigation-parent.spec.ts",
+      "file": "03-navigation-parent.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@navigation Layer 3: Parent Navigation",
+          "file": "03-navigation-parent.spec.ts",
+          "line": 13,
+          "column": 6,
+          "specs": [
+            {
+              "title": "NAV-P-001: Dashboard link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-56f33be5f1a64e358942",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-002: Students link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-8fc5761033760cc0a7b8",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 24,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-003: Add Student from empty state",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-bacf8fa2e18989cae836",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 30,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-004: Alerts link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-d8c527557c1e5539ebfd",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 45,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-005: Settings link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-afd591eee792cda227b3",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 51,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-006: Logo navigates home",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-ca072b417a315d396997",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 57,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-007: Logout button visible",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-1b3ffc0fee6dd2cfc80f",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 69,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-008: Back navigation works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-21cf1238e6b192677fdb",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 76,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-009: Student detail back link",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-37a57b8a012a952ab958",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 84,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-010: Breadcrumb navigation",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-e8864237f9ca9e47917a",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 103,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-011: Settings tabs navigation",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-a637941462bd3c3ee6d7",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 116,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-012: Alert filter tabs",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-41bbb5bc581b98b6933d",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 133,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-013: Mobile menu toggle",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-ef91149b270184fc3f4c",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 146,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-014: Mobile nav links work",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-b66a8e7fdb2f668048b7",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 164,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-015: Deep link direct access",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-98857b8978ba01d61f82",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 183,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "04-feature-admin.spec.ts",
+      "file": "04-feature-admin.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@feature Layer 4: Admin Features",
+          "file": "04-feature-admin.spec.ts",
+          "line": 14,
+          "column": 6,
+          "specs": [
+            {
+              "title": "FEAT-A-001: Read customer list",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-c94284f7a959daeb644a",
+              "file": "04-feature-admin.spec.ts",
+              "line": 15,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-002: Search customers",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-98a442cdc9e19e7863c3",
+              "file": "04-feature-admin.spec.ts",
+              "line": 26,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-003: Filter customers by plan",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-897c682043e22a5c72ef",
+              "file": "04-feature-admin.spec.ts",
+              "line": 38,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-004: View customer detail",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-0c0979d84f4c97e2c240",
+              "file": "04-feature-admin.spec.ts",
+              "line": 52,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-005: Suspend customer (super_admin only)",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-c13fdf2a74d7fdf2e5a4",
+              "file": "04-feature-admin.spec.ts",
+              "line": 68,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-006: Unsuspend customer (super_admin only)",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-7138552ce96177ae0095",
+              "file": "04-feature-admin.spec.ts",
+              "line": 98,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-007: Update subscription plan",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-49007befd080330a05fa",
+              "file": "04-feature-admin.spec.ts",
+              "line": 122,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-008: Cancel subscription",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-9584809d081f6f58b1e4",
+              "file": "04-feature-admin.spec.ts",
+              "line": 152,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-009: Issue refund (billing roles)",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-e9f9471e3863c2f2778c",
+              "file": "04-feature-admin.spec.ts",
+              "line": 177,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-010: Create admin note",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-2b47971379ce7a7ac16b",
+              "file": "04-feature-admin.spec.ts",
+              "line": 206,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-011: Update admin note",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-9c2a626ea9fe31fd1385",
+              "file": "04-feature-admin.spec.ts",
+              "line": 241,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-012: Delete admin note",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-ddae1455c8ad996386a7",
+              "file": "04-feature-admin.spec.ts",
+              "line": 274,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-013: Send communication to customer",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-ee3a697b7160234445c6",
+              "file": "04-feature-admin.spec.ts",
+              "line": 304,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-014: Create admin user (super_admin only)",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-11030b929232f87f2047",
+              "file": "04-feature-admin.spec.ts",
+              "line": 330,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-015: Update admin user role",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-c1cfa7727eefd3947125",
+              "file": "04-feature-admin.spec.ts",
+              "line": 356,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "04-feature-parent.spec.ts",
+      "file": "04-feature-parent.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@feature Layer 4: Parent Features",
+          "file": "04-feature-parent.spec.ts",
+          "line": 13,
+          "column": 6,
+          "specs": [
+            {
+              "title": "FEAT-P-001: Create student",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-ffcbe947509b612c6b79",
+              "file": "04-feature-parent.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-002: Read student details",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-de0c73ecf69d431785e2",
+              "file": "04-feature-parent.spec.ts",
+              "line": 35,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-003: Update student",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-17c93a05c20631a1527b",
+              "file": "04-feature-parent.spec.ts",
+              "line": 48,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-004: Delete student",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-b4042c39435662333bc4",
+              "file": "04-feature-parent.spec.ts",
+              "line": 70,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-005: Read alerts",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-27ed68234fe0341f0bea",
+              "file": "04-feature-parent.spec.ts",
+              "line": 100,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-006: Acknowledge alert",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-8983533cf105f0d6a1ae",
+              "file": "04-feature-parent.spec.ts",
+              "line": 108,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-007: Filter alerts by severity",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-ab90ae58c6af2d8de96d",
+              "file": "04-feature-parent.spec.ts",
+              "line": 123,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-008: Update notification preferences",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-4e878fd930087a7011a9",
+              "file": "04-feature-parent.spec.ts",
+              "line": 136,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-009: Update alert thresholds",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-5ada9b28051e60edb4fd",
+              "file": "04-feature-parent.spec.ts",
+              "line": 162,
+              "column": 7
+            },
+            {
+              "title": "FEAT-P-010: Settings persist on reload",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "8f2d2f0df6916081c81a-8d3066cad64ee233152a",
+              "file": "04-feature-parent.spec.ts",
+              "line": 182,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-12-11T19:53:55.109Z",
+    "duration": 4003.459,
+    "expected": 2,
+    "skipped": 107,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

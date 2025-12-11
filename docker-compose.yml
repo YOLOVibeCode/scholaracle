@@ -1,0 +1,133 @@
+version: '3.8'
+
+# ⚠️ PORT POLICY: All ports are FIXED in the 28XX series and MUST NOT be changed.
+# Changing these ports will break E2E tests, CI/CD pipelines, and documentation.
+# Ports: 2800 (Web), 2801 (API), 2802 (MongoDB), 2803 (MailHog SMTP), 2804 (MailHog UI)
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: scholaracle-mongodb
+    restart: unless-stopped
+    ports:
+      - "2802:27017"
+    environment:
+      MONGO_INITDB_DATABASE: scholaracle
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/scholaracle --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - scholaracle-network
+
+  # MailHog - Email Testing Server
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: scholaracle-mailhog
+    restart: unless-stopped
+    ports:
+      - "2803:1025"  # SMTP server
+      - "2804:8025"  # Web UI
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scholaracle-network
+
+  # API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: production
+    container_name: scholaracle-api
+    restart: unless-stopped
+    ports:
+      - "2801:3002"  # Main API port
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      MONGODB_URI: mongodb://mongodb:27017/scholaracle
+      # External MongoDB URI (for host connections)
+      MONGODB_URI_EXTERNAL: mongodb://localhost:2802/scholaracle
+      MONGODB_DB_NAME: scholaracle
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      # Email configuration (using MailHog)
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@scholaracle.local}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Scholaracle}
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      # Twilio (optional)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      # Firebase (optional)
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mailhog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - scholaracle-network
+    volumes:
+      - ./packages/api:/app/packages/api
+      - ./packages/shared:/app/packages/shared
+      - /app/node_modules
+
+  # Web Application (Next.js)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      target: development
+    container_name: scholaracle-web
+    restart: unless-stopped
+    ports:
+      - "2800:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:2801/api
+      PORT: 3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - scholaracle-network
+    volumes:
+      - ./packages/web:/app/packages/web
+      - ./packages/shared:/app/packages/shared
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  scholaracle-network:
+    driver: bridge

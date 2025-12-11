@@ -1,0 +1,1 @@
+export { GradeDropTemplate } from './GradeDropTemplate';

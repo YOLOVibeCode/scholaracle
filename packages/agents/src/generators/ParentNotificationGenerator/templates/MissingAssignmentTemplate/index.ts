@@ -1,0 +1,1 @@
+export { MissingAssignmentTemplate } from './MissingAssignmentTemplate';

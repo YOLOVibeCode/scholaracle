@@ -1,0 +1,32 @@
+# Dockerfile for Web Application (Next.js)
+# Uses BuildKit for better caching and performance
+
+# syntax=docker/dockerfile:1.4
+
+# Base stage - install dependencies
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/web/package.json ./packages/web/
+COPY packages/shared/*/package.json ./packages/shared/*/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Development stage
+FROM base AS development
+COPY . .
+EXPOSE 3000
+CMD ["pnpm", "--filter", "@scholaracle/web", "dev"]
+
+# Production stage
+FROM base AS production
+COPY . .
+RUN pnpm --filter @scholaracle/web build
+EXPOSE 3000
+CMD ["pnpm", "--filter", "@scholaracle/web", "start"]

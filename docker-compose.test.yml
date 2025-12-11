@@ -1,0 +1,87 @@
+# Docker Compose for E2E Testing
+# Runs minimal services needed for testing
+
+version: '3.8'
+
+# ⚠️ PORT POLICY: All ports are FIXED in the 28XX series and MUST NOT be changed.
+# Changing these ports will break E2E tests, CI/CD pipelines, and documentation.
+# Ports: 2801 (API), 2802 (MongoDB), 2803 (MailHog SMTP), 2804 (MailHog UI)
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: scholaracle-mongodb-test
+    ports:
+      - "6802:27017"
+    environment:
+      MONGO_INITDB_DATABASE: scholaracle_test
+    volumes:
+      - mongodb_test_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/scholaracle_test --quiet
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - scholaracle-test-network
+
+  # MailHog - Email Testing Server
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: scholaracle-mailhog-test
+    ports:
+      - "2803:1025"  # SMTP server
+      - "2804:8025"  # Web UI
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - scholaracle-test-network
+
+  # API Server for Testing
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: development
+    container_name: scholaracle-api-test
+    ports:
+      - "2801:3002"  # Main API port
+    environment:
+      NODE_ENV: test
+      PORT: 3002
+      MONGODB_URI: mongodb://mongodb:27017/scholaracle_test
+      MONGODB_URI_EXTERNAL: mongodb://localhost:2802/scholaracle_test
+      MONGODB_DB_NAME: scholaracle_test
+      JWT_SECRET: test-jwt-secret-for-e2e-tests
+      # Use MailHog for email testing
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SENDGRID_FROM_EMAIL: test@scholaracle.local
+      SENDGRID_FROM_NAME: Scholaracle Test
+      SKIP_FIREBASE: "true"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mailhog:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    networks:
+      - scholaracle-test-network
+
+volumes:
+  mongodb_test_data:
+    driver: local
+
+networks:
+  scholaracle-test-network:
+    driver: bridge

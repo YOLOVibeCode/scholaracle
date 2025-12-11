@@ -1,0 +1,138 @@
+import type { Db, Collection } from 'mongodb';
+import { ObjectId } from 'mongodb';
+import {
+  CommunicationLog,
+  type ICommunicationLogData,
+  type CommunicationChannel,
+  type CommunicationStatus,
+  type CommunicationType,
+} from '../../models/CommunicationLog';
+
+export interface ICommunicationLogRepository {
+  create(logData: ICommunicationLogData): Promise<CommunicationLog>;
+  findById(id: string): Promise<CommunicationLog | null>;
+  findByUserId(userId: string): Promise<readonly CommunicationLog[]>;
+  updateDeliveryStatus(id: string, status: CommunicationStatus): Promise<boolean>;
+  filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]>;
+  filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]>;
+}
+
+/**
+ * Repository for CommunicationLog model operations.
+ */
+export class CommunicationLogRepository implements ICommunicationLogRepository {
+  private readonly _collection: Collection<ICommunicationLogData & { _id?: ObjectId }>;
+
+  constructor(database: Db) {
+    this._collection = database.collection<ICommunicationLogData & { _id?: ObjectId }>(
+      'communication_logs'
+    );
+  }
+
+  /**
+   * Create a new communication log entry.
+   *
+   * @param logData - Communication log data
+   * @returns Created log
+   */
+  public async create(logData: ICommunicationLogData): Promise<CommunicationLog> {
+    const document = {
+      ...logData,
+      createdAt: logData.createdAt ?? new Date(),
+    };
+
+    const result = await this._collection.insertOne(document);
+    return new CommunicationLog(document, result.insertedId);
+  }
+
+  /**
+   * Find communication log by ID.
+   *
+   * @param id - Log ID
+   * @returns Log or null if not found
+   */
+  public async findById(id: string): Promise<CommunicationLog | null> {
+    const objectId = new ObjectId(id);
+    const document = await this._collection.findOne({ _id: objectId });
+
+    if (!document || !document._id) {
+      return null;
+    }
+
+    return new CommunicationLog(document, document._id);
+  }
+
+  /**
+   * Find all communication logs for a user.
+   *
+   * @param userId - User ID
+   * @returns Array of logs
+   */
+  public async findByUserId(userId: string): Promise<readonly CommunicationLog[]> {
+    const documents = await this._collection
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return documents.map((doc) => new CommunicationLog(doc, doc._id));
+  }
+
+  /**
+   * Update delivery status of a communication.
+   *
+   * @param id - Log ID
+   * @param status - New status
+   * @returns True if updated, false if not found
+   */
+  public async updateDeliveryStatus(id: string, status: CommunicationStatus): Promise<boolean> {
+    const objectId = new ObjectId(id);
+    const updateDoc: Record<string, unknown> = {
+      status,
+    };
+
+    if (status === 'delivered') {
+      updateDoc['deliveredAt'] = new Date();
+    } else if (status === 'opened') {
+      updateDoc['openedAt'] = new Date();
+    } else if (status === 'clicked') {
+      updateDoc['clickedAt'] = new Date();
+    } else if (status === 'failed') {
+      updateDoc['failedAt'] = new Date();
+    }
+
+    const result = await this._collection.updateOne({ _id: objectId }, { $set: updateDoc });
+
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Filter logs by communication channel.
+   *
+   * @param channel - Channel type
+   * @returns Array of logs
+   */
+  public async filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]> {
+    const documents = await this._collection
+      .find({ channel })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return documents.map((doc) => new CommunicationLog(doc, doc._id));
+  }
+
+  /**
+   * Filter logs by communication type.
+   *
+   * @param type - Communication type
+   * @returns Array of logs
+   */
+  public async filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]> {
+    const documents = await this._collection
+      .find({ type })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return documents.map((doc) => new CommunicationLog(doc, doc._id));
+  }
+}
+

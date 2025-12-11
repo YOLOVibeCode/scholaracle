@@ -1,0 +1,1 @@
+export { TestTemplate } from './TestTemplate';

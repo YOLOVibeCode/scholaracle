@@ -1,0 +1,237 @@
+import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import cors from 'cors';
+import { MongoClient, type Db } from 'mongodb';
+import { healthRouter } from './routes/health';
+import { alertsRouter } from './routes/alerts/alerts';
+import { authRouter } from './routes/auth/auth';
+import { studentsRouter } from './routes/students/students';
+import { alertsApiRouter } from './routes/alerts-api/alerts-api';
+import { settingsRouter } from './routes/settings/settings';
+import { authMiddleware } from './middleware/auth';
+import { AuthService } from '@scholaracle/auth';
+import { adminAuthRouter } from './routes/admin/auth';
+import { customersRouter } from './routes/admin/customers/customers';
+import { analyticsRouter } from './routes/admin/analytics';
+import { reportsRouter } from './routes/admin/reports';
+import { notesRouter } from './routes/admin/notes';
+import { subscriptionsRouter } from './routes/admin/subscriptions';
+import { paymentsRouter } from './routes/admin/payments';
+import { seedRouter } from './routes/seed/seed';
+import { NotificationService } from '@scholaracle/agents';
+import { StudentNotificationGenerator } from '@scholaracle/agents';
+import { ParentNotificationGenerator } from '@scholaracle/agents';
+import { DeliveryRouter } from '@scholaracle/agents';
+import { EmailDelivery } from '@scholaracle/agents';
+import { SMSDelivery } from '@scholaracle/agents';
+import { PushDelivery } from '@scholaracle/agents';
+import { InAppDelivery } from '@scholaracle/agents';
+import { messaging } from 'firebase-admin';
+import type { MailService } from '@sendgrid/mail';
+import type { Twilio } from 'twilio';
+import sgMail from '@sendgrid/mail';
+import twilio from 'twilio';
+
+export interface IServerConfig {
+  readonly port?: number;
+  readonly mongodbUri?: string;
+  readonly mongodbDbName?: string;
+  readonly jwtSecret?: string;
+  readonly sendGridApiKey?: string;
+  readonly sendGridFromEmail?: string;
+  readonly sendGridFromName?: string;
+  readonly twilioAccountSid?: string;
+  readonly twilioAuthToken?: string;
+  readonly twilioFromNumber?: string;
+}
+
+/**
+ * Error handling middleware.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function errorHandler(error: Error, _req: Request, res: Response, _next: NextFunction): void {
+  // eslint-disable-next-line no-console
+  console.error('Error:', error);
+
+  res.status(500).json({
+    success: false,
+    error: error.message ?? 'Internal server error',
+  });
+}
+
+/**
+ * Get SendGrid configuration from config or environment.
+ *
+ * @param config - Server configuration
+ * @returns SendGrid configuration
+ */
+function getSendGridConfig(config: IServerConfig): {
+  readonly apiKey: string;
+  readonly fromEmail: string;
+  readonly fromName: string;
+} {
+  return {
+    apiKey: config.sendGridApiKey ?? process.env['SENDGRID_API_KEY'] ?? '',
+    fromEmail:
+      config.sendGridFromEmail ??
+      process.env['SENDGRID_FROM_EMAIL'] ??
+      'notifications@scholaracle.com',
+    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
+  };
+}
+
+/**
+ * Get Twilio configuration from config or environment.
+ *
+ * @param config - Server configuration
+ * @returns Twilio configuration
+ */
+function getTwilioConfig(config: IServerConfig): {
+  readonly accountSid: string;
+  readonly authToken: string;
+  readonly fromNumber: string;
+} {
+  return {
+    accountSid: config.twilioAccountSid ?? process.env['TWILIO_ACCOUNT_SID'] ?? '',
+    authToken: config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '',
+    fromNumber: config.twilioFromNumber ?? process.env['TWILIO_FROM_NUMBER'] ?? '',
+  };
+}
+
+/**
+ * Initialize notification service with delivery services.
+ *
+ * @param config - Server configuration
+ * @returns Notification service instance
+ */
+function initializeNotificationService(config: IServerConfig): NotificationService {
+  const sendGridConfig = getSendGridConfig(config);
+  const twilioConfig = getTwilioConfig(config);
+
+  const sendGrid = sgMail as unknown as MailService;
+  const twilioClient =
+    twilioConfig.accountSid && twilioConfig.authToken
+      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+      : ({} as unknown as Twilio);
+
+  const emailDelivery = new EmailDelivery(sendGridConfig, sendGrid);
+  const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
+  // PushDelivery is deprecated but still needed for notifications that include push channel
+  // Initialize with empty config and mocked FCM for testing
+  // Firebase is optional - only needed for push notifications (not implemented yet)
+  let fcmMessaging: ReturnType<typeof messaging>;
+  try {
+    fcmMessaging = messaging();
+  } catch {
+    // Firebase not initialized - create a mock messaging instance for testing
+    fcmMessaging = {
+      send: async () => Promise.resolve('mock-message-id'),
+    } as unknown as ReturnType<typeof messaging>;
+  }
+  const pushDelivery = new PushDelivery({ projectId: 'test-project' }, fcmMessaging);
+  const inAppDelivery = new InAppDelivery();
+  const deliveryRouter = new DeliveryRouter([
+    emailDelivery,
+    smsDelivery,
+    pushDelivery,
+    inAppDelivery,
+  ]);
+
+  const studentGenerator = new StudentNotificationGenerator();
+  const parentGenerator = new ParentNotificationGenerator();
+
+  return new NotificationService(studentGenerator, parentGenerator, deliveryRouter);
+}
+
+/**
+ * Initialize MongoDB connection.
+ *
+ * @param config - Server configuration
+ * @returns MongoDB database instance
+ */
+async function initializeDatabase(config: IServerConfig): Promise<Db> {
+  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
+  const dbName = config.mongodbDbName ?? process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
+
+  const client = new MongoClient(mongodbUri);
+  await client.connect();
+
+  return client.db(dbName);
+}
+
+/**
+ * Create Express application with all routes configured.
+ *
+ * @param config - Server configuration
+ * @param database - MongoDB database instance
+ * @returns Express application
+ */
+export function createApp(config: IServerConfig = {}, database?: Db): Express {
+  const app = express();
+
+  app.use(cors());
+  app.use(express.json());
+
+  const notificationService = initializeNotificationService(config);
+
+  app.use('/api/health', healthRouter);
+
+  // Seed endpoint (development/test only)
+  if (database) {
+    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
+    app.use('/api/seed', seedRouter({ database, jwtSecret }));
+  }
+
+  // Legacy alerts route (for notification creation) - POST /api/alerts
+  app.use('/api/alerts', alertsRouter(notificationService));
+
+  if (database) {
+    const authService = new AuthService(database);
+    
+    // User-facing API routes
+    app.use('/api/auth', authRouter({ database }));
+    app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
+    // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
+    app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
+    // Settings API routes
+    app.use('/api/settings', authMiddleware(authService), settingsRouter({ database }));
+    
+    // Admin API routes (separate authentication)
+    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
+    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret }));
+    app.use('/api/admin/customers', customersRouter({ database }));
+    app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
+    app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use('/api/admin/analytics', analyticsRouter({ database }));
+    app.use('/api/admin/reports', reportsRouter({ database }));
+    app.use('/api/admin', notesRouter({ database }));
+  }
+
+  app.use(errorHandler);
+
+  return app;
+}
+
+/**
+ * Start the server.
+ *
+ * @param config - Server configuration
+ */
+export async function startServer(config: IServerConfig = {}): Promise<void> {
+  const database = await initializeDatabase(config);
+  const app = createApp(config, database);
+  const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
+
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Server running on port ${port}`);
+  });
+}
+
+// Start server if this file is run directly
+if (require.main === module) {
+  startServer().catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}

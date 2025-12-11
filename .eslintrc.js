@@ -99,7 +99,80 @@ module.exports = {
     {
       files: ['**/*.test.ts', '**/*.spec.ts'],
       rules: {
-        'max-lines-per-function': 'off'
+        'max-lines-per-function': 'off',
+        '@typescript-eslint/unbound-method': 'off',
+        '@typescript-eslint/naming-convention': [
+          'error',
+          {
+            selector: 'interface',
+            filter: {
+              regex: '^(NotificationData|NotificationAction|DeliveryResult|AlertData)$',
+              match: false
+            },
+            format: ['PascalCase'],
+            prefix: ['I']
+          },
+          {
+            selector: 'interface',
+            filter: {
+              regex: '^(NotificationData|NotificationAction|DeliveryResult|AlertData)$',
+              match: true
+            },
+            format: ['PascalCase']
+          },
+          {
+            selector: 'typeAlias',
+            format: ['PascalCase']
+          },
+          {
+            selector: 'class',
+            format: ['PascalCase']
+          },
+          {
+            selector: 'method',
+            format: ['camelCase']
+          },
+          {
+            selector: 'method',
+            modifiers: ['private'],
+            format: ['camelCase'],
+            leadingUnderscore: 'require'
+          },
+          {
+            selector: 'variable',
+            format: ['camelCase', 'UPPER_CASE'],
+            filter: {
+              regex: '^(result|mock|callArgs)$',
+              match: true
+            }
+          },
+          {
+            selector: 'variable',
+            format: ['camelCase', 'UPPER_CASE']
+          },
+          {
+            selector: 'variable',
+            types: ['boolean'],
+            format: ['PascalCase'],
+            prefix: ['is', 'has', 'should', 'can', 'did', 'will']
+          },
+          {
+            selector: 'parameter',
+            format: ['camelCase'],
+            leadingUnderscore: 'allow'
+          },
+          {
+            selector: 'enum',
+            format: ['PascalCase']
+          },
+          {
+            selector: 'enumMember',
+            format: ['UPPER_CASE']
+          }
+        ],
+        '@typescript-eslint/no-unsafe-assignment': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-argument': 'off'
       }
     }
   ]

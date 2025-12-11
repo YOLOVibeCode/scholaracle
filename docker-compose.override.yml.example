@@ -1,0 +1,26 @@
+# Example override file for local development
+# Copy this to docker-compose.override.yml and customize as needed
+
+version: '3.8'
+
+services:
+  api:
+    environment:
+      # Override with your local SendGrid API key if needed
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      # Use MailHog for local email testing
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    volumes:
+      # Mount source code for hot reload
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+
+  web:
+    environment:
+      # Point to local API
+      NEXT_PUBLIC_API_URL: http://localhost:2801/api
+    volumes:
+      # Mount source code for hot reload
+      - ./packages/web:/app/packages/web
+      - ./packages/shared:/app/packages/shared

@@ -1,0 +1,1 @@
+export { DeadlineTemplate } from './DeadlineTemplate';
