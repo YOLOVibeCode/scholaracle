@@ -1,5 +1,7 @@
 # E2E Fail-Fast Test Pyramid — Implementation Summary
 
+**⚠️ PORT POLICY: All services use FIXED ports (2800-2804). DO NOT change these ports.**
+
 **Status:** ✅ Complete  
 **Date:** December 2024
 
@@ -213,9 +215,11 @@ The following test users must exist in your test database:
 
 ### Environment Setup
 
-1. **Database**: Test database with seeded test users
-2. **API Server**: Running on `http://localhost:3000` (or set `BASE_URL`)
-3. **Web Server**: Next.js app running (auto-started by Playwright)
+1. **Database**: Test database with seeded test users (MongoDB on FIXED port 2802)
+2. **API Server**: Running on `http://localhost:2801` (FIXED PORT - DO NOT CHANGE)
+3. **Web Server**: Next.js app running on `http://localhost:2800` (FIXED PORT - DO NOT CHANGE)
+
+**⚠️ PORT POLICY: All ports are FIXED (2800-2804). See [PORT_POLICY.md](../PORT_POLICY.md) for details.**
 
 ---
 

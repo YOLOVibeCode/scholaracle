@@ -54,6 +54,8 @@ export default function LoginPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
+                data-testid="email-input"
                 type="email"
                 placeholder="name@example.com"
                 value={email}
@@ -66,6 +68,8 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                name="password"
+                data-testid="password-input"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -75,7 +79,7 @@ export default function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading} data-testid="login-button">
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">

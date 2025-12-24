@@ -18,6 +18,7 @@ async function handleGetSubscriptions(
   try {
     const status = req.query['status'] as string | undefined;
     const plan = req.query['plan'] as string | undefined;
+    const userId = req.query['userId'] as string | undefined;
 
     const filter: Record<string, unknown> = {};
     
@@ -26,6 +27,9 @@ async function handleGetSubscriptions(
     }
     if (plan) {
       filter['plan'] = plan;
+    }
+    if (userId) {
+      filter['userId'] = userId;
     }
 
     const subscriptions = await subscriptionRepository.findAll(filter);
@@ -38,8 +42,12 @@ async function handleGetSubscriptions(
         plan: sub.plan,
         status: sub.status,
         billingCycle: sub.billingCycle,
-        currentPeriodEnd: sub.currentPeriodEnd,
-        createdAt: sub.createdAt,
+        currentPeriodStart: sub.currentPeriodStart.toISOString(),
+        currentPeriodEnd: sub.currentPeriodEnd.toISOString(),
+        cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+        canceledAt: sub.cancelledAt?.toISOString(),
+        createdAt: sub.createdAt.toISOString(),
+        updatedAt: sub.updatedAt.toISOString(),
       })),
     });
   } catch (error) {
@@ -252,6 +260,59 @@ async function handleReactivateSubscription(
   }
 }
 
+async function handleExtendTrial(
+  req: Request,
+  res: Response,
+  subscriptionRepository: SubscriptionRepository,
+  auditLogRepository: AuditLogRepository,
+  adminId: string,
+  adminEmail: string
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, error: 'User ID is required' });
+      return;
+    }
+
+    const { days, reason } = req.body as { days?: number; reason?: string };
+    if (!reason) {
+      res.status(400).json({ success: false, error: 'reason is required' });
+      return;
+    }
+    const nDays = Number(days);
+    if (!Number.isFinite(nDays) || nDays <= 0) {
+      res.status(400).json({ success: false, error: 'days must be a positive number' });
+      return;
+    }
+
+    const updated = await subscriptionRepository.extendTrial(id, nDays, adminId, reason);
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Subscription not found or not trialing' });
+      return;
+    }
+
+    await auditLogRepository.create({
+      adminUserId: adminId,
+      adminEmail,
+      action: 'subscription:extend_trial',
+      entityType: 'subscription',
+      entityId: updated._id?.toString() ?? id,
+      reason,
+      metadata: { days: nDays },
+      ipAddress: req.ip ?? 'unknown',
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+    });
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
 export function subscriptionsRouter(config: ISubscriptionsRouterConfig): Router {
   const router = Router();
   const subscriptionRepository = new SubscriptionRepository(config.database);
@@ -296,6 +357,18 @@ export function subscriptionsRouter(config: ISubscriptionsRouterConfig): Router 
   router.post('/:id/reactivate', (req: Request, res: Response) => {
     const authReq = req as IAdminAuthenticatedRequest;
     void handleReactivateSubscription(
+      req,
+      res,
+      subscriptionRepository,
+      auditLogRepository,
+      authReq.adminId!,
+      authReq.adminEmail!
+    );
+  });
+
+  router.post('/:id/extend-trial', (req: Request, res: Response) => {
+    const authReq = req as IAdminAuthenticatedRequest;
+    void handleExtendTrial(
       req,
       res,
       subscriptionRepository,

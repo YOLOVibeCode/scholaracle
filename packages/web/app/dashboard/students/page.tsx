@@ -6,10 +6,13 @@ import { Plus, GraduationCap, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
+import { ConfirmDialog } from '@/components/common';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<readonly IStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void loadStudents();
@@ -28,13 +31,26 @@ export default function StudentsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this student?')) {
-      const success = await studentsApi.delete(id);
+  const handleDeleteClick = (id: string) => {
+    setDeleteStudentId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteStudentId) return;
+    setIsDeleting(true);
+    try {
+      const success = await studentsApi.delete(deleteStudentId);
       if (success) {
         void loadStudents();
       }
+    } finally {
+      setIsDeleting(false);
+      setDeleteStudentId(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteStudentId(null);
   };
 
   return (
@@ -44,7 +60,7 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <Button asChild>
+        <Button asChild data-testid="add-student-button">
           <Link href="/dashboard/students/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Student
@@ -53,16 +69,21 @@ export default function StudentsPage() {
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-gray-600 dark:text-gray-400">Loading students...</div>
+        <div
+          className="text-center py-12 text-gray-600 dark:text-gray-400"
+          data-testid="student-list"
+        >
+          Loading students...
+        </div>
       ) : students.length === 0 ? (
-        <Card>
+        <Card data-testid="empty-state">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <GraduationCap className="h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No students yet</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Get started by adding your first student
             </p>
-            <Button asChild>
+            <Button asChild data-testid="add-student-button">
               <Link href="/dashboard/students/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Student
@@ -71,7 +92,7 @@ export default function StudentsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="student-list">
           {students.map((student) => (
             <Card key={student.id}>
               <CardHeader>
@@ -111,8 +132,8 @@ export default function StudentsPage() {
                   </div>
                 )}
                 <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/students/${student.id}`}>
+                  <Button variant="outline" size="sm" asChild data-testid="edit-student-button">
+                    <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
                       <Edit className="mr-2 h-4 w-4" />
                       Edit
                     </Link>
@@ -120,8 +141,9 @@ export default function StudentsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(student.id)}
+                    onClick={() => handleDeleteClick(student.id)}
                     className="text-red-600 hover:text-red-700"
+                    data-testid="delete-student-button"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
@@ -132,6 +154,17 @@ export default function StudentsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteStudentId !== null}
+        title="Delete Student"
+        description="Are you sure you want to delete this student? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        isSubmitting={isDeleting}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </div>
   );
 }

@@ -32,6 +32,20 @@ export interface IMFASetupResponse {
   readonly error?: string;
 }
 
+export interface IStepUpStartResponse {
+  readonly success: boolean;
+  readonly data?: { stepUpId: string; expiresAt: number };
+  readonly error?: string;
+  readonly code?: string;
+}
+
+export interface IStepUpVerifyResponse {
+  readonly success: boolean;
+  readonly data?: { stepUpToken: string; expiresAt: number };
+  readonly error?: string;
+  readonly code?: string;
+}
+
 /**
  * Admin authentication API client.
  */
@@ -78,6 +92,20 @@ export const adminAuthApi = {
   },
 
   /**
+   * Start a step-up challenge (requires MFA enabled).
+   */
+  async stepUpStart(): Promise<IStepUpStartResponse> {
+    return apiClient.post<IStepUpStartResponse>('/admin/auth/step-up/start', {}, true);
+  },
+
+  /**
+   * Verify a step-up challenge and receive a short-lived step-up token.
+   */
+  async stepUpVerify(stepUpId: string, totpCode: string): Promise<IStepUpVerifyResponse> {
+    return apiClient.post<IStepUpVerifyResponse>('/admin/auth/step-up/verify', { stepUpId, token: totpCode }, true);
+  },
+
+  /**
    * Admin logout.
    */
   async logout(): Promise<void> {
@@ -111,4 +139,5 @@ export const adminAuthApi = {
     return !!this.getToken();
   },
 };
+
 

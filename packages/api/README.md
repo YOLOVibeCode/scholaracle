@@ -2,6 +2,8 @@
 
 API server for Scholaracle built with Express.js and TypeScript.
 
+**⚠️ PORT POLICY: This API server uses FIXED port 2801 (external). DO NOT change this port.**
+
 ## Features
 
 - RESTful API endpoints
@@ -9,6 +11,14 @@ API server for Scholaracle built with Express.js and TypeScript.
 - Notification system integration
 - Error handling middleware
 - Health check endpoint
+
+## Port Configuration
+
+- **External Port**: 2801 (FIXED - DO NOT CHANGE)
+- **Internal Port**: 3002 (container internal)
+- **MongoDB**: mongodb://localhost:2802 (FIXED port)
+
+See [PORT_POLICY.md](../../PORT_POLICY.md) for complete port policy.
 
 ## Development
 

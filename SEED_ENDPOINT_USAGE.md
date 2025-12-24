@@ -1,5 +1,7 @@
 # Seed Endpoint Usage Guide
 
+**⚠️ PORT POLICY: API uses FIXED port 2801. DO NOT change this port.**
+
 ## Overview
 
 The seed endpoint (`POST /api/seed`) scaffolds all test data needed for E2E tests, including:
@@ -26,28 +28,30 @@ POST /api/seed
 ### Basic Seeding (Skip if exists)
 
 ```bash
-curl -X POST http://localhost:3000/api/seed
+curl -X POST http://localhost:2801/api/seed
 ```
 
 ### Force Recreate (Delete and recreate)
 
 ```bash
-curl -X POST "http://localhost:3000/api/seed?force=true"
+curl -X POST "http://localhost:2801/api/seed?force=true"
 ```
+
+**Note:** Port 2801 is FIXED for the API server. Do not change it.
 
 ### Using fetch (JavaScript)
 
 ```javascript
-// Basic seeding
-const response = await fetch('http://localhost:3000/api/seed', {
+// Basic seeding (using FIXED port 2801)
+const response = await fetch('http://localhost:2801/api/seed', {
   method: 'POST',
 });
 
 const result = await response.json();
 console.log(result);
 
-// Force recreate
-const forceResponse = await fetch('http://localhost:3000/api/seed?force=true', {
+// Force recreate (using FIXED port 2801)
+const forceResponse = await fetch('http://localhost:2801/api/seed?force=true', {
   method: 'POST',
 });
 
@@ -153,8 +157,8 @@ console.log(forceResult);
 The seed endpoint should be called before running E2E tests:
 
 ```bash
-# In your E2E test setup or CI/CD pipeline
-curl -X POST http://localhost:3000/api/seed?force=true
+# In your E2E test setup or CI/CD pipeline (using FIXED port 2801)
+curl -X POST http://localhost:2801/api/seed?force=true
 
 # Then run tests
 pnpm --filter @scholaracle/e2e test
@@ -163,13 +167,15 @@ pnpm --filter @scholaracle/e2e test
 Or in Playwright setup:
 
 ```typescript
-// playwright.config.ts or test setup
+// playwright.config.ts or test setup (using FIXED port 2801)
 test.beforeAll(async () => {
-  await fetch('http://localhost:3000/api/seed?force=true', {
+  await fetch('http://localhost:2801/api/seed?force=true', {
     method: 'POST',
   });
 });
 ```
+
+**Note:** Port 2801 is FIXED for the API server. See [PORT_POLICY.md](../PORT_POLICY.md) for details.
 
 ## Error Handling
 

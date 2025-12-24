@@ -1,4 +1,13 @@
-# Scholaracle Implementation Status
+# Scholaracle Implementation Status (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This file reflects an earlier phased implementation plan and is no longer authoritative.
+
+**Use instead:**
+- **Authoritative shipped scope**: `APP_SPECIFICATION.md`
+- **Coverage mapping**: `SPECIFICATION_COVERAGE.md`, `E2E_SPECIFICATION_COVERAGE.md`
+- **Admin spec (for reference)**: `SUPER_ADMIN_DASHBOARD_SPECIFICATION.md`
+
+If you’re looking for “what’s left”, treat anything not in `APP_SPECIFICATION.md` as **out-of-scope** for v1 unless explicitly added.
 
 ## ✅ Completed Phases
 
@@ -174,4 +183,5 @@ This will make all admin endpoints immediately usable!
 - 100% test coverage for implemented features
 - Clean separation of concerns (ISP)
 - Ready for frontend integration once routes are integrated
+
 

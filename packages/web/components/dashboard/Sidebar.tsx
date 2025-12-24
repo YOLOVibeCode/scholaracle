@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +33,11 @@ const menuItems = [
     icon: Bell,
   },
   {
+    title: 'Agenda',
+    url: '/dashboard/agenda',
+    icon: Calendar,
+  },
+  {
     title: 'Courses',
     url: '/dashboard/courses',
     icon: BookOpen,
@@ -59,7 +64,10 @@ export function Sidebar() {
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.url}>
+                      <Link
+                        href={item.url}
+                        data-testid={`sidebar-${item.title.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
                         <item.icon className="mr-2 h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>

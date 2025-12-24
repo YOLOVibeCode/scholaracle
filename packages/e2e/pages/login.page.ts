@@ -13,21 +13,24 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.locator('input#email, [data-testid="email-input"], input[name="email"], input[type="email"]');
-    this.passwordInput = page.locator('input#password, [data-testid="password-input"], input[name="password"], input[type="password"]');
-    this.loginButton = page.locator('button[type="submit"], [data-testid="login-button"], button:has-text("Sign in")');
+    this.emailInput = page.locator('[data-testid="email-input"]');
+    this.passwordInput = page.locator('[data-testid="password-input"]');
+    this.loginButton = page.locator('[data-testid="login-button"]');
     this.errorMessage = page.locator('[data-testid="error-message"], .text-red-500, .text-destructive, .bg-red-50');
-    this.registerLink = page.locator('a[href="/register"], [data-testid="register-link"]');
+    this.registerLink = page.locator('a[href="/register"]');
   }
 
   async goto(): Promise<void> {
     await this.page.goto('/login');
   }
 
-  async login(email: string, password: string): Promise<void> {
+  async login(email: string, password: string, options?: { readonly waitForDashboard?: boolean }): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     await this.loginButton.click();
+    if (options?.waitForDashboard ?? true) {
+      await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });
+    }
   }
 
   async expectError(message?: string): Promise<void> {

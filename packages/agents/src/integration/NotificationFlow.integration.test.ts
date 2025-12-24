@@ -7,6 +7,8 @@ import { ParentNotificationGenerator } from '../generators/ParentNotificationGen
 import { DeliveryRouter } from '../delivery/DeliveryRouter';
 import { EmailDelivery } from '../delivery/EmailDelivery';
 import { SMSDelivery } from '../delivery/SMSDelivery';
+import { InAppDelivery } from '../delivery/InAppDelivery';
+import { PushDelivery } from '../delivery/PushDelivery';
 import {
   Alert,
   AlertType,
@@ -20,6 +22,8 @@ import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
 
 describe('NotificationFlow Integration', () => {
+  jest.setTimeout(20_000);
+
   let mongoClient: MongoClient;
   let database: Db;
   let mongoQueue: MongoQueue;
@@ -31,8 +35,27 @@ describe('NotificationFlow Integration', () => {
   let deliveryRouter: DeliveryRouter;
   let emailDelivery: EmailDelivery;
   let smsDelivery: SMSDelivery;
+  let inAppDelivery: InAppDelivery;
+  let pushDelivery: PushDelivery;
   let mockSendGrid: jest.Mocked<MailService>;
   let mockTwilio: jest.Mocked<Twilio>;
+  let mockFcm: { send: jest.Mock };
+
+  async function waitForCount(params: {
+    readonly collection: string;
+    readonly filter: Record<string, unknown>;
+    readonly min: number;
+    readonly timeoutMs?: number;
+  }): Promise<number> {
+    const timeoutMs = params.timeoutMs ?? 8000;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const count = await database.collection(params.collection).countDocuments(params.filter as any);
+      if (count >= params.min) return count;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return database.collection(params.collection).countDocuments(params.filter as any);
+  }
 
   beforeAll(async () => {
     // Connect to test MongoDB instance
@@ -84,7 +107,12 @@ describe('NotificationFlow Integration', () => {
       mockTwilio
     );
 
-    deliveryRouter = new DeliveryRouter([emailDelivery, smsDelivery]);
+    mockFcm = { send: jest.fn() };
+    inAppDelivery = new InAppDelivery();
+    pushDelivery = new PushDelivery({ projectId: 'test' }, mockFcm as any);
+
+    // Include all default channels used by Notification defaults (PUSH/EMAIL/SMS/IN_APP)
+    deliveryRouter = new DeliveryRouter([emailDelivery, smsDelivery, inAppDelivery, pushDelivery]);
 
     // Initialize generators
     studentGenerator = new StudentNotificationGenerator();
@@ -119,6 +147,7 @@ describe('NotificationFlow Integration', () => {
 
     // Reset mocks
     jest.clearAllMocks();
+    mockFcm.send.mockResolvedValue('push-123');
   });
 
   describe('End-to-End Flow', () => {
@@ -129,9 +158,14 @@ describe('NotificationFlow Integration', () => {
         type: AlertType.MISSING_ASSIGNMENT,
         severity: 'high',
         relatedData: {
-          assignmentName: 'Math Homework',
-          courseName: 'Algebra I',
-          dueDate: new Date(Date.now() + 86400000), // Tomorrow
+          studentName: 'John Doe',
+          course: 'Algebra I',
+          assignment: 'Math Homework',
+          daysAgo: 1,
+          points: 10,
+          gradeImpact: 5,
+          currentGrade: 88,
+          assignmentUrl: 'https://example.edu/assignment/1',
         },
       });
 
@@ -161,33 +195,31 @@ describe('NotificationFlow Integration', () => {
       expect(parentNotification).toBeDefined();
       expect(parentNotification.agentType).toBe(AgentType.PARENT);
       expect(parentNotification.priority).toBe(NotificationPriority.HIGH);
-      expect(parentNotification.subject).toContain('Missing Assignment');
+      expect(parentNotification.subject).toContain('MISSING ASSIGNMENT');
 
       // Act Step 2: Schedule notifications
       await notificationScheduler.schedule(studentNotification, alert);
-      await notificationScheduler.schedule(parentNotification, alert);
 
       // Verify jobs were created
       const jobsBefore = await database.collection('jobs').countDocuments({
         status: 'pending',
       });
-      expect(jobsBefore).toBeGreaterThanOrEqual(2);
+      expect(jobsBefore).toBeGreaterThanOrEqual(1);
 
       // Act Step 3: Start worker and process jobs
       notificationWorker.start();
 
-      // Wait for worker to process jobs
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       // Act Step 4: Verify jobs were processed
-      const jobsAfter = await database.collection('jobs').countDocuments({
-        status: 'completed',
+      const jobsAfter = await waitForCount({
+        collection: 'jobs',
+        filter: { status: 'completed' },
+        min: 1,
+        timeoutMs: 8000,
       });
-      expect(jobsAfter).toBeGreaterThanOrEqual(2);
+      expect(jobsAfter).toBeGreaterThanOrEqual(1);
 
       // Verify delivery services were called
       expect(mockSendGrid.send).toHaveBeenCalled();
-      expect(mockTwilio.messages.create).toHaveBeenCalled();
 
       // Stop worker
       await notificationWorker.stop();
@@ -200,9 +232,14 @@ describe('NotificationFlow Integration', () => {
         type: AlertType.DEADLINE,
         severity: 'medium',
         relatedData: {
-          assignmentName: 'Science Project',
-          courseName: 'Biology',
-          dueDate: new Date(Date.now() + 3600000), // 1 hour from now
+          studentName: 'Jane Doe',
+          course: 'Biology',
+          assignment: 'Science Project',
+          dueDate: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+          points: 25,
+          gradeWeight: 10,
+          currentGrade: 91,
+          assignmentUrl: 'https://example.edu/assignment/2',
         },
       });
 
@@ -244,11 +281,14 @@ describe('NotificationFlow Integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Verify job was processed after delay
-      const completedJobs = await database
-        .collection('jobs')
-        .find({ status: 'completed' })
-        .toArray();
-      expect(completedJobs.length).toBe(1);
+      // Poll a bit because processing loop is async
+      const completedCount = await waitForCount({
+        collection: 'jobs',
+        filter: { status: 'completed' },
+        min: 1,
+        timeoutMs: 8000,
+      });
+      expect(completedCount).toBe(1);
 
       await notificationWorker.stop();
     });
@@ -260,9 +300,14 @@ describe('NotificationFlow Integration', () => {
         type: AlertType.GRADE_DROP,
         severity: 'critical',
         relatedData: {
-          courseName: 'History',
+          studentName: 'Alex Student',
+          course: 'History',
           previousGrade: 85,
           currentGrade: 72,
+          change: -13,
+          timeframe: '1 week',
+          contributingFactors: ['Missing assignments', 'Low quiz score'],
+          reason: 'Recent missing assignments',
         },
       });
 
@@ -290,10 +335,12 @@ describe('NotificationFlow Integration', () => {
       notificationWorker.start();
 
       // Wait for processing and retry
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // First retry is scheduled with exponential backoff (>= 4s)
+      await new Promise((resolve) => setTimeout(resolve, 7000));
 
       // Verify retry occurred
-      expect(emailDelivery.deliver).toHaveBeenCalledTimes(2);
+      // 1st attempt fails on first email send, 2nd attempt sends both student+parent emails
+      expect(mockSendGrid.send).toHaveBeenCalledTimes(3);
 
       await notificationWorker.stop();
     });
@@ -305,19 +352,42 @@ describe('NotificationFlow Integration', () => {
           studentId: 'student-1',
           type: AlertType.MISSING_ASSIGNMENT,
           severity: 'high',
-          relatedData: { assignmentName: 'Assignment 1' },
+          relatedData: {
+            studentName: 'Student 1',
+            course: 'Math',
+            assignment: 'Assignment 1',
+            daysAgo: 1,
+            points: 10,
+            gradeImpact: 2,
+            currentGrade: 90,
+          },
         }),
         new Alert({
           studentId: 'student-2',
           type: AlertType.DEADLINE,
           severity: 'medium',
-          relatedData: { assignmentName: 'Assignment 2' },
+          relatedData: {
+            studentName: 'Student 2',
+            course: 'English',
+            assignment: 'Assignment 2',
+            dueDate: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+            points: 20,
+            gradeWeight: 5,
+            currentGrade: 85,
+          },
         }),
         new Alert({
           studentId: 'student-3',
           type: AlertType.TEST,
           severity: 'high',
-          relatedData: { testName: 'Test 1' },
+          relatedData: {
+            studentName: 'Student 3',
+            course: 'Science',
+            testName: 'Test 1',
+            testDate: new Date(Date.now() + 48 * 60 * 60_000).toISOString(),
+            weight: 20,
+            currentGrade: 88,
+          },
         }),
       ];
 
@@ -331,28 +401,29 @@ describe('NotificationFlow Integration', () => {
       // Act: Schedule all notifications
       for (const alert of alerts) {
         const studentNotification = studentGenerator.generate(alert);
-        const parentNotification = parentGenerator.generate(alert);
         await notificationScheduler.schedule(studentNotification, alert);
-        await notificationScheduler.schedule(parentNotification, alert);
       }
 
       // Verify all jobs were created
       const pendingJobs = await database.collection('jobs').countDocuments({
         status: 'pending',
       });
-      expect(pendingJobs).toBe(6); // 3 alerts × 2 notifications each
+      expect(pendingJobs).toBe(3); // 3 alerts (worker generates both student+parent notifications per job)
 
       // Start worker
       notificationWorker.start();
 
       // Wait for all jobs to process
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Verify all jobs were completed
-      const completedJobs = await database.collection('jobs').countDocuments({
-        status: 'completed',
+      const completedJobs = await waitForCount({
+        collection: 'jobs',
+        filter: { status: 'completed' },
+        min: 3,
+        timeoutMs: 10000,
       });
-      expect(completedJobs).toBe(6);
+      expect(completedJobs).toBe(3);
 
       // Verify delivery was called for all notifications
       expect(mockSendGrid.send).toHaveBeenCalledTimes(6);

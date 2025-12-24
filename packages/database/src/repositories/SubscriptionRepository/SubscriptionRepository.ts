@@ -11,6 +11,7 @@ export interface ISubscriptionRepository {
   changePlan(userId: string, newPlan: SubscriptionPlan, performedBy?: string): Promise<Subscription | null>;
   cancel(userId: string, reason?: string): Promise<boolean>;
   reactivate(userId: string): Promise<boolean>;
+  extendTrial(userId: string, days: number, performedBy?: string, reason?: string): Promise<Subscription | null>;
   getExpiringSubscriptions(daysUntilExpiry: number): Promise<readonly Subscription[]>;
 }
 
@@ -224,6 +225,47 @@ export class SubscriptionRepository implements ISubscriptionRepository {
     );
 
     return result.modifiedCount > 0;
+  }
+
+  /**
+   * Extend a trial subscription by N days.
+   * Records an event for history/auditing in the subscription document.
+   */
+  public async extendTrial(
+    userId: string,
+    days: number,
+    performedBy?: string,
+    reason?: string
+  ): Promise<Subscription | null> {
+    const current = await this.findByUserId(userId);
+    if (!current) return null;
+
+    // Only meaningful for trialing subscriptions; treat others as not eligible.
+    if (current.status !== 'trialing') return null;
+    if (!Number.isFinite(days) || days <= 0) return null;
+
+    const newEnd = new Date(current.currentPeriodEnd);
+    newEnd.setDate(newEnd.getDate() + days);
+
+    const event = {
+      type: 'trial_extended' as const,
+      days,
+      reason,
+      performedBy,
+      timestamp: new Date(),
+    };
+
+    const result = await this._collection.findOneAndUpdate(
+      { userId },
+      {
+        $set: { currentPeriodEnd: newEnd, updatedAt: new Date() },
+        $push: { events: event } as never,
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!result || !result._id) return null;
+    return new Subscription(result, result._id);
   }
 
   /**

@@ -1,4 +1,12 @@
-# E2E Test Execution Status Report
+# E2E Test Execution Status Report (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This report reflects an earlier point-in-time when remaining layers were not yet executed locally.
+
+**Current reality:** The full E2E suite is now **green** and runs **Chromium-only**.
+
+- **Authoritative spec**: `APP_SPECIFICATION.md`
+- **How to run tests**: `RUN_ALL_TESTS.md`
+- **Most accurate QA summary**: `QA_TEST_EXECUTION_SUMMARY.md`
 
 **⚠️ PORT POLICY: Services use FIXED ports (2800-2804). DO NOT modify these ports.**
 
@@ -26,11 +34,11 @@
 
 ---
 
-## ⚠️ Remaining Layers - Blocked
+## ⚠️ Remaining Layers - Blocked (Historical)
 
 ### Issue: MongoDB Connection Required
 
-**Root Cause:** MongoDB not running on port 27017
+**Root Cause:** MongoDB not running on FIXED port 2802
 
 **Impact:**
 - API server cannot connect to database
@@ -78,21 +86,23 @@ docker run -d -p 27017:27017 --name mongodb mongo:7
 
 ### Step 2: Verify API Server
 ```bash
-# Should already be running on port 3002
-curl http://localhost:3002/api/health
+# Should already be running on FIXED port 2801
+curl http://localhost:2801/api/health
 ```
 
 ### Step 3: Seed Database
 ```bash
-curl -X POST 'http://localhost:3002/api/seed?force=true'
+curl -X POST 'http://localhost:2801/api/seed?force=true'
 ```
 
 ### Step 4: Run Remaining Tests
 ```bash
 cd packages/e2e
-API_BASE_URL=http://localhost:3002 BASE_URL=http://localhost:3000 \
+API_BASE_URL=http://localhost:2801 BASE_URL=http://localhost:2800 \
 pnpm exec playwright test tests/01-auth.spec.ts
 ```
+
+**⚠️ PORT POLICY: Ports 2800 (Web), 2801 (API), and 2802 (MongoDB) are FIXED.**
 
 ---
 

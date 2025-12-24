@@ -477,9 +477,7 @@ pnpm --filter @scholaracle/e2e test:headed
 pnpm --filter @scholaracle/e2e test:report
 
 # Run tests for specific browser
-pnpm --filter @scholaracle/e2e test --project=chromium
-pnpm --filter @scholaracle/e2e test --project=firefox
-pnpm --filter @scholaracle/e2e test --project=webkit
+pnpm --filter @scholaracle/e2e test
 ```
 
 ---
@@ -503,9 +501,12 @@ pnpm --filter @scholaracle/e2e test --project=webkit
 1. **All critical tests pass** - No regression in core functionality
 2. **90%+ test pass rate** - High reliability
 3. **< 5 minute test suite** - Fast feedback
-4. **Cross-browser compatibility** - Chrome, Firefox, Safari
-5. **Mobile responsive** - Tests run on mobile viewports
-6. **Visual regression** - Screenshot comparison for UI consistency
+4. **Chromium-only** - Project policy (keep suite deterministic)
+
+**Out of scope for v1:**
+- Cross-browser compatibility (Firefox/WebKit)
+- Mobile viewport automation
+- Visual regression testing
 
 ---
 

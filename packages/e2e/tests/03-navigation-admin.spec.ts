@@ -14,7 +14,7 @@ import { TEST_USERS } from '../fixtures/test-data';
  * If Layer 2 fails → don't run
  */
 test.describe('@navigation Layer 3: Admin Navigation', () => {
-  test('NAV-A-001: Dashboard link works (all roles)', async ({ page }) => {
+  test('NAV-A-001: Dashboard link works (all roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'support', 'billing', 'analyst'];
     
     for (const role of roles) {
@@ -24,7 +24,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
       await navigateToSidebar(page, 'Dashboard');
       await expect(page).toHaveURL(/\/admin\/dashboard/);
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
@@ -51,7 +51,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
         await expect(page).toHaveURL('/admin/payments');
       }
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
@@ -188,6 +188,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
     await page.goto('/admin/settings');
     
     // Should redirect or show 403
+    await page.waitForTimeout(600);
     const is403 = page.url().includes('403') || (await page.locator('body').textContent())?.includes('403');
     const isRedirected = !page.url().includes('/admin/settings');
     

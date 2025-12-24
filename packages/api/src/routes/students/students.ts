@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import type { Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import { StudentRepository } from '@scholaracle/database';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 
@@ -126,7 +126,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const student = await studentRepository.create({
-        userId,
+        userId: new ObjectId(userId),
         name,
         grade,
         studentId,

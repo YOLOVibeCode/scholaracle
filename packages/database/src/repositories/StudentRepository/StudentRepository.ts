@@ -28,8 +28,10 @@ export class StudentRepository implements IStudentRepository {
    */
   public async create(studentData: IStudentData): Promise<Student> {
     const now = new Date();
+    const userIdObj = typeof studentData.userId === 'string' ? new ObjectId(studentData.userId) : studentData.userId;
     const document = {
       ...studentData,
+      userId: userIdObj,
       createdAt: now,
       updatedAt: now,
     };

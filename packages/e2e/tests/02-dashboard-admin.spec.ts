@@ -1,5 +1,5 @@
-import { test as baseTest, expect } from '@playwright/test';
-import { test, loginAsRole } from '../fixtures/auth';
+import { expect } from '@playwright/test';
+import { test } from '../fixtures/auth';
 import { AdminDashboardPage } from '../pages/admin/dashboard.page';
 import { AdminCustomersPage } from '../pages/admin/customers.page';
 import { assertOnAdminDashboard, assertAccessDenied, assertAdminAccess } from '../helpers/assertions';
@@ -21,7 +21,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
     await assertOnAdminDashboard(page);
     
     // Verify KPI cards or dashboard content
-    await expect(page.locator('[data-testid="kpi-card"], .stat-card, h1')).toBeVisible();
+    await expect(page.locator('[data-testid="kpi-card"], .stat-card, h1').first()).toBeVisible();
   });
 
   test('DASH-A-002: Customers List renders (all roles)', async ({ page, loginAsRole }) => {
@@ -35,7 +35,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page.locator('body')).toBeVisible();
       
       // Logout for next iteration
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
@@ -60,7 +60,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
     }
   });
 
-  test('DASH-A-004: Payments page renders (billing roles)', async ({ page }) => {
+  test('DASH-A-004: Payments page renders (billing roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'billing', 'analyst'];
     
     for (const role of roles) {
@@ -70,11 +70,11 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/payments');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
-  test('DASH-A-005: Subscriptions page renders (billing roles)', async ({ page }) => {
+  test('DASH-A-005: Subscriptions page renders (billing roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'billing'];
     
     for (const role of roles) {
@@ -84,11 +84,11 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/subscriptions');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
-  test('DASH-A-006: Communications page renders (support roles)', async ({ page }) => {
+  test('DASH-A-006: Communications page renders (support roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'support'];
     
     for (const role of roles) {
@@ -98,11 +98,11 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/communications');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
-  test('DASH-A-007: Reports page renders (analyst roles)', async ({ page }) => {
+  test('DASH-A-007: Reports page renders (analyst roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'billing', 'analyst'];
     
     for (const role of roles) {
@@ -112,7 +112,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/reports');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 
@@ -129,10 +129,38 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
     await page.goto('/admin/audit-logs');
     
     await expect(page).toHaveURL('/admin/audit-logs');
-    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('[data-testid="audit-logs-page"]')).toBeVisible();
+    await expect(page.locator('[data-testid="audit-logs-table"]')).toBeVisible();
+    // Seed should provide at least one baseline audit log.
+    await expect(page.locator('[data-testid="audit-log-row"]').first()).toBeVisible();
   });
 
-  test('DASH-A-010: Analytics Overview renders (analyst roles)', async ({ page }) => {
+  test('DASH-A-021: Audit Logs export CSV works (super_admin only)', async ({ page, loginAsRole }) => {
+    await loginAsRole('super_admin');
+    await page.goto('/admin/audit-logs');
+    await expect(page.locator('[data-testid="audit-export-button"]')).toBeVisible();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('[data-testid="audit-export-button"]').click({ force: true });
+    const download = await downloadPromise;
+    expect(await download.suggestedFilename()).toMatch(/audit-logs-.*\.csv/i);
+
+    // After export, an audit entry should be created; refresh and assert it appears.
+    await page.locator('[data-testid="audit-refresh-button"]').click({ force: true });
+    await expect(page.locator('[data-testid="audit-log-row"]').first()).toContainText('system:export', { timeout: 10_000 });
+  });
+
+  test('DASH-A-022: Audit Log detail drawer opens (super_admin only)', async ({ page, loginAsRole }) => {
+    await loginAsRole('super_admin');
+    await page.goto('/admin/audit-logs');
+
+    await page.locator('[data-testid="audit-log-row"]').first().click({ force: true });
+    await expect(page.locator('[data-testid="audit-detail-sheet"]')).toBeVisible();
+    await expect(page.locator('[data-testid="audit-detail-action"]')).toBeVisible();
+    await expect(page.locator('[data-testid="audit-detail-metadata"]')).toBeVisible();
+  });
+
+  test('DASH-A-010: Analytics Overview renders (analyst roles)', async ({ page, loginAsRole }) => {
     const roles: Array<keyof typeof TEST_USERS> = ['super_admin', 'admin', 'analyst'];
     
     for (const role of roles) {
@@ -142,7 +170,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL(/\/admin\/analytics/);
       await expect(page.locator('body')).toBeVisible();
       
-      await page.click('[data-testid="logout-button"]');
+      await page.locator('[data-testid="logout-button"]').click({ force: true });
     }
   });
 

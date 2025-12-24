@@ -1,14 +1,22 @@
-# QA Test Report - Scholaracle E2E Testing
+# QA Test Report - Scholaracle E2E Testing (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This report reflects an earlier point-in-time when Firebase/Mongo setup issues were still being resolved.
+
+**Current reality:** Firebase is optional, ports are fixed, and the full E2E suite is now **green** and **Chromium-only**.
+
+- **Authoritative spec**: `APP_SPECIFICATION.md`
+- **How to run tests**: `RUN_ALL_TESTS.md`
+- **Most accurate QA summary**: `QA_TEST_EXECUTION_SUMMARY.md`
 
 **Date:** December 11, 2025  
 **QA Engineer:** AI QA Developer  
-**Status:** ⚠️ Setup Issues Identified
+**Status:** ✅ Resolved (historical report preserved)
 
 ---
 
-## Executive Summary
+## Executive Summary (Historical)
 
-As the QA developer, I've reviewed the E2E test implementation and attempted to execute the test suite. The test infrastructure is **well-designed** with a comprehensive fail-fast pyramid architecture, but there are **environmental setup issues** that need to be resolved before tests can run successfully.
+As the QA developer, I've reviewed the E2E test implementation and attempted to execute the test suite. The test infrastructure is **well-designed** with a comprehensive fail-fast pyramid architecture, but there were **environmental setup issues** at the time of this report.
 
 ---
 
@@ -75,14 +83,20 @@ if (!getApps().length) {
 
 ### 2. **Port Conflicts** (ENVIRONMENT)
 
-**Issue:** Port 3000 is occupied by another service (SJI Flight Deck)
+**Issue:** Port conflicts (resolved with FIXED port policy)
 
-**Impact:** Tests expect Scholaracle API on port 3000
+**Impact:** All ports are now FIXED (2800-2804) to prevent conflicts
+
+**⚠️ PORT POLICY: Ports are now FIXED. See [PORT_POLICY.md](./PORT_POLICY.md) for details.**
 
 **Current State:**
-- Port 3000: SJI Flight Deck (different project)
-- Port 3001: Different API service
-- Port 3002: Attempted but API failed to start
+- Port 2800: Web App (FIXED)
+- Port 2801: API Server (FIXED)
+- Port 2802: MongoDB (FIXED)
+- Port 2803: MailHog SMTP (FIXED)
+- Port 2804: MailHog UI (FIXED)
+
+**All ports are now FIXED in the 28XX series to prevent conflicts.**
 
 **Fix Required:**
 - Update Playwright config to use correct port
@@ -93,7 +107,7 @@ if (!getApps().length) {
 
 ### 3. **MongoDB Connection** (NEEDS VERIFICATION)
 
-**Status:** MongoDB appears to be running on port 27017
+**Status:** MongoDB should run on FIXED port 2802
 
 **Action Required:** Verify connection string and database name match
 

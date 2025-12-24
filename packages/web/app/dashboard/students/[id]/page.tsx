@@ -94,7 +94,7 @@ export default function EditStudentPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/students">
+          <Link href="/dashboard/students" data-testid="back-link">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -120,6 +120,8 @@ export default function EditStudentPage() {
               <Label htmlFor="name">Name *</Label>
               <Input
                 id="name"
+                name="name"
+                data-testid="student-name"
                 type="text"
                 placeholder="John Doe"
                 value={name}
@@ -132,6 +134,8 @@ export default function EditStudentPage() {
               <Label htmlFor="grade">Grade</Label>
               <Input
                 id="grade"
+                name="grade"
+                data-testid="student-grade"
                 type="number"
                 placeholder="10"
                 min="1"
@@ -145,6 +149,8 @@ export default function EditStudentPage() {
               <Label htmlFor="studentId">Student ID</Label>
               <Input
                 id="studentId"
+                name="studentId"
+                data-testid="student-external-id"
                 type="text"
                 placeholder="Optional external ID"
                 value={studentIdField}
@@ -157,7 +163,7 @@ export default function EditStudentPage() {
             <Button variant="outline" type="button" asChild disabled={isSaving}>
               <Link href="/dashboard/students">Cancel</Link>
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving} data-testid="save-student-button">
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </CardFooter>

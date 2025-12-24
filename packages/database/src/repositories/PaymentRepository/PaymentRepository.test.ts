@@ -125,6 +125,45 @@ describe('PaymentRepository', () => {
     });
   });
 
+  describe('getLifetimeValueByUserId', () => {
+    it('should compute net LTV (amount - refunded) for succeeded/refunded payments', async () => {
+      const userId = '507f1f77bcf86cd799439011';
+      await repository.create({
+        userId,
+        amount: 2000,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+      const p2 = await repository.create({
+        userId,
+        amount: 3000,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+      // Refund 10.00 on second payment
+      await repository.recordRefund(p2._id!.toString(), 1000, '507f1f77bcf86cd799439099', 'Partial');
+
+      // Failed payments should not count
+      await repository.create({
+        userId,
+        amount: 9999,
+        currency: 'usd',
+        status: 'failed',
+        paymentMethod: 'card',
+      });
+
+      const ltv = await repository.getLifetimeValueByUserId(userId);
+      expect(ltv).toBe(2000 + (3000 - 1000));
+    });
+
+    it('should return 0 when user has no qualifying payments', async () => {
+      const ltv = await repository.getLifetimeValueByUserId('no-such-user');
+      expect(ltv).toBe(0);
+    });
+  });
+
   describe('getRevenueByPeriod', () => {
     it('should get revenue by period', async () => {
       await repository.create({
@@ -145,4 +184,5 @@ describe('PaymentRepository', () => {
     });
   });
 });
+
 

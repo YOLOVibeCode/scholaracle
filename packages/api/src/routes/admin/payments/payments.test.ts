@@ -4,6 +4,7 @@ import { MongoClient, type Db } from 'mongodb';
 import { paymentsRouter } from './payments';
 import { AdminAuthService } from '@scholaracle/auth';
 import { AdminUserRepository, PaymentRepository } from '@scholaracle/database';
+import { adminAuthRouter } from '../auth/auth';
 
 describe('Admin Payment Routes', () => {
   let app: Express;
@@ -42,6 +43,7 @@ describe('Admin Payment Routes', () => {
 
     app = express();
     app.use(express.json());
+    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
     app.use('/api/admin/payments', paymentsRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -179,6 +181,73 @@ describe('Admin Payment Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('reason');
     });
+
+    it('should require step-up when MFA is enabled', async () => {
+      const payment = await new PaymentRepository(database).create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+
+      const speakeasy = require('speakeasy');
+      const mfaService = new (require('@scholaracle/auth').MFAService)();
+
+      // Enable MFA on billing admin
+      const billing = await new AdminUserRepository(database).findByEmail('billing-admin@test.com');
+      expect(billing).not.toBeNull();
+      const { secret } = mfaService.generateSecret('billing-admin@test.com');
+      await new AdminUserRepository(database).update(billing!._id!.toString(), { mfaEnabled: true, mfaSecret: secret });
+
+      // Login should require MFA now
+      const loginRes = await request(app).post('/api/admin/auth/login').send({
+        email: 'billing-admin@test.com',
+        password: 'AdminPass123!',
+      });
+      expect(loginRes.status).toBe(401);
+      expect(loginRes.body.requiresMFA).toBe(true);
+      const mfaToken = loginRes.body.mfaToken as string;
+
+      const totp = speakeasy.totp({ secret, encoding: 'base32' });
+      const verifyRes = await request(app).post('/api/admin/auth/mfa/verify').send({ mfaToken, token: totp });
+      expect(verifyRes.status).toBe(200);
+      const billingTokenWithMFA = verifyRes.body.token as string;
+
+      // Refund without step-up must be denied
+      const denied = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
+        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
+        .send({ amount: 19, reason: 'Customer request' });
+      expect(denied.status).toBe(401);
+      expect(String(denied.body.code ?? '')).toContain('MFA_STEP_UP');
+
+      // Step-up mint
+      const startRes = await request(app)
+        .post('/api/admin/auth/step-up/start')
+        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
+        .send({});
+      expect(startRes.status).toBe(200);
+      const stepUpId = startRes.body.data.stepUpId as string;
+
+      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
+      const stepUpRes = await request(app)
+        .post('/api/admin/auth/step-up/verify')
+        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
+        .send({ stepUpId, token: totp2 });
+      expect(stepUpRes.status).toBe(200);
+      const stepUpToken = stepUpRes.body.data.stepUpToken as string;
+      expect(stepUpToken).toBeTruthy();
+
+      // Refund with step-up should succeed
+      const ok = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
+        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ amount: 19, reason: 'Customer request' });
+      expect(ok.status).toBe(200);
+      expect(ok.body.success).toBe(true);
+    });
   });
 
   describe('POST /api/admin/payments/:id/retry', () => {
@@ -200,4 +269,5 @@ describe('Admin Payment Routes', () => {
     });
   });
 });
+
 

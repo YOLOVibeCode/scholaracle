@@ -97,7 +97,13 @@ export const authApi = {
     apiClient.setToken(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
+      // Clear cookie with matching attributes used when setting it.
+      document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
+      // Extra hardening for browsers that prefer explicit expiry.
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      // Some environments require clearing without SameSite attribute as well.
       document.cookie = 'auth_token=; path=/; max-age=0';
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
   },
 

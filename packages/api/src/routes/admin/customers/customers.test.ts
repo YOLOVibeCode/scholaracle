@@ -2,8 +2,9 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { customersRouter } from './customers';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, UserRepository } from '@scholaracle/database';
+import { AdminAuthService, AuthService } from '@scholaracle/auth';
+import { adminAuthRouter } from '../auth/auth';
+import { AdminUserRepository, UserRepository, StudentRepository, PaymentRepository } from '@scholaracle/database';
 
 describe('Admin Customer Routes', () => {
   let app: Express;
@@ -46,6 +47,7 @@ describe('Admin Customer Routes', () => {
 
     app = express();
     app.use(express.json());
+    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
     app.use('/api/admin/customers', customersRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -55,6 +57,273 @@ describe('Admin Customer Routes', () => {
 
   beforeEach(async () => {
     await database.collection('users').deleteMany({});
+    await database.collection('students').deleteMany({});
+    await database.collection('admin_notes').deleteMany({});
+    await database.collection('payments').deleteMany({});
+    await database.collection('subscriptions').deleteMany({});
+    await database.collection('audit_logs').deleteMany({});
+  });
+
+  describe('GET /api/admin/customers/:id/students', () => {
+    it('should return students for customer', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const userRepo = new UserRepository(database);
+      const customer = await userRepo.create({
+        email: 'studentparent@test.com',
+        passwordHash,
+        name: 'Student Parent',
+      });
+
+      const studentRepo = new StudentRepository(database);
+      await studentRepo.create({
+        userId: customer._id!.toString(),
+        name: 'Student One',
+        grade: 5,
+        studentId: 'S-001',
+        stats: { currentGPA: 3.5, missingAssignments: 1, totalAssignments: 10 },
+      });
+
+      const res = await request(app)
+        .get(`/api/admin/customers/${customer._id!.toString()}/students`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].name).toBe('Student One');
+      expect(res.body.data[0].userId).toBe(customer._id!.toString());
+    });
+
+    it('should return empty array when customer has no students', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'nostudents@test.com',
+        passwordHash,
+        name: 'No Students',
+      });
+
+      const res = await request(app)
+        .get(`/api/admin/customers/${customer._id!.toString()}/students`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBe(0);
+    });
+  });
+
+  describe('GET /api/admin/customers/:id/activity', () => {
+    it('should return recent activity items for customer', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const userRepo = new UserRepository(database);
+      const customer = await userRepo.create({
+        email: 'activity@test.com',
+        passwordHash,
+        name: 'Activity User',
+      });
+
+      // Create a student
+      const studentRepo = new StudentRepository(database);
+      await studentRepo.create({
+        userId: customer._id!.toString(),
+        name: 'Student Activity',
+        grade: 6,
+        studentId: 'S-ACT',
+      });
+
+      // Insert a payment
+      await database.collection('payments').insertOne({
+        userId: customer._id!.toString(),
+        amount: 1999,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+        createdAt: new Date(),
+      });
+
+      // Insert an admin note
+      await database.collection('admin_notes').insertOne({
+        userId: customer._id!.toString(),
+        adminUserId: 'admin-id',
+        content: 'Test note',
+        category: 'general',
+        isInternal: true,
+        isPinned: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const res = await request(app)
+        .get(`/api/admin/customers/${customer._id!.toString()}/activity`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      // Should include at least one of each type
+      const types = res.body.data.map((x: { type: string }) => x.type);
+      expect(types).toContain('student');
+      expect(types).toContain('payment');
+      expect(types).toContain('note');
+    });
+  });
+
+  describe('GET /api/admin/customers/:id/ltv', () => {
+    it('should return customer lifetime value (net) in dollars', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'ltv@test.com',
+        passwordHash,
+        name: 'LTV User',
+      });
+
+      const paymentRepo = new PaymentRepository(database);
+      await paymentRepo.create({
+        userId: customer._id!.toString(),
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+
+      const res = await request(app)
+        .get(`/api/admin/customers/${customer._id!.toString()}/ltv`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data?.ltv).toBe(19);
+      expect(res.body.data?.currency).toBe('usd');
+    });
+  });
+
+  describe('POST /api/admin/customers/:id/impersonate (step-up MFA)', () => {
+    it('should require step-up when MFA is enabled', async () => {
+      const speakeasy = require('speakeasy');
+
+      // Create customer
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'impersonate@test.com',
+        passwordHash,
+        name: 'Impersonate Target',
+      });
+
+      // Enable MFA for super admin user
+      const adminRepo = new AdminUserRepository(database);
+      const superAdminUser = await adminRepo.findByEmail('super@test.com');
+      expect(superAdminUser).not.toBeNull();
+
+      const { secret } = new (require('@scholaracle/auth').MFAService)().generateSecret('super@test.com');
+      await adminRepo.update(superAdminUser!._id!.toString(), { mfaEnabled: true, mfaSecret: secret });
+
+      // Login: should require MFA
+      const loginRes = await request(app).post('/api/admin/auth/login').send({ email: 'super@test.com', password: 'AdminPass123!' });
+      expect(loginRes.status).toBe(401);
+      expect(loginRes.body.requiresMFA).toBe(true);
+      const mfaToken = loginRes.body.mfaToken as string;
+
+      const totp = speakeasy.totp({ secret, encoding: 'base32' });
+      const verifyRes = await request(app).post('/api/admin/auth/mfa/verify').send({ mfaToken, token: totp });
+      expect(verifyRes.status).toBe(200);
+      const adminToken = verifyRes.body.token as string;
+      expect(adminToken).toBeTruthy();
+
+      // Without step-up header: denied
+      const denied = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Support check' });
+      expect(denied.status).toBe(401);
+      expect(String(denied.body.code ?? '')).toContain('MFA_STEP_UP');
+
+      // Mint step-up token
+      const startRes = await request(app)
+        .post('/api/admin/auth/step-up/start')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      expect(startRes.status).toBe(200);
+      const stepUpId = startRes.body.data.stepUpId as string;
+
+      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
+      const stepUpRes = await request(app)
+        .post('/api/admin/auth/step-up/verify')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ stepUpId, token: totp2 });
+      expect(stepUpRes.status).toBe(200);
+      const stepUpToken = stepUpRes.body.data.stepUpToken as string;
+      expect(stepUpToken).toBeTruthy();
+
+      // With step-up header: allowed
+      const ok = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ reason: 'Support check' });
+      expect(ok.status).toBe(200);
+      expect(ok.body.success).toBe(true);
+      expect(ok.body.data?.token).toBeTruthy();
+    });
+  });
+
+  describe('POST /api/admin/customers/:id/impersonate', () => {
+    it('should return a user token for an admin', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'impersonate@test.com',
+        passwordHash,
+        name: 'Impersonate User',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Support troubleshooting' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data?.token).toBeDefined();
+
+      const userAuth = new AuthService(database, 'test-secret');
+      const decoded = await userAuth.verifyToken(res.body.data.token);
+      expect(decoded?.userId).toBe(customer._id!.toString());
+      expect(decoded?.email).toBe('impersonate@test.com');
+
+      const auditLogs = await database.collection('audit_logs').find({ action: 'customer:impersonate' }).toArray();
+      expect(auditLogs.length).toBeGreaterThan(0);
+    });
+
+    it('should reject impersonation for billing role', async () => {
+      // Create billing admin
+      const adminRepo = new AdminUserRepository(database);
+      const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
+      await adminRepo.create({
+        email: 'billing@test.com',
+        passwordHash,
+        name: 'Billing Admin',
+        role: 'billing',
+      });
+
+      const adminAuthService = new AdminAuthService(database, 'test-secret');
+      const billingLogin = await adminAuthService.login('billing@test.com', 'AdminPass123!');
+      const billingToken = billingLogin.token!;
+
+      const userHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'impersonate2@test.com',
+        passwordHash: userHash,
+        name: 'Impersonate User 2',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
+        .set('Authorization', `Bearer ${billingToken}`)
+        .send({ reason: 'Billing should not impersonate' });
+
+      expect(res.status).toBe(403);
+    });
   });
 
   describe('GET /api/admin/customers', () => {

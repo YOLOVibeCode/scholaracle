@@ -36,6 +36,8 @@ export interface IAdminAuthService {
   login(email: string, password: string): Promise<IAdminAuthResult>;
   verifyMFAToken(mfaToken: string, totpToken: string): Promise<IAdminAuthResult>;
   verifyToken(token: string): Promise<IAdminTokenPayload | null>;
+  issueStepUpToken(adminId: string): Promise<string | null>;
+  verifyStepUpToken(token: string): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null>;
   refreshToken(token: string): Promise<IAdminAuthResult>;
   logout(token: string): Promise<boolean>;
 }
@@ -308,6 +310,48 @@ export class AdminAuthService implements IAdminAuthService {
         return null;
       }
 
+      return decoded;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Mint a short-lived step-up token after successful MFA re-verification.
+   * This is used for sensitive admin actions (refund, impersonate, admin user management).
+   */
+  public async issueStepUpToken(adminId: string): Promise<string | null> {
+    const admin = await this._adminRepository.findById(adminId);
+    if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) return null;
+
+    const issuedAt = Date.now();
+    const expiresAt = issuedAt + 5 * 60 * 1000;
+    return jwt.sign(
+      { adminId, type: 'step_up', issuedAt, expiresAt },
+      this._jwtSecret,
+      { expiresIn: '5m' } as jwt.SignOptions
+    ) as string;
+  }
+
+  /**
+   * Verify a step-up token.
+   */
+  public async verifyStepUpToken(
+    token: string
+  ): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null> {
+    try {
+      const decoded = jwt.verify(token, this._jwtSecret) as {
+        adminId: string;
+        type: 'step_up';
+        issuedAt: number;
+        expiresAt: number;
+      };
+      if (decoded.type !== 'step_up') return null;
+
+      const admin = await this._adminRepository.findById(decoded.adminId);
+      if (!admin || !admin.isActive) return null;
+
+      if (Date.now() > decoded.expiresAt) return null;
       return decoded;
     } catch {
       return null;

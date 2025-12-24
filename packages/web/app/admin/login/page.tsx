@@ -85,6 +85,8 @@ export default function AdminLoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  name="email"
+                  data-testid="email-input"
                   type="email"
                   placeholder="admin@scholaracle.com"
                   value={email}
@@ -96,6 +98,8 @@ export default function AdminLoginPage() {
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
+                  name="password"
+                  data-testid="password-input"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -107,7 +111,7 @@ export default function AdminLoginPage() {
                   {error}
                 </div>
               )}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading} data-testid="login-button">
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
@@ -117,6 +121,7 @@ export default function AdminLoginPage() {
                 <Label htmlFor="mfaCode">Authentication Code</Label>
                 <Input
                   id="mfaCode"
+                  data-testid="mfa-code-input"
                   type="text"
                   placeholder="000000"
                   value={mfaCode}
@@ -143,7 +148,7 @@ export default function AdminLoginPage() {
                 >
                   Back
                 </Button>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading} data-testid="verify-mfa-button">
                   {isLoading ? 'Verifying...' : 'Verify'}
                 </Button>
               </div>
@@ -154,4 +159,5 @@ export default function AdminLoginPage() {
     </div>
   );
 }
+
 

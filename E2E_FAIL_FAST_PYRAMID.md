@@ -270,7 +270,7 @@ const TEST_USERS = {
 
 **Depends on:** Layer 3 passing
 
-#### Parent Features (15 tests)
+#### Parent Features (10 tests)
 
 | Test ID | Feature | Operation | Steps |
 |---------|---------|-----------|-------|
@@ -284,11 +284,7 @@ const TEST_USERS = {
 | FEAT-P-008 | Settings | UPDATE | Change notification prefs → Save |
 | FEAT-P-009 | Settings | UPDATE | Change thresholds → Save → Verify |
 | FEAT-P-010 | Settings | PERSIST | Reload → Verify settings saved |
-| FEAT-P-011 | Profile | READ | View user profile |
-| FEAT-P-012 | Profile | UPDATE | Change name → Save |
-| FEAT-P-013 | Password | UPDATE | Change password → Verify login |
-| FEAT-P-014 | Data Source | CREATE | Add platform credentials |
-| FEAT-P-015 | Data Source | DELETE | Remove platform |
+| (future) | Profile / Password / Data Sources | — | Out of scope for v1 (see APP_SPECIFICATION.md) |
 
 #### Admin Features (15 tests)
 
@@ -494,7 +490,7 @@ export default defineConfig({
   
   // Shared settings
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://localhost:2800', // FIXED PORT - DO NOT CHANGE
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -560,33 +556,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     
-    // Cross-browser (optional, runs after all layers)
-    {
-      name: 'firefox',
-      testMatch: /0[1-4]-.*\.spec\.ts/,
-      dependencies: ['feature'],
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      testMatch: /0[1-4]-.*\.spec\.ts/,
-      dependencies: ['feature'],
-      use: { ...devices['Desktop Safari'] },
-    },
-    
-    // Mobile (optional)
-    {
-      name: 'mobile',
-      testMatch: /03-navigation.*\.spec\.ts/,
-      dependencies: ['dashboard'],
-      use: { ...devices['iPhone 14'] },
-    },
+    // Note: We intentionally run Chromium-only to keep the suite deterministic.
+    // Cross-browser and mobile viewport projects are out-of-scope for v1.
   ],
   
   // Dev server
   webServer: {
     command: 'pnpm --filter @scholaracle/web dev',
-    url: 'http://localhost:3000',
+    url: 'http://localhost:2800', // FIXED PORT - DO NOT CHANGE
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
@@ -748,7 +725,7 @@ jobs:
         run: |
           pnpm --filter @scholaracle/e2e test --project=critical
         env:
-          BASE_URL: http://localhost:3000
+          BASE_URL: http://localhost:2800  # FIXED PORT - DO NOT CHANGE
       
       - name: Upload failure artifacts
         if: failure()
@@ -780,7 +757,7 @@ jobs:
       - name: Run Full E2E Suite
         run: pnpm --filter @scholaracle/e2e test
         env:
-          BASE_URL: http://localhost:3000
+          BASE_URL: http://localhost:2800  # FIXED PORT - DO NOT CHANGE
           CI: true
       
       - name: Upload test report

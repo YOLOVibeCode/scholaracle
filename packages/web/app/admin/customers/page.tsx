@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { adminCustomersApi, type ICustomer } from '@/lib/api/admin/customers';
 
 export default function AdminCustomersPage() {
+  const router = useRouter();
   const [customers, setCustomers] = useState<ICustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -25,13 +27,27 @@ export default function AdminCustomersPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
-    void loadCustomers();
-  }, [page]);
+    // Hydrate initial state from URL query params on the client to avoid
+    // Next.js `useSearchParams()` suspense requirement during prerender.
+    const qs = new URLSearchParams(window.location.search);
+    const initialSearch = qs.get('search') ?? '';
+    const initialPage = Number(qs.get('page') ?? '1') || 1;
+    setSearch(initialSearch);
+    setPage(initialPage);
+    void loadCustomers(initialPage, initialSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const loadCustomers = async () => {
+  const loadCustomers = async (pageOverride?: number, searchOverride?: string) => {
     setIsLoading(true);
     try {
-      const result = await adminCustomersApi.getAll({ page, limit: 25, search: search || undefined });
+      const effectivePage = pageOverride ?? page;
+      const effectiveSearch = searchOverride ?? search;
+      const result = await adminCustomersApi.getAll({
+        page: effectivePage,
+        limit: 25,
+        search: effectiveSearch || undefined,
+      });
       setCustomers(result.data as ICustomer[]);
       setTotalPages(result.totalPages ?? 1);
     } catch (error) {
@@ -42,8 +58,13 @@ export default function AdminCustomersPage() {
   };
 
   const handleSearch = () => {
+    // Reset to first page and persist query in URL
     setPage(1);
-    void loadCustomers();
+    const qs = new URLSearchParams();
+    if (search.trim()) qs.set('search', search.trim());
+    qs.set('page', '1');
+    router.push(`/admin/customers?${qs.toString()}`);
+    void loadCustomers(1, search);
   };
 
   const getPlanBadgeColor = (plan?: string) => {
@@ -72,6 +93,7 @@ export default function AdminCustomersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
+                data-testid="search-input"
                 placeholder="Search by name or email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -79,7 +101,7 @@ export default function AdminCustomersPage() {
                 className="pl-10"
               />
             </div>
-            <Button onClick={handleSearch}>Search</Button>
+            <Button onClick={handleSearch} data-testid="search-button">Search</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -101,7 +123,12 @@ export default function AdminCustomersPage() {
                 </TableHeader>
                 <TableBody>
                   {customers.map((customer) => (
-                    <TableRow key={customer.id}>
+                    <TableRow
+                      key={customer.id}
+                      data-testid="customer-row"
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/admin/customers/${customer.id}`)}
+                    >
                       <TableCell>
                         <div>
                           <div className="font-medium">{customer.name}</div>
@@ -126,8 +153,15 @@ export default function AdminCustomersPage() {
                         {new Date(customer.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/admin/customers/${customer.id}`}>View</Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link href={`/admin/customers/${customer.id}`} data-testid="customer-link">
+                            View
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -144,8 +178,17 @@ export default function AdminCustomersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage(page - 1)}
+                    onClick={() => {
+                      const nextPage = page - 1;
+                      setPage(nextPage);
+                      const qs = new URLSearchParams();
+                      if (search.trim()) qs.set('search', search.trim());
+                      qs.set('page', String(nextPage));
+                      router.push(`/admin/customers?${qs.toString()}`);
+                      void loadCustomers(nextPage, search);
+                    }}
                     disabled={page === 1}
+                    data-testid="previous-page"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     Previous
@@ -153,7 +196,16 @@ export default function AdminCustomersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage(page + 1)}
+                    data-testid="next-page"
+                    onClick={() => {
+                      const nextPage = page + 1;
+                      setPage(nextPage);
+                      const qs = new URLSearchParams();
+                      if (search.trim()) qs.set('search', search.trim());
+                      qs.set('page', String(nextPage));
+                      router.push(`/admin/customers?${qs.toString()}`);
+                      void loadCustomers(nextPage, search);
+                    }}
                     disabled={page >= totalPages}
                   >
                     Next
@@ -168,4 +220,5 @@ export default function AdminCustomersPage() {
     </div>
   );
 }
+
 

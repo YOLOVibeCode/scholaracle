@@ -1,7 +1,6 @@
 import { MongoClient, type Db } from 'mongodb';
 import { AdminUserRepository } from './AdminUserRepository';
 import { AdminUser, type IAdminUserData } from '../../models/AdminUser';
-import bcrypt from 'bcrypt';
 
 describe('AdminUserRepository', () => {
   let client: MongoClient;
@@ -26,7 +25,7 @@ describe('AdminUserRepository', () => {
 
   describe('create', () => {
     it('should create admin user', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'admin@test.com',
         passwordHash,
@@ -44,7 +43,7 @@ describe('AdminUserRepository', () => {
     });
 
     it('should set default values', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'admin2@test.com',
         passwordHash,
@@ -63,7 +62,7 @@ describe('AdminUserRepository', () => {
 
   describe('findByEmail', () => {
     it('should find admin by email', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'find@test.com',
         passwordHash,
@@ -86,7 +85,7 @@ describe('AdminUserRepository', () => {
 
   describe('findById', () => {
     it('should find admin by id', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'findid@test.com',
         passwordHash,
@@ -109,7 +108,7 @@ describe('AdminUserRepository', () => {
 
   describe('update', () => {
     it('should update admin user', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'update@test.com',
         passwordHash,
@@ -129,7 +128,7 @@ describe('AdminUserRepository', () => {
     });
 
     it('should update last login', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'login@test.com',
         passwordHash,
@@ -148,7 +147,7 @@ describe('AdminUserRepository', () => {
 
   describe('deactivate', () => {
     it('should deactivate admin user', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       const adminData: IAdminUserData = {
         email: 'deactivate@test.com',
         passwordHash,
@@ -167,7 +166,7 @@ describe('AdminUserRepository', () => {
 
   describe('findAll', () => {
     it('should list all admins', async () => {
-      const passwordHash = await bcrypt.hash('TestPass123!', 10);
+      const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
       await repository.create({
         email: 'admin1@test.com',
         passwordHash,

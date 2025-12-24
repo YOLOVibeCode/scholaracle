@@ -1,4 +1,11 @@
-# Implementation Quick Reference Card
+# Implementation Quick Reference Card (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This “build plan” was used earlier during phased implementation.
+
+**Use instead:**
+- `APP_SPECIFICATION.md` (what the app must do in v1)
+- `RUN_ALL_TESTS.md` (how to validate the UX end-to-end)
+- `SPECIFICATION_COVERAGE.md` (what is tested)
 
 ## TDD Cycle
 

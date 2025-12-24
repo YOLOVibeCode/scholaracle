@@ -13,7 +13,12 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/api/package.json ./packages/api/
-COPY packages/shared/*/package.json ./packages/shared/*/
+COPY packages/auth/package.json ./packages/auth/
+COPY packages/database/package.json ./packages/database/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/interfaces/package.json ./packages/interfaces/
+COPY packages/workers/package.json ./packages/workers/
+COPY packages/agents/package.json ./packages/agents/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile

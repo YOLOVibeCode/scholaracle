@@ -3,12 +3,27 @@ const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:300
 export interface IApiError {
   readonly success: false;
   readonly error: string;
+  readonly code?: string;
 }
 
 export interface IApiResponse<T> {
   readonly success: boolean;
   readonly data?: T;
   readonly error?: string;
+}
+
+export class ApiClientError extends Error {
+  public readonly status: number;
+  public readonly code?: string;
+  public readonly details?: unknown;
+
+  constructor(message: string, status: number, code?: string, details?: unknown) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
 }
 
 /**
@@ -99,6 +114,13 @@ export class ApiClient {
   }
 
   /**
+   * Make an HTTP request with full control over RequestInit (including headers).
+   */
+  public async request<T>(endpoint: string, options: RequestInit = {}, useAdminToken: boolean = false): Promise<T> {
+    return this._request<T>(endpoint, options, useAdminToken);
+  }
+
+  /**
    * Make an HTTP request.
    *
    * @param endpoint - API endpoint
@@ -116,7 +138,7 @@ export class ApiClient {
     // Get token from appropriate storage
     const token = useAdminToken
       ? (typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null)
-      : this._token;
+      : (this._token ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null));
 
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -129,8 +151,16 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        const errorData = (await response.json()) as IApiError;
-        throw new Error(errorData.error ?? `HTTP ${response.status}`);
+        let errorData: Partial<IApiError> | null = null;
+        try {
+          errorData = (await response.json()) as Partial<IApiError>;
+        } catch {
+          errorData = null;
+        }
+
+        const message = errorData?.error ?? `HTTP ${response.status}`;
+        const code = errorData?.code;
+        throw new ApiClientError(message, response.status, code, errorData);
       }
 
       return (await response.json()) as T;

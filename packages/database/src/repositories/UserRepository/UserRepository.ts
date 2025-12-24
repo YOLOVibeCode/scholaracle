@@ -1,7 +1,7 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { User, type IUserData } from '../../models/User';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 export interface IPaginationOptions {
   readonly page: number;
@@ -148,7 +148,15 @@ export class UserRepository implements IUserRepository {
    * @returns Hashed password
    */
   public static async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    return await new Promise<string>((resolve, reject) => {
+      bcrypt.hash(password, 10, (err, hash) => {
+        if (err || !hash) {
+          reject(err ?? new Error('Failed to hash password'));
+          return;
+        }
+        resolve(hash);
+      });
+    });
   }
 
   /**
@@ -159,7 +167,15 @@ export class UserRepository implements IUserRepository {
    * @returns True if password matches
    */
   public static async verifyPassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
+    return await new Promise<boolean>((resolve, reject) => {
+      bcrypt.compare(password, hash, (err, same) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(Boolean(same));
+      });
+    });
   }
 
   /**

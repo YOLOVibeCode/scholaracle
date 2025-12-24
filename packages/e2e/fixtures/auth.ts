@@ -28,26 +28,42 @@ export const test = base.extend<AuthFixtures>({
   },
 
   loginAsRole: async ({ page }, use) => {
+    const disableNextDevOverlay = async () => {
+      // Next.js dev overlay/devtools can render inside <nextjs-portal> and intercept pointer events.
+      // Hide it via CSS when present (dev-mode only).
+      await page
+        .addStyleTag({
+          content: `
+            nextjs-portal, nextjs-portal * { pointer-events: none !important; }
+            [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
+          `,
+        })
+        .catch(() => {});
+    };
+
     const login = async (role: UserRole) => {
       const user = TEST_USERS[role];
-      const loginUrl = role === 'parent' ? '/login' : '/admin/login';
+      // Use relative URLs - baseURL from config handles localhost vs production
+      const loginUrl = role === 'parent' || role === 'newUser' ? '/login' : '/admin/login';
       
       await page.goto(loginUrl);
+      await disableNextDevOverlay();
       
-      // Use flexible selectors that match actual page structure
-      const emailInput = page.locator('input#email, input[type="email"], [data-testid="email-input"], input[name="email"]');
-      const passwordInput = page.locator('input#password, input[type="password"], [data-testid="password-input"], input[name="password"]');
-      const loginButton = page.locator('button[type="submit"], [data-testid="login-button"], button:has-text("Sign in")');
+      // Use stable data-testid selectors for reliability
+      const emailInput = page.locator('[data-testid="email-input"]');
+      const passwordInput = page.locator('[data-testid="password-input"]');
+      const loginButton = page.locator('[data-testid="login-button"]');
       
       await emailInput.fill(user.email);
       await passwordInput.fill(user.password);
-      await loginButton.click();
+      await loginButton.first().click({ force: true });
       
       // Wait for redirect based on role
-      if (role === 'parent') {
+      if (role === 'parent' || role === 'newUser') {
         await page.waitForURL('/dashboard', { timeout: 10000 });
       } else {
-        await page.waitForURL('/admin', { timeout: 10000 });
+        // Admin app may land on /admin or /admin/dashboard depending on routing
+        await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 10000 });
       }
     };
     
@@ -57,10 +73,23 @@ export const test = base.extend<AuthFixtures>({
   authenticatedPage: async ({ page, testUser }, use) => {
     // Register the test user
     await page.goto('/register');
-    await page.fill('[data-testid="email-input"], input[name="email"]', testUser.email);
-    await page.fill('[data-testid="name-input"], input[name="name"]', testUser.name);
-    await page.fill('[data-testid="password-input"], input[name="password"]', testUser.password);
-    await page.click('[data-testid="register-button"], button[type="submit"]');
+    await page
+      .addStyleTag({
+        content: `
+          nextjs-portal, nextjs-portal * { pointer-events: none !important; }
+          [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
+        `,
+      })
+      .catch(() => {});
+    await page.fill('[data-testid="email-input"]', testUser.email);
+    await page.fill('[data-testid="name-input"]', testUser.name);
+    await page.fill('[data-testid="password-input"]', testUser.password);
+    // Confirm password if present
+    const confirmPassword = page.locator('[data-testid="confirm-password-input"]');
+    if ((await confirmPassword.count()) > 0) {
+      await confirmPassword.fill(testUser.password);
+    }
+    await page.locator('[data-testid="register-button"]').first().click({ force: true });
     
     // Wait for dashboard
     await page.waitForURL('/dashboard', { timeout: 10000 });
@@ -76,9 +105,17 @@ export { expect } from '@playwright/test';
  */
 export async function login(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/login');
-  await page.fill('[data-testid="email-input"], input[name="email"]', email);
-  await page.fill('[data-testid="password-input"], input[name="password"]', password);
-  await page.click('[data-testid="login-button"], button[type="submit"]');
+  await page
+    .addStyleTag({
+      content: `
+        nextjs-portal, nextjs-portal * { pointer-events: none !important; }
+        [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
+      `,
+    })
+    .catch(() => {});
+  await page.fill('[data-testid="email-input"]', email);
+  await page.fill('[data-testid="password-input"]', password);
+  await page.locator('[data-testid="login-button"]').first().click({ force: true });
   await page.waitForURL('/dashboard', { timeout: 10000 });
 }
 
@@ -87,17 +124,38 @@ export async function login(page: Page, email: string, password: string): Promis
  */
 export async function loginAdmin(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/admin/login');
-  await page.fill('[data-testid="email-input"], input[name="email"]', email);
-  await page.fill('[data-testid="password-input"], input[name="password"]', password);
-  await page.click('[data-testid="login-button"], button[type="submit"]');
-  await page.waitForURL('/admin', { timeout: 10000 });
+  await page
+    .addStyleTag({
+      content: `
+        nextjs-portal, nextjs-portal * { pointer-events: none !important; }
+        [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
+      `,
+    })
+    .catch(() => {});
+  await page.fill('[data-testid="email-input"]', email);
+  await page.fill('[data-testid="password-input"]', password);
+  await page.locator('[data-testid="login-button"]').first().click({ force: true });
+  await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 10000 });
 }
 
 /**
  * Logout helper function.
  */
 export async function logout(page: Page): Promise<void> {
-  await page.click('[data-testid="logout-button"], button:has-text("Logout")');
+  // Prefer explicit logout button if present; otherwise use user menu.
+  const directLogout = page.locator('[data-testid="logout-button"]');
+  if ((await directLogout.count()) > 0) {
+    await directLogout.first().click({ force: true });
+  } else {
+    const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').first();
+    if ((await menuTrigger.count()) > 0) {
+      await menuTrigger.click({ force: true });
+      await page
+        .locator('[data-testid="logout-menu-item"]')
+        .first()
+        .click({ force: true });
+    }
+  }
   await page.waitForURL(/\/login/, { timeout: 10000 });
 }
 
@@ -111,10 +169,14 @@ export async function register(
   name: string
 ): Promise<void> {
   await page.goto('/register');
-  await page.fill('[data-testid="email-input"], input[name="email"]', email);
-  await page.fill('[data-testid="name-input"], input[name="name"]', name);
-  await page.fill('[data-testid="password-input"], input[name="password"]', password);
-  await page.click('[data-testid="register-button"], button[type="submit"]');
+  await page.fill('[data-testid="email-input"]', email);
+  await page.fill('[data-testid="name-input"]', name);
+  await page.fill('[data-testid="password-input"]', password);
+  const confirmPassword = page.locator('[data-testid="confirm-password-input"]');
+  if ((await confirmPassword.count()) > 0) {
+    await confirmPassword.fill(password);
+  }
+  await page.click('[data-testid="register-button"]');
   await page.waitForURL('/dashboard', { timeout: 10000 });
 }
 

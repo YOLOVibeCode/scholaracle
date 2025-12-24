@@ -14,7 +14,11 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**⚠️ PORT POLICY: Web app uses FIXED port 2800. DO NOT change this port.**
+
+Open [http://localhost:2800](http://localhost:2800) with your browser to see the result.
+
+See [PORT_POLICY.md](../../PORT_POLICY.md) for complete port policy.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

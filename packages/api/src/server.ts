@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import { MongoClient, type Db } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { healthRouter } from './routes/health';
 import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
@@ -16,7 +17,13 @@ import { reportsRouter } from './routes/admin/reports';
 import { notesRouter } from './routes/admin/notes';
 import { subscriptionsRouter } from './routes/admin/subscriptions';
 import { paymentsRouter } from './routes/admin/payments';
+import { auditLogsRouter } from './routes/admin/audit-logs';
+import { communicationsRouter } from './routes/admin/communications';
+import { adminUsersRouter } from './routes/admin/users';
+import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { seedRouter } from './routes/seed/seed';
+import { ingestV1Router } from './routes/ingest/v1';
+import { agendaRouter } from './routes/agenda';
 import { NotificationService } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
 import { ParentNotificationGenerator } from '@scholaracle/agents';
@@ -152,6 +159,16 @@ async function initializeDatabase(config: IServerConfig): Promise<Db> {
   const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
   const dbName = config.mongodbDbName ?? process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
 
+  // Allow fully self-contained E2E runs without an external MongoDB daemon.
+  // Usage: MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_e2e
+  if (mongodbUri === 'memory' || mongodbUri.startsWith('memory:') || process.env['USE_IN_MEMORY_MONGO'] === 'true') {
+    const memoryServer = await MongoMemoryServer.create();
+    const uri = memoryServer.getUri();
+    const client = new MongoClient(uri);
+    await client.connect();
+    return client.db(dbName);
+  }
+
   const client = new MongoClient(mongodbUri);
   await client.connect();
 
@@ -186,6 +203,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
   if (database) {
     const authService = new AuthService(database);
+    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
     
     // User-facing API routes
     app.use('/api/auth', authRouter({ database }));
@@ -194,16 +212,25 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Settings API routes
     app.use('/api/settings', authMiddleware(authService), settingsRouter({ database }));
+    // Agenda API routes (unified assignments + recurring events)
+    app.use('/api/agenda', agendaRouter({ database }));
+    // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
+    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
     
     // Admin API routes (separate authentication)
-    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
     app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret }));
     app.use('/api/admin/customers', customersRouter({ database }));
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
     app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
+    app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
+    app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin', notesRouter({ database }));
+
+    // Webhook ingestion (delivery tracking)
+    app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));
   }
 
   app.use(errorHandler);

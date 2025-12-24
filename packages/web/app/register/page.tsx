@@ -67,6 +67,8 @@ export default function RegisterPage() {
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
+                name="name"
+                data-testid="name-input"
                 type="text"
                 placeholder="John Doe"
                 value={name}
@@ -79,6 +81,8 @@ export default function RegisterPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
+                data-testid="email-input"
                 type="email"
                 placeholder="name@example.com"
                 value={email}
@@ -91,6 +95,8 @@ export default function RegisterPage() {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                name="password"
+                data-testid="password-input"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -103,6 +109,8 @@ export default function RegisterPage() {
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
                 id="confirmPassword"
+                name="confirmPassword"
+                data-testid="confirm-password-input"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -113,7 +121,7 @@ export default function RegisterPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading} data-testid="register-button">
               {isLoading ? 'Creating account...' : 'Create account'}
             </Button>
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">

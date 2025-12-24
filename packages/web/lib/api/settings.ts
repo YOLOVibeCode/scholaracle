@@ -62,8 +62,9 @@ export const settingsApi = {
    */
   async update(settings: IUpdateSettingsRequest): Promise<boolean> {
     try {
-      const response = await apiClient.put<{ readonly success: boolean }>('/settings', settings);
-      return response.success ?? false;
+      // API returns the updated settings object (not wrapped)
+      await apiClient.put<IUserSettings>('/settings', settings);
+      return true;
     } catch (error) {
       console.error('Failed to update settings:', error);
       return false;

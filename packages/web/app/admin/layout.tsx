@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -9,32 +9,86 @@ import {
   CreditCard,
   FileText,
   BarChart3,
+  MessageSquare,
+  Settings,
+  ClipboardList,
   LogOut,
   Menu,
   X,
 } from 'lucide-react';
 import { adminAuthApi } from '@/lib/api/admin/auth';
 
+function getInitialAdminUser(): { id: string; email: string; name: string; role: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return adminAuthApi.getCurrentAdmin();
+  } catch {
+    return null;
+  }
+}
+
+function isForbiddenByRole(role: string, pathname: string): boolean {
+  const forbiddenByRole: Record<string, readonly RegExp[]> = {
+    // Support: no billing or system settings
+    support: [/^\/admin\/settings/, /^\/admin\/payments/, /^\/admin\/subscriptions/, /^\/admin\/audit-logs/],
+    // Billing: no communications or system settings
+    billing: [/^\/admin\/communications/, /^\/admin\/settings/, /^\/admin\/audit-logs/],
+    // Analyst: no system settings / audit logs / communications / subscriptions management
+    analyst: [/^\/admin\/settings/, /^\/admin\/audit-logs/, /^\/admin\/communications/, /^\/admin\/subscriptions/],
+    // Admin: no system settings / audit logs
+    admin: [/^\/admin\/settings/, /^\/admin\/audit-logs/],
+    // Super admin: everything allowed
+    super_admin: [],
+  };
+
+  return (forbiddenByRole[role] ?? []).some((re) => re.test(pathname));
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isLoginRoute = pathname === '/admin/login';
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [adminUser, setAdminUser] = useState<{ name: string; email: string; role: string } | null>(
-    null
+  const [adminUser, setAdminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(
+    () => getInitialAdminUser()
   );
 
   useEffect(() => {
-    const user = adminAuthApi.getCurrentAdmin();
-    if (!user) {
-      router.push('/admin/login');
+    // Keep state in sync in case localStorage changes after initial load.
+    const user = getInitialAdminUser();
+    if (user) setAdminUser(user);
+  }, [router]);
+
+  const forbidden = useMemo(() => {
+    if (!adminUser) return false;
+    return isForbiddenByRole(adminUser.role, pathname);
+  }, [adminUser, pathname]);
+
+  // Enforce auth + RBAC as early as possible for best UX (and stable E2E).
+  useLayoutEffect(() => {
+    if (isLoginRoute) return;
+    if (!adminUser) {
+      router.replace('/admin/login');
       return;
     }
-    setAdminUser(user);
-  }, [router]);
+    if (forbidden) {
+      router.replace('/admin/dashboard');
+    }
+  }, [adminUser, forbidden, isLoginRoute, router]);
 
   const handleLogout = async () => {
     await adminAuthApi.logout();
     router.push('/admin/login');
   };
+
+  // Avoid rendering forbidden routes (prevents flicker and makes denial deterministic).
+  if (!isLoginRoute && (!adminUser || forbidden)) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
+        <p className="text-sm text-gray-600 dark:text-gray-400">Redirecting…</p>
+      </div>
+    );
+  }
 
   const navItems = [
     { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -42,6 +96,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/subscriptions', icon: CreditCard, label: 'Subscriptions' },
     { href: '/admin/payments', icon: FileText, label: 'Payments' },
     { href: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
+    { href: '/admin/reports', icon: ClipboardList, label: 'Reports' },
+    { href: '/admin/communications', icon: MessageSquare, label: 'Communications' },
+    { href: '/admin/settings', icon: Settings, label: 'Settings' },
+    { href: '/admin/audit-logs', icon: ClipboardList, label: 'Audit Logs' },
   ];
 
   return (
@@ -67,6 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={`${item.label.toLowerCase().replace(/\s+/g, '-')}-link`}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <item.icon className="w-5 h-5" />
@@ -85,6 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <button
               onClick={handleLogout}
+              data-testid="logout-button"
               className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" />
@@ -109,4 +169,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     </div>
   );
 }
+
 

@@ -92,6 +92,37 @@ describe('Admin Auth Routes', () => {
       expect(response.body.requiresMFA).toBe(true);
       expect(response.body.mfaToken).toBeDefined();
     });
+
+    it('should rate limit login when enabled', async () => {
+      const old = process.env['RATE_LIMIT_ENABLED'];
+      process.env['RATE_LIMIT_ENABLED'] = 'true';
+      try {
+        // Fresh app instance to pick up env + limiter.
+        const app2 = express();
+        app2.use(express.json());
+        app2.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
+
+        // Make sure user exists; password irrelevant (we just need deterministic route calls).
+        const passwordHash = await AdminUserRepository.hashPassword('LoginPass123!');
+        await new AdminUserRepository(database).create({
+          email: 'ratelimit@test.com',
+          passwordHash,
+          name: 'Rate Limit Admin',
+          role: 'admin',
+        });
+
+        // 10 allowed, 11th should 429
+        for (let i = 0; i < 10; i++) {
+          await request(app2).post('/api/admin/auth/login').send({ email: 'ratelimit@test.com', password: 'wrong' });
+        }
+        const res = await request(app2).post('/api/admin/auth/login').send({ email: 'ratelimit@test.com', password: 'wrong' });
+        expect(res.status).toBe(429);
+        expect(res.body.code).toBe('RATE_LIMIT_EXCEEDED');
+      } finally {
+        if (old === undefined) delete process.env['RATE_LIMIT_ENABLED'];
+        else process.env['RATE_LIMIT_ENABLED'] = old;
+      }
+    });
   });
 
   describe('POST /api/admin/auth/mfa/verify', () => {
@@ -150,6 +181,57 @@ describe('Admin Auth Routes', () => {
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('Step-up MFA', () => {
+    it('should enable MFA and mint step-up token', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('StepUpPass123!');
+      await new AdminUserRepository(database).create({
+        email: 'stepup@test.com',
+        passwordHash,
+        name: 'Step Up Admin',
+        role: 'admin',
+      });
+
+      // Login (no MFA yet)
+      const loginRes = await request(app).post('/api/admin/auth/login').send({
+        email: 'stepup@test.com',
+        password: 'StepUpPass123!',
+      });
+      expect(loginRes.status).toBe(200);
+      const adminToken = loginRes.body.token as string;
+      expect(adminToken).toBeTruthy();
+
+      // Setup MFA (client would normally call /mfa/setup)
+      const { secret } = mfaService.generateSecret('stepup@test.com');
+      const speakeasy = require('speakeasy');
+      const totp = speakeasy.totp({ secret, encoding: 'base32' });
+
+      const enableRes = await request(app)
+        .post('/api/admin/auth/mfa/enable')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ secret, token: totp });
+      expect(enableRes.status).toBe(200);
+      expect(enableRes.body.success).toBe(true);
+
+      const startRes = await request(app)
+        .post('/api/admin/auth/step-up/start')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      expect(startRes.status).toBe(200);
+      expect(startRes.body.success).toBe(true);
+      expect(startRes.body.data?.stepUpId).toBeTruthy();
+
+      const stepUpId = startRes.body.data.stepUpId as string;
+      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
+      const verifyRes = await request(app)
+        .post('/api/admin/auth/step-up/verify')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ stepUpId, token: totp2 });
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.success).toBe(true);
+      expect(verifyRes.body.data?.stepUpToken).toBeTruthy();
     });
   });
 

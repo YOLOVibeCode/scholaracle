@@ -1,4 +1,4 @@
-import type { Db, Collection, ObjectId, ModifyResult, Document } from 'mongodb';
+import type { Db, Collection, ObjectId, Document } from 'mongodb';
 import { ObjectId as MongoObjectId } from 'mongodb';
 
 export interface IJobData {
@@ -126,11 +126,17 @@ export class MongoQueue {
       }
     );
 
-    if (!result) {
-      return null;
+    if (!result) return null;
+
+    // MongoDB driver can return either:
+    // - ModifyResult<T> (with .value) when includeResultMetadata=true
+    // - WithId<T> | null (document directly) when includeResultMetadata=false
+    const asAny = result as unknown as { value?: IJob | null };
+    if ('value' in asAny) {
+      return (asAny.value ?? null) as IJob | null;
     }
 
-    return (result as unknown as ModifyResult<IJob>).value ?? null;
+    return result as unknown as IJob;
   }
 
   /**

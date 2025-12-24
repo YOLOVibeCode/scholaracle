@@ -1,0 +1,339 @@
+# Scholaracle - AI Coding Rules
+
+ROLE: engineer STRICT=true
+
+## Stack
+Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Express 4 | Jest | Playwright | pnpm monorepo
+
+## Response Format
+- Code + 3-line max docstring
+- No explanation unless asked
+- If >50 lines: modularize into helpers
+- If ambiguous: 2 implementations + 1-line tradeoff each
+- Assume experienced user—skip basics
+
+## Before Writing
+1. Search codebase—reuse existing patterns
+2. Check for `APP_SPECIFICATION.md` / `IMPLEMENTATION_STATUS.md` / `CODING_STANDARDS.md`
+3. If API endpoint: confirm route exists in `/packages/api/src/routes/`
+4. If new model: add to `@scholaracle/contracts`
+5. List edge cases you'll handle
+
+## Code Standards
+- TypeScript strict, no `any`—use `unknown` or generics
+- Errors: throw (not return null)
+- No hardcoded values—use env/config
+- No console.log—use structured logging
+- KISS + YAGNI + DRY × SOLID
+- Complexity max 10, depth max 3, functions max 50 lines
+
+## Port Policy (CRITICAL - NEVER CHANGE)
+| Port | Service |
+|------|---------|
+| 2800 | Web App (Next.js) |
+| 2801 | API Server (Express) |
+| 2802 | MongoDB |
+| 2803 | MailHog SMTP |
+| 2804 | MailHog UI |
+
+## Mandates (ENFORCE STRICTLY)
+
+### M1: Monorepo Package Structure
+```
+packages/
+├── contracts/     # Shared types, enums, errors (leaf package)
+├── interfaces/    # ISP interfaces
+├── database/      # MongoDB repositories
+├── auth/          # JWT + 2FA
+├── agents/        # Notification generators & delivery
+├── api/           # Express server
+├── workers/       # Background jobs
+├── web/           # Next.js frontend
+├── connector/     # CLI ingestion tool
+└── e2e/           # Playwright tests
+```
+
+### M2: Repository Pattern
+```typescript
+// ❌ REJECT - direct MongoDB access
+const user = await db.collection('users').findOne({ _id });
+
+// ✅ REQUIRE - use repository
+import { UserRepository } from '@scholaracle/database';
+const userRepo = new UserRepository(db);
+const user = await userRepo.findById(id);
+```
+
+### M3: Interface Segregation
+```typescript
+// ❌ REJECT - god interface
+interface INotificationService { /* 20+ methods */ }
+
+// ✅ REQUIRE - granular (from @scholaracle/interfaces)
+interface INotificationGenerator { generate(): Notification[] }
+interface INotificationDelivery { deliver(): DeliveryResult }
+interface INotificationScheduler { schedule(): void }
+```
+
+### M4: Delivery Agent Pattern
+```typescript
+// ❌ REJECT - inline notification logic
+if (channel === 'email') sendEmail(); else sendSMS();
+
+// ✅ REQUIRE - use DeliveryRouter
+import { DeliveryRouter } from '@scholaracle/agents';
+const router = new DeliveryRouter(emailAgent, smsAgent, pushAgent, inAppAgent);
+await router.route(notification);
+```
+
+### M5: Contract Types
+```typescript
+// ❌ REJECT - local type definitions
+interface Alert { id: string; type: string; }
+
+// ✅ REQUIRE - shared contracts
+import { Alert, AlertType } from '@scholaracle/contracts';
+```
+
+### M6: API Client Pattern (Frontend)
+```typescript
+// ❌ REJECT - raw fetch
+const res = await fetch('/api/students');
+
+// ✅ REQUIRE - API client SDK
+import { studentsApi } from '@/lib/api/students';
+const students = await studentsApi.list();
+```
+
+### M7: Validation with Zod
+```typescript
+// ❌ REJECT - manual validation
+if (!email || !email.includes('@')) throw new Error('Invalid');
+
+// ✅ REQUIRE - Zod schemas
+import { z } from 'zod';
+const schema = z.object({ email: z.string().email() });
+schema.parse(input);
+```
+
+### M8: Middleware Chain (API)
+Order: Auth → Validation → Rate-limit → Handler → Error
+```typescript
+// ❌ REJECT - auth in handler
+router.post('/alerts', (req, res) => { if (!req.user) ... });
+
+// ✅ REQUIRE - middleware chain
+router.post('/alerts', authMiddleware, validateBody(schema), createAlert);
+```
+
+## Project Patterns (MUST follow)
+| Pattern | Implementation |
+|---------|---------------|
+| Services | `@scholaracle/agents` - NotificationService, generators |
+| Repositories | `@scholaracle/database` - 13 repo classes (User, Student, Alert, etc.) |
+| Delivery | `@scholaracle/agents/delivery` - Email, SMS, Push, InApp, Router |
+| Contracts | `@scholaracle/contracts` - Alert, Notification, DeliveryResult |
+| Interfaces | `@scholaracle/interfaces` - INotification*, IAlert* |
+| API Client | `packages/web/lib/api/` - typed clients per domain |
+| Auth | `@scholaracle/auth` - JWT + TOTP/2FA |
+| Validation | Zod + react-hook-form (frontend) |
+| Styling | Tailwind 4 + shadcn/ui (Radix primitives) |
+
+## Frontend Patterns
+
+### Component Structure
+```typescript
+// ❌ REJECT - mixed concerns
+export function Dashboard() {
+  const [data, setData] = useState();
+  useEffect(() => fetch('/api/...'), []);
+}
+
+// ✅ REQUIRE - hooks + composition
+import { useAsyncData } from '@/lib/hooks/useAsyncData';
+import { dashboardApi } from '@/lib/api/dashboard';
+
+export function Dashboard() {
+  const { data, loading, error } = useAsyncData(dashboardApi.get);
+}
+```
+
+### Form Pattern
+```typescript
+// ✅ REQUIRE - react-hook-form + Zod
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { studentSchema } from '@/schemas/student';
+
+const form = useForm({ resolver: zodResolver(studentSchema) });
+```
+
+## Route Organization (API)
+```
+/packages/api/src/routes/
+├── health/         # GET /health
+├── auth/           # /auth/*
+├── students/       # /students/*
+├── alerts/         # /alerts/*
+├── settings/       # /settings/*
+├── agenda/         # /agenda/*
+├── ingest/         # /v1/ingest/*
+└── admin/
+    ├── auth/       # /admin/auth/*
+    ├── customers/  # /admin/customers/*
+    ├── analytics/  # /admin/analytics/*
+    └── ...
+```
+
+## Testing Requirements
+- Unit tests: Jest with ts-jest
+- E2E tests: Playwright (see `packages/e2e/`)
+- Test files: `*.test.ts`, `*.spec.ts`
+- Coverage: aim for 100% on business logic
+
+## CLI Output
+No emojis in: shell scripts, terminal commands, CI/CD, logs, error messages
+Allowed in: .md files, React components, code comments
+
+## Safety Rails
+- Never delete/refactor/optimize without OK
+- Preserve comments & existing style
+- Assume code has purpose
+- Present simpler alternative with confidence (1–10) before edits
+
+## Self-Check
+```
+[ ] No placeholder code
+[ ] Edge cases handled
+[ ] Matches codebase patterns (repos, agents, contracts)
+[ ] Types from @scholaracle/contracts
+[ ] Zod schema if API input
+[ ] STRICT mode honored
+[ ] Ports unchanged (2800-2804)
+```
+
+## Quick Reference
+```bash
+# Dev commands
+pnpm dev                    # Start all services
+pnpm --filter @scholaracle/web dev     # Web only
+pnpm --filter @scholaracle/api dev     # API only
+
+# Testing
+pnpm test                   # Jest (all packages)
+pnpm --filter @scholaracle/e2e test    # Playwright
+
+# Type checking
+pnpm typecheck              # All packages
+
+# Linting
+pnpm lint                   # ESLint
+pnpm format                 # Prettier
+```
+
+## Violation Response
+When violation detected:
+1. REJECT with mandate number (M1-M8)
+2. Show bad code vs good code
+3. Reference relevant package/file
+4. Provide fix instruction
+
+## Documentation Reference
+- `APP_SPECIFICATION.md` - Feature specs & acceptance criteria
+- `CODING_STANDARDS.md` - Mandatory standards
+- `IMPLEMENTATION_STATUS.md` - Current status
+- `PORT_POLICY.md` - Port requirements
+- `E2E_TEST_SPECIFICATION.md` - Test specs
+- `SUPER_ADMIN_DASHBOARD_SPECIFICATION.md` - Admin features
+
+ROLE: engineer STRICT=true
+
+
+---
+
+## UI AUTOMATION REQUIREMENTS (CRITICAL)
+
+All UI components MUST be automation-friendly for Playwright, browser automation, and MCP testing.
+
+### Data Test IDs (MANDATORY)
+
+Add `data-testid` attributes to ALL interactive elements and key containers:
+
+| Element Type | Pattern | Example |
+|-------------|---------|---------|
+| Buttons | `data-testid="btn-{action}"` | `data-testid="btn-submit"`, `data-testid="btn-cancel"` |
+| Forms | `data-testid="form-{name}"` | `data-testid="form-login"` |
+| Inputs | `data-testid="input-{field}"` | `data-testid="input-email"` |
+| Links | `data-testid="link-{destination}"` | `data-testid="link-dashboard"` |
+| Modals | `data-testid="modal-{name}"` | `data-testid="modal-confirm"` |
+| Tables | `data-testid="table-{name}"` | `data-testid="table-users"` |
+| Table Rows | `data-testid="row-{identifier}"` | `data-testid="row-user-123"` |
+| Cards | `data-testid="card-{name}"` | `data-testid="card-profile"` |
+| Dropdowns | `data-testid="dropdown-{name}"` | `data-testid="dropdown-status"` |
+| Checkboxes | `data-testid="checkbox-{name}"` | `data-testid="checkbox-agree"` |
+
+### Semantic HTML (MANDATORY)
+
+- Use proper semantic elements (`<button>`, `<a>`, `<form>`, `<input>`) instead of divs with click handlers
+- Use `<button type="button">` for actions, `<button type="submit">` for form submissions
+- Use `<a href>` for navigation, not buttons with onClick navigation
+
+### Accessible Labels (MANDATORY)
+
+- Include `aria-label` for elements without visible text
+- Use proper `<label htmlFor="id">` elements for form inputs
+- Add `aria-describedby` for error messages linked to inputs
+
+### Stable Selectors (MANDATORY)
+
+- NEVER rely on auto-generated class names (CSS-in-JS hashes) as primary selectors
+- ALWAYS use `data-testid` for test targeting
+- Avoid using indexes or nth-child selectors
+
+### Loading & Error States (MANDATORY)
+
+- Add `data-loading="true|false"` attribute for async states
+- Use `data-testid="loading-{component}"` for loading indicators
+- Use `data-testid="error-{field}"` for validation/error messages
+- Use `data-testid="empty-{component}"` for empty states
+
+### Example Component:
+
+```tsx
+<form data-testid="form-login" onSubmit={handleSubmit}>
+  <div>
+    <label htmlFor="email">Email</label>
+    <input
+      id="email"
+      data-testid="input-email"
+      type="email"
+      aria-describedby="email-error"
+    />
+    {errors.email && (
+      <span id="email-error" data-testid="error-email" role="alert">
+        {errors.email}
+      </span>
+    )}
+  </div>
+  
+  <button
+    type="submit"
+    data-testid="btn-submit-login"
+    data-loading={isLoading}
+    disabled={isLoading}
+    aria-label="Submit login form"
+  >
+    {isLoading ? 'Signing in...' : 'Sign In'}
+  </button>
+</form>
+```
+
+### Self-Check for UI Automation:
+
+- [ ] All interactive elements have `data-testid`
+- [ ] Forms use semantic HTML elements
+- [ ] Inputs have associated labels
+- [ ] Loading states are indicated with `data-loading`
+- [ ] Error messages have `data-testid="error-*"`
+- [ ] No reliance on generated CSS classes for testing
+

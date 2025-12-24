@@ -2,7 +2,7 @@
  * Test data constants for E2E tests.
  */
 
-export type UserRole = 'parent' | 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst';
+export type UserRole = 'parent' | 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst' | 'newUser';
 
 export const TEST_USERS = {
   parent: {

@@ -2,16 +2,16 @@
   "config": {
     "configFile": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/playwright.config.ts",
     "rootDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
-    "forbidOnly": true,
+    "forbidOnly": false,
     "fullyParallel": true,
-    "globalSetup": null,
+    "globalSetup": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/global-setup.ts",
     "globalTeardown": null,
     "globalTimeout": 0,
     "grep": {},
     "grepInvert": null,
-    "maxFailures": 5,
+    "maxFailures": 0,
     "metadata": {
-      "actualWorkers": 4
+      "actualWorkers": 8
     },
     "preserveOutput": "always",
     "reporter": [
@@ -49,7 +49,7 @@
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "critical",
         "name": "critical",
@@ -58,14 +58,14 @@
         "testMatch": [
           "/00-critical\\.spec\\.ts/"
         ],
-        "timeout": 120000
+        "timeout": 30000
       },
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "auth",
         "name": "auth",
@@ -74,14 +74,14 @@
         "testMatch": [
           "/01-auth\\.spec\\.ts/"
         ],
-        "timeout": 120000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "dashboard",
         "name": "dashboard",
@@ -90,14 +90,14 @@
         "testMatch": [
           "/02-dashboard.*\\.spec\\.ts/"
         ],
-        "timeout": 120000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "navigation",
         "name": "navigation",
@@ -106,14 +106,14 @@
         "testMatch": [
           "/03-navigation.*\\.spec\\.ts/"
         ],
-        "timeout": 120000
+        "timeout": 60000
       },
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "feature",
         "name": "feature",
@@ -122,14 +122,14 @@
         "testMatch": [
           "/04-feature.*\\.spec\\.ts/"
         ],
-        "timeout": 120000
+        "timeout": 90000
       },
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "integration",
         "name": "integration",
@@ -143,9 +143,9 @@
       {
         "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
         "repeatEach": 1,
-        "retries": 2,
+        "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "error",
         "name": "error",
@@ -154,55 +154,7 @@
         "testMatch": [
           "/06-error\\.spec\\.ts/"
         ],
-        "timeout": 120000
-      },
-      {
-        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
-        "repeatEach": 1,
-        "retries": 2,
-        "metadata": {
-          "actualWorkers": 4
-        },
-        "id": "firefox",
-        "name": "firefox",
-        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
-        "testIgnore": [],
-        "testMatch": [
-          "/0[1-4]-.*\\.spec\\.ts/"
-        ],
-        "timeout": 120000
-      },
-      {
-        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
-        "repeatEach": 1,
-        "retries": 2,
-        "metadata": {
-          "actualWorkers": 4
-        },
-        "id": "webkit",
-        "name": "webkit",
-        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
-        "testIgnore": [],
-        "testMatch": [
-          "/0[1-4]-.*\\.spec\\.ts/"
-        ],
-        "timeout": 120000
-      },
-      {
-        "outputDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/test-results",
-        "repeatEach": 1,
-        "retries": 2,
-        "metadata": {
-          "actualWorkers": 4
-        },
-        "id": "mobile",
-        "name": "mobile",
-        "testDir": "/Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests",
-        "testIgnore": [],
-        "testMatch": [
-          "/03-navigation.*\\.spec\\.ts/"
-        ],
-        "timeout": 120000
+        "timeout": 60000
       }
     ],
     "shard": null,
@@ -210,15 +162,8 @@
     "updateSnapshots": "missing",
     "updateSourceMethod": "patch",
     "version": "1.57.0",
-    "workers": 4,
-    "webServer": {
-      "command": "pnpm --filter @scholaracle/web dev",
-      "url": "http://localhost:3000",
-      "reuseExistingServer": true,
-      "timeout": 120000,
-      "stdout": "pipe",
-      "stderr": "pipe"
-    }
+    "workers": 8,
+    "webServer": null
   },
   "suites": [
     {
@@ -242,7 +187,7 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "critical",
@@ -252,12 +197,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 710,
+                      "duration": 899,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-11T19:53:57.444Z",
+                      "startTime": "2025-12-24T16:10:38.375Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -278,7 +223,7 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "critical",
@@ -288,12 +233,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 402,
+                      "duration": 442,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-11T19:53:58.351Z",
+                      "startTime": "2025-12-24T16:10:39.578Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -308,13 +253,13 @@
             },
             {
               "title": "CRIT-003: API health check",
-              "ok": false,
+              "ok": true,
               "tags": [
                 "critical"
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 30000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "critical",
@@ -323,41 +268,18 @@
                     {
                       "workerIndex": 0,
                       "parallelIndex": 0,
-                      "status": "failed",
-                      "duration": 312,
-                      "error": {
-                        "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
-                        "stack": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:3002\n    at /Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests/00-critical.spec.ts:59:36",
-                        "location": {
-                          "file": "apiRequestContext.get: connect ECONNREFUSED :",
-                          "column": 3002,
-                          "line": 1
-                        }
-                      },
-                      "errors": [
-                        {
-                          "location": {
-                            "file": "apiRequestContext.get: connect ECONNREFUSED :",
-                            "column": 3002,
-                            "line": 1
-                          },
-                          "message": "Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002\nCall log:\n\u001b[2m  - → GET http://localhost:3002/api/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\n    at apiRequestContext.get: connect ECONNREFUSED ::1:3002\n    at /Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests/00-critical.spec.ts:59:36"
-                        }
-                      ],
+                      "status": "passed",
+                      "duration": 11,
+                      "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2025-12-11T19:53:58.757Z",
+                      "startTime": "2025-12-24T16:10:40.025Z",
                       "annotations": [],
-                      "attachments": [],
-                      "errorLocation": {
-                        "file": "apiRequestContext.get: connect ECONNREFUSED :",
-                        "column": 3002,
-                        "line": 1
-                      }
+                      "attachments": []
                     }
                   ],
-                  "status": "unexpected"
+                  "status": "expected"
                 }
               ],
               "id": "4d1f3adcf1fd23d3881d-0889747d90f5ee25600e",
@@ -390,13 +312,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1357,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.438Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-92ce9551832d645ca2e4",
@@ -412,13 +348,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1451,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.428Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-7cba6e490f7ff66af425",
@@ -434,18 +384,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1178,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.444Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-4fb5fb8ffb478c3a6fcc",
               "file": "01-auth.spec.ts",
-              "line": 40,
+              "line": 55,
               "column": 7
             },
             {
@@ -456,18 +420,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1125,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.426Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-45a4e9f90e46b4262ae6",
               "file": "01-auth.spec.ts",
-              "line": 50,
+              "line": 65,
               "column": 7
             },
             {
@@ -478,18 +456,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1117,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.441Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-02c461fc0c446c09a0c5",
               "file": "01-auth.spec.ts",
-              "line": 60,
+              "line": 75,
               "column": 7
             },
             {
@@ -500,18 +492,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1141,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.425Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-f350c0da708ac4795164",
               "file": "01-auth.spec.ts",
-              "line": 70,
+              "line": 85,
               "column": 7
             },
             {
@@ -522,18 +528,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1155,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.438Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-859b075d7c37d2a5a13c",
               "file": "01-auth.spec.ts",
-              "line": 80,
+              "line": 95,
               "column": 7
             },
             {
@@ -544,370 +564,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "auth",
                   "projectName": "auth",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 612,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:40.433Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "791b3c4e0869e77b2651-cb1c4b26f41cc9aa4149",
               "file": "01-auth.spec.ts",
-              "line": 90,
-              "column": 7
-            },
-            {
-              "title": "AUTH-001: Parent can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-7d1a3eaa56fedd6725b0",
-              "file": "01-auth.spec.ts",
-              "line": 16,
-              "column": 7
-            },
-            {
-              "title": "AUTH-002: Parent can logout",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-342549dca5ed429ab8fb",
-              "file": "01-auth.spec.ts",
-              "line": 26,
-              "column": 7
-            },
-            {
-              "title": "AUTH-003: Super Admin can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-bafed0ce9e4db640abb6",
-              "file": "01-auth.spec.ts",
-              "line": 40,
-              "column": 7
-            },
-            {
-              "title": "AUTH-004: Admin can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-570737a4ad15375208d1",
-              "file": "01-auth.spec.ts",
-              "line": 50,
-              "column": 7
-            },
-            {
-              "title": "AUTH-005: Support can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-673a5a25f12a5532ec36",
-              "file": "01-auth.spec.ts",
-              "line": 60,
-              "column": 7
-            },
-            {
-              "title": "AUTH-006: Billing can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-e4f5d4476daf9972399f",
-              "file": "01-auth.spec.ts",
-              "line": 70,
-              "column": 7
-            },
-            {
-              "title": "AUTH-007: Analyst can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-267198b1d193d668dad3",
-              "file": "01-auth.spec.ts",
-              "line": 80,
-              "column": 7
-            },
-            {
-              "title": "AUTH-008: Invalid credentials rejected",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "firefox",
-                  "projectName": "firefox",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-f80746e28f2c26b98f70",
-              "file": "01-auth.spec.ts",
-              "line": 90,
-              "column": 7
-            },
-            {
-              "title": "AUTH-001: Parent can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-591ea26056ebb9435e14",
-              "file": "01-auth.spec.ts",
-              "line": 16,
-              "column": 7
-            },
-            {
-              "title": "AUTH-002: Parent can logout",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-657e081a24177ed7d4fe",
-              "file": "01-auth.spec.ts",
-              "line": 26,
-              "column": 7
-            },
-            {
-              "title": "AUTH-003: Super Admin can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-09743fdc64e7e50f8df8",
-              "file": "01-auth.spec.ts",
-              "line": 40,
-              "column": 7
-            },
-            {
-              "title": "AUTH-004: Admin can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-14d8440733f88539f774",
-              "file": "01-auth.spec.ts",
-              "line": 50,
-              "column": 7
-            },
-            {
-              "title": "AUTH-005: Support can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-4a6386dd292951dc141e",
-              "file": "01-auth.spec.ts",
-              "line": 60,
-              "column": 7
-            },
-            {
-              "title": "AUTH-006: Billing can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-1b865a8dd6c93af6c8ed",
-              "file": "01-auth.spec.ts",
-              "line": 70,
-              "column": 7
-            },
-            {
-              "title": "AUTH-007: Analyst can login",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-eb7d7c7cdec98b30365e",
-              "file": "01-auth.spec.ts",
-              "line": 80,
-              "column": 7
-            },
-            {
-              "title": "AUTH-008: Invalid credentials rejected",
-              "ok": true,
-              "tags": [
-                "auth"
-              ],
-              "tests": [
-                {
-                  "timeout": 120000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "webkit",
-                  "projectName": "webkit",
-                  "results": [],
-                  "status": "skipped"
-                }
-              ],
-              "id": "791b3c4e0869e77b2651-483d1456263e1b277123",
-              "file": "01-auth.spec.ts",
-              "line": 90,
+              "line": 105,
               "column": 7
             }
           ]
@@ -935,13 +617,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1210,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.528Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-33736fc328d522404b2b",
@@ -957,13 +653,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 7037,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.539Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-be6c80510b0aa2ded91a",
@@ -979,13 +689,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 4450,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.522Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-f302109b81df0d643b83",
@@ -1001,13 +725,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 7641,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.501Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-a47009672fb24f56b043",
@@ -1023,13 +761,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 6132,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.536Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-d896d5faf56253865119",
@@ -1045,13 +797,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 6190,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.514Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-ce8ce0c5a27ba7aecb63",
@@ -1067,13 +833,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 7032,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.518Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-7f570796ae6f330af96e",
@@ -1089,13 +869,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 2857,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:42.521Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-825639ca909fa01b4128",
@@ -1111,18 +905,104 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2621,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:43.940Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-2562086c5ecc76574ebe",
               "file": "02-dashboard-admin.spec.ts",
               "line": 127,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-021: Audit Logs export CSV works (super_admin only)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 2225,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:45.591Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "91595cd527973b515e78-403e41a596a85aa38569",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 138,
+              "column": 7
+            },
+            {
+              "title": "DASH-A-022: Audit Log detail drawer opens (super_admin only)",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2370,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:46.568Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "91595cd527973b515e78-fc33cd5b96bfbce02e65",
+              "file": "02-dashboard-admin.spec.ts",
+              "line": 153,
               "column": 7
             },
             {
@@ -1133,18 +1013,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3958,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:47.189Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-8ba466c90427332c5a5e",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 135,
+              "line": 163,
               "column": 7
             },
             {
@@ -1155,18 +1049,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1503,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:47.825Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-64ab91328ac2fa9aff58",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 150,
+              "line": 178,
               "column": 7
             },
             {
@@ -1177,18 +1085,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1679,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:48.866Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-1dce1d938ae9fc21a75c",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 155,
+              "line": 183,
               "column": 7
             },
             {
@@ -1199,18 +1121,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1599,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:48.924Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-186f38305b4f4501e0a8",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 160,
+              "line": 188,
               "column": 7
             },
             {
@@ -1221,18 +1157,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1573,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:48.953Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-fc9584e74c5e5016b7eb",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 165,
+              "line": 193,
               "column": 7
             },
             {
@@ -1243,18 +1193,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1309,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:49.336Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-a564f8e2c7ce8364deb4",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 170,
+              "line": 198,
               "column": 7
             },
             {
@@ -1265,18 +1229,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1219,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:49.760Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-921f451516b245bc35dd",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 175,
+              "line": 203,
               "column": 7
             },
             {
@@ -1287,18 +1265,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1273,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:49.760Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-607b782ace34bba9394e",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 180,
+              "line": 208,
               "column": 7
             },
             {
@@ -1309,18 +1301,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 944,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.352Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-371dd5ea0d12651518ab",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 185,
+              "line": 213,
               "column": 7
             },
             {
@@ -1331,18 +1337,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1320,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.533Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-ce4a210b468630f30e38",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 190,
+              "line": 218,
               "column": 7
             },
             {
@@ -1353,18 +1373,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1415,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.534Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "91595cd527973b515e78-3ac4330b6ffb11f63de0",
               "file": "02-dashboard-admin.spec.ts",
-              "line": 195,
+              "line": 223,
               "column": 7
             }
           ]
@@ -1392,18 +1426,68 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1237,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.554Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-bd606aaa987c91581dd5",
               "file": "02-dashboard-parent.spec.ts",
               "line": 18,
+              "column": 7
+            },
+            {
+              "title": "DASH-P-009: Dashboard shows real alerts and deadlines",
+              "ok": true,
+              "tags": [
+                "dashboard"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "dashboard",
+                  "projectName": "dashboard",
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1508,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.657Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "86579bd80fa9328a9371-92edb6c6d8bb128e7392",
+              "file": "02-dashboard-parent.spec.ts",
+              "line": 26,
               "column": 7
             },
             {
@@ -1414,18 +1498,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1620,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:50.992Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-0875a729e61ce38cdced",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 26,
+              "line": 56,
               "column": 7
             },
             {
@@ -1436,18 +1534,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1587,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.047Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-f4609cf916a85d7e999b",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 35,
+              "line": 65,
               "column": 7
             },
             {
@@ -1458,18 +1570,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1576,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.161Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-a1e00d95dd8688c16627",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 44,
+              "line": 74,
               "column": 7
             },
             {
@@ -1480,18 +1606,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1630,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.304Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-a8edf0f0f92f2e841b57",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 65,
+              "line": 95,
               "column": 7
             },
             {
@@ -1502,18 +1642,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1596,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.799Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-94e079a221cd2ac43f81",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 74,
+              "line": 104,
               "column": 7
             },
             {
@@ -1524,18 +1678,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1562,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.864Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-223f02769a3bcc4faf7d",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 82,
+              "line": 112,
               "column": 7
             },
             {
@@ -1546,18 +1714,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "dashboard",
                   "projectName": "dashboard",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1445,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:51.961Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "86579bd80fa9328a9371-fe27553d71749643e929",
               "file": "02-dashboard-parent.spec.ts",
-              "line": 98,
+              "line": 128,
               "column": 7
             }
           ]
@@ -1585,13 +1767,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 17,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 52704,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.233Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-2d8111c9b609e029ab8c",
@@ -1607,13 +1803,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 18,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 11230,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.228Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-a6ed2e99342c0b9f09ce",
@@ -1629,13 +1839,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3810,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.233Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-aac8b9ef87f17927fb22",
@@ -1651,13 +1875,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 20,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 12072,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.225Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-2e84f609a200288226ef",
@@ -1673,13 +1911,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 21,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 12033,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.217Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-eb7b6a7177314cb3836b",
@@ -1695,13 +1947,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 22,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 11225,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.219Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-cebdab37a324fc139d43",
@@ -1717,13 +1983,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 2242,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.219Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-f157549b008e424d6982",
@@ -1739,13 +2019,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 2250,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:54.218Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-452ec7def9cb36339c51",
@@ -1761,13 +2055,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 851,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:56.703Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-0a67aee85d68c5ae2a7a",
@@ -1783,13 +2091,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 868,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:56.709Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-50454306f748e8736a16",
@@ -1805,13 +2127,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1025,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:57.562Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-ca49a46fc4a0ae27c1e5",
@@ -1827,13 +2163,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 805,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:57.592Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-2d6b26a7589bb64db9c8",
@@ -1849,13 +2199,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1304,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:58.276Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-5578c304b8e94e32068e",
@@ -1871,18 +2235,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1216,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:58.408Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-97656c0eefcb07615271",
               "file": "03-navigation-admin.spec.ts",
-              "line": 197,
+              "line": 198,
               "column": 7
             },
             {
@@ -1893,18 +2271,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 567,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:58.594Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "964aae6494a0f3fb946a-ae9d128585fb64c5a8a1",
               "file": "03-navigation-admin.spec.ts",
-              "line": 214,
+              "line": 215,
               "column": 7
             }
           ]
@@ -1932,13 +2324,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 562,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:59.169Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-56f33be5f1a64e358942",
@@ -1954,13 +2360,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 622,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:59.590Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-8fc5761033760cc0a7b8",
@@ -1976,13 +2396,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 715,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:59.633Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-bacf8fa2e18989cae836",
@@ -1998,18 +2432,104 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 670,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:10:59.737Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-d8c527557c1e5539ebfd",
               "file": "03-navigation-parent.spec.ts",
               "line": 45,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-004a: Agenda link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 30588,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:00.218Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-f44bb5f6ba011262e50e",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 51,
+              "column": 7
+            },
+            {
+              "title": "NAV-P-004b: Courses link works",
+              "ok": true,
+              "tags": [
+                "navigation"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "navigation",
+                  "projectName": "navigation",
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 801,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:00.354Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b9ca369f84d7cf1fa132-5ff1fe2975744a64821b",
+              "file": "03-navigation-parent.spec.ts",
+              "line": 58,
               "column": 7
             },
             {
@@ -2020,18 +2540,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 665,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:00.413Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-afd591eee792cda227b3",
               "file": "03-navigation-parent.spec.ts",
-              "line": 51,
+              "line": 65,
               "column": 7
             },
             {
@@ -2042,18 +2576,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 623,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:01.086Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-ca072b417a315d396997",
               "file": "03-navigation-parent.spec.ts",
-              "line": 57,
+              "line": 71,
               "column": 7
             },
             {
@@ -2064,18 +2612,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 539,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:01.164Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-1b3ffc0fee6dd2cfc80f",
               "file": "03-navigation-parent.spec.ts",
-              "line": 69,
+              "line": 83,
               "column": 7
             },
             {
@@ -2086,18 +2648,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1289,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:01.709Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-21cf1238e6b192677fdb",
               "file": "03-navigation-parent.spec.ts",
-              "line": 76,
+              "line": 90,
               "column": 7
             },
             {
@@ -2108,18 +2684,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 690,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:01.716Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-37a57b8a012a952ab958",
               "file": "03-navigation-parent.spec.ts",
-              "line": 84,
+              "line": 98,
               "column": 7
             },
             {
@@ -2130,18 +2720,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 475,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:02.412Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-e8864237f9ca9e47917a",
               "file": "03-navigation-parent.spec.ts",
-              "line": 103,
+              "line": 117,
               "column": 7
             },
             {
@@ -2152,18 +2756,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 780,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:02.893Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-a637941462bd3c3ee6d7",
               "file": "03-navigation-parent.spec.ts",
-              "line": 116,
+              "line": 130,
               "column": 7
             },
             {
@@ -2174,18 +2792,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1667,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:03.009Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-41bbb5bc581b98b6933d",
               "file": "03-navigation-parent.spec.ts",
-              "line": 133,
+              "line": 147,
               "column": 7
             },
             {
@@ -2196,18 +2828,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 968,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:03.680Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-ef91149b270184fc3f4c",
               "file": "03-navigation-parent.spec.ts",
-              "line": 146,
+              "line": 176,
               "column": 7
             },
             {
@@ -2218,18 +2864,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 23,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 940,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:04.657Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-b66a8e7fdb2f668048b7",
               "file": "03-navigation-parent.spec.ts",
-              "line": 164,
+              "line": 194,
               "column": 7
             },
             {
@@ -2240,18 +2900,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 60000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "navigation",
                   "projectName": "navigation",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 24,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 719,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:04.688Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "b9ca369f84d7cf1fa132-98857b8978ba01d61f82",
               "file": "03-navigation-parent.spec.ts",
-              "line": 183,
+              "line": 213,
               "column": 7
             }
           ]
@@ -2279,13 +2953,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1928,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.678Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-c94284f7a959daeb644a",
@@ -2301,13 +2989,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 26,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 2791,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.666Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-98a442cdc9e19e7863c3",
@@ -2323,13 +3025,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1625,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.679Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-897c682043e22a5c72ef",
@@ -2345,13 +3061,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 28,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 2752,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.657Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-0c0979d84f4c97e2c240",
@@ -2367,18 +3097,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 29,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 2304,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.681Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-c13fdf2a74d7fdf2e5a4",
               "file": "04-feature-admin.spec.ts",
-              "line": 68,
+              "line": 71,
               "column": 7
             },
             {
@@ -2389,18 +3133,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 30,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1940,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.663Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-7138552ce96177ae0095",
               "file": "04-feature-admin.spec.ts",
-              "line": 98,
+              "line": 101,
               "column": 7
             },
             {
@@ -2411,18 +3169,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 31,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1136,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.662Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-49007befd080330a05fa",
               "file": "04-feature-admin.spec.ts",
-              "line": 122,
+              "line": 125,
               "column": 7
             },
             {
@@ -2433,18 +3205,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 32,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1662,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:47.687Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-9584809d081f6f58b1e4",
               "file": "04-feature-admin.spec.ts",
-              "line": 152,
+              "line": 155,
               "column": 7
             },
             {
@@ -2455,18 +3241,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 31,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 2129,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:49.143Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-e9f9471e3863c2f2778c",
               "file": "04-feature-admin.spec.ts",
-              "line": 177,
+              "line": 180,
               "column": 7
             },
             {
@@ -2477,18 +3277,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 2105,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:49.626Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-2b47971379ce7a7ac16b",
               "file": "04-feature-admin.spec.ts",
-              "line": 206,
+              "line": 211,
               "column": 7
             },
             {
@@ -2499,18 +3313,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 32,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 1993,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:49.679Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-9c2a626ea9fe31fd1385",
               "file": "04-feature-admin.spec.ts",
-              "line": 241,
+              "line": 246,
               "column": 7
             },
             {
@@ -2521,18 +3349,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 30,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1942,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:49.951Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-ddae1455c8ad996386a7",
               "file": "04-feature-admin.spec.ts",
-              "line": 274,
+              "line": 279,
               "column": 7
             },
             {
@@ -2543,18 +3385,140 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2122,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:50.002Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-ee3a697b7160234445c6",
               "file": "04-feature-admin.spec.ts",
-              "line": 304,
+              "line": 309,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-013b: Create template and send using it",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [
+                    {
+                      "workerIndex": 29,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 2295,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:50.317Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-6cae6a6a4813f237004f",
+              "file": "04-feature-admin.spec.ts",
+              "line": 331,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-013c: Create bulk send batch (parents segment)",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [
+                    {
+                      "workerIndex": 26,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 3467,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:50.809Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-5d4f06934a43981577ba",
+              "file": "04-feature-admin.spec.ts",
+              "line": 364,
+              "column": 7
+            },
+            {
+              "title": "FEAT-A-013d: Webhook status update reflects in UI",
+              "ok": true,
+              "tags": [
+                "feature"
+              ],
+              "tests": [
+                {
+                  "timeout": 90000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "feature",
+                  "projectName": "feature",
+                  "results": [
+                    {
+                      "workerIndex": 28,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 3188,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:50.810Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "c07d5f14d653aecfd04f-381717c97a40699fb677",
+              "file": "04-feature-admin.spec.ts",
+              "line": 397,
               "column": 7
             },
             {
@@ -2565,18 +3529,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 31,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 2573,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:51.283Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-11030b929232f87f2047",
               "file": "04-feature-admin.spec.ts",
-              "line": 330,
+              "line": 435,
               "column": 7
             },
             {
@@ -2587,18 +3565,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 32,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 2228,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:51.678Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "c07d5f14d653aecfd04f-c1cfa7727eefd3947125",
               "file": "04-feature-admin.spec.ts",
-              "line": 356,
+              "line": 457,
               "column": 7
             }
           ]
@@ -2626,18 +3618,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 2094,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:51.743Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-ffcbe947509b612c6b79",
               "file": "04-feature-parent.spec.ts",
-              "line": 18,
+              "line": 14,
               "column": 7
             },
             {
@@ -2648,18 +3654,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 30,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 2354,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:51.902Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-de0c73ecf69d431785e2",
               "file": "04-feature-parent.spec.ts",
-              "line": 35,
+              "line": 33,
               "column": 7
             },
             {
@@ -2670,18 +3690,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1736,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:52.135Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-17c93a05c20631a1527b",
               "file": "04-feature-parent.spec.ts",
-              "line": 48,
+              "line": 47,
               "column": 7
             },
             {
@@ -2692,18 +3726,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 29,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1741,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:52.620Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-b4042c39435662333bc4",
               "file": "04-feature-parent.spec.ts",
-              "line": 70,
+              "line": 71,
               "column": 7
             },
             {
@@ -2714,18 +3762,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 27,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1197,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:53.848Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-27ed68234fe0341f0bea",
               "file": "04-feature-parent.spec.ts",
-              "line": 100,
+              "line": 88,
               "column": 7
             },
             {
@@ -2736,18 +3798,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 31,
+                      "parallelIndex": 6,
+                      "status": "passed",
+                      "duration": 1045,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:53.872Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-8983533cf105f0d6a1ae",
               "file": "04-feature-parent.spec.ts",
-              "line": 108,
+              "line": 97,
               "column": 7
             },
             {
@@ -2758,18 +3834,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 25,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1176,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:53.879Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-ab90ae58c6af2d8de96d",
               "file": "04-feature-parent.spec.ts",
-              "line": 123,
+              "line": 113,
               "column": 7
             },
             {
@@ -2780,13 +3870,27 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 32,
+                      "parallelIndex": 7,
+                      "status": "passed",
+                      "duration": 2016,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:53.915Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-4e878fd930087a7011a9",
@@ -2802,18 +3906,32 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 28,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1350,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:54.010Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-5ada9b28051e60edb4fd",
               "file": "04-feature-parent.spec.ts",
-              "line": 162,
+              "line": 164,
               "column": 7
             },
             {
@@ -2824,18 +3942,498 @@
               ],
               "tests": [
                 {
-                  "timeout": 120000,
+                  "timeout": 90000,
                   "annotations": [],
                   "expectedStatus": "passed",
                   "projectId": "feature",
                   "projectName": "feature",
-                  "results": [],
-                  "status": "skipped"
+                  "results": [
+                    {
+                      "workerIndex": 30,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1200,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:54.267Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
               "id": "8f2d2f0df6916081c81a-8d3066cad64ee233152a",
               "file": "04-feature-parent.spec.ts",
-              "line": 182,
+              "line": 186,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "05-integration.spec.ts",
+      "file": "05-integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@integration Layer 5: Integration Workflows",
+          "file": "05-integration.spec.ts",
+          "line": 18,
+          "column": 6,
+          "specs": [
+            {
+              "title": "INT-001: Complete Parent Onboarding",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 33,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3248,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.324Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-362a9c1fb5051efaaadc",
+              "file": "05-integration.spec.ts",
+              "line": 19,
+              "column": 7
+            },
+            {
+              "title": "INT-002: Parent-Admin Interaction",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 34,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 2359,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.320Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-b0f5b17e80db6e5616c3",
+              "file": "05-integration.spec.ts",
+              "line": 90,
+              "column": 7
+            },
+            {
+              "title": "INT-003: Subscription Lifecycle",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 35,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 14151,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.314Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-f6642a02bf9ffbb18e69",
+              "file": "05-integration.spec.ts",
+              "line": 151,
+              "column": 7
+            },
+            {
+              "title": "INT-006: Connector ingestion populates agenda and alerts (value loop)",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 36,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 4208,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.322Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-d426899cfa581ce7631a",
+              "file": "05-integration.spec.ts",
+              "line": 240,
+              "column": 7
+            },
+            {
+              "title": "INT-004: Alert Flow",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 37,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 2279,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.322Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-2c76dda9ef60a6582f0f",
+              "file": "05-integration.spec.ts",
+              "line": 430,
+              "column": 7
+            },
+            {
+              "title": "INT-005: Multi-Student Family",
+              "ok": true,
+              "tags": [
+                "integration"
+              ],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "integration",
+                  "projectName": "integration",
+                  "results": [
+                    {
+                      "workerIndex": 38,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 3045,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:11:56.330Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "8959a9f13c685dd63528-15c0d83698797c7ae6a4",
+              "file": "05-integration.spec.ts",
+              "line": 454,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "06-error.spec.ts",
+      "file": "06-error.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "@error Layer 6: Error Handling",
+          "file": "06-error.spec.ts",
+          "line": 12,
+          "column": 6,
+          "specs": [
+            {
+              "title": "ERR-001: 404 Page displays",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 39,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 539,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.021Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-a759ed81ffb0b2ba0a52",
+              "file": "06-error.spec.ts",
+              "line": 13,
+              "column": 7
+            },
+            {
+              "title": "ERR-002: API Error Display",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 40,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1350,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.024Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-ee69279e75d912ae522a",
+              "file": "06-error.spec.ts",
+              "line": 30,
+              "column": 7
+            },
+            {
+              "title": "ERR-003: Session Expired",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 41,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 1202,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.022Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-eb66a44d9c99bdfc7f76",
+              "file": "06-error.spec.ts",
+              "line": 48,
+              "column": 7
+            },
+            {
+              "title": "ERR-004: Permission Denied",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 42,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1312,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.023Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-7f60edd7050b89693a07",
+              "file": "06-error.spec.ts",
+              "line": 66,
+              "column": 7
+            },
+            {
+              "title": "ERR-005: Form Validation",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 43,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 1862,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.027Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-26fa8226695a14b524f7",
+              "file": "06-error.spec.ts",
+              "line": 73,
+              "column": 7
+            },
+            {
+              "title": "ERR-006: Network Offline",
+              "ok": true,
+              "tags": [
+                "error"
+              ],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "error",
+                  "projectName": "error",
+                  "results": [
+                    {
+                      "workerIndex": 44,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 1400,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-24T16:12:11.021Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "e9ef51c150db709b5780-bb4f9f40c60e7776f757",
+              "file": "06-error.spec.ts",
+              "line": 91,
               "column": 7
             }
           ]
@@ -2845,11 +4443,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2025-12-11T19:53:55.109Z",
-    "duration": 4003.459,
-    "expected": 2,
-    "skipped": 107,
-    "unexpected": 1,
+    "startTime": "2025-12-24T16:10:32.644Z",
+    "duration": 100504.146,
+    "expected": 114,
+    "skipped": 0,
+    "unexpected": 0,
     "flaky": 0
   }
 }

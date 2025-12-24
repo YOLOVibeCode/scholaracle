@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { UserRepository, AuditLogRepository } from '@scholaracle/database';
-import { AdminAuthService } from '@scholaracle/auth';
+import { UserRepository, AuditLogRepository, StudentRepository, PaymentRepository } from '@scholaracle/database';
+import { AdminAuthService, AuthService } from '@scholaracle/auth';
 import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 
 export interface ICustomersRouterConfig {
   readonly database: Db;
@@ -392,7 +393,10 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
   const auditLogRepository = new AuditLogRepository(config.database);
+  const studentRepository = new StudentRepository(config.database);
+  const paymentRepository = new PaymentRepository(config.database);
   const adminAuthService = new AdminAuthService(config.database, config.jwtSecret);
+  const userAuthService = new AuthService(config.database, config.jwtSecret);
 
   // Apply admin auth middleware to all routes
   router.use(adminAuthMiddleware(adminAuthService));
@@ -404,6 +408,195 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
   router.get('/:id', (req: Request, res: Response) => {
     void handleGetCustomer(req, res, userRepository);
   });
+
+  // GET /api/admin/customers/:id/students
+  router.get('/:id/students', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ success: false, error: 'Customer ID is required' });
+        return;
+      }
+
+      const customer = await userRepository.findById(id);
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
+
+      const students = await studentRepository.findByUserId(id);
+      res.status(200).json({
+        success: true,
+        data: students.map((s) => ({
+          id: s._id?.toString(),
+          userId: s.userId.toString(),
+          name: s.name,
+          grade: s.grade,
+          studentId: s.studentId,
+          stats: s.stats,
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // GET /api/admin/customers/:id/activity
+  router.get('/:id/activity', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ success: false, error: 'Customer ID is required' });
+        return;
+      }
+
+      const customer = await userRepository.findById(id);
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
+
+      const limit = Math.min(parseInt((req.query['limit'] as string) || '50') || 50, 100);
+
+      const [notes, payments, subs, auditLogs, students] = await Promise.all([
+        config.database.collection('admin_notes').find({ userId: id }).sort({ createdAt: -1 }).limit(20).toArray(),
+        config.database.collection('payments').find({ userId: id }).sort({ createdAt: -1 }).limit(20).toArray(),
+        config.database.collection('subscriptions').find({ userId: id }).sort({ updatedAt: -1, createdAt: -1 }).limit(5).toArray(),
+        config.database.collection('audit_logs').find({ entityType: 'customer', entityId: id }).sort({ timestamp: -1, createdAt: -1 }).limit(20).toArray(),
+        config.database.collection('students').find({ userId: customer._id }).sort({ createdAt: -1 }).limit(20).toArray(),
+      ]);
+
+      const items = [
+        ...notes.map((n: any) => ({
+          id: `note:${n._id?.toString?.() ?? ''}`,
+          type: 'note' as const,
+          title: 'Admin note added',
+          occurredAt: (n.createdAt ? new Date(n.createdAt) : new Date()).toISOString(),
+          meta: { category: n.category, isPinned: n.isPinned },
+        })),
+        ...payments.map((p: any) => ({
+          id: `payment:${p._id?.toString?.() ?? ''}`,
+          type: 'payment' as const,
+          title: `Payment ${p.status ?? 'event'}`,
+          occurredAt: (p.createdAt ? new Date(p.createdAt) : new Date()).toISOString(),
+          meta: { amount: p.amount, currency: p.currency, status: p.status },
+        })),
+        ...subs.map((s: any) => ({
+          id: `subscription:${s._id?.toString?.() ?? ''}`,
+          type: 'subscription' as const,
+          title: `Subscription ${s.status ?? ''}`.trim(),
+          occurredAt: (s.updatedAt ? new Date(s.updatedAt) : s.createdAt ? new Date(s.createdAt) : new Date()).toISOString(),
+          meta: { plan: s.plan, status: s.status },
+        })),
+        ...students.map((s: any) => ({
+          id: `student:${s._id?.toString?.() ?? ''}`,
+          type: 'student' as const,
+          title: `Student added: ${s.name ?? 'Student'}`,
+          occurredAt: (s.createdAt ? new Date(s.createdAt) : new Date()).toISOString(),
+          meta: { grade: s.grade, studentId: s.studentId },
+        })),
+        ...auditLogs.map((a: any) => ({
+          id: `audit:${a._id?.toString?.() ?? ''}`,
+          type: 'admin_action' as const,
+          title: a.action ? `Admin action: ${a.action}` : 'Admin action',
+          occurredAt: (a.timestamp ? new Date(a.timestamp) : a.createdAt ? new Date(a.createdAt) : new Date()).toISOString(),
+          meta: { adminEmail: a.adminEmail, entityType: a.entityType },
+        })),
+      ];
+
+      items.sort((x, y) => y.occurredAt.localeCompare(x.occurredAt));
+
+      res.status(200).json({ success: true, data: items.slice(0, limit) });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // GET /api/admin/customers/:id/ltv
+  router.get('/:id/ltv', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ success: false, error: 'Customer ID is required' });
+        return;
+      }
+
+      const customer = await userRepository.findById(id);
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
+
+      const ltvCents = await paymentRepository.getLifetimeValueByUserId(id);
+      res.status(200).json({
+        success: true,
+        data: {
+          customerId: id,
+          ltv: ltvCents / 100,
+          currency: 'usd',
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // POST /api/admin/customers/:id/impersonate
+  router.post(
+    '/:id/impersonate',
+    requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
+    async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ success: false, error: 'Customer ID is required' });
+        return;
+      }
+
+      const authReq = req as IAdminAuthenticatedRequest;
+      const role = authReq.adminRole ?? '';
+      if (role === 'billing' || role === 'analyst') {
+        res.status(403).json({ success: false, error: 'Insufficient permissions to impersonate customer' });
+        return;
+      }
+
+      const customer = await userRepository.findById(id);
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
+
+      const token = userAuthService.issueTokenForUser(customer._id!.toString(), customer.email);
+
+      await auditLogRepository.create({
+        adminUserId: authReq.adminId ?? 'unknown',
+        adminEmail: authReq.adminEmail ?? 'unknown',
+        action: 'customer:impersonate',
+        entityType: 'customer',
+        entityId: id,
+        reason: req.body?.reason,
+        ipAddress: req.ip ?? 'unknown',
+        userAgent: req.headers['user-agent'] ?? 'unknown',
+      });
+
+      res.status(200).json({ success: true, data: { token } });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+    }
+  );
 
   router.put('/:id', (req: Request, res: Response) => {
     const authReq = req as IAdminAuthenticatedRequest;

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { UserMenu } from '@/components/dashboard/UserMenu';
+import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [router]);
 
+  const handleLogout = () => {
+    authApi.logout();
+    router.push('/login');
+  };
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
@@ -29,6 +35,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="flex h-16 items-center gap-4 border-b px-4">
             <SidebarTrigger />
             <div className="flex flex-1 items-center justify-end gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                data-testid="logout-button"
+              >
+                Logout
+              </Button>
               <UserMenu />
             </div>
           </header>

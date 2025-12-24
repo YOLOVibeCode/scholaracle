@@ -1,4 +1,11 @@
-# Scholaracle - Next Steps Implementation Plan
+# Scholaracle - Next Steps Implementation Plan (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This plan predates the current shipped scope and the completed E2E suite.
+
+**Use instead:**
+- `APP_SPECIFICATION.md` (authoritative shipped scope + out-of-scope list)
+- `SPECIFICATION_COVERAGE.md` / `E2E_SPECIFICATION_COVERAGE.md` (coverage truth)
+- `RUN_ALL_TESTS.md` (how to run the Chromium-only E2E suite)
 
 ## Overview
 

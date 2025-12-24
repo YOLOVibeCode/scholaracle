@@ -71,6 +71,25 @@ export async function createIndexes(database: Db): Promise<void> {
   await alertsCollection.createIndex({ userId: 1, createdAt: -1 });
   await alertsCollection.createIndex({ acknowledged: 1 });
 
+  // SLC (Scholaracle Local Connector) collections
+  const slcDeviceAuth = database.collection('slc_device_auth');
+  await slcDeviceAuth.createIndex({ deviceCode: 1 }, { unique: true });
+  await slcDeviceAuth.createIndex({ userCode: 1 }, { unique: true });
+  await slcDeviceAuth.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  const slcSources = database.collection('slc_sources');
+  await slcSources.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
+  await slcSources.createIndex({ userId: 1, updatedAt: -1 });
+
+  const slcRuns = database.collection('slc_runs');
+  await slcRuns.createIndex({ userId: 1, runId: 1 }, { unique: true });
+  await slcRuns.createIndex({ userId: 1, sourceId: 1, committedAt: -1 });
+
+  // Agenda overrides (snooze)
+  const agendaOverrides = database.collection('agenda_overrides');
+  await agendaOverrides.createIndex({ userId: 1, itemType: 1, itemKey: 1, scope: 1 }, { unique: true });
+  await agendaOverrides.createIndex({ userId: 1, snoozedUntil: 1 });
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }

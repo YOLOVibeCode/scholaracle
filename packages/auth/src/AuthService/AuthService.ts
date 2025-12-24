@@ -152,6 +152,16 @@ export class AuthService implements IAuthService {
   }
 
   /**
+   * Issue a user JWT for a specific user (used for admin impersonation flows).
+   *
+   * NOTE: This does not perform any permission checks by itself. Callers must
+   * enforce RBAC and audit logging at the API layer.
+   */
+  public issueTokenForUser(userId: string, email: string): string {
+    return this._generateToken(userId, email);
+  }
+
+  /**
    * Generate JWT token.
    *
    * @param userId - User ID

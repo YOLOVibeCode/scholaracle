@@ -1,6 +1,7 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { AdminUser, type IAdminUserData } from '../../models/AdminUser';
+import bcrypt from 'bcryptjs';
 
 export interface IAdminUserRepository {
   create(adminData: IAdminUserData): Promise<AdminUser>;
@@ -146,8 +147,15 @@ export class AdminUserRepository implements IAdminUserRepository {
    * @returns Hashed password
    */
   public static async hashPassword(password: string): Promise<string> {
-    const bcrypt = await import('bcrypt');
-    return bcrypt.default.hash(password, 10);
+    return await new Promise<string>((resolve, reject) => {
+      bcrypt.hash(password, 10, (err, hash) => {
+        if (err || !hash) {
+          reject(err ?? new Error('Failed to hash password'));
+          return;
+        }
+        resolve(hash);
+      });
+    });
   }
 
   /**
@@ -158,8 +166,15 @@ export class AdminUserRepository implements IAdminUserRepository {
    * @returns True if password matches
    */
   public static async verifyPassword(password: string, hash: string): Promise<boolean> {
-    const bcrypt = await import('bcrypt');
-    return bcrypt.default.compare(password, hash);
+    return await new Promise<boolean>((resolve, reject) => {
+      bcrypt.compare(password, hash, (err, same) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(Boolean(same));
+      });
+    });
   }
 }
 

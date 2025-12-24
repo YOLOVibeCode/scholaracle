@@ -13,7 +13,7 @@ services:
     image: mongo:7
     container_name: scholaracle-mongodb-test
     ports:
-      - "6802:27017"
+      - "2802:27017"  # FIXED PORT - DO NOT CHANGE
     environment:
       MONGO_INITDB_DATABASE: scholaracle_test
     volumes:

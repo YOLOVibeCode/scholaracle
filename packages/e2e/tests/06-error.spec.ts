@@ -49,26 +49,18 @@ test.describe('@error Layer 6: Error Handling', () => {
     await loginAsRole('parent');
     await page.goto('/dashboard');
     
-    // Clear session storage to simulate expired session
+    // Clear session storage + auth cookie to simulate expired session
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
+      document.cookie = 'auth_token=; path=/; max-age=0';
     });
     
     // Try to access protected route
     await page.goto('/dashboard/students');
     
     // Should redirect to login
-    await page.waitForTimeout(1000);
-    const isLoginPage = page.url().includes('/login');
-    
-    // Or API call should fail and show error
-    if (!isLoginPage) {
-      const errorMessage = page.locator('[data-testid="error-message"], [role="alert"]');
-      await expect(errorMessage.or(page.locator('body'))).toBeVisible();
-    } else {
-      await expect(page).toHaveURL(/\/login/);
-    }
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test('ERR-004: Permission Denied', async ({ page, loginAsRole }) => {
@@ -84,21 +76,16 @@ test.describe('@error Layer 6: Error Handling', () => {
     
     // Try to submit with invalid data
     await page.fill('[data-testid="student-name"], input[name="name"]', ''); // Empty name
-    await page.fill('[data-testid="student-grade"], input[name="grade"]', 'invalid'); // Invalid grade
+    await page.fill('[data-testid="student-grade"], input[name="grade"]', '99'); // Out of range
     
     await page.click('[data-testid="save-student-button"], button[type="submit"]');
     
     // Should show validation errors
     await page.waitForTimeout(500);
     
-    const nameInput = page.locator('[data-testid="student-name"], input[name="name"]');
-    const isInvalid = await nameInput.evaluate((el: HTMLInputElement) => !el.validity.valid);
-    
-    // Or should show error message
-    const errorMessage = page.locator('[data-testid="error-message"], .text-red-500');
-    const hasError = await errorMessage.isVisible({ timeout: 1000 });
-    
-    expect(isInvalid || hasError).toBe(true);
+    // Native form validation should mark invalid fields
+    const invalidCount = await page.locator('input:invalid').count();
+    expect(invalidCount).toBeGreaterThan(0);
   });
 
   test('ERR-006: Network Offline', async ({ page, context, loginAsRole }) => {
@@ -108,16 +95,16 @@ test.describe('@error Layer 6: Error Handling', () => {
     // Simulate offline
     await context.setOffline(true);
     
-    // Try to navigate
-    await page.goto('/dashboard/students');
-    
-    // Should handle gracefully (show cached content or error message)
-    await page.waitForTimeout(1000);
-    
-    // Page should still be visible (might show error message)
-    await expect(page.locator('body')).toBeVisible();
-    
-    // Restore online
-    await context.setOffline(false);
+    try {
+      // Navigation should fail while offline
+      await page.goto('/dashboard/students');
+      throw new Error('Expected navigation to fail while offline');
+    } catch (error) {
+      expect(String(error)).toContain('ERR_INTERNET_DISCONNECTED');
+      await expect(page.locator('body')).toBeVisible();
+    } finally {
+      // Restore online
+      await context.setOffline(false);
+    }
   });
 });

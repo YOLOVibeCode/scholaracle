@@ -6,6 +6,10 @@ import { UserRepository } from '@scholaracle/database';
 import { AdminUserRepository } from '@scholaracle/database';
 import { StudentRepository } from '@scholaracle/database';
 import { AlertRepository } from '@scholaracle/database';
+import { PaymentRepository } from '@scholaracle/database';
+import { SubscriptionRepository } from '@scholaracle/database';
+import { AuditLogRepository } from '@scholaracle/database';
+import { CommunicationLogRepository } from '@scholaracle/database';
 import type { AdminRole } from '@scholaracle/database';
 
 export interface ISeedRouterConfig {
@@ -21,6 +25,16 @@ const TEST_USERS = {
     email: 'test.parent@example.com',
     password: 'TestPass123!',
     name: 'Test Parent',
+  },
+  parent2: {
+    email: 'test.parent2@example.com',
+    password: 'TestPass123!',
+    name: 'Test Parent 2',
+  },
+  parent3: {
+    email: 'test.parent3@example.com',
+    password: 'TestPass123!',
+    name: 'Test Parent 3',
   },
   super_admin: {
     email: 'super@scholaracle.com',
@@ -81,6 +95,10 @@ async function handleSeed(
     const adminRepository = new AdminUserRepository(config.database);
     const studentRepository = new StudentRepository(config.database);
     const alertRepository = new AlertRepository(config.database);
+    const paymentRepository = new PaymentRepository(config.database);
+    const subscriptionRepository = new SubscriptionRepository(config.database);
+    const auditLogRepository = new AuditLogRepository(config.database);
+    const communicationLogRepository = new CommunicationLogRepository(config.database);
     const authService = new AuthService(config.database);
     const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
     const adminAuthService = new AdminAuthService(config.database, jwtSecret);
@@ -101,6 +119,22 @@ async function handleSeed(
         errors: [] as string[],
       },
       alerts: {
+        created: [] as string[],
+        errors: [] as string[],
+      },
+      payments: {
+        created: [] as string[],
+        errors: [] as string[],
+      },
+      subscriptions: {
+        created: [] as string[],
+        errors: [] as string[],
+      },
+      auditLogs: {
+        created: [] as string[],
+        errors: [] as string[],
+      },
+      communications: {
         created: [] as string[],
         errors: [] as string[],
       },
@@ -148,6 +182,29 @@ async function handleSeed(
       results.users.errors.push(
         `Parent: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    }
+
+    // 1b. Create additional parent users for bulk-send segmentation tests
+    for (const extra of [TEST_USERS.parent2, TEST_USERS.parent3]) {
+      try {
+        const existing = await userRepository.findByEmail(extra.email);
+        if (existing) {
+          if (shouldForce) {
+            await userRepository.delete(existing._id!.toString());
+            const result = await authService.register(extra.email, extra.password, extra.name);
+            if (result.success) results.users.created.push(`Parent: ${extra.email}`);
+            else results.users.errors.push(`Parent: ${result.error}`);
+          } else {
+            results.users.existing.push(`Parent: ${extra.email}`);
+          }
+        } else {
+          const result = await authService.register(extra.email, extra.password, extra.name);
+          if (result.success) results.users.created.push(`Parent: ${extra.email}`);
+          else results.users.errors.push(`Parent: ${result.error}`);
+        }
+      } catch (error) {
+        results.users.errors.push(`Parent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
 
     // 2. Create admin users (need super_admin first)
@@ -346,6 +403,118 @@ async function handleSeed(
       }
     }
 
+    // 5. Create test payments (for admin payments UI/E2E)
+    if (parentUser && parentUser._id) {
+      const userId = parentUser._id.toString();
+      try {
+        const existingPayments = await paymentRepository.findByUserId(userId);
+        if (existingPayments.length === 0 || shouldForce) {
+          if (shouldForce && existingPayments.length > 0) {
+            await config.database.collection('payments').deleteMany({ userId });
+          }
+
+          const p1 = await paymentRepository.create({
+            userId,
+            amount: 1900,
+            currency: 'usd',
+            status: 'succeeded',
+            paymentMethod: 'card',
+          });
+          results.payments.created.push(`Payment: succeeded (${p1._id?.toString()})`);
+
+          const p2 = await paymentRepository.create({
+            userId,
+            amount: 2900,
+            currency: 'usd',
+            status: 'failed',
+            paymentMethod: 'card',
+          });
+          results.payments.created.push(`Payment: failed (${p2._id?.toString()})`);
+        }
+      } catch (error) {
+        results.payments.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    // 6. Create test subscription (for subscription UI/E2E)
+    if (parentUser && parentUser._id) {
+      const userId = parentUser._id.toString();
+      try {
+        const existing = await subscriptionRepository.findByUserId(userId);
+        if (!existing || shouldForce) {
+          if (existing && shouldForce) {
+            await config.database.collection('subscriptions').deleteMany({ userId });
+          }
+
+          const start = new Date();
+          const end = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+          const sub = await subscriptionRepository.create({
+            userId,
+            plan: 'starter',
+            status: 'trialing',
+            currentPeriodStart: start,
+            currentPeriodEnd: end,
+            billingCycle: 'monthly',
+          });
+          results.subscriptions.created.push(`Subscription: trialing (${sub._id?.toString()})`);
+        }
+      } catch (error) {
+        results.subscriptions.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    // 7. Create baseline audit log (for audit log viewer E2E)
+    if (superAdminId) {
+      try {
+        const existingCount = await config.database.collection('audit_logs').countDocuments({ action: 'system:export' });
+        if (existingCount === 0 || shouldForce) {
+          if (shouldForce) {
+            await config.database.collection('audit_logs').deleteMany({ action: 'system:export' });
+          }
+          const log = await auditLogRepository.create({
+            adminUserId: superAdminId,
+            adminEmail: TEST_USERS.super_admin.email,
+            action: 'system:export',
+            entityType: 'system',
+            entityId: 'seed',
+            reason: 'Seed baseline audit entry',
+            ipAddress: req.ip ?? 'unknown',
+            userAgent: req.headers['user-agent'] ?? 'seed',
+          });
+          results.auditLogs.created.push(`AuditLog: system:export (${log._id?.toString()})`);
+        }
+      } catch (error) {
+        results.auditLogs.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    // 8. Create baseline communication log (for communications center E2E)
+    if (parentUser && parentUser._id && superAdminId) {
+      try {
+        const existingCount = await config.database.collection('communication_logs').countDocuments({ subject: 'Seed Communication' });
+        if (existingCount === 0 || shouldForce) {
+          if (shouldForce) {
+            await config.database.collection('communication_logs').deleteMany({ subject: 'Seed Communication' });
+          }
+          const comm = await communicationLogRepository.create({
+            userId: parentUser._id.toString(),
+            channel: 'email',
+            type: 'support',
+            subject: 'Seed Communication',
+            content: 'This is a seeded communication log entry.',
+            recipientEmail: parentUser.email,
+            status: 'sent',
+            sentAt: new Date(),
+            triggeredBy: 'admin',
+            adminUserId: superAdminId,
+          });
+          results.communications.created.push(`CommunicationLog: Seed Communication (${comm._id?.toString()})`);
+        }
+      } catch (error) {
+        results.communications.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
     // Summary
     const summary = {
       success: true,
@@ -362,6 +531,14 @@ async function handleSeed(
         studentsErrors: results.students.errors.length,
         alertsCreated: results.alerts.created.length,
         alertsErrors: results.alerts.errors.length,
+        paymentsCreated: results.payments.created.length,
+        paymentsErrors: results.payments.errors.length,
+        subscriptionsCreated: results.subscriptions.created.length,
+        subscriptionsErrors: results.subscriptions.errors.length,
+        auditLogsCreated: results.auditLogs.created.length,
+        auditLogsErrors: results.auditLogs.errors.length,
+        communicationsCreated: results.communications.created.length,
+        communicationsErrors: results.communications.errors.length,
       },
     };
 

@@ -1,5 +1,13 @@
 import { apiClient } from './client';
 import { studentsApi, type IStudent } from './students';
+import { alertsApi, type IAlert } from './alerts';
+import { agendaApi, type IAgendaItem } from './agenda';
+import { MemoryCacheService } from '../cache';
+
+// Cache instance (ISP: Separate cache from API logic)
+const cache = new MemoryCacheService();
+const CACHE_KEY_STATS = 'dashboard:stats';
+const CACHE_TTL_SECONDS = 60; // Cache for 1 minute
 
 export interface IDashboardStats {
   readonly totalStudents: number;
@@ -30,6 +38,12 @@ export const dashboardApi = {
    * @returns Dashboard stats
    */
   async getStats(): Promise<IDashboardStats> {
+    // Check cache first (ISP: Caching is separate concern)
+    const cached = await cache.get<IDashboardStats>(CACHE_KEY_STATS);
+    if (cached) {
+      return cached;
+    }
+
     try {
       const students = await studentsApi.getAll();
 
@@ -58,11 +72,54 @@ export const dashboardApi = {
 
       const averageGPA = studentsWithGPA > 0 ? totalGPA / studentsWithGPA : null;
 
-      // TODO: Fetch real alerts and deadlines from API
-      const recentAlerts: IDashboardStats['recentAlerts'] = [];
-      const upcomingDeadlines: IDashboardStats['upcomingDeadlines'] = [];
+      // Fetch real alerts and deadlines from API
+      let recentAlerts: IDashboardStats['recentAlerts'] = [];
+      let upcomingDeadlines: IDashboardStats['upcomingDeadlines'] = [];
 
-      return {
+      try {
+        // Fetch alerts (unacknowledged, sorted by most recent)
+        const allAlerts = await alertsApi.getAll();
+        if (Array.isArray(allAlerts)) {
+          recentAlerts = allAlerts
+            .filter((alert) => !alert.acknowledged)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 5) // Show top 5 most recent
+            .map((alert) => ({
+              id: alert.id,
+              type: alert.type,
+              message: alert.message,
+              createdAt: alert.createdAt,
+            }));
+        }
+
+        // Fetch upcoming agenda items (next 7 days)
+        const now = new Date();
+        const from = new Date(now.getTime());
+        from.setHours(0, 0, 0, 0);
+        const to = new Date(from.getTime() + 7 * 24 * 60 * 60_000);
+
+        const agendaResponse = await agendaApi.getRange(from.toISOString(), to.toISOString());
+        if (agendaResponse.success && agendaResponse.data) {
+          // Filter to only assignments (not events) and sort by due date
+          const assignments = agendaResponse.data.items
+            .filter((item) => item.type === 'assignment')
+            .sort((a, b) => new Date(a.timeAt).getTime() - new Date(b.timeAt).getTime())
+            .slice(0, 5); // Show top 5 upcoming
+
+          upcomingDeadlines = assignments.map((item) => ({
+            id: item.id,
+            title: item.title,
+            dueDate: item.timeAt,
+            course: item.courseName ?? item.courseExternalId ?? 'Course',
+          }));
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load alerts or agenda:', error);
+        // Continue with empty arrays if API calls fail
+      }
+
+      const stats: IDashboardStats = {
         totalStudents,
         totalCourses,
         totalAlerts,
@@ -70,6 +127,11 @@ export const dashboardApi = {
         recentAlerts,
         upcomingDeadlines,
       };
+
+      // Cache the result (ISP: Caching is separate concern)
+      await cache.set(CACHE_KEY_STATS, stats, CACHE_TTL_SECONDS);
+
+      return stats;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to load dashboard stats:', error);

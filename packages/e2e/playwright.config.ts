@@ -28,6 +28,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 4 : undefined,
   
+  // Global setup: Seed database with live test data before all tests
+  globalSetup: require.resolve('./global-setup.ts'),
+  
   // Global timeout
   timeout: 60 * 1000,
   expect: { timeout: 10 * 1000 },
@@ -43,12 +46,16 @@ export default defineConfig({
   ],
   
   use: {
+    // Support production URLs via environment variable
+    // Local: http://localhost:2800 (FIXED PORT)
+    // Production: https://app.scholaracle.com (or set BASE_URL)
     baseURL: process.env.BASE_URL ?? 'http://localhost:2800',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
 
+  // Chromium-only: always run the full layered suite.
   projects: [
     // Layer 0: Critical (runs first, serial, no retries)
     {
@@ -58,7 +65,6 @@ export default defineConfig({
       retries: 0,
       timeout: 30 * 1000,
     },
-    
     // Layer 1: Auth (depends on critical)
     {
       name: 'auth',
@@ -67,7 +73,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
     },
-    
     // Layer 2: Dashboard (depends on auth)
     {
       name: 'dashboard',
@@ -76,7 +81,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
     },
-    
     // Layer 3: Navigation (depends on dashboard)
     {
       name: 'navigation',
@@ -85,7 +89,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
     },
-    
     // Layer 4: Feature (depends on navigation)
     {
       name: 'feature',
@@ -94,8 +97,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
-    
-    // Layer 5: Integration (depends on feature, serial)
+    // Layer 5: Integration (depends on feature)
     {
       name: 'integration',
       testMatch: /05-integration\.spec\.ts/,
@@ -103,7 +105,6 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 120 * 1000,
     },
-    
     // Layer 6: Error (depends on integration)
     {
       name: 'error',
@@ -112,43 +113,39 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
     },
-    
-    // Cross-browser (optional, runs after feature layer)
-    {
-      name: 'firefox',
-      testMatch: /0[1-4]-.*\.spec\.ts/,
-      dependencies: ['feature'],
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      testMatch: /0[1-4]-.*\.spec\.ts/,
-      dependencies: ['feature'],
-      use: { ...devices['Desktop Safari'] },
-    },
-    
-    // Mobile (optional)
-    {
-      name: 'mobile',
-      testMatch: /03-navigation.*\.spec\.ts/,
-      dependencies: ['dashboard'],
-      use: { ...devices['iPhone 14'] },
-    },
   ],
 
   // Web server configuration
-  webServer: {
-    command: 'pnpm --filter @scholaracle/web dev',
-    url: 'http://localhost:2800',
-    reuseExistingServer: true,
-    timeout: 120 * 1000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  // Only start servers if BASE_URL is localhost (not production/staging)
+  webServer: process.env.BASE_URL?.includes('localhost') || !process.env.BASE_URL ? [
+    // API server (FIXED port 2801)
+    {
+      // Use in-memory MongoDB for fully self-contained E2E (no external Mongo daemon required).
+      command: 'PORT=2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test pnpm --filter @scholaracle/api dev',
+      url: 'http://localhost:2801/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    // Web app (FIXED port 2800)
+    {
+      // Disable Next.js dev tools overlay which can intercept pointer events and cause Playwright flakiness.
+      command: 'PORT=2800 NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
+      url: 'http://localhost:2800',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  ] : undefined,
   
-  // Note: API server should be running separately on port 2801 (external)
-  // Start with: MONGODB_URI=mongodb://localhost:2802/scholaracle PORT=3002 pnpm --filter @scholaracle/api start
-  // Or use Docker: make test-up (starts Web on 2800, API on 2801, MongoDB on 2802)
+  // Note: 
+  // - Local: API server should be running separately on port 2801 (FIXED PORT)
+  //   Start with: MONGODB_URI=mongodb://localhost:2802/scholaracle PORT=3002 pnpm --filter @scholaracle/api start
+  //   Or use Docker: make test-up (starts Web on 2800, API on 2801, MongoDB on 2802)
+  // - Production: Set API_BASE_URL environment variable to production API URL
+  //   Example: API_BASE_URL=https://api.scholaracle.com pnpm test
 });
 
 

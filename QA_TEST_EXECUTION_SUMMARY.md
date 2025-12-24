@@ -59,7 +59,7 @@
 
 ### Tests Are Running But...
 
-**Issue:** Web app not running (port 3000 occupied by another service)
+**Issue:** Web app should run on FIXED port 2800
 
 **What's Happening:**
 - ✅ API server: Running on port 3002

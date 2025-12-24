@@ -33,7 +33,22 @@ test.describe('@auth Layer 1: Authentication', () => {
     await assertOnDashboard(page);
     
     // Logout
-    await page.click('[data-testid="logout-button"], button:has-text("Logout")');
+    const logoutButton = page.locator('[data-testid="logout-button"], button:has-text("Logout")').first();
+    await expect(logoutButton).toBeVisible();
+    await logoutButton.click({ force: true });
+
+    // Deterministic validation:
+    // - token should be removed from storage and cookie
+    // - navigating to /login should stay on /login (middleware won't bounce back)
+    await expect
+      .poll(async () => page.evaluate(() => localStorage.getItem('auth_token')), { timeout: 15000 })
+      .toBeNull();
+
+    await expect
+      .poll(async () => page.evaluate(() => document.cookie), { timeout: 15000 })
+      .not.toContain('auth_token=');
+
+    await page.goto('/login');
     await assertRedirectedToLogin(page);
   });
 
@@ -91,7 +106,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     
-    await loginPage.login('invalid@example.com', 'WrongPassword123!');
+    await loginPage.login('invalid@example.com', 'WrongPassword123!', { waitForDashboard: false });
     
     // Should show error and stay on login page
     await loginPage.expectError();

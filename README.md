@@ -35,10 +35,20 @@ scholaracle/
 
 ## Getting Started
 
+**⚠️ PORT POLICY: All services use FIXED ports in the 28XX series (2800-2804). These ports MUST NOT be changed.**
+- **2800**: Web App (FIXED)
+- **2801**: API Server (FIXED)
+- **2802**: MongoDB (FIXED)
+- **2803**: MailHog SMTP (FIXED)
+- **2804**: MailHog UI (FIXED)
+
+See [PORT_POLICY.md](./PORT_POLICY.md) for complete port policy documentation.
+
 ### Prerequisites
 
 - **Node.js**: 20+ LTS ([Download](https://nodejs.org/))
 - **PNPM**: 8+ ([Installation Guide](https://pnpm.io/installation))
+- **Docker** (optional, for full infrastructure setup)
 
 ### Installation
 
@@ -177,6 +187,9 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 - [Notification Agents Specification](./NOTIFICATION_AGENTS_SPECIFICATION.md)
 - [Implementation Plan](./IMPLEMENTATION_PLAN_FINAL.md)
 - [Coding Standards](./CODING_STANDARDS.md)
+- **[Port Policy](./PORT_POLICY.md)** - ⚠️ **FIXED ports (2800-2804) - DO NOT CHANGE**
+- [Docker Setup](./DOCKER_SETUP.md) - Complete Docker infrastructure guide
+- [Port Mapping](./PORT_MAPPING.md) - Port reference guide
 
 ## Technology Stack
 

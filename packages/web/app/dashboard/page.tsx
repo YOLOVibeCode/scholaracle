@@ -1,30 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap, BookOpen, Bell, TrendingUp } from 'lucide-react';
 import { dashboardApi, type IDashboardStats } from '@/lib/api/dashboard';
+import { useAsyncData } from '@/lib/hooks';
+import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<IDashboardStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    void loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    setIsLoading(true);
-    try {
-      const data = await dashboardApi.getStats();
-      setStats(data);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load dashboard stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data: stats, isLoading, error, retry } = useAsyncData<IDashboardStats>(
+    () => dashboardApi.getStats(),
+    { retryCount: 2, retryDelay: 1000 }
+  );
 
   return (
     <div className="space-y-6">
@@ -33,9 +19,9 @@ export default function DashboardPage() {
         <p className="text-gray-600 dark:text-gray-400">Welcome to Scholaracle</p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-12 text-gray-600 dark:text-gray-400">Loading dashboard...</div>
-      ) : (
+      {isLoading && !error && <LoadingSkeleton variant="dashboard" />}
+      {error && !isLoading && <ErrorDisplay error={error} title="Failed to load dashboard" onRetry={retry} />}
+      {!isLoading && !error && (
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
@@ -44,7 +30,9 @@ export default function DashboardPage() {
                 <GraduationCap className="h-4 w-4 text-gray-600 dark:text-gray-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalStudents ?? 0}</div>
+                <div className="text-2xl font-bold" data-testid="student-count">
+                  {stats?.totalStudents ?? 0}
+                </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400">Total students</p>
               </CardContent>
             </Card>
@@ -93,11 +81,11 @@ export default function DashboardPage() {
                 <CardTitle>Recent Alerts</CardTitle>
                 <CardDescription>Latest notifications and alerts</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent data-testid="dashboard-recent-alerts">
                 {stats?.recentAlerts && stats.recentAlerts.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-testid="dashboard-alerts-list">
                     {stats.recentAlerts.map((alert) => (
-                      <div key={alert.id} className="text-sm">
+                      <div key={alert.id} className="text-sm" data-testid={`dashboard-alert-${alert.id}`}>
                         <p className="font-medium">{alert.message}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                           {new Date(alert.createdAt).toLocaleDateString()}
@@ -106,7 +94,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">No alerts yet</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="dashboard-alerts-empty">No alerts yet</p>
                 )}
               </CardContent>
             </Card>
@@ -116,11 +104,11 @@ export default function DashboardPage() {
                 <CardTitle>Upcoming Deadlines</CardTitle>
                 <CardDescription>Assignments due soon</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent data-testid="dashboard-upcoming-deadlines">
                 {stats?.upcomingDeadlines && stats.upcomingDeadlines.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-testid="dashboard-deadlines-list">
                     {stats.upcomingDeadlines.map((deadline) => (
-                      <div key={deadline.id} className="text-sm">
+                      <div key={deadline.id} className="text-sm" data-testid={`dashboard-deadline-${deadline.id}`}>
                         <p className="font-medium">{deadline.title}</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                           {deadline.course} • Due {new Date(deadline.dueDate).toLocaleDateString()}
@@ -129,7 +117,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">No upcoming deadlines</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="dashboard-deadlines-empty">No upcoming deadlines</p>
                 )}
               </CardContent>
             </Card>

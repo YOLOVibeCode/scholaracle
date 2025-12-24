@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicRoutes = ['/', '/login', '/register'];
+const publicRoutes = ['/', '/login', '/register', '/admin/login'];
 const authRoutes = ['/login', '/register'];
 
 /**
@@ -13,6 +13,12 @@ const authRoutes = ['/login', '/register'];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth_token')?.value;
+
+  // Admin routes are protected client-side by admin auth (localStorage) and server-side by API RBAC.
+  // Middleware only enforces parent auth cookie; allow /admin/* to pass through so /admin/login works.
+  if (pathname.startsWith('/admin')) {
+    return NextResponse.next();
+  }
 
   // Check if route is public
   const isPublicRoute = publicRoutes.includes(pathname);

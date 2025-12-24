@@ -1,4 +1,12 @@
-# Final E2E Test Execution Report
+# Final E2E Test Execution Report (ARCHIVED)
+
+**Status:** ⚠️ **Archived / historical**. This report reflects an earlier point-in-time when local MongoDB was not running.
+
+**Current reality:** The full E2E suite is now **green** and runs **Chromium-only**.
+
+- **Authoritative spec**: `APP_SPECIFICATION.md`
+- **How to run tests**: `RUN_ALL_TESTS.md`
+- **Most accurate QA summary**: `QA_TEST_EXECUTION_SUMMARY.md`
 
 **⚠️ PORT POLICY: All services use FIXED ports (2800-2804). These ports MUST NOT be changed.**
 
@@ -8,10 +16,10 @@
 
 ---
 
-## 🎯 Executive Summary
+## 🎯 Executive Summary (Historical)
 
 **Layer 0 (Critical):** ✅ **2/3 PASSING** (67%)  
-**Remaining Layers:** ⚠️ **BLOCKED** - MongoDB connection required
+**Remaining Layers:** ⚠️ **BLOCKED (historical)** - MongoDB connection required
 
 **Overall Progress:** ✅ **Test Infrastructure Complete** | ⚠️ **Environment Setup Needed**
 
@@ -23,7 +31,7 @@
 - ✅ **Firebase Initialization** - Made optional, no longer crashes
 - ✅ **Test Selectors** - Updated to match actual page structure (`id="email"`, `id="password"`)
 - ✅ **API Server** - Starts successfully (when MongoDB available)
-- ✅ **Web App** - Running correctly on port 3000
+- ✅ **Web App** - Running correctly on FIXED port 2800
 - ✅ **Database Seeding** - Endpoint working perfectly
 
 ### 2. **Test Execution Results**
@@ -53,7 +61,7 @@
 
 ### MongoDB Not Running
 
-**Issue:** MongoDB connection refused on port 27017
+**Issue:** MongoDB connection refused on FIXED port 2802
 
 **Impact:**
 - API server cannot start (requires MongoDB)
@@ -96,9 +104,11 @@ mongod --dbpath /usr/local/var/mongodb
 
 ### Prerequisites Checklist
 
-- [ ] **MongoDB Running** on port 27017
-- [ ] **API Server** running on port 3002
-- [ ] **Web App** running on port 3000
+- [ ] **MongoDB Running** on FIXED port 2802
+- [ ] **API Server** running on FIXED port 2801
+- [ ] **Web App** running on FIXED port 2800
+
+**⚠️ PORT POLICY: These ports are FIXED and MUST NOT be changed.**
 - [ ] **Database Seeded** with test users
 
 ### Execution Commands
@@ -220,19 +230,19 @@ Layer 6 - Error: ⏳ Waiting for Layer 5
 
 1. **Start MongoDB**
    ```bash
-   docker run -d -p 27017:27017 --name mongodb mongo:7
+   docker run -d -p 2802:27017 --name mongodb mongo:7
    ```
 
 2. **Verify Services**
    ```bash
    # Check MongoDB
-   nc -z localhost 27017 && echo "✅ MongoDB running"
+   nc -z localhost 2802 && echo "✅ MongoDB running (FIXED PORT)"
    
    # Check API
-   curl http://localhost:3002/api/health && echo "✅ API running"
+   curl http://localhost:2801/api/health && echo "✅ API running (FIXED PORT)"
    
    # Check Web App
-   curl http://localhost:3000 && echo "✅ Web app running"
+   curl http://localhost:2800 && echo "✅ Web app running (FIXED PORT)"
    ```
 
 3. **Run Full Suite**

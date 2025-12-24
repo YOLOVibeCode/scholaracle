@@ -8,6 +8,7 @@ export class RegisterPage {
   readonly emailInput: Locator;
   readonly nameInput: Locator;
   readonly passwordInput: Locator;
+  readonly confirmPasswordInput: Locator;
   readonly registerButton: Locator;
   readonly errorMessage: Locator;
   readonly loginLink: Locator;
@@ -17,6 +18,9 @@ export class RegisterPage {
     this.emailInput = page.locator('[data-testid="email-input"], input[name="email"]');
     this.nameInput = page.locator('[data-testid="name-input"], input[name="name"]');
     this.passwordInput = page.locator('[data-testid="password-input"], input[name="password"]');
+    this.confirmPasswordInput = page.locator(
+      '[data-testid="confirm-password-input"], input[name="confirmPassword"], input#confirmPassword'
+    );
     this.registerButton = page.locator('[data-testid="register-button"], button[type="submit"]');
     this.errorMessage = page.locator('[data-testid="error-message"], .text-red-500, .text-destructive');
     this.loginLink = page.locator('[data-testid="login-link"], a[href="/login"]');
@@ -30,7 +34,11 @@ export class RegisterPage {
     await this.emailInput.fill(email);
     await this.nameInput.fill(name);
     await this.passwordInput.fill(password);
+    if ((await this.confirmPasswordInput.count()) > 0) {
+      await this.confirmPasswordInput.fill(password);
+    }
     await this.registerButton.click();
+    await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });
   }
 
   async expectError(message?: string): Promise<void> {

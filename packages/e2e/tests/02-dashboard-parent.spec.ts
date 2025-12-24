@@ -23,6 +23,36 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     await expect(page.locator('h1, [data-testid="dashboard-header"]')).toBeVisible();
   });
 
+  test('DASH-P-009: Dashboard shows real alerts and deadlines', async ({ page }) => {
+    await page.goto('/dashboard');
+    await assertOnDashboard(page);
+    
+    // Wait for dashboard to load (wait for loading skeleton to disappear or content to appear)
+    await page.waitForSelector('[data-testid="loading-skeleton-dashboard"]', { state: 'hidden', timeout: 5000 }).catch(() => {});
+    await expect(page.locator('[data-testid="student-count"]')).toBeVisible({ timeout: 5000 });
+    
+    // Check for Recent Alerts section (wait for it to be visible after loading)
+    const recentAlertsSection = page.locator('[data-testid="dashboard-recent-alerts"]');
+    await expect(recentAlertsSection).toBeVisible({ timeout: 5000 });
+    
+    // Check for Upcoming Deadlines section
+    const upcomingDeadlinesSection = page.locator('[data-testid="dashboard-upcoming-deadlines"]');
+    await expect(upcomingDeadlinesSection).toBeVisible({ timeout: 5000 });
+    
+    // Verify sections show either content or empty state (both are valid)
+    const alertsList = page.locator('[data-testid="dashboard-alerts-list"]');
+    const alertsEmpty = page.locator('[data-testid="dashboard-alerts-empty"]');
+    const hasAlerts = await alertsList.count() > 0;
+    const hasAlertsEmpty = await alertsEmpty.count() > 0;
+    expect(hasAlerts || hasAlertsEmpty).toBe(true);
+    
+    const deadlinesList = page.locator('[data-testid="dashboard-deadlines-list"]');
+    const deadlinesEmpty = page.locator('[data-testid="dashboard-deadlines-empty"]');
+    const hasDeadlines = await deadlinesList.count() > 0;
+    const hasDeadlinesEmpty = await deadlinesEmpty.count() > 0;
+    expect(hasDeadlines || hasDeadlinesEmpty).toBe(true);
+  });
+
   test('DASH-P-002: Students List page renders', async ({ page }) => {
     await page.goto('/dashboard/students');
     await expect(page).toHaveURL('/dashboard/students');
@@ -88,7 +118,7 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     
     if (count > 0) {
       await notificationSection.first().click();
-      await expect(page.locator('[data-testid="push-toggle"], input[type="checkbox"]')).toBeVisible({ timeout: 2000 });
+      await expect(page.locator('[data-testid="push-toggle"]').first()).toBeVisible({ timeout: 2000 });
     } else {
       // Settings might be on single page, verify page loads
       await expect(page.locator('body')).toBeVisible();
@@ -104,7 +134,7 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     
     if (count > 0) {
       await thresholdSection.first().click();
-      await expect(page.locator('[data-testid="grade-drop-threshold"], input[type="number"]')).toBeVisible({ timeout: 2000 });
+      await expect(page.locator('[data-testid="grade-drop-threshold"]').first()).toBeVisible({ timeout: 2000 });
     } else {
       // Settings might be on single page
       await expect(page.locator('body')).toBeVisible();

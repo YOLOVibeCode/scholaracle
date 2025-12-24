@@ -18,6 +18,34 @@ export interface ICustomerDetail extends ICustomer {
   readonly suspendedReason?: string;
   readonly suspendedAt?: string;
   readonly updatedAt: string;
+  readonly subscription?: {
+    readonly id?: string;
+    readonly plan: string;
+    readonly status: string;
+  };
+}
+
+export interface IAdminCustomerStudent {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly grade?: number;
+  readonly studentId?: string;
+  readonly stats?: {
+    readonly currentGPA?: number;
+    readonly missingAssignments?: number;
+    readonly totalAssignments?: number;
+  };
+}
+
+export type AdminCustomerActivityType = 'note' | 'payment' | 'subscription' | 'student' | 'admin_action';
+
+export interface IAdminCustomerActivityItem {
+  readonly id: string;
+  readonly type: AdminCustomerActivityType;
+  readonly title: string;
+  readonly occurredAt: string; // ISO
+  readonly meta?: Record<string, unknown>;
 }
 
 export interface ICustomersListResponse {
@@ -27,6 +55,28 @@ export interface ICustomersListResponse {
   readonly page: number;
   readonly limit: number;
   readonly totalPages?: number;
+}
+
+export interface IAdminCustomerStudentsResponse {
+  readonly success: boolean;
+  readonly data?: readonly IAdminCustomerStudent[];
+  readonly error?: string;
+}
+
+export interface IAdminCustomerActivityResponse {
+  readonly success: boolean;
+  readonly data?: readonly IAdminCustomerActivityItem[];
+  readonly error?: string;
+}
+
+export interface IAdminCustomerLtvResponse {
+  readonly success: boolean;
+  readonly data?: {
+    readonly customerId: string;
+    readonly ltv: number;
+    readonly currency: string;
+  };
+  readonly error?: string;
 }
 
 /**
@@ -94,5 +144,39 @@ export const adminCustomersApi = {
   async unsuspend(id: string): Promise<{ success: boolean }> {
     return apiClient.post<{ success: boolean }>(`/admin/customers/${id}/unsuspend`, {}, true);
   },
+
+  /**
+   * Get students for a customer.
+   */
+  async getStudents(id: string): Promise<IAdminCustomerStudentsResponse> {
+    return apiClient.get<IAdminCustomerStudentsResponse>(`/admin/customers/${id}/students`, true);
+  },
+
+  /**
+   * Get recent activity for a customer.
+   */
+  async getActivity(id: string, limit: number = 50): Promise<IAdminCustomerActivityResponse> {
+    return apiClient.get<IAdminCustomerActivityResponse>(`/admin/customers/${id}/activity?limit=${limit}`, true);
+  },
+
+  /**
+   * Get lifetime value (LTV) for a customer.
+   */
+  async getLtv(id: string): Promise<IAdminCustomerLtvResponse> {
+    return apiClient.get<IAdminCustomerLtvResponse>(`/admin/customers/${id}/ltv`, true);
+  },
+
+  /**
+   * Impersonate a customer (admin/support only).
+   * Returns a *user* JWT token to be stored as the parent session.
+   */
+  async impersonate(id: string, reason?: string): Promise<{ success: boolean; data?: { token: string }; error?: string }> {
+    return apiClient.post<{ success: boolean; data?: { token: string }; error?: string }>(
+      `/admin/customers/${id}/impersonate`,
+      { reason },
+      true
+    );
+  },
 };
+
 

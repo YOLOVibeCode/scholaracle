@@ -176,5 +176,46 @@ describe('Admin Subscription Routes', () => {
       expect(response.body.success).toBe(true);
     });
   });
+
+  describe('POST /api/admin/subscriptions/:id/extend-trial', () => {
+    it('should extend trial period', async () => {
+      await new SubscriptionRepository(database).create({
+        userId: testUserId,
+        plan: 'starter',
+        status: 'trialing',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        billingCycle: 'monthly',
+      });
+
+      const response = await request(app)
+        .post(`/api/admin/subscriptions/${testUserId}/extend-trial`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ days: 7, reason: 'Support extension' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    it('should require reason', async () => {
+      await new SubscriptionRepository(database).create({
+        userId: testUserId,
+        plan: 'starter',
+        status: 'trialing',
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        billingCycle: 'monthly',
+      });
+
+      const response = await request(app)
+        .post(`/api/admin/subscriptions/${testUserId}/extend-trial`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ days: 7 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reason');
+    });
+  });
 });
+
 

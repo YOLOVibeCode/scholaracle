@@ -3,6 +3,7 @@ import type { Db } from 'mongodb';
 import { PaymentRepository, AuditLogRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
 import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 
 export interface IPaymentsRouterConfig {
   readonly database: Db;
@@ -231,17 +232,21 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
     void handleGetPayment(req, res, paymentRepository);
   });
 
-  router.post('/:id/refund', (req: Request, res: Response) => {
-    const authReq = req as IAdminAuthenticatedRequest;
-    void handleRefundPayment(
-      req,
-      res,
-      paymentRepository,
-      auditLogRepository,
-      authReq.adminId!,
-      authReq.adminEmail!
-    );
-  });
+  router.post(
+    '/:id/refund',
+    requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
+    (req: Request, res: Response) => {
+      const authReq = req as IAdminAuthenticatedRequest;
+      void handleRefundPayment(
+        req,
+        res,
+        paymentRepository,
+        auditLogRepository,
+        authReq.adminId!,
+        authReq.adminEmail!
+      );
+    }
+  );
 
   router.post('/:id/retry', (req: Request, res: Response) => {
     const authReq = req as IAdminAuthenticatedRequest;
@@ -257,4 +262,5 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
 
   return router;
 }
+
 

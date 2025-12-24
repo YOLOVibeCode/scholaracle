@@ -48,6 +48,20 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
     await expect(page).toHaveURL('/dashboard/alerts');
   });
 
+  test('NAV-P-004a: Agenda link works', async ({ page }) => {
+    await page.goto('/dashboard');
+    await navigateToSidebar(page, 'Agenda');
+    await expect(page).toHaveURL('/dashboard/agenda');
+    await expect(page.locator('[data-testid="agenda-page"]')).toBeVisible();
+  });
+
+  test('NAV-P-004b: Courses link works', async ({ page }) => {
+    await page.goto('/dashboard');
+    await navigateToSidebar(page, 'Courses');
+    await expect(page).toHaveURL('/dashboard/courses');
+    await expect(page.locator('h1')).toContainText('Courses');
+  });
+
   test('NAV-P-005: Settings link works', async ({ page }) => {
     await page.goto('/dashboard');
     await navigateToSidebar(page, 'Settings');
@@ -133,12 +147,28 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
   test('NAV-P-012: Alert filter tabs', async ({ page }) => {
     await page.goto('/dashboard/alerts');
     
-    const filterTabs = page.locator('[data-testid="alert-filter"], [role="tab"]:has-text("Critical"), [role="tab"]:has-text("Warning")');
+    // Wait for alerts page to load
+    await page.waitForSelector('[data-testid="alert-filters"], [role="tablist"]', { timeout: 5000 });
+    
+    const filterTabs = page.locator('[data-testid="alert-filters"] [role="tab"], [data-testid="filter-critical"], [data-testid="filter-warning"]');
     const count = await filterTabs.count();
     
     if (count > 0) {
-      await filterTabs.first().click();
-      await page.waitForTimeout(500);
+      // Click a filter tab (skip "All" which is already selected)
+      const criticalTab = page.locator('[data-testid="filter-critical"]');
+      const criticalCount = await criticalTab.count();
+      if (criticalCount > 0) {
+        await criticalTab.click();
+        await page.waitForTimeout(500);
+        await expect(criticalTab).toHaveAttribute('aria-selected', 'true');
+      } else {
+        // Fallback: click any non-selected tab
+        const nonSelectedTab = filterTabs.filter({ hasNotText: 'All' }).first();
+        if ((await nonSelectedTab.count()) > 0) {
+          await nonSelectedTab.click();
+          await page.waitForTimeout(500);
+        }
+      }
       await expect(page.locator('body')).toBeVisible();
     }
   });

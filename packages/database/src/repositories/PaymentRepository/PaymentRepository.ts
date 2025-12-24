@@ -9,6 +9,7 @@ export interface IPaymentRepository {
   findByStripeId(stripePaymentIntentId: string): Promise<Payment | null>;
   updateStatus(id: string, status: PaymentStatus, failureReason?: string): Promise<boolean>;
   recordRefund(id: string, amount: number, refundedBy: string, reason?: string): Promise<boolean>;
+  getLifetimeValueByUserId(userId: string): Promise<number>;
   getRevenueByPeriod(startDate: Date, endDate: Date): Promise<number>;
 }
 
@@ -195,5 +196,40 @@ export class PaymentRepository implements IPaymentRepository {
 
     return (results[0]?.['total'] as number) ?? 0;
   }
+
+  /**
+   * Compute lifetime value (LTV) for a user as net paid amount:
+   * sum(amount) - sum(amountRefunded) across successful/partially refunded/refunded payments.
+   *
+   * @returns Net LTV in cents
+   */
+  public async getLifetimeValueByUserId(userId: string): Promise<number> {
+    const pipeline = [
+      {
+        $match: {
+          userId,
+          status: { $in: ['succeeded', 'partially_refunded', 'refunded'] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          gross: { $sum: '$amount' },
+          refunded: { $sum: '$amountRefunded' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          net: { $max: [0, { $subtract: ['$gross', '$refunded'] }] },
+        },
+      },
+    ];
+
+    const results = await this._collection.aggregate(pipeline).toArray();
+    if (results.length === 0) return 0;
+    return (results[0]?.['net'] as number) ?? 0;
+  }
 }
+
 

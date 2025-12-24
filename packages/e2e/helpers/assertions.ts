@@ -17,7 +17,7 @@ export async function assertOnDashboard(page: Page): Promise<void> {
  */
 export async function assertOnAdminDashboard(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/admin/);
-  await expect(page.locator('[data-testid="admin-header"], h1')).toBeVisible();
+  await expect(page.locator('[data-testid="admin-header"], h1').first()).toBeVisible();
 }
 
 /**
@@ -59,7 +59,9 @@ export async function assertElementVisible(page: Page, testId: string): Promise<
  * Assert toast message appears.
  */
 export async function assertToastMessage(page: Page, message: string | RegExp): Promise<void> {
-  await expect(page.locator('[data-testid="toast"], .toast, [role="alert"]')).toContainText(message);
+  // Next.js includes a route announcer with role="alert" - ignore it.
+  const toast = page.locator('[data-testid="toast"], .toast, [role="alert"]:not(#__next-route-announcer__)').first();
+  await expect(toast).toContainText(message);
 }
 
 /**
@@ -99,9 +101,11 @@ export async function assertAccessDenied(page: Page, url: string): Promise<void>
     // 403 is expected
     return;
   }
-  // Or should redirect away from admin
-  if (status === 200 && !page.url().includes('/admin')) {
-    return;
-  }
-  throw new Error(`Expected access denied but got status ${status} at ${url}`);
+  // Client-side guards may redirect after initial 200 response.
+  // Wait a bit longer to avoid flakes on slower CI/local machines.
+  const requestedPath = new URL(url, page.url()).pathname;
+
+  await expect
+    .poll(async () => page.url(), { timeout: 5000 })
+    .not.toContain(requestedPath);
 }

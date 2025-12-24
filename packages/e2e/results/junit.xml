@@ -1,470 +1,250 @@
-<testsuites id="" name="" tests="110" failures="1" skipped="107" errors="0" time="4.003458999999999">
-<testsuite name="00-critical.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="critical" tests="3" failures="1" skipped="0" time="1.424" errors="0">
-<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-001: App loads without crash" classname="00-critical.spec.ts" time="0.71">
+<testsuites id="" name="" tests="114" failures="0" skipped="0" errors="0" time="100.50414599999999">
+<testsuite name="00-critical.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="critical" tests="3" failures="0" skipped="0" time="1.352" errors="0">
+<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-001: App loads without crash" classname="00-critical.spec.ts" time="0.899">
 </testcase>
-<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-002: Login page accessible" classname="00-critical.spec.ts" time="0.402">
+<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-002: Login page accessible" classname="00-critical.spec.ts" time="0.442">
 </testcase>
-<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-003: API health check" classname="00-critical.spec.ts" time="0.312">
-<failure message="00-critical.spec.ts:56:7 CRIT-003: API health check" type="FAILURE">
-<![CDATA[  [critical] › 00-critical.spec.ts:56:7 › @critical Layer 0: Critical Infrastructure › CRIT-003: API health check 
-
-    Error: apiRequestContext.get: connect ECONNREFUSED ::1:3002
-    Call log:
-      - → GET http://localhost:3002/api/health
-        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.7499.4 Safari/537.36
-        - accept: */*
-        - accept-encoding: gzip,deflate,br
-
-        at apiRequestContext.get: connect ECONNREFUSED ::1:3002
-        at /Users/admin/Dev/YOLOProjects/scholarmancy/scholaracle/packages/e2e/tests/00-critical.spec.ts:59:36
-]]>
-</failure>
+<testcase name="@critical Layer 0: Critical Infrastructure › CRIT-003: API health check" classname="00-critical.spec.ts" time="0.011">
 </testcase>
 </testsuite>
-<testsuite name="01-auth.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="auth" tests="8" failures="0" skipped="8" time="0" errors="0">
-<testcase name="@auth Layer 1: Authentication › AUTH-001: Parent can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="01-auth.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="auth" tests="8" failures="0" skipped="0" time="9.136" errors="0">
+<testcase name="@auth Layer 1: Authentication › AUTH-001: Parent can login" classname="01-auth.spec.ts" time="1.357">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-002: Parent can logout" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-002: Parent can logout" classname="01-auth.spec.ts" time="1.451">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-003: Super Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-003: Super Admin can login" classname="01-auth.spec.ts" time="1.178">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-004: Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-004: Admin can login" classname="01-auth.spec.ts" time="1.125">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-005: Support can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-005: Support can login" classname="01-auth.spec.ts" time="1.117">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-006: Billing can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-006: Billing can login" classname="01-auth.spec.ts" time="1.141">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-007: Analyst can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-007: Analyst can login" classname="01-auth.spec.ts" time="1.155">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-008: Invalid credentials rejected" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@auth Layer 1: Authentication › AUTH-008: Invalid credentials rejected" classname="01-auth.spec.ts" time="0.612">
 </testcase>
 </testsuite>
-<testsuite name="02-dashboard-admin.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="dashboard" tests="20" failures="0" skipped="20" time="0" errors="0">
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-001: Admin Home renders (super_admin)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="02-dashboard-admin.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="dashboard" tests="22" failures="0" skipped="0" time="67.557" errors="0">
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-001: Admin Home renders (super_admin)" classname="02-dashboard-admin.spec.ts" time="1.21">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-002: Customers List renders (all roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-002: Customers List renders (all roles)" classname="02-dashboard-admin.spec.ts" time="7.037">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-003: Customer Detail renders (super_admin)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-003: Customer Detail renders (super_admin)" classname="02-dashboard-admin.spec.ts" time="4.45">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-004: Payments page renders (billing roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-004: Payments page renders (billing roles)" classname="02-dashboard-admin.spec.ts" time="7.641">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-005: Subscriptions page renders (billing roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-005: Subscriptions page renders (billing roles)" classname="02-dashboard-admin.spec.ts" time="6.132">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-006: Communications page renders (support roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-006: Communications page renders (support roles)" classname="02-dashboard-admin.spec.ts" time="6.19">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-007: Reports page renders (analyst roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-007: Reports page renders (analyst roles)" classname="02-dashboard-admin.spec.ts" time="7.032">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-008: System Settings renders (super_admin only)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-008: System Settings renders (super_admin only)" classname="02-dashboard-admin.spec.ts" time="2.857">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-009: Audit Logs renders (super_admin only)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-009: Audit Logs renders (super_admin only)" classname="02-dashboard-admin.spec.ts" time="2.621">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-010: Analytics Overview renders (analyst roles)" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-021: Audit Logs export CSV works (super_admin only)" classname="02-dashboard-admin.spec.ts" time="2.225">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-011: Support cannot access Settings" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-022: Audit Log detail drawer opens (super_admin only)" classname="02-dashboard-admin.spec.ts" time="2.37">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-012: Support cannot access Payments" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-010: Analytics Overview renders (analyst roles)" classname="02-dashboard-admin.spec.ts" time="3.958">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-013: Billing cannot access Communications" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-011: Support cannot access Settings" classname="02-dashboard-admin.spec.ts" time="1.503">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-014: Analyst cannot access Settings" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-012: Support cannot access Payments" classname="02-dashboard-admin.spec.ts" time="1.679">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-015: Admin cannot access Settings" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-013: Billing cannot access Communications" classname="02-dashboard-admin.spec.ts" time="1.599">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-016: Admin cannot access Audit Logs" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-014: Analyst cannot access Settings" classname="02-dashboard-admin.spec.ts" time="1.573">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-017: Billing cannot access Communications" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-015: Admin cannot access Settings" classname="02-dashboard-admin.spec.ts" time="1.309">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-018: Analyst can access Payments" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-016: Admin cannot access Audit Logs" classname="02-dashboard-admin.spec.ts" time="1.219">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-019: Analyst can access Reports" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-017: Billing cannot access Communications" classname="02-dashboard-admin.spec.ts" time="1.273">
 </testcase>
-<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-020: Support can access Customers" classname="02-dashboard-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-018: Analyst can access Payments" classname="02-dashboard-admin.spec.ts" time="0.944">
+</testcase>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-019: Analyst can access Reports" classname="02-dashboard-admin.spec.ts" time="1.32">
+</testcase>
+<testcase name="@dashboard Layer 2: Admin Dashboard Pages › DASH-A-020: Support can access Customers" classname="02-dashboard-admin.spec.ts" time="1.415">
 </testcase>
 </testsuite>
-<testsuite name="02-dashboard-parent.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="dashboard" tests="8" failures="0" skipped="8" time="0" errors="0">
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-001: Dashboard Home renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="02-dashboard-parent.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="dashboard" tests="9" failures="0" skipped="0" time="13.761" errors="0">
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-001: Dashboard Home renders" classname="02-dashboard-parent.spec.ts" time="1.237">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-002: Students List page renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-009: Dashboard shows real alerts and deadlines" classname="02-dashboard-parent.spec.ts" time="1.508">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-003: Add Student page renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-002: Students List page renders" classname="02-dashboard-parent.spec.ts" time="1.62">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-004: Student Detail page renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-003: Add Student page renders" classname="02-dashboard-parent.spec.ts" time="1.587">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-005: Alerts page renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-004: Student Detail page renders" classname="02-dashboard-parent.spec.ts" time="1.576">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-006: Settings page renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-005: Alerts page renders" classname="02-dashboard-parent.spec.ts" time="1.63">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-007: Notification Settings section renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-006: Settings page renders" classname="02-dashboard-parent.spec.ts" time="1.596">
 </testcase>
-<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-008: Grade Thresholds section renders" classname="02-dashboard-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-007: Notification Settings section renders" classname="02-dashboard-parent.spec.ts" time="1.562">
+</testcase>
+<testcase name="@dashboard Layer 2: Parent Dashboard Pages › DASH-P-008: Grade Thresholds section renders" classname="02-dashboard-parent.spec.ts" time="1.445">
 </testcase>
 </testsuite>
-<testsuite name="03-navigation-admin.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="navigation" tests="15" failures="0" skipped="15" time="0" errors="0">
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-001: Dashboard link works (all roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="03-navigation-admin.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="navigation" tests="15" failures="0" skipped="0" time="114.202" errors="0">
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-001: Dashboard link works (all roles)" classname="03-navigation-admin.spec.ts" time="52.704">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-002: Customers link works (all roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-002: Customers link works (all roles)" classname="03-navigation-admin.spec.ts" time="11.23">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-003: Payments link works (billing roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-003: Payments link works (billing roles)" classname="03-navigation-admin.spec.ts" time="3.81">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-004: Subscriptions link works (billing roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-004: Subscriptions link works (billing roles)" classname="03-navigation-admin.spec.ts" time="12.072">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-005: Communications link works (support roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-005: Communications link works (support roles)" classname="03-navigation-admin.spec.ts" time="12.033">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-006: Reports link works (analyst roles)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-006: Reports link works (analyst roles)" classname="03-navigation-admin.spec.ts" time="11.225">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-007: Settings link works (super_admin only)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-007: Settings link works (super_admin only)" classname="03-navigation-admin.spec.ts" time="2.242">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-008: Audit Logs link works (super_admin only)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-008: Audit Logs link works (super_admin only)" classname="03-navigation-admin.spec.ts" time="2.25">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-009: Customer detail navigation" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-009: Customer detail navigation" classname="03-navigation-admin.spec.ts" time="0.851">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-010: Customer detail tabs" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-010: Customer detail tabs" classname="03-navigation-admin.spec.ts" time="0.868">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-011: Back to customers list" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-011: Back to customers list" classname="03-navigation-admin.spec.ts" time="1.025">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-012: Quick actions menu" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-012: Quick actions menu" classname="03-navigation-admin.spec.ts" time="0.805">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-013: Unauthorized redirect (support → settings)" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-013: Unauthorized redirect (support → settings)" classname="03-navigation-admin.spec.ts" time="1.304">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-014: Search navigation" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-014: Search navigation" classname="03-navigation-admin.spec.ts" time="1.216">
 </testcase>
-<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-015: Pagination navigation" classname="03-navigation-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Admin Navigation › NAV-A-015: Pagination navigation" classname="03-navigation-admin.spec.ts" time="0.567">
 </testcase>
 </testsuite>
-<testsuite name="03-navigation-parent.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="navigation" tests="15" failures="0" skipped="15" time="0" errors="0">
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-001: Dashboard link works" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="03-navigation-parent.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="navigation" tests="17" failures="0" skipped="0" time="43.313" errors="0">
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-001: Dashboard link works" classname="03-navigation-parent.spec.ts" time="0.562">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-002: Students link works" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-002: Students link works" classname="03-navigation-parent.spec.ts" time="0.622">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-003: Add Student from empty state" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-003: Add Student from empty state" classname="03-navigation-parent.spec.ts" time="0.715">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-004: Alerts link works" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-004: Alerts link works" classname="03-navigation-parent.spec.ts" time="0.67">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-005: Settings link works" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-004a: Agenda link works" classname="03-navigation-parent.spec.ts" time="30.588">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-006: Logo navigates home" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-004b: Courses link works" classname="03-navigation-parent.spec.ts" time="0.801">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-007: Logout button visible" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-005: Settings link works" classname="03-navigation-parent.spec.ts" time="0.665">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-008: Back navigation works" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-006: Logo navigates home" classname="03-navigation-parent.spec.ts" time="0.623">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-009: Student detail back link" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-007: Logout button visible" classname="03-navigation-parent.spec.ts" time="0.539">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-010: Breadcrumb navigation" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-008: Back navigation works" classname="03-navigation-parent.spec.ts" time="1.289">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-011: Settings tabs navigation" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-009: Student detail back link" classname="03-navigation-parent.spec.ts" time="0.69">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-012: Alert filter tabs" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-010: Breadcrumb navigation" classname="03-navigation-parent.spec.ts" time="0.475">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-013: Mobile menu toggle" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-011: Settings tabs navigation" classname="03-navigation-parent.spec.ts" time="0.78">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-014: Mobile nav links work" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-012: Alert filter tabs" classname="03-navigation-parent.spec.ts" time="1.667">
 </testcase>
-<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-015: Deep link direct access" classname="03-navigation-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-013: Mobile menu toggle" classname="03-navigation-parent.spec.ts" time="0.968">
+</testcase>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-014: Mobile nav links work" classname="03-navigation-parent.spec.ts" time="0.94">
+</testcase>
+<testcase name="@navigation Layer 3: Parent Navigation › NAV-P-015: Deep link direct access" classname="03-navigation-parent.spec.ts" time="0.719">
 </testcase>
 </testsuite>
-<testsuite name="04-feature-admin.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="feature" tests="15" failures="0" skipped="15" time="0" errors="0">
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-001: Read customer list" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="04-feature-admin.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="feature" tests="18" failures="0" skipped="0" time="40.18" errors="0">
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-001: Read customer list" classname="04-feature-admin.spec.ts" time="1.928">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-002: Search customers" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-002: Search customers" classname="04-feature-admin.spec.ts" time="2.791">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-003: Filter customers by plan" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-003: Filter customers by plan" classname="04-feature-admin.spec.ts" time="1.625">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-004: View customer detail" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-004: View customer detail" classname="04-feature-admin.spec.ts" time="2.752">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-005: Suspend customer (super_admin only)" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-005: Suspend customer (super_admin only)" classname="04-feature-admin.spec.ts" time="2.304">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-006: Unsuspend customer (super_admin only)" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-006: Unsuspend customer (super_admin only)" classname="04-feature-admin.spec.ts" time="1.94">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-007: Update subscription plan" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-007: Update subscription plan" classname="04-feature-admin.spec.ts" time="1.136">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-008: Cancel subscription" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-008: Cancel subscription" classname="04-feature-admin.spec.ts" time="1.662">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-009: Issue refund (billing roles)" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-009: Issue refund (billing roles)" classname="04-feature-admin.spec.ts" time="2.129">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-010: Create admin note" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-010: Create admin note" classname="04-feature-admin.spec.ts" time="2.105">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-011: Update admin note" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-011: Update admin note" classname="04-feature-admin.spec.ts" time="1.993">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-012: Delete admin note" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-012: Delete admin note" classname="04-feature-admin.spec.ts" time="1.942">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-013: Send communication to customer" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-013: Send communication to customer" classname="04-feature-admin.spec.ts" time="2.122">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-014: Create admin user (super_admin only)" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-013b: Create template and send using it" classname="04-feature-admin.spec.ts" time="2.295">
 </testcase>
-<testcase name="@feature Layer 4: Admin Features › FEAT-A-015: Update admin user role" classname="04-feature-admin.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-013c: Create bulk send batch (parents segment)" classname="04-feature-admin.spec.ts" time="3.467">
+</testcase>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-013d: Webhook status update reflects in UI" classname="04-feature-admin.spec.ts" time="3.188">
+</testcase>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-014: Create admin user (super_admin only)" classname="04-feature-admin.spec.ts" time="2.573">
+</testcase>
+<testcase name="@feature Layer 4: Admin Features › FEAT-A-015: Update admin user role" classname="04-feature-admin.spec.ts" time="2.228">
 </testcase>
 </testsuite>
-<testsuite name="04-feature-parent.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="feature" tests="10" failures="0" skipped="10" time="0" errors="0">
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-001: Create student" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="04-feature-parent.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="feature" tests="10" failures="0" skipped="0" time="15.909" errors="0">
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-001: Create student" classname="04-feature-parent.spec.ts" time="2.094">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-002: Read student details" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-002: Read student details" classname="04-feature-parent.spec.ts" time="2.354">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-003: Update student" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-003: Update student" classname="04-feature-parent.spec.ts" time="1.736">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-004: Delete student" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-004: Delete student" classname="04-feature-parent.spec.ts" time="1.741">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-005: Read alerts" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-005: Read alerts" classname="04-feature-parent.spec.ts" time="1.197">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-006: Acknowledge alert" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-006: Acknowledge alert" classname="04-feature-parent.spec.ts" time="1.045">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-007: Filter alerts by severity" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-007: Filter alerts by severity" classname="04-feature-parent.spec.ts" time="1.176">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-008: Update notification preferences" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-008: Update notification preferences" classname="04-feature-parent.spec.ts" time="2.016">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-009: Update alert thresholds" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-009: Update alert thresholds" classname="04-feature-parent.spec.ts" time="1.35">
 </testcase>
-<testcase name="@feature Layer 4: Parent Features › FEAT-P-010: Settings persist on reload" classname="04-feature-parent.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@feature Layer 4: Parent Features › FEAT-P-010: Settings persist on reload" classname="04-feature-parent.spec.ts" time="1.2">
 </testcase>
 </testsuite>
-<testsuite name="01-auth.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="firefox" tests="8" failures="0" skipped="8" time="0" errors="0">
-<testcase name="@auth Layer 1: Authentication › AUTH-001: Parent can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="05-integration.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="integration" tests="6" failures="0" skipped="0" time="29.29" errors="0">
+<testcase name="@integration Layer 5: Integration Workflows › INT-001: Complete Parent Onboarding" classname="05-integration.spec.ts" time="3.248">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-002: Parent can logout" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@integration Layer 5: Integration Workflows › INT-002: Parent-Admin Interaction" classname="05-integration.spec.ts" time="2.359">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-003: Super Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@integration Layer 5: Integration Workflows › INT-003: Subscription Lifecycle" classname="05-integration.spec.ts" time="14.151">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-004: Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@integration Layer 5: Integration Workflows › INT-006: Connector ingestion populates agenda and alerts (value loop)" classname="05-integration.spec.ts" time="4.208">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-005: Support can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@integration Layer 5: Integration Workflows › INT-004: Alert Flow" classname="05-integration.spec.ts" time="2.279">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-006: Billing can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
-</testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-007: Analyst can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
-</testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-008: Invalid credentials rejected" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@integration Layer 5: Integration Workflows › INT-005: Multi-Student Family" classname="05-integration.spec.ts" time="3.045">
 </testcase>
 </testsuite>
-<testsuite name="01-auth.spec.ts" timestamp="2025-12-11T19:53:57.178Z" hostname="webkit" tests="8" failures="0" skipped="8" time="0" errors="0">
-<testcase name="@auth Layer 1: Authentication › AUTH-001: Parent can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testsuite name="06-error.spec.ts" timestamp="2025-12-24T16:10:38.063Z" hostname="error" tests="6" failures="0" skipped="0" time="7.665" errors="0">
+<testcase name="@error Layer 6: Error Handling › ERR-001: 404 Page displays" classname="06-error.spec.ts" time="0.539">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-002: Parent can logout" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@error Layer 6: Error Handling › ERR-002: API Error Display" classname="06-error.spec.ts" time="1.35">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-003: Super Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@error Layer 6: Error Handling › ERR-003: Session Expired" classname="06-error.spec.ts" time="1.202">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-004: Admin can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@error Layer 6: Error Handling › ERR-004: Permission Denied" classname="06-error.spec.ts" time="1.312">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-005: Support can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@error Layer 6: Error Handling › ERR-005: Form Validation" classname="06-error.spec.ts" time="1.862">
 </testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-006: Billing can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
-</testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-007: Analyst can login" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
-</testcase>
-<testcase name="@auth Layer 1: Authentication › AUTH-008: Invalid credentials rejected" classname="01-auth.spec.ts" time="0">
-<skipped>
-</skipped>
+<testcase name="@error Layer 6: Error Handling › ERR-006: Network Offline" classname="06-error.spec.ts" time="1.4">
 </testcase>
 </testsuite>
 </testsuites>
