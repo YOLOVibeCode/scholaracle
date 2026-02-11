@@ -46,7 +46,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+              <div data-testid="error-message" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
                 {error}
               </div>
             )}
@@ -87,6 +87,13 @@ export default function LoginPage() {
               <Link href="/register" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
                 Sign up
               </Link>
+            </div>
+            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+              {' · '}
+              <Link href="/terms" className="hover:underline">Terms</Link>
+              {' · '}
+              <Link href="/support" className="hover:underline">Support</Link>
             </div>
           </CardFooter>
         </form>

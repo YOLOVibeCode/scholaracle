@@ -22,6 +22,13 @@ export default function HomePage() {
               <Link href="/register">Create Account</Link>
             </Button>
           </div>
+          <div className="text-center text-xs text-gray-500 dark:text-gray-400 pt-2">
+            <Link href="/privacy" className="hover:underline">Privacy</Link>
+            {' · '}
+            <Link href="/terms" className="hover:underline">Terms</Link>
+            {' · '}
+            <Link href="/support" className="hover:underline">Support</Link>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -15,6 +15,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -119,6 +121,59 @@ export default function RegisterPage() {
                 minLength={8}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone (optional, for SMS alerts)</Label>
+              <Input
+                id="phone"
+                name="phone"
+                data-testid="phone-input"
+                type="tel"
+                placeholder="+1 (555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-start gap-2">
+                <input
+                  id="termsConsent"
+                  name="termsConsent"
+                  type="checkbox"
+                  required
+                  disabled={isLoading}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                  data-testid="terms-consent-checkbox"
+                />
+                <Label htmlFor="termsConsent" className="text-sm font-normal cursor-pointer">
+                  I agree to the{' '}
+                  <Link href="/terms" className="font-medium text-blue-600 hover:underline dark:text-blue-400" target="_blank">
+                    Terms of Service
+                  </Link>
+                  {' '}
+                  and{' '}
+                  <Link href="/privacy" className="font-medium text-blue-600 hover:underline dark:text-blue-400" target="_blank">
+                    Privacy Policy
+                  </Link>
+                </Label>
+              </div>
+              <div className="flex items-start gap-2">
+                <input
+                  id="smsConsent"
+                  name="smsConsent"
+                  type="checkbox"
+                  checked={smsConsent}
+                  onChange={(e) => setSmsConsent(e.target.checked)}
+                  disabled={isLoading}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                  data-testid="sms-consent-checkbox"
+                />
+                <Label htmlFor="smsConsent" className="text-sm font-normal cursor-pointer">
+                  I agree to receive SMS text message alerts about assignments and deadlines. Message and data
+                  rates may apply. Reply STOP to opt out, HELP for help.
+                </Label>
+              </div>
+            </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={isLoading} data-testid="register-button">
@@ -129,6 +184,13 @@ export default function RegisterPage() {
               <Link href="/login" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
                 Sign in
               </Link>
+            </div>
+            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+              {' · '}
+              <Link href="/terms" className="hover:underline">Terms</Link>
+              {' · '}
+              <Link href="/support" className="hover:underline">Support</Link>
             </div>
           </CardFooter>
         </form>
