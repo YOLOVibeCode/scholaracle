@@ -6,18 +6,8 @@
 |-----------|-----------------------------------------------|----------|
 | **Web**   | https://web-production-7c7641.up.railway.app  | Running  |
 | **API**   | https://api-production-155e.up.railway.app    | Running  |
-| **Workers** | (Background - no public URL)                | See note |
+| **Workers** | (Background - health at internal port)     | Running  |
 | **MongoDB** | (Private network only)                      | Running  |
-
-## Workers Service - One Manual Step Required
-
-The workers service is a background process with no HTTP server. The default health check (`/api/health`) will fail and block deployment.
-
-**To fix:** In the [Railway Dashboard](https://railway.com/project/202aed45-fee6-4398-bc42-fdf259dc6bac):
-1. Select the **workers** service
-2. Go to **Settings** → **Deploy**
-3. Clear the **Health Check Path** field (leave it empty)
-4. Save; the workers will redeploy successfully
 
 ## Environment Variables (Configured)
 
