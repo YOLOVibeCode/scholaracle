@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { MongoClient, type Db } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { healthRouter } from './routes/health';
@@ -21,6 +22,9 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
+import { stripeWebhookRouter } from './routes/webhooks/stripe';
+import { billingRouter } from './routes/billing';
+import { StripeService } from './services/StripeService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
 import { agendaRouter } from './routes/agenda';
@@ -49,6 +53,8 @@ export interface IServerConfig {
   readonly twilioAccountSid?: string;
   readonly twilioAuthToken?: string;
   readonly twilioFromNumber?: string;
+  readonly stripeSecretKey?: string;
+  readonly stripeWebhookSecret?: string;
 }
 
 /**
@@ -156,7 +162,7 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
  * @returns MongoDB database instance
  */
 async function initializeDatabase(config: IServerConfig): Promise<Db> {
-  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
+  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? process.env['MONGO_URL'] ?? 'mongodb://localhost:27017';
   const dbName = config.mongodbDbName ?? process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
 
   // Allow fully self-contained E2E runs without an external MongoDB daemon.
@@ -185,8 +191,29 @@ async function initializeDatabase(config: IServerConfig): Promise<Db> {
 export function createApp(config: IServerConfig = {}, database?: Db): Express {
   const app = express();
 
-  app.use(cors());
-  app.use(express.json());
+  // Security headers
+  app.use(helmet());
+
+  // CORS - restrict origins in production
+  const allowedOrigins = process.env['CORS_ORIGINS']
+    ? process.env['CORS_ORIGINS'].split(',')
+    : ['http://localhost:2800', 'http://localhost:3000'];
+  app.use(
+    cors({
+      origin: allowedOrigins,
+      credentials: true,
+    })
+  );
+
+  // Body parsing with size limit
+  app.use(express.json({ limit: '10mb' }));
+
+  // Resolve JWT secret once - fail hard in production if missing
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? (nodeEnv === 'production' ? undefined : 'test-secret');
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET environment variable is required in production');
+  }
 
   const notificationService = initializeNotificationService(config);
 
@@ -194,7 +221,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
   // Seed endpoint (development/test only)
   if (database) {
-    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
     app.use('/api/seed', seedRouter({ database, jwtSecret }));
   }
 
@@ -203,7 +229,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
   if (database) {
     const authService = new AuthService(database);
-    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
     
     // User-facing API routes
     app.use('/api/auth', authRouter({ database }));
@@ -231,6 +256,20 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
     // Webhook ingestion (delivery tracking)
     app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));
+
+    // Stripe billing (optional — only registers if secret key is configured)
+    const stripeSecretKey = config.stripeSecretKey ?? process.env['STRIPE_SECRET_KEY'];
+    const stripeWebhookSecret = config.stripeWebhookSecret ?? process.env['STRIPE_WEBHOOK_SECRET'];
+    if (stripeSecretKey && stripeWebhookSecret) {
+      const stripeService = new StripeService({
+        secretKey: stripeSecretKey,
+        webhookSecret: stripeWebhookSecret,
+      });
+
+      app.use('/api/billing', authMiddleware(authService), billingRouter({ database, stripeService }));
+      // Stripe webhook uses raw body for signature verification
+      app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter({ database, stripeService }));
+    }
   }
 
   app.use(errorHandler);

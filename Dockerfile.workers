@@ -1,0 +1,41 @@
+# Dockerfile for Workers Service
+# Uses BuildKit for better caching and performance
+
+# syntax=docker/dockerfile:1.4
+
+# Base stage - install dependencies
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+
+# Copy package files (ALL workspace packages required for frozen lockfile)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/auth/package.json ./packages/auth/
+COPY packages/database/package.json ./packages/database/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/interfaces/package.json ./packages/interfaces/
+COPY packages/agents/package.json ./packages/agents/
+COPY packages/workers/package.json ./packages/workers/
+COPY packages/connector/package.json ./packages/connector/
+COPY packages/web/package.json ./packages/web/
+COPY packages/e2e/package.json ./packages/e2e/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Development stage
+FROM base AS development
+COPY . .
+RUN pnpm --filter @scholaracle/workers... build
+EXPOSE 3003
+CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]
+
+# Production stage
+FROM base AS production
+COPY . .
+RUN pnpm --filter @scholaracle/workers... build
+ENV NODE_ENV=production
+CMD ["node", "packages/workers/dist/worker.js"]

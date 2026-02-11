@@ -126,7 +126,7 @@ function initializeNotificationService(config: IWorkerConfig): NotificationServi
  * @param config - Worker configuration
  */
 export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
-  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
+  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? process.env['MONGO_URL'] ?? 'mongodb://localhost:27017';
   const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
 
   // Connect to MongoDB
