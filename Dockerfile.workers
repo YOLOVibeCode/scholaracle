@@ -38,4 +38,5 @@ FROM base AS production
 COPY . .
 RUN pnpm --filter @scholaracle/workers... build
 ENV NODE_ENV=production
+EXPOSE 3003
 CMD ["node", "packages/workers/dist/worker.js"]

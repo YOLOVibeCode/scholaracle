@@ -1,3 +1,4 @@
+import { createServer } from 'http';
 import { MongoClient, type Db } from 'mongodb';
 import { MongoQueue } from '@scholaracle/agents';
 import { NotificationWorker } from '@scholaracle/agents';
@@ -151,6 +152,22 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Start worker
   notificationWorker.start();
 
+  // Minimal HTTP server for Railway health check (GET /api/health)
+  const port = parseInt(process.env['PORT'] ?? '3003', 10);
+  const healthServer = createServer((req, res) => {
+    if (req.url === '/api/health' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  healthServer.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Health check server listening on port ${port}`);
+  });
+
   // eslint-disable-next-line no-console
   console.log('Notification worker started');
 
@@ -158,6 +175,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const shutdown = async (): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log('Shutting down worker...');
+    healthServer.close();
     await notificationWorker.stop();
     await mongoClient.close();
     // eslint-disable-next-line no-console
