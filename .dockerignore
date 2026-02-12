@@ -33,6 +33,5 @@ packages/e2e/playwright-report
 .github
 
 # Docker
-Dockerfile*
 docker-compose*
 .dockerignore
