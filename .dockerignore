@@ -1,0 +1,38 @@
+# Dependencies (installed fresh in container)
+node_modules
+packages/*/node_modules
+
+# Build outputs (built fresh in container)
+packages/*/dist
+packages/web/.next
+packages/web/out
+*.tsbuildinfo
+packages/*/*.tsbuildinfo
+
+# Test artifacts
+packages/*/coverage
+packages/e2e/test-results
+packages/e2e/playwright-report
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files (secrets set via Railway/Vercel dashboard)
+.env
+.env.local
+.env.*.local
+
+# CI/CD
+.github
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore

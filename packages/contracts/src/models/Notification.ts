@@ -32,8 +32,8 @@ export class Notification {
   public readonly agentType: AgentType;
   public readonly studentId: string;
   public readonly userId: string;
-  public readonly subject: string;
-  public readonly body: string;
+  public subject: string;
+  public body: string;
   public readonly priority: NotificationPriority;
   public readonly triggerType: string;
   public readonly triggerData?: unknown;
@@ -79,6 +79,11 @@ export class Notification {
 
   public markActionTaken(): void {
     this.actionTakenAt = new Date();
+  }
+
+  public updateContent(subject: string, body: string): void {
+    this.subject = subject;
+    this.body = body;
   }
 
   private _validate(data: NotificationData): void {

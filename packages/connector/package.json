@@ -8,12 +8,16 @@
     "slc": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build",
     "dev": "ts-node-dev --respawn --transpile-only src/cli.ts",
-    "test": "jest --passWithNoTests",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {
     "@scholaracle/contracts": "workspace:*"

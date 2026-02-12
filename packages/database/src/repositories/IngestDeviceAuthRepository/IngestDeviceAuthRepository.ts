@@ -1,7 +1,34 @@
 import type { Collection, Db, ObjectId } from 'mongodb';
-import { IngestDeviceAuth, type IngestDeviceAuthStatus, type IIngestDeviceAuthData } from '../../models/IngestDeviceAuth';
+import {
+  IngestDeviceAuth,
+  type IngestDeviceAuthStatus,
+  type IIngestDeviceAuthData,
+} from '../../models/IngestDeviceAuth';
 
-export class IngestDeviceAuthRepository {
+export interface IIngestDeviceAuthReader {
+  findByDeviceCode(deviceCode: string): Promise<IngestDeviceAuth | null>;
+  deliverTokenOnce(
+    deviceCode: string
+  ): Promise<{ readonly status: IngestDeviceAuthStatus; readonly token?: string }>;
+}
+
+export interface IIngestDeviceAuthWriter {
+  createPending(params: {
+    readonly deviceCode: string;
+    readonly userCode: string;
+    readonly expiresAt: Date;
+  }): Promise<IngestDeviceAuth>;
+  markExpired(deviceCode: string): Promise<void>;
+  approveByUserCode(
+    userCode: string,
+    userId: ObjectId | string,
+    connectorToken: string
+  ): Promise<boolean>;
+}
+
+export class IngestDeviceAuthRepository
+  implements IIngestDeviceAuthReader, IIngestDeviceAuthWriter
+{
   private readonly _collection: Collection<IIngestDeviceAuthData>;
 
   constructor(database: Db) {
@@ -32,10 +59,17 @@ export class IngestDeviceAuthRepository {
   }
 
   async markExpired(deviceCode: string): Promise<void> {
-    await this._collection.updateOne({ deviceCode }, { $set: { status: 'expired' satisfies IngestDeviceAuthStatus } });
+    await this._collection.updateOne(
+      { deviceCode },
+      { $set: { status: 'expired' satisfies IngestDeviceAuthStatus } }
+    );
   }
 
-  async approveByUserCode(userCode: string, userId: ObjectId | string, connectorToken: string): Promise<boolean> {
+  async approveByUserCode(
+    userCode: string,
+    userId: ObjectId | string,
+    connectorToken: string
+  ): Promise<boolean> {
     const now = new Date();
     const result = await this._collection.updateOne(
       { userCode, status: 'pending', expiresAt: { $gt: now } },
@@ -52,7 +86,9 @@ export class IngestDeviceAuthRepository {
     return result.modifiedCount === 1;
   }
 
-  async deliverTokenOnce(deviceCode: string): Promise<{ readonly status: IngestDeviceAuthStatus; readonly token?: string }> {
+  async deliverTokenOnce(
+    deviceCode: string
+  ): Promise<{ readonly status: IngestDeviceAuthStatus; readonly token?: string }> {
     const doc = await this._collection.findOne({ deviceCode });
     if (!doc) return { status: 'expired' };
 
@@ -79,5 +115,3 @@ export class IngestDeviceAuthRepository {
     return { status: 'approved', token: doc.connectorToken };
   }
 }
-
-

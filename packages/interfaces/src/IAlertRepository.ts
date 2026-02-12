@@ -14,11 +14,10 @@ export interface IAlertData {
 }
 
 /**
- * Repository interface for Alert persistence operations.
- * Follows Interface Segregation Principle - focused on data access only.
- * Uses string IDs to avoid coupling to MongoDB implementation details.
+ * Reader interface for Alert query operations.
+ * Part of ISP split - contains only read/query methods.
  */
-export interface IAlertRepository {
+export interface IAlertReader {
   /**
    * Find all alerts for a specific user.
    *
@@ -34,7 +33,13 @@ export interface IAlertRepository {
    * @returns Alert or null if not found
    */
   findById(id: string): Promise<IAlertData | null>;
+}
 
+/**
+ * Writer interface for Alert mutation operations.
+ * Part of ISP split - contains only write/mutation methods.
+ */
+export interface IAlertWriter {
   /**
    * Create a new alert.
    *
@@ -60,3 +65,9 @@ export interface IAlertRepository {
   delete(id: string): Promise<boolean>;
 }
 
+/**
+ * Combined repository interface for Alert persistence operations.
+ * Extends both reader and writer interfaces for backwards compatibility.
+ * Uses string IDs to avoid coupling to MongoDB implementation details.
+ */
+export interface IAlertRepository extends IAlertReader, IAlertWriter {}

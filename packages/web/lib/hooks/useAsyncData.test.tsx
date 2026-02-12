@@ -1,6 +1,10 @@
 /**
+ * @jest-environment jsdom
+ */
+
+/**
  * TDD Tests for useAsyncData hook
- * 
+ *
  * Following ISP: Small, focused interface for async data loading
  */
 
@@ -45,16 +49,16 @@ describe('useAsyncData Hook (ISP)', () => {
   });
 
   it('should support retry', async () => {
-    let attemptCount = 0;
-    const { result } = renderHook(() =>
-      useAsyncData(() => {
-        attemptCount++;
-        if (attemptCount < 2) {
-          return Promise.reject(new Error('Failed'));
-        }
-        return Promise.resolve({ data: 'success' });
-      })
-    );
+    // Track whether we should succeed — allows any number of React double-invokes
+    let shouldSucceed = false;
+    const fetchFn = jest.fn(() => {
+      if (!shouldSucceed) {
+        return Promise.reject(new Error('Failed'));
+      }
+      return Promise.resolve({ data: 'success' });
+    });
+
+    const { result } = renderHook(() => useAsyncData(fetchFn));
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -62,28 +66,38 @@ describe('useAsyncData Hook (ISP)', () => {
 
     expect(result.current.error).toBe('Failed');
 
-    // Retry
+    // Switch to success mode and retry
+    shouldSucceed = true;
     result.current.retry();
+
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data).toEqual({ data: 'success' });
     });
 
-    expect(result.current.data).toEqual({ data: 'success' });
     expect(result.current.error).toBeNull();
   });
 
   it('should support manual refresh', async () => {
-    const { result } = renderHook(() =>
-      useAsyncData(() => Promise.resolve({ data: 'test' }))
-    );
+    let callCount = 0;
+    const fetchFn = jest.fn(() => {
+      callCount++;
+      return Promise.resolve({ data: `result-${callCount}` });
+    });
+
+    const { result } = renderHook(() => useAsyncData(fetchFn));
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    // Refresh
+    const callsBefore = fetchFn.mock.calls.length;
+
+    // Refresh triggers a new fetch
     result.current.refresh();
-    expect(result.current.isLoading).toBe(true);
+
+    await waitFor(() => {
+      expect(fetchFn.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

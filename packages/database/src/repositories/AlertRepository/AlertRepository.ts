@@ -1,12 +1,12 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import type { IAlertRepository, IAlertData } from '@scholaracle/interfaces';
+import type { IAlertReader, IAlertWriter, IAlertData } from '@scholaracle/interfaces';
 
 /**
  * Repository for Alert model operations.
- * Implements IAlertRepository interface following ISP.
+ * Implements IAlertReader and IAlertWriter interfaces following ISP.
  */
-export class AlertRepository implements IAlertRepository {
+export class AlertRepository implements IAlertReader, IAlertWriter {
   private readonly _collection: Collection<IAlertData & { _id?: ObjectId }>;
 
   constructor(database: Db) {

@@ -107,7 +107,7 @@ export default function AdminLoginPage() {
                 />
               </div>
               {error && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                <div data-testid="error-message" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
                   {error}
                 </div>
               )}
@@ -135,7 +135,7 @@ export default function AdminLoginPage() {
                 </p>
               </div>
               {error && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                <div data-testid="error-message" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
                   {error}
                 </div>
               )}

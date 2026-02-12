@@ -5,6 +5,9 @@ module.exports = {
   displayName: 'connector',
   rootDir: '.',
   testEnvironment: 'node',
+  // Connector is a pure Node CLI tool with no MongoDB dependency.
+  globalSetup: undefined,
+  globalTeardown: undefined,
 };
 
 

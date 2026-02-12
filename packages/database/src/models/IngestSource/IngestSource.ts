@@ -34,5 +34,3 @@ export class IngestSource {
     this.updatedAt = data.updatedAt ?? new Date();
   }
 }
-
-

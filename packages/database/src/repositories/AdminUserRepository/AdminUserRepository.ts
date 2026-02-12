@@ -3,20 +3,25 @@ import { ObjectId } from 'mongodb';
 import { AdminUser, type IAdminUserData } from '../../models/AdminUser';
 import bcrypt from 'bcryptjs';
 
-export interface IAdminUserRepository {
-  create(adminData: IAdminUserData): Promise<AdminUser>;
+export interface IAdminUserReader {
   findByEmail(email: string): Promise<AdminUser | null>;
   findById(id: string): Promise<AdminUser | null>;
+  findAll(): Promise<readonly AdminUser[]>;
+}
+
+export interface IAdminUserWriter {
+  create(adminData: IAdminUserData): Promise<AdminUser>;
   update(id: string, updates: Partial<IAdminUserData>): Promise<AdminUser | null>;
   updateLastLogin(id: string, loginTime: Date): Promise<AdminUser | null>;
   deactivate(id: string): Promise<boolean>;
-  findAll(): Promise<readonly AdminUser[]>;
 }
+
+export interface IAdminUserRepository extends IAdminUserReader, IAdminUserWriter {}
 
 /**
  * Repository for AdminUser model operations.
  */
-export class AdminUserRepository implements IAdminUserRepository {
+export class AdminUserRepository implements IAdminUserReader, IAdminUserWriter {
   private readonly _collection: Collection<IAdminUserData & { _id?: ObjectId }>;
 
   constructor(database: Db) {
@@ -177,4 +182,3 @@ export class AdminUserRepository implements IAdminUserRepository {
     });
   }
 }
-

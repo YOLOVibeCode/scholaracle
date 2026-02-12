@@ -73,6 +73,14 @@ services:
       # Firebase (optional)
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
+      # Square (optional)
+      SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:-}
+      SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-sandbox}
+      SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:-}
+      SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
+      SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-}
+      # CORS
+      CORS_ORIGINS: http://localhost:2800,http://localhost:3000
     depends_on:
       mongodb:
         condition: service_healthy
@@ -88,7 +96,6 @@ services:
       - scholaracle-network
     volumes:
       - ./packages/api:/app/packages/api
-      - ./packages/shared:/app/packages/shared
       - /app/node_modules
 
   # Web Application (Next.js)
@@ -118,7 +125,6 @@ services:
       - scholaracle-network
     volumes:
       - ./packages/web:/app/packages/web
-      - ./packages/shared:/app/packages/shared
       - /app/node_modules
       - /app/.next
 

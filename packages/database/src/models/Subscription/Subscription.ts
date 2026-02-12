@@ -29,13 +29,16 @@ export const PLAN_PRICING: Record<SubscriptionPlan, { monthly: number; annual: n
 /**
  * Plan feature limits.
  */
-export const PLAN_FEATURES: Record<SubscriptionPlan, {
-  maxStudents: number;
-  emailNotifications: boolean;
-  smsNotifications: boolean;
-  prioritySupport: boolean;
-  advancedAnalytics: boolean;
-}> = {
+export const PLAN_FEATURES: Record<
+  SubscriptionPlan,
+  {
+    maxStudents: number;
+    emailNotifications: boolean;
+    smsNotifications: boolean;
+    prioritySupport: boolean;
+    advancedAnalytics: boolean;
+  }
+> = {
   free: {
     maxStudents: 1,
     emailNotifications: true,
@@ -108,34 +111,38 @@ export interface ISubscriptionData {
   readonly plan: SubscriptionPlan;
   readonly status: SubscriptionStatus;
   readonly priceId?: string;
-  
+
   // Billing Cycle
   readonly currentPeriodStart: Date;
   readonly currentPeriodEnd: Date;
   readonly billingCycle: BillingCycle;
-  
+
   // Trial
   readonly trialStart?: Date;
   readonly trialEnd?: Date;
-  
+
   // Cancellation
   readonly cancelAtPeriodEnd?: boolean;
   readonly cancelledAt?: Date;
   readonly cancellationReason?: string;
-  
+
   // Payment
   readonly lastPaymentDate?: Date;
   readonly lastPaymentAmount?: number;
   readonly nextPaymentDate?: Date;
   readonly nextPaymentAmount?: number;
-  
-  // Stripe Integration
+
+  // Stripe Integration (deprecated - use Square)
   readonly stripeSubscriptionId?: string;
   readonly stripeCustomerId?: string;
-  
+
+  // Square Integration
+  readonly squareSubscriptionId?: string;
+  readonly squareCustomerId?: string;
+
   // History
   readonly events?: readonly ISubscriptionEvent[];
-  
+
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -163,6 +170,8 @@ export class Subscription {
   public readonly nextPaymentAmount?: number;
   public readonly stripeSubscriptionId?: string;
   public readonly stripeCustomerId?: string;
+  public readonly squareSubscriptionId?: string;
+  public readonly squareCustomerId?: string;
   public readonly events: readonly ISubscriptionEvent[];
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
@@ -187,6 +196,8 @@ export class Subscription {
     this.nextPaymentAmount = data.nextPaymentAmount;
     this.stripeSubscriptionId = data.stripeSubscriptionId;
     this.stripeCustomerId = data.stripeCustomerId;
+    this.squareSubscriptionId = data.squareSubscriptionId;
+    this.squareCustomerId = data.squareCustomerId;
     this.events = data.events ?? [];
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
@@ -227,9 +238,7 @@ export class Subscription {
   /**
    * Get plan features.
    */
-  public getFeatures(): typeof PLAN_FEATURES[SubscriptionPlan] {
+  public getFeatures(): (typeof PLAN_FEATURES)[SubscriptionPlan] {
     return PLAN_FEATURES[this.plan];
   }
 }
-
-

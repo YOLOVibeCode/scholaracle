@@ -2,16 +2,22 @@ import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { Payment, type IPaymentData, type PaymentStatus } from '../../models/Payment';
 
-export interface IPaymentRepository {
-  create(paymentData: IPaymentData): Promise<Payment>;
+export interface IPaymentReader {
   findById(id: string): Promise<Payment | null>;
   findByUserId(userId: string): Promise<readonly Payment[]>;
   findByStripeId(stripePaymentIntentId: string): Promise<Payment | null>;
+  findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null>;
+  getRevenueByPeriod(startDate: Date, endDate: Date): Promise<number>;
+  getLifetimeValueByUserId(userId: string): Promise<number>;
+}
+
+export interface IPaymentWriter {
+  create(paymentData: IPaymentData): Promise<Payment>;
   updateStatus(id: string, status: PaymentStatus, failureReason?: string): Promise<boolean>;
   recordRefund(id: string, amount: number, refundedBy: string, reason?: string): Promise<boolean>;
-  getLifetimeValueByUserId(userId: string): Promise<number>;
-  getRevenueByPeriod(startDate: Date, endDate: Date): Promise<number>;
 }
+
+export interface IPaymentRepository extends IPaymentReader, IPaymentWriter {}
 
 /**
  * Repository for Payment model operations.
@@ -66,10 +72,7 @@ export class PaymentRepository implements IPaymentRepository {
    * @returns Array of payments
    */
   public async findByUserId(userId: string): Promise<readonly Payment[]> {
-    const documents = await this._collection
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const documents = await this._collection.find({ userId }).sort({ createdAt: -1 }).toArray();
 
     return documents.map((doc) => new Payment(doc, doc._id));
   }
@@ -82,6 +85,22 @@ export class PaymentRepository implements IPaymentRepository {
    */
   public async findByStripeId(stripePaymentIntentId: string): Promise<Payment | null> {
     const document = await this._collection.findOne({ stripePaymentIntentId });
+
+    if (!document || !document._id) {
+      return null;
+    }
+
+    return new Payment(document, document._id);
+  }
+
+  /**
+   * Find payment by Square payment ID.
+   *
+   * @param squarePaymentId - Square payment ID
+   * @returns Payment or null if not found
+   */
+  public async findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null> {
+    const document = await this._collection.findOne({ squarePaymentId });
 
     if (!document || !document._id) {
       return null;
@@ -113,10 +132,7 @@ export class PaymentRepository implements IPaymentRepository {
       updateDoc['failureReason'] = failureReason;
     }
 
-    const result = await this._collection.updateOne(
-      { _id: objectId },
-      { $set: updateDoc }
-    );
+    const result = await this._collection.updateOne({ _id: objectId }, { $set: updateDoc });
 
     return result.modifiedCount > 0;
   }
@@ -189,7 +205,7 @@ export class PaymentRepository implements IPaymentRepository {
     ];
 
     const results = await this._collection.aggregate(pipeline).toArray();
-    
+
     if (results.length === 0) {
       return 0;
     }
@@ -231,5 +247,3 @@ export class PaymentRepository implements IPaymentRepository {
     return (results[0]?.['net'] as number) ?? 0;
   }
 }
-
-

@@ -60,6 +60,7 @@ export async function createIndexes(database: Db): Promise<void> {
   await paymentsCollection.createIndex({ userId: 1, createdAt: -1 });
   await paymentsCollection.createIndex({ status: 1 });
   await paymentsCollection.createIndex({ stripePaymentIntentId: 1 });
+  await paymentsCollection.createIndex({ squarePaymentId: 1 });
 
   // Communication logs collection indexes
   const communicationLogsCollection = database.collection('communication_logs');
@@ -87,7 +88,10 @@ export async function createIndexes(database: Db): Promise<void> {
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
-  await agendaOverrides.createIndex({ userId: 1, itemType: 1, itemKey: 1, scope: 1 }, { unique: true });
+  await agendaOverrides.createIndex(
+    { userId: 1, itemType: 1, itemKey: 1, scope: 1 },
+    { unique: true }
+  );
   await agendaOverrides.createIndex({ userId: 1, snoozedUntil: 1 });
 
   // eslint-disable-next-line no-console

@@ -3,7 +3,13 @@ import type { ObjectId } from 'mongodb';
 /**
  * Payment status types.
  */
-export type PaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'disputed' | 'partially_refunded';
+export type PaymentStatus =
+  | 'pending'
+  | 'succeeded'
+  | 'failed'
+  | 'refunded'
+  | 'disputed'
+  | 'partially_refunded';
 
 /**
  * Payment method types.
@@ -21,44 +27,48 @@ export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'discover' | 'other';
 export interface IPaymentData {
   readonly userId: string;
   readonly subscriptionId?: string;
-  
+
   // Amount
   readonly amount: number;
   readonly currency: string;
   readonly amountRefunded?: number;
-  
+
   // Status
   readonly status: PaymentStatus;
   readonly failureReason?: string;
   readonly failureCode?: string;
-  
+
   // Payment Details
   readonly paymentMethod: PaymentMethodType;
   readonly last4?: string;
   readonly brand?: CardBrand;
   readonly expiryMonth?: number;
   readonly expiryYear?: number;
-  
-  // Stripe Integration
+
+  // Stripe Integration (deprecated - use Square)
   readonly stripePaymentIntentId?: string;
   readonly stripeChargeId?: string;
   readonly stripeInvoiceId?: string;
-  
+
+  // Square Integration
+  readonly squarePaymentId?: string;
+  readonly squareOrderId?: string;
+
   // Receipt
   readonly receiptUrl?: string;
   readonly receiptNumber?: string;
   readonly invoiceNumber?: string;
-  
+
   // Refund Details
   readonly refundedAt?: Date;
   readonly refundedBy?: string;
   readonly refundReason?: string;
   readonly refundId?: string;
-  
+
   // Metadata
   readonly description?: string;
   readonly metadata?: Record<string, unknown>;
-  
+
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -84,6 +94,8 @@ export class Payment {
   public readonly stripePaymentIntentId?: string;
   public readonly stripeChargeId?: string;
   public readonly stripeInvoiceId?: string;
+  public readonly squarePaymentId?: string;
+  public readonly squareOrderId?: string;
   public readonly receiptUrl?: string;
   public readonly receiptNumber?: string;
   public readonly invoiceNumber?: string;
@@ -114,6 +126,8 @@ export class Payment {
     this.stripePaymentIntentId = data.stripePaymentIntentId;
     this.stripeChargeId = data.stripeChargeId;
     this.stripeInvoiceId = data.stripeInvoiceId;
+    this.squarePaymentId = data.squarePaymentId;
+    this.squareOrderId = data.squareOrderId;
     this.receiptUrl = data.receiptUrl;
     this.receiptNumber = data.receiptNumber;
     this.invoiceNumber = data.invoiceNumber;
@@ -167,5 +181,3 @@ export class Payment {
     return `•••• ${this.last4}`;
   }
 }
-
-

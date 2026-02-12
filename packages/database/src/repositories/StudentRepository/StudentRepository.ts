@@ -2,13 +2,18 @@ import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { Student, type IStudentData } from '../../models/Student';
 
-export interface IStudentRepository {
-  create(studentData: IStudentData): Promise<Student>;
+export interface IStudentReader {
   findById(id: string | ObjectId): Promise<Student | null>;
   findByUserId(userId: string | ObjectId): Promise<readonly Student[]>;
+}
+
+export interface IStudentWriter {
+  create(studentData: IStudentData): Promise<Student>;
   update(id: string | ObjectId, updates: Partial<IStudentData>): Promise<Student | null>;
   delete(id: string | ObjectId): Promise<boolean>;
 }
+
+export interface IStudentRepository extends IStudentReader, IStudentWriter {}
 
 /**
  * Repository for Student model operations.
@@ -28,7 +33,10 @@ export class StudentRepository implements IStudentRepository {
    */
   public async create(studentData: IStudentData): Promise<Student> {
     const now = new Date();
-    const userIdObj = typeof studentData.userId === 'string' ? new ObjectId(studentData.userId) : studentData.userId;
+    const userIdObj =
+      typeof studentData.userId === 'string'
+        ? new ObjectId(studentData.userId)
+        : studentData.userId;
     const document = {
       ...studentData,
       userId: userIdObj,

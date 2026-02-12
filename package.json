@@ -30,6 +30,15 @@
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.3"
   },
+  "lint-staged": {
+    "packages/*/src/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "packages/*/src/**/*.{json,md}": [
+      "prettier --write"
+    ]
+  },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=8.0.0"

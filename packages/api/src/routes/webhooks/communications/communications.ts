@@ -1,6 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { CommunicationLogRepository, AuditLogRepository } from '@scholaracle/database';
+import {
+  CommunicationLogRepository,
+  AuditLogRepository,
+  type CommunicationStatus,
+} from '@scholaracle/database';
 
 export interface ICommunicationsWebhooksRouterConfig {
   readonly database: Db;
@@ -13,7 +17,8 @@ export interface ICommunicationsWebhooksRouterConfig {
  */
 export function communicationsWebhooksRouter(config: ICommunicationsWebhooksRouterConfig): Router {
   const router = Router();
-  const secret = config.webhookSecret ?? process.env['COMMUNICATIONS_WEBHOOK_SECRET'] ?? 'test-webhook-secret';
+  const secret =
+    config.webhookSecret ?? process.env['COMMUNICATIONS_WEBHOOK_SECRET'] ?? 'test-webhook-secret';
   const logsRepo = new CommunicationLogRepository(config.database);
   const auditRepo = new AuditLogRepository(config.database);
 
@@ -32,7 +37,7 @@ export function communicationsWebhooksRouter(config: ICommunicationsWebhooksRout
         return;
       }
 
-      const ok = await logsRepo.updateDeliveryStatus(logId, status as any);
+      const ok = await logsRepo.updateDeliveryStatus(logId, status as CommunicationStatus);
       if (!ok) {
         res.status(404).json({ success: false, error: 'Log not found' });
         return;
@@ -53,11 +58,12 @@ export function communicationsWebhooksRouter(config: ICommunicationsWebhooksRout
 
       res.status(200).json({ success: true });
     } catch (error) {
-      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
     }
   });
 
   return router;
 }
-
-

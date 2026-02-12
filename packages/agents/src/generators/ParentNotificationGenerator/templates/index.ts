@@ -4,6 +4,7 @@ export { GradeDropTemplate } from './GradeDropTemplate';
 export { TestTemplate } from './TestTemplate';
 export { WorkloadTemplate } from './WorkloadTemplate';
 export { PositiveTemplate } from './PositiveTemplate';
+export { RecommendationTemplate } from './RecommendationTemplate';
 export type {
   ITemplateResult,
   ITemplateAction,

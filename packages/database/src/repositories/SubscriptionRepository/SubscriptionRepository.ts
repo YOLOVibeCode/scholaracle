@@ -1,19 +1,37 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { Subscription, type ISubscriptionData, type SubscriptionPlan } from '../../models/Subscription';
+import {
+  Subscription,
+  type ISubscriptionData,
+  type SubscriptionPlan,
+} from '../../models/Subscription';
 
-export interface ISubscriptionRepository {
-  create(subscriptionData: ISubscriptionData): Promise<Subscription>;
+export interface ISubscriptionReader {
   findByUserId(userId: string): Promise<Subscription | null>;
   findById(id: string): Promise<Subscription | null>;
   findAll(filters?: Record<string, unknown>): Promise<readonly Subscription[]>;
-  update(userId: string, updates: Partial<ISubscriptionData>): Promise<Subscription | null>;
-  changePlan(userId: string, newPlan: SubscriptionPlan, performedBy?: string): Promise<Subscription | null>;
-  cancel(userId: string, reason?: string): Promise<boolean>;
-  reactivate(userId: string): Promise<boolean>;
-  extendTrial(userId: string, days: number, performedBy?: string, reason?: string): Promise<Subscription | null>;
   getExpiringSubscriptions(daysUntilExpiry: number): Promise<readonly Subscription[]>;
 }
+
+export interface ISubscriptionWriter {
+  create(subscriptionData: ISubscriptionData): Promise<Subscription>;
+  update(userId: string, updates: Partial<ISubscriptionData>): Promise<Subscription | null>;
+  changePlan(
+    userId: string,
+    newPlan: SubscriptionPlan,
+    performedBy?: string
+  ): Promise<Subscription | null>;
+  cancel(userId: string, reason?: string): Promise<boolean>;
+  reactivate(userId: string): Promise<boolean>;
+  extendTrial(
+    userId: string,
+    days: number,
+    performedBy?: string,
+    reason?: string
+  ): Promise<Subscription | null>;
+}
+
+export interface ISubscriptionRepository extends ISubscriptionReader, ISubscriptionWriter {}
 
 /**
  * Repository for Subscription model operations.
@@ -106,7 +124,10 @@ export class SubscriptionRepository implements ISubscriptionRepository {
    * @param updates - Update data
    * @returns Updated subscription or null if not found
    */
-  public async update(userId: string, updates: Partial<ISubscriptionData>): Promise<Subscription | null> {
+  public async update(
+    userId: string,
+    updates: Partial<ISubscriptionData>
+  ): Promise<Subscription | null> {
     const updateDoc = {
       ...updates,
       updatedAt: new Date(),
@@ -288,4 +309,3 @@ export class SubscriptionRepository implements ISubscriptionRepository {
     return documents.map((doc) => new Subscription(doc, doc._id));
   }
 }
-

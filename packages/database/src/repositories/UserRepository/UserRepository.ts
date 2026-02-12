@@ -26,18 +26,23 @@ export interface IUserStatistics {
   readonly suspendedUsers: number;
 }
 
-export interface IUserRepository {
-  create(userData: IUserData): Promise<User>;
+export interface IUserReader {
   findById(id: string | ObjectId): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
-  update(id: string | ObjectId, updates: Partial<IUserData>): Promise<User | null>;
-  delete(id: string | ObjectId): Promise<boolean>;
   findWithPagination(options: IPaginationOptions): Promise<IPaginatedResult<User>>;
   searchUsers(query: string): Promise<readonly User[]>;
-  suspendUser(userId: string, reason: string): Promise<boolean>;
-  unsuspendUser(userId: string): Promise<boolean>;
   getUserStatistics(): Promise<IUserStatistics>;
 }
+
+export interface IUserWriter {
+  create(userData: IUserData): Promise<User>;
+  update(id: string | ObjectId, updates: Partial<IUserData>): Promise<User | null>;
+  delete(id: string | ObjectId): Promise<boolean>;
+  suspendUser(userId: string, reason: string): Promise<boolean>;
+  unsuspendUser(userId: string): Promise<boolean>;
+}
+
+export interface IUserRepository extends IUserReader, IUserWriter {}
 
 /**
  * Repository for User model operations.

@@ -8,4 +8,5 @@ export enum AlertType {
   TEST = 'test',
   WORKLOAD = 'workload',
   POSITIVE = 'positive',
+  RECOMMENDATION = 'recommendation',
 }

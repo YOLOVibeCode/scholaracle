@@ -1,2 +1,2 @@
 export { AlertRepository } from './AlertRepository';
-export type { IAlertRepository } from '@scholaracle/interfaces';
+export type { IAlertReader, IAlertWriter, IAlertRepository } from '@scholaracle/interfaces';

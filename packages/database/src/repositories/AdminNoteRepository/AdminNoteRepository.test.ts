@@ -117,9 +117,9 @@ describe('AdminNoteRepository', () => {
         category: 'general',
       });
 
-      const success = await repository.delete(note._id!.toString());
+      const isSuccess = await repository.delete(note._id!.toString());
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const found = await repository.findById(note._id!.toString());
       expect(found).toBeNull();
     });
@@ -135,9 +135,9 @@ describe('AdminNoteRepository', () => {
         isPinned: false,
       });
 
-      const success = await repository.togglePin(note._id!.toString(), true);
+      const isSuccess = await repository.togglePin(note._id!.toString(), true);
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const found = await repository.findById(note._id!.toString());
       expect(found?.isPinned).toBe(true);
     });
@@ -151,13 +151,11 @@ describe('AdminNoteRepository', () => {
         isPinned: true,
       });
 
-      const success = await repository.togglePin(note._id!.toString(), false);
+      const isSuccess = await repository.togglePin(note._id!.toString(), false);
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const found = await repository.findById(note._id!.toString());
       expect(found?.isPinned).toBe(false);
     });
   });
 });
-
-

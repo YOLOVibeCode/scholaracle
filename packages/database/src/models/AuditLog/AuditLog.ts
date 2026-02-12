@@ -49,28 +49,28 @@ export interface IAuditLogData {
   readonly adminEmail: string;
   readonly action: AuditAction;
   readonly severity?: AuditSeverity;
-  
+
   // Target entity
   readonly entityType: string;
   readonly entityId?: string;
   readonly entityDescription?: string;
-  
+
   // Change details
   readonly changes?: {
     readonly field: string;
     readonly oldValue: unknown;
     readonly newValue: unknown;
   }[];
-  
+
   // Context
   readonly reason?: string;
   readonly metadata?: Record<string, unknown>;
-  
+
   // Request context
   readonly ipAddress: string;
   readonly userAgent: string;
   readonly sessionId?: string;
-  
+
   readonly timestamp?: Date;
 }
 
@@ -179,11 +179,9 @@ export class AuditLog {
    */
   public formatChanges(): string {
     if (this.changes.length === 0) return 'No changes recorded';
-    
+
     return this.changes
       .map((c) => `${c.field}: "${String(c.oldValue)}" → "${String(c.newValue)}"`)
       .join('\n');
   }
 }
-
-

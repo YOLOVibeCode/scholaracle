@@ -2,7 +2,9 @@
 
 import { loadConfig, saveConfig } from './config';
 import { postJson } from './http';
-import { buildFixtureEnvelope } from './fixture-adapter';
+import { AdapterRegistry } from './adapter-registry';
+import { FixtureAdapter } from './fixture-adapter-wrapper';
+import { CanvasAdapter } from './canvas';
 
 function usage(): never {
   // eslint-disable-next-line no-console
@@ -27,27 +29,33 @@ function getArg(name: string): string | undefined {
   return process.argv[idx + 1];
 }
 
-async function cmdInit() {
+async function cmdInit(): Promise<void> {
   const apiBaseUrl = getArg('--api') ?? process.env['API_BASE_URL'] ?? loadConfig().apiBaseUrl;
   const cfg = loadConfig();
   saveConfig({ ...cfg, apiBaseUrl });
 
-  const start = await postJson<{ success: boolean; deviceCode: string; userCode: string; verificationUrl: string }>(
-    `${apiBaseUrl}/api/ingest/v1/device/start`,
-    {}
-  );
+  const start = await postJson<{
+    success: boolean;
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+  }>(`${apiBaseUrl}/api/ingest/v1/device/start`, {});
 
   // eslint-disable-next-line no-console
-  console.log(`Device code created.`);
+  console.log('Device code created.');
   // eslint-disable-next-line no-console
   console.log(`User code: ${start.userCode}`);
   // eslint-disable-next-line no-console
-  console.log(`Approve it by logging into Scholaracle and visiting: ${apiBaseUrl}${start.verificationUrl}`);
+  console.log(
+    `Approve it by logging into Scholaracle and visiting: ${apiBaseUrl}${start.verificationUrl}`
+  );
   // eslint-disable-next-line no-console
-  console.log(`(Dev shortcut) Run: slc approve --user-token <USER_JWT> --user-code ${start.userCode}`);
+  console.log(
+    `(Dev shortcut) Run: slc approve --user-token <USER_JWT> --user-code ${start.userCode}`
+  );
 
   // Poll until approved
-  while (true) {
+  for (;;) {
     await new Promise((r) => setTimeout(r, 2000));
     const poll = await postJson<{ success: boolean; status: string; connectorToken?: string }>(
       `${apiBaseUrl}/api/ingest/v1/device/poll`,
@@ -55,7 +63,12 @@ async function cmdInit() {
     );
     if (poll.status === 'approved' && poll.connectorToken) {
       const newCfg = loadConfig();
-      saveConfig({ ...newCfg, apiBaseUrl, connectorToken: poll.connectorToken, sources: newCfg.sources });
+      saveConfig({
+        ...newCfg,
+        apiBaseUrl,
+        connectorToken: poll.connectorToken,
+        sources: newCfg.sources,
+      });
       // eslint-disable-next-line no-console
       console.log('Connector token saved locally. ✅');
       return;
@@ -65,22 +78,18 @@ async function cmdInit() {
   }
 }
 
-async function cmdApprove() {
+async function cmdApprove(): Promise<void> {
   const apiBaseUrl = process.env['API_BASE_URL'] ?? loadConfig().apiBaseUrl;
   const userToken = getArg('--user-token');
   const userCode = getArg('--user-code');
   if (!userToken || !userCode) usage();
 
-  await postJson(
-    `${apiBaseUrl}/api/ingest/v1/device/approve`,
-    { userCode },
-    userToken
-  );
+  await postJson(`${apiBaseUrl}/api/ingest/v1/device/approve`, { userCode }, userToken);
   // eslint-disable-next-line no-console
   console.log('Approved. You can return to slc init polling.');
 }
 
-async function cmdAddSource() {
+async function cmdAddSource(): Promise<void> {
   const cfg = loadConfig();
   const token = cfg.connectorToken;
   if (!token) throw new Error('Missing connector token. Run `slc init` first.');
@@ -107,7 +116,18 @@ async function cmdAddSource() {
   console.log(`Source saved: ${sourceId}`);
 }
 
-async function cmdRun() {
+function createDefaultRegistry(): AdapterRegistry {
+  const registry = new AdapterRegistry();
+  registry.register('fixture', 'com.scholaracle.fixture', () => new FixtureAdapter());
+  registry.register('canvas', 'com.instructure.canvas', (creds) => {
+    const adapter = new CanvasAdapter();
+    void adapter.authenticate(creds);
+    return adapter;
+  });
+  return registry;
+}
+
+async function cmdRun(): Promise<void> {
   const cfg = loadConfig();
   const token = cfg.connectorToken;
   if (!token) throw new Error('Missing connector token. Run `slc init` first.');
@@ -118,13 +138,23 @@ async function cmdRun() {
   const source = cfg.sources.find((s) => s.sourceId === sourceId);
   if (!source) throw new Error(`Unknown sourceId ${sourceId}. Run slc add-source first.`);
 
+  const isFixtureMode = process.argv.includes('--fixture');
+  const provider = isFixtureMode ? 'fixture' : source.provider;
+  const adapterId = isFixtureMode ? 'com.scholaracle.fixture' : source.adapterId;
+
+  const registry = createDefaultRegistry();
+  const adapter = registry.create(provider, adapterId, {
+    baseUrl: source.portalBaseUrl ?? '',
+    accessToken: process.env['CANVAS_ACCESS_TOKEN'],
+  });
+
   const run = await postJson<{ success: boolean; runId: string }>(
     `${cfg.apiBaseUrl}/api/ingest/v1/runs`,
     { sourceId },
     token
   );
 
-  const envelope = buildFixtureEnvelope({
+  const envelope = await adapter.fetchEnvelope({
     runId: run.runId,
     sourceId,
     displayName: source.displayName,
@@ -132,13 +162,17 @@ async function cmdRun() {
   });
 
   await postJson(`${cfg.apiBaseUrl}/api/ingest/v1/runs/${run.runId}/envelope`, envelope, token);
-  await postJson(`${cfg.apiBaseUrl}/api/ingest/v1/runs/${run.runId}/complete`, { cursor: { type: 'opaque', value: `fixture-${Date.now()}` } }, token);
+  await postJson(
+    `${cfg.apiBaseUrl}/api/ingest/v1/runs/${run.runId}/complete`,
+    { cursor: { type: 'opaque', value: `${provider}-${Date.now()}` } },
+    token
+  );
 
   // eslint-disable-next-line no-console
   console.log(`Run complete: ${run.runId}`);
 }
 
-async function main() {
+async function main(): Promise<void> {
   const cmd = process.argv[2];
   if (!cmd) usage();
 
@@ -155,5 +189,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-

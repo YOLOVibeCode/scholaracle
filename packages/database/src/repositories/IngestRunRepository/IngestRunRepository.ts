@@ -1,7 +1,30 @@
 import type { Collection, Db, ObjectId } from 'mongodb';
 import { IngestRun, type IIngestRunData, type IngestRunStatus } from '../../models/IngestRun';
 
-export class IngestRunRepository {
+export interface IIngestRunReader {
+  findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null>;
+  findLastCommittedCursor(
+    userId: ObjectId | string,
+    sourceId: string
+  ): Promise<{ type: 'opaque'; value: string } | null>;
+}
+
+export interface IIngestRunWriter {
+  startRun(params: {
+    readonly userId: ObjectId | string;
+    readonly sourceId: string;
+    readonly runId: string;
+    readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+  }): Promise<IngestRun>;
+  markUploaded(userId: ObjectId | string, runId: string): Promise<void>;
+  commitRun(params: {
+    readonly userId: ObjectId | string;
+    readonly runId: string;
+    readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+  }): Promise<void>;
+}
+
+export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
   private readonly _collection: Collection<IIngestRunData>;
 
   constructor(database: Db) {
@@ -27,7 +50,7 @@ export class IngestRunRepository {
 
     await this._collection.insertOne(doc);
     const stored = await this._collection.findOne({ userId: params.userId, runId: params.runId });
-    return new IngestRun((stored ?? doc) as IIngestRunData);
+    return new IngestRun(stored ?? doc);
   }
 
   async markUploaded(userId: ObjectId | string, runId: string): Promise<void> {
@@ -60,7 +83,10 @@ export class IngestRunRepository {
     return new IngestRun(doc, doc._id as unknown as ObjectId);
   }
 
-  async findLastCommittedCursor(userId: ObjectId | string, sourceId: string): Promise<{ type: 'opaque'; value: string } | null> {
+  async findLastCommittedCursor(
+    userId: ObjectId | string,
+    sourceId: string
+  ): Promise<{ type: 'opaque'; value: string } | null> {
     const last = await this._collection
       .find({ userId, sourceId, status: 'committed', newCursor: { $ne: null } })
       .sort({ committedAt: -1 })
@@ -72,5 +98,3 @@ export class IngestRunRepository {
     return doc.newCursor;
   }
 }
-
-

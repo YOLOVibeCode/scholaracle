@@ -93,9 +93,9 @@ describe('PaymentRepository', () => {
         paymentMethod: 'card',
       });
 
-      const success = await repository.updateStatus(payment._id!.toString(), 'succeeded');
+      const isSuccess = await repository.updateStatus(payment._id!.toString(), 'succeeded');
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const updated = await repository.findById(payment._id!.toString());
       expect(updated?.status).toBe('succeeded');
     });
@@ -111,14 +111,14 @@ describe('PaymentRepository', () => {
         paymentMethod: 'card',
       });
 
-      const success = await repository.recordRefund(
+      const isSuccess = await repository.recordRefund(
         payment._id!.toString(),
         1900,
         '507f1f77bcf86cd799439012',
         'Customer request'
       );
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const updated = await repository.findById(payment._id!.toString());
       expect(updated?.status).toBe('refunded');
       expect(updated?.amountRefunded).toBe(1900);
@@ -143,7 +143,12 @@ describe('PaymentRepository', () => {
         paymentMethod: 'card',
       });
       // Refund 10.00 on second payment
-      await repository.recordRefund(p2._id!.toString(), 1000, '507f1f77bcf86cd799439099', 'Partial');
+      await repository.recordRefund(
+        p2._id!.toString(),
+        1000,
+        '507f1f77bcf86cd799439099',
+        'Partial'
+      );
 
       // Failed payments should not count
       await repository.create({
@@ -184,5 +189,3 @@ describe('PaymentRepository', () => {
     });
   });
 });
-
-

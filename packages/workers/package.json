@@ -5,7 +5,7 @@
   "main": "dist/worker.js",
   "types": "dist/worker.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build",
     "start": "node dist/worker.js",
     "dev": "ts-node-dev --respawn --transpile-only src/worker.ts",
     "test": "jest",
@@ -15,7 +15,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist coverage"
+    "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {
     "@scholaracle/interfaces": "workspace:*",

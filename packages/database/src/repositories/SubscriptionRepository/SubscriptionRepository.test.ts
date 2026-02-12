@@ -98,9 +98,9 @@ describe('SubscriptionRepository', () => {
         billingCycle: 'monthly',
       });
 
-      const success = await repository.cancel(userId, 'User request');
+      const isSuccess = await repository.cancel(userId, 'User request');
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const subscription = await repository.findByUserId(userId);
       expect(subscription?.status).toBe('cancelled');
     });
@@ -119,9 +119,9 @@ describe('SubscriptionRepository', () => {
         cancelledAt: new Date(),
       });
 
-      const success = await repository.reactivate(userId);
+      const isSuccess = await repository.reactivate(userId);
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const subscription = await repository.findByUserId(userId);
       expect(subscription?.status).toBe('active');
     });
@@ -145,5 +145,3 @@ describe('SubscriptionRepository', () => {
     });
   });
 });
-
-

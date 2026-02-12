@@ -8,19 +8,27 @@ import {
   type CommunicationType,
 } from '../../models/CommunicationLog';
 
-export interface ICommunicationLogRepository {
-  create(logData: ICommunicationLogData): Promise<CommunicationLog>;
+export interface ICommunicationLogReader {
   findById(id: string): Promise<CommunicationLog | null>;
   findByUserId(userId: string): Promise<readonly CommunicationLog[]>;
-  updateDeliveryStatus(id: string, status: CommunicationStatus): Promise<boolean>;
   filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]>;
   filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]>;
 }
 
+export interface ICommunicationLogWriter {
+  create(logData: ICommunicationLogData): Promise<CommunicationLog>;
+  updateDeliveryStatus(id: string, status: CommunicationStatus): Promise<boolean>;
+}
+
+export interface ICommunicationLogRepository
+  extends ICommunicationLogReader, ICommunicationLogWriter {}
+
 /**
  * Repository for CommunicationLog model operations.
  */
-export class CommunicationLogRepository implements ICommunicationLogRepository {
+export class CommunicationLogRepository
+  implements ICommunicationLogReader, ICommunicationLogWriter
+{
   private readonly _collection: Collection<ICommunicationLogData & { _id?: ObjectId }>;
 
   constructor(database: Db) {
@@ -69,10 +77,7 @@ export class CommunicationLogRepository implements ICommunicationLogRepository {
    * @returns Array of logs
    */
   public async findByUserId(userId: string): Promise<readonly CommunicationLog[]> {
-    const documents = await this._collection
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const documents = await this._collection.find({ userId }).sort({ createdAt: -1 }).toArray();
 
     return documents.map((doc) => new CommunicationLog(doc, doc._id));
   }
@@ -111,11 +116,10 @@ export class CommunicationLogRepository implements ICommunicationLogRepository {
    * @param channel - Channel type
    * @returns Array of logs
    */
-  public async filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]> {
-    const documents = await this._collection
-      .find({ channel })
-      .sort({ createdAt: -1 })
-      .toArray();
+  public async filterByChannel(
+    channel: CommunicationChannel
+  ): Promise<readonly CommunicationLog[]> {
+    const documents = await this._collection.find({ channel }).sort({ createdAt: -1 }).toArray();
 
     return documents.map((doc) => new CommunicationLog(doc, doc._id));
   }
@@ -127,12 +131,8 @@ export class CommunicationLogRepository implements ICommunicationLogRepository {
    * @returns Array of logs
    */
   public async filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]> {
-    const documents = await this._collection
-      .find({ type })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const documents = await this._collection.find({ type }).sort({ createdAt: -1 }).toArray();
 
     return documents.map((doc) => new CommunicationLog(doc, doc._id));
   }
 }
-

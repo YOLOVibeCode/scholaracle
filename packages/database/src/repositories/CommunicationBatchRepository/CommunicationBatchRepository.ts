@@ -12,15 +12,23 @@ export interface ICommunicationBatchWriter {
   update(id: string, updates: Partial<ICommunicationBatchData>): Promise<boolean>;
 }
 
-export class CommunicationBatchRepository implements ICommunicationBatchReader, ICommunicationBatchWriter {
+export class CommunicationBatchRepository
+  implements ICommunicationBatchReader, ICommunicationBatchWriter
+{
   private readonly _collection: Collection<ICommunicationBatchData & { _id?: ObjectId }>;
 
   constructor(database: Db) {
-    this._collection = database.collection<ICommunicationBatchData & { _id?: ObjectId }>('communication_batches');
+    this._collection = database.collection<ICommunicationBatchData & { _id?: ObjectId }>(
+      'communication_batches'
+    );
   }
 
   public async findAll(limit: number = 50): Promise<readonly CommunicationBatch[]> {
-    const docs = await this._collection.find({}).sort({ createdAt: -1 }).limit(Math.min(limit, 200)).toArray();
+    const docs = await this._collection
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(Math.min(limit, 200))
+      .toArray();
     return docs.map((d) => new CommunicationBatch(d, d._id));
   }
 
@@ -49,5 +57,3 @@ export class CommunicationBatchRepository implements ICommunicationBatchReader, 
     return result.modifiedCount > 0;
   }
 }
-
-

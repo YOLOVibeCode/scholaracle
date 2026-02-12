@@ -156,9 +156,9 @@ describe('AdminUserRepository', () => {
       };
 
       const created = await repository.create(adminData);
-      const deactivated = await repository.deactivate(created._id!.toString());
+      const isDeactivated = await repository.deactivate(created._id!.toString());
 
-      expect(deactivated).toBe(true);
+      expect(isDeactivated).toBe(true);
       const found = await repository.findById(created._id!.toString());
       expect(found?.isActive).toBe(false);
     });
@@ -191,4 +191,3 @@ describe('AdminUserRepository', () => {
     });
   });
 });
-

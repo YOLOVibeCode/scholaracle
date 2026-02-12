@@ -77,5 +77,3 @@ export class CommunicationBatch {
     this.updatedAt = data.updatedAt ?? now;
   }
 }
-
-

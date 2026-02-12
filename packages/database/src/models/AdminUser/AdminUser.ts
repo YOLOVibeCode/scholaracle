@@ -52,11 +52,7 @@ export const ROLE_PERMISSIONS: Record<AdminRole, readonly AdminPermission[]> = {
     'communications:send',
     'analytics:view',
   ],
-  support: [
-    'customers:view',
-    'communications:view',
-    'communications:send',
-  ],
+  support: ['customers:view', 'communications:view', 'communications:send'],
   billing: [
     'customers:view',
     'payments:view',
@@ -65,12 +61,7 @@ export const ROLE_PERMISSIONS: Record<AdminRole, readonly AdminPermission[]> = {
     'subscriptions:modify',
     'analytics:view',
   ],
-  analyst: [
-    'customers:view',
-    'payments:view',
-    'subscriptions:view',
-    'analytics:view',
-  ],
+  analyst: ['customers:view', 'payments:view', 'subscriptions:view', 'analytics:view'],
 } as const;
 
 /**
@@ -163,5 +154,3 @@ export class AdminUser {
     return levels[this.role];
   }
 }
-
-

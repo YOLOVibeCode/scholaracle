@@ -15,14 +15,19 @@ export interface IPaginatedResult<T> {
   readonly totalPages: number;
 }
 
-export interface IAuditLogRepository {
-  create(logData: IAuditLogData): Promise<AuditLog>;
+export interface IAuditLogReader {
   findByAdminUserId(adminUserId: string): Promise<readonly AuditLog[]>;
   findByEntity(entityType: string, entityId: string): Promise<readonly AuditLog[]>;
   findByAction(action: AuditAction): Promise<readonly AuditLog[]>;
   findByDateRange(startDate: Date, endDate: Date): Promise<readonly AuditLog[]>;
   findWithPagination(options: IPaginationOptions): Promise<IPaginatedResult<AuditLog>>;
 }
+
+export interface IAuditLogWriter {
+  create(logData: IAuditLogData): Promise<AuditLog>;
+}
+
+export interface IAuditLogRepository extends IAuditLogReader, IAuditLogWriter {}
 
 /**
  * Repository for AuditLog model operations.
@@ -88,10 +93,7 @@ export class AuditLogRepository implements IAuditLogRepository {
    * @returns Array of audit logs
    */
   public async findByAction(action: AuditAction): Promise<readonly AuditLog[]> {
-    const documents = await this._collection
-      .find({ action })
-      .sort({ timestamp: -1 })
-      .toArray();
+    const documents = await this._collection.find({ action }).sort({ timestamp: -1 }).toArray();
 
     return documents.map((doc) => new AuditLog(doc, doc._id));
   }
@@ -130,12 +132,7 @@ export class AuditLogRepository implements IAuditLogRepository {
     const skip = (page - 1) * limit;
 
     const [documents, total] = await Promise.all([
-      this._collection
-        .find({})
-        .sort({ timestamp: -1 })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
+      this._collection.find({}).sort({ timestamp: -1 }).skip(skip).limit(limit).toArray(),
       this._collection.countDocuments({}),
     ]);
 
@@ -150,4 +147,3 @@ export class AuditLogRepository implements IAuditLogRepository {
     };
   }
 }
-

@@ -1,4 +1,6 @@
 export { AdminNoteRepository } from './AdminNoteRepository';
-export type { IAdminNoteRepository } from './AdminNoteRepository';
-
-
+export type {
+  IAdminNoteReader,
+  IAdminNoteWriter,
+  IAdminNoteRepository,
+} from './AdminNoteRepository';

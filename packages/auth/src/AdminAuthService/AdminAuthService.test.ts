@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { MongoClient, type Db } from 'mongodb';
 import { AdminAuthService } from './AdminAuthService';
 import { AdminUserRepository } from '@scholaracle/database';
@@ -120,6 +121,13 @@ describe('AdminAuthService', () => {
       expect(result.admin).toBeDefined();
     });
 
+    it('should reject non-existent email', async () => {
+      const result = await authService.login('nobody@test.com', 'Password123!');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid');
+    });
+
     it('should reject invalid credentials', async () => {
       const passwordHash = await AdminUserRepository.hashPassword('CorrectPass123!');
       await adminRepository.create({
@@ -201,10 +209,7 @@ describe('AdminAuthService', () => {
       const loginResult = await authService.login('mfaverify@test.com', 'MFAPass123!');
       expect(loginResult.requiresMFA).toBe(true);
 
-      const verifyResult = await authService.verifyMFAToken(
-        loginResult.mfaToken!,
-        token
-      );
+      const verifyResult = await authService.verifyMFAToken(loginResult.mfaToken!, token);
 
       expect(verifyResult.success).toBe(true);
       expect(verifyResult.token).toBeDefined();
@@ -228,12 +233,28 @@ describe('AdminAuthService', () => {
       const loginResult = await authService.login('mfainvalid@test.com', 'MFAPass123!');
       expect(loginResult.requiresMFA).toBe(true);
 
-      const verifyResult = await authService.verifyMFAToken(
-        loginResult.mfaToken!,
-        '000000'
-      );
+      const verifyResult = await authService.verifyMFAToken(loginResult.mfaToken!, '000000');
 
       expect(verifyResult.success).toBe(false);
+    });
+  });
+
+  describe('verifyMFAToken edge cases', () => {
+    it('should reject a fabricated MFA token with wrong type', async () => {
+      // Create a token with type !== 'mfa'
+      const fakeToken = jwt.sign(
+        { adminId: 'fake-id', type: 'admin', expiresAt: Date.now() + 300000 },
+        'test-secret'
+      );
+
+      const result = await authService.verifyMFAToken(fakeToken, '123456');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid MFA token');
+    });
+
+    it('should reject a completely invalid MFA token string', async () => {
+      const result = await authService.verifyMFAToken('completely-invalid', '123456');
+      expect(result.success).toBe(false);
     });
   });
 
@@ -259,6 +280,164 @@ describe('AdminAuthService', () => {
       const verifyResult = await authService.verifyToken('invalid-token');
       expect(verifyResult).toBeNull();
     });
+
+    it('should return null for deactivated admin', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('DeactivatePass123!');
+      const admin = await adminRepository.create({
+        email: 'deactivate@test.com',
+        passwordHash,
+        name: 'Deactivate Admin',
+        role: 'admin',
+      });
+
+      const loginResult = await authService.login('deactivate@test.com', 'DeactivatePass123!');
+      expect(loginResult.success).toBe(true);
+
+      // Deactivate admin after login
+      await adminRepository.deactivate(admin._id!.toString());
+
+      const verifyResult = await authService.verifyToken(loginResult.token!);
+      expect(verifyResult).toBeNull();
+    });
+
+    it('should return null for token with wrong type', async () => {
+      const fakeToken = jwt.sign(
+        { adminId: 'fake-id', email: 'fake@test.com', role: 'admin', type: 'not-admin' },
+        'test-secret'
+      );
+
+      const verifyResult = await authService.verifyToken(fakeToken);
+      expect(verifyResult).toBeNull();
+    });
+  });
+
+  describe('issueStepUpToken', () => {
+    it('should issue step-up token for MFA-enabled admin', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('StepUpPass123!');
+      const admin = await adminRepository.create({
+        email: 'stepup@test.com',
+        passwordHash,
+        name: 'StepUp Admin',
+        role: 'admin',
+      });
+
+      const { secret } = mfaService.generateSecret('stepup@test.com');
+      await adminRepository.update(admin._id!.toString(), {
+        mfaEnabled: true,
+        mfaSecret: secret,
+      });
+
+      const token = await authService.issueStepUpToken(admin._id!.toString());
+      expect(token).not.toBeNull();
+      expect(typeof token).toBe('string');
+    });
+
+    it('should return null for admin without MFA enabled', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('NoMFAPass123!');
+      const admin = await adminRepository.create({
+        email: 'nomfa@test.com',
+        passwordHash,
+        name: 'NoMFA Admin',
+        role: 'admin',
+      });
+
+      const token = await authService.issueStepUpToken(admin._id!.toString());
+      expect(token).toBeNull();
+    });
+
+    it('should return null for non-existent admin', async () => {
+      const token = await authService.issueStepUpToken('000000000000000000000000');
+      expect(token).toBeNull();
+    });
+  });
+
+  describe('verifyStepUpToken', () => {
+    it('should verify a valid step-up token', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('VerifyStepPass123!');
+      const admin = await adminRepository.create({
+        email: 'verifystep@test.com',
+        passwordHash,
+        name: 'VerifyStep Admin',
+        role: 'admin',
+      });
+
+      const { secret } = mfaService.generateSecret('verifystep@test.com');
+      await adminRepository.update(admin._id!.toString(), {
+        mfaEnabled: true,
+        mfaSecret: secret,
+      });
+
+      const token = await authService.issueStepUpToken(admin._id!.toString());
+      expect(token).not.toBeNull();
+
+      const decoded = await authService.verifyStepUpToken(token!);
+      expect(decoded).not.toBeNull();
+      expect(decoded?.adminId).toBe(admin._id!.toString());
+      expect(decoded?.type).toBe('step_up');
+    });
+
+    it('should reject invalid step-up token', async () => {
+      const decoded = await authService.verifyStepUpToken('invalid-token');
+      expect(decoded).toBeNull();
+    });
+
+    it('should reject token with wrong type', async () => {
+      const fakeToken = jwt.sign(
+        { adminId: 'fake-id', type: 'admin', issuedAt: Date.now(), expiresAt: Date.now() + 300000 },
+        'test-secret'
+      );
+
+      const decoded = await authService.verifyStepUpToken(fakeToken);
+      expect(decoded).toBeNull();
+    });
+  });
+
+  describe('refreshToken', () => {
+    it('should refresh a valid token', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('RefreshPass123!');
+      await adminRepository.create({
+        email: 'refresh@test.com',
+        passwordHash,
+        name: 'Refresh Admin',
+        role: 'admin',
+      });
+
+      const loginResult = await authService.login('refresh@test.com', 'RefreshPass123!');
+      expect(loginResult.success).toBe(true);
+
+      // Wait briefly so the new token has a different iat
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+
+      const refreshResult = await authService.refreshToken(loginResult.token!);
+      expect(refreshResult.success).toBe(true);
+      expect(refreshResult.token).toBeDefined();
+    });
+
+    it('should reject invalid token for refresh', async () => {
+      const result = await authService.refreshToken('invalid-token');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid');
+    });
+  });
+
+  describe('logout', () => {
+    it('should return true for valid token', async () => {
+      const passwordHash = await AdminUserRepository.hashPassword('LogoutPass123!');
+      await adminRepository.create({
+        email: 'logout@test.com',
+        passwordHash,
+        name: 'Logout Admin',
+        role: 'admin',
+      });
+
+      const loginResult = await authService.login('logout@test.com', 'LogoutPass123!');
+      const logoutResult = await authService.logout(loginResult.token!);
+      expect(logoutResult).toBe(true);
+    });
+
+    it('should return false for invalid token', async () => {
+      const logoutResult = await authService.logout('invalid-token');
+      expect(logoutResult).toBe(false);
+    });
   });
 });
-

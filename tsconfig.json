@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/interfaces" },
+    { "path": "packages/database" },
+    { "path": "packages/auth" },
+    { "path": "packages/agents" },
+    { "path": "packages/connector" },
+    { "path": "packages/api" },
+    { "path": "packages/workers" }
+  ]
+}

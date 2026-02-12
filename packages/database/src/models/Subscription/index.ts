@@ -7,5 +7,3 @@ export type {
   SubscriptionEventType,
   BillingCycle,
 } from './Subscription';
-
-

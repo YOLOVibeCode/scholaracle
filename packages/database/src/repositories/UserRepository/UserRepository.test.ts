@@ -120,12 +120,9 @@ describe('UserRepository Admin Methods', () => {
         name: 'Suspend User',
       });
 
-      const success = await repository.suspendUser(
-        user._id!.toString(),
-        'Violation of terms'
-      );
+      const isSuccess = await repository.suspendUser(user._id!.toString(), 'Violation of terms');
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
       const updated = await repository.findById(user._id!.toString());
       expect(updated).not.toBeNull();
       expect(updated?.isSuspended).toBe(true);
@@ -143,9 +140,9 @@ describe('UserRepository Admin Methods', () => {
       });
 
       await repository.suspendUser(user._id!.toString(), 'Test');
-      const success = await repository.unsuspendUser(user._id!.toString());
+      const isSuccess = await repository.unsuspendUser(user._id!.toString());
 
-      expect(success).toBe(true);
+      expect(isSuccess).toBe(true);
     });
   });
 
@@ -178,4 +175,3 @@ describe('UserRepository Admin Methods', () => {
     });
   });
 });
-

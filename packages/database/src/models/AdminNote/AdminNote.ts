@@ -48,5 +48,3 @@ export class AdminNote {
     this.updatedAt = data.updatedAt ?? new Date();
   }
 }
-
-

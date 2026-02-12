@@ -2,14 +2,19 @@ import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { AdminNote, type IAdminNoteData } from '../../models/AdminNote';
 
-export interface IAdminNoteRepository {
-  create(noteData: IAdminNoteData): Promise<AdminNote>;
+export interface IAdminNoteReader {
   findById(id: string): Promise<AdminNote | null>;
   findByUserId(userId: string): Promise<readonly AdminNote[]>;
+}
+
+export interface IAdminNoteWriter {
+  create(noteData: IAdminNoteData): Promise<AdminNote>;
   update(id: string, updates: Partial<IAdminNoteData>): Promise<AdminNote | null>;
   delete(id: string): Promise<boolean>;
   togglePin(id: string, pinned: boolean): Promise<boolean>;
 }
+
+export interface IAdminNoteRepository extends IAdminNoteReader, IAdminNoteWriter {}
 
 /**
  * Repository for AdminNote model operations.
@@ -130,5 +135,3 @@ export class AdminNoteRepository implements IAdminNoteRepository {
     return result.modifiedCount > 0;
   }
 }
-
-

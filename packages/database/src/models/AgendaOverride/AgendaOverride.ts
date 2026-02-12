@@ -34,5 +34,3 @@ export class AgendaOverride {
     this.updatedAt = data.updatedAt ?? new Date();
   }
 }
-
-

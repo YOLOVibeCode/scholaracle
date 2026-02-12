@@ -337,3 +337,47 @@ Add `data-testid` attributes to ALL interactive elements and key containers:
 - [ ] Error messages have `data-testid="error-*"`
 - [ ] No reliance on generated CSS classes for testing
 
+---
+
+## MODULAR CODE STRUCTURE (Monorepo App)
+
+### Purpose
+Keep monorepo code modular with clear package boundaries.
+
+### SIZE THRESHOLDS (Monorepo)
+
+| Metric | Limit | Rationale |
+|--------|-------|-----------|
+| **File Length** | 250 lines max | Package-focused |
+| **Function** | 40 lines max | Single responsibility |
+| **Component** | 180 lines max | UI boundary |
+| **Service** | 200 lines max | Per-package service |
+| **Repository** | 150 lines max | Data access focused |
+| **Parameters** | 6 max | Use typed objects |
+| **Nesting Depth** | 3 levels max | Extract helpers |
+
+### WHEN LIMITS ARE EXCEEDED
+
+```
+If Service > 200 lines:
+  → Split by responsibility (Generator, Delivery, Scheduler)
+  → Use @scholaracle/interfaces for segregation
+
+If Repository > 150 lines:
+  → Split read/write operations
+  → Extract query builders
+
+If Component > 180 lines:
+  → Extract into packages/web/components/
+  → Use composition with useAsyncData hooks
+```
+
+### SELF-CHECK UPDATE
+
+Add to existing checklist:
+- [ ] Files under 250 lines
+- [ ] Services under 200 lines
+- [ ] Repositories under 150 lines
+- [ ] Types from @scholaracle/contracts
+- [ ] Interfaces from @scholaracle/interfaces
+

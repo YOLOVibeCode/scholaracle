@@ -11,8 +11,18 @@ import {
   type ISlcEventOverride,
 } from '@scholaracle/contracts';
 import { authMiddleware } from '../../../middleware/auth';
-import { connectorAuthMiddleware, type IConnectorAuthenticatedRequest } from '../../../middleware/connectorAuth';
-import { IngestDeviceAuthRepository, IngestRunRepository, IngestSourceRepository, UserRepository, AlertRepository } from '@scholaracle/database';
+import {
+  connectorAuthMiddleware,
+  type IConnectorAuthenticatedRequest,
+} from '../../../middleware/connectorAuth';
+import { asyncHandler } from '../../../middleware/asyncHandler';
+import {
+  IngestDeviceAuthRepository,
+  IngestRunRepository,
+  IngestSourceRepository,
+  UserRepository,
+  AlertRepository,
+} from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 
 export interface IIngestV1RouterConfig {
@@ -23,13 +33,14 @@ export interface IIngestV1RouterConfig {
 function randomUserCode(): string {
   // Human-friendly code: XXXX-XXXX
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const pick = () => alphabet[Math.floor(Math.random() * alphabet.length)] ?? 'A';
+  const pick = (): string => alphabet[Math.floor(Math.random() * alphabet.length)] ?? 'A';
   return `${pick()}${pick()}${pick()}${pick()}-${pick()}${pick()}${pick()}${pick()}`;
 }
 
 function validateEnvelope(envelope: ISlcIngestEnvelopeV1): { valid: boolean; error?: string } {
   if (!envelope || typeof envelope !== 'object') return { valid: false, error: 'Missing envelope' };
-  if (envelope.schemaVersion !== SLC_INGEST_SCHEMA_VERSION_V1) return { valid: false, error: 'Invalid schemaVersion' };
+  if (envelope.schemaVersion !== SLC_INGEST_SCHEMA_VERSION_V1)
+    return { valid: false, error: 'Invalid schemaVersion' };
   if (!envelope.run?.runId) return { valid: false, error: 'Missing run.runId' };
   if (envelope.run.mode !== 'delta') return { valid: false, error: 'Only delta mode is supported' };
   if (!envelope.source?.sourceId) return { valid: false, error: 'Missing source.sourceId' };
@@ -44,17 +55,23 @@ function validateEnvelope(envelope: ISlcIngestEnvelopeV1): { valid: boolean; err
 }
 
 function validateOp(op: ISlcDeltaOp): { valid: boolean; error?: string } {
-  if (!op?.op || (op.op !== 'upsert' && op.op !== 'delete')) return { valid: false, error: 'Invalid op.op' };
+  if (!op?.op || (op.op !== 'upsert' && op.op !== 'delete'))
+    return { valid: false, error: 'Invalid op.op' };
   if (!op.entity) return { valid: false, error: 'Missing op.entity' };
-  if (!op.key?.provider || !op.key?.adapterId || !op.key?.externalId) return { valid: false, error: 'Missing op.key fields' };
+  if (!op.key?.provider || !op.key?.adapterId || !op.key?.externalId)
+    return { valid: false, error: 'Missing op.key fields' };
   if (!op.observedAt) return { valid: false, error: 'Missing op.observedAt' };
 
-  if (op.op === 'upsert' && !op.record) return { valid: false, error: 'Missing op.record for upsert' };
+  if (op.op === 'upsert' && !op.record)
+    return { valid: false, error: 'Missing op.record for upsert' };
 
   // Minimal entity-specific checks (v0.1)
   if (op.entity === 'assignment') {
     if (!op.key.studentExternalId || !op.key.institutionExternalId) {
-      return { valid: false, error: 'assignment requires studentExternalId and institutionExternalId in key' };
+      return {
+        valid: false,
+        error: 'assignment requires studentExternalId and institutionExternalId in key',
+      };
     }
     const r = op.record as ISlcAssignment | undefined;
     if (op.op === 'upsert' && (!r || typeof r.title !== 'string' || r.title.trim().length === 0)) {
@@ -64,28 +81,43 @@ function validateOp(op: ISlcDeltaOp): { valid: boolean; error?: string } {
 
   if (op.entity === 'eventSeries') {
     if (!op.key.studentExternalId || !op.key.institutionExternalId) {
-      return { valid: false, error: 'eventSeries requires studentExternalId and institutionExternalId in key' };
+      return {
+        valid: false,
+        error: 'eventSeries requires studentExternalId and institutionExternalId in key',
+      };
     }
     const r = op.record as ISlcEventSeries | undefined;
     if (op.op === 'upsert' && (!r?.recurrence?.rrule || !r.timezone || !r.startsAt)) {
-      return { valid: false, error: 'eventSeries upsert requires recurrence.rrule, timezone, startsAt' };
+      return {
+        valid: false,
+        error: 'eventSeries upsert requires recurrence.rrule, timezone, startsAt',
+      };
     }
   }
 
   if (op.entity === 'eventOverride') {
     if (!op.key.studentExternalId || !op.key.institutionExternalId) {
-      return { valid: false, error: 'eventOverride requires studentExternalId and institutionExternalId in key' };
+      return {
+        valid: false,
+        error: 'eventOverride requires studentExternalId and institutionExternalId in key',
+      };
     }
     const r = op.record as ISlcEventOverride | undefined;
     if (op.op === 'upsert' && (!r?.seriesExternalId || !r.occurrenceStartAt || !r.op)) {
-      return { valid: false, error: 'eventOverride upsert requires seriesExternalId, occurrenceStartAt, op' };
+      return {
+        valid: false,
+        error: 'eventOverride upsert requires seriesExternalId, occurrenceStartAt, op',
+      };
     }
   }
 
   return { valid: true };
 }
 
-async function generateAlertsFromIngestedAssignments(params: { readonly database: Db; readonly userId: string }): Promise<void> {
+async function generateAlertsFromIngestedAssignments(params: {
+  readonly database: Db;
+  readonly userId: string;
+}): Promise<void> {
   const userRepo = new UserRepository(params.database);
   const alertRepo = new AlertRepository(params.database);
 
@@ -97,11 +129,14 @@ async function generateAlertsFromIngestedAssignments(params: { readonly database
   const windowEnd = new Date(now.getTime() + daysBeforeDeadline * 24 * 60 * 60_000);
 
   // Due soon assignments (ISO string comparison works for UTC ISO format)
-  const dueSoon = await params.database.collection('slc_assignments').find({
-    userId: params.userId,
-    deletedAt: null,
-    'record.dueAt': { $gte: now.toISOString(), $lte: windowEnd.toISOString() },
-  }).toArray();
+  const dueSoon = await params.database
+    .collection('slc_assignments')
+    .find({
+      userId: params.userId,
+      deletedAt: null,
+      'record.dueAt': { $gte: now.toISOString(), $lte: windowEnd.toISOString() },
+    })
+    .toArray();
 
   for (const doc of dueSoon) {
     const dueAt = doc['record']?.dueAt as string | undefined;
@@ -173,7 +208,11 @@ async function generateAlertsFromIngestedAssignments(params: { readonly database
   }
 }
 
-async function applyOps(params: { readonly database: Db; readonly userId: string; readonly ops: readonly ISlcDeltaOp[] }) {
+async function applyOps(params: {
+  readonly database: Db;
+  readonly userId: string;
+  readonly ops: readonly ISlcDeltaOp[];
+}): Promise<void> {
   const assignments = params.database.collection('slc_assignments');
   const eventSeries = params.database.collection('slc_event_series');
   const eventOverrides = params.database.collection('slc_event_overrides');
@@ -198,7 +237,11 @@ async function applyOps(params: { readonly database: Db; readonly userId: string
 
     if (op.entity === 'assignment') {
       if (op.op === 'delete') {
-        await assignments.updateOne(baseFilter, { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } }, { upsert: true });
+        await assignments.updateOne(
+          baseFilter,
+          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
+          { upsert: true }
+        );
       } else {
         await assignments.updateOne(
           baseFilter,
@@ -210,7 +253,11 @@ async function applyOps(params: { readonly database: Db; readonly userId: string
 
     if (op.entity === 'eventSeries') {
       if (op.op === 'delete') {
-        await eventSeries.updateOne(baseFilter, { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } }, { upsert: true });
+        await eventSeries.updateOne(
+          baseFilter,
+          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
+          { upsert: true }
+        );
       } else {
         await eventSeries.updateOne(
           baseFilter,
@@ -222,7 +269,11 @@ async function applyOps(params: { readonly database: Db; readonly userId: string
 
     if (op.entity === 'eventOverride') {
       if (op.op === 'delete') {
-        await eventOverrides.updateOne(baseFilter, { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } }, { upsert: true });
+        await eventOverrides.updateOne(
+          baseFilter,
+          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
+          { upsert: true }
+        );
       } else {
         await eventOverrides.updateOne(
           baseFilter,
@@ -246,156 +297,195 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   // --- Device auth (public start/poll; approve requires user JWT) ---
 
-  router.post('/device/start', async (_req: Request, res: Response) => {
-    const deviceCode = randomUUID();
-    const userCode = randomUserCode();
-    const expiresAt = new Date(Date.now() + 15 * 60_000);
+  router.post(
+    '/device/start',
+    asyncHandler(async (_req: Request, res: Response) => {
+      const deviceCode = randomUUID();
+      const userCode = randomUserCode();
+      const expiresAt = new Date(Date.now() + 15 * 60_000);
 
-    const created = await deviceRepo.createPending({ deviceCode, userCode, expiresAt });
-    res.status(200).json({
-      success: true,
-      deviceCode: created.deviceCode,
-      userCode: created.userCode,
-      verificationUrl: '/connector/activate',
-      expiresInSeconds: 15 * 60,
-      intervalSeconds: 2,
-    });
-  });
+      const created = await deviceRepo.createPending({ deviceCode, userCode, expiresAt });
+      res.status(200).json({
+        success: true,
+        deviceCode: created.deviceCode,
+        userCode: created.userCode,
+        verificationUrl: '/connector/activate',
+        expiresInSeconds: 15 * 60,
+        intervalSeconds: 2,
+      });
+    })
+  );
 
-  router.post('/device/poll', async (req: Request, res: Response) => {
-    const deviceCode = (req.body?.deviceCode as string | undefined) ?? '';
-    if (!deviceCode) {
-      res.status(400).json({ success: false, error: 'Missing deviceCode' });
-      return;
-    }
+  router.post(
+    '/device/poll',
+    asyncHandler(async (req: Request, res: Response) => {
+      const deviceCode = (req.body?.deviceCode as string | undefined) ?? '';
+      if (!deviceCode) {
+        res.status(400).json({ success: false, error: 'Missing deviceCode' });
+        return;
+      }
 
-    const result = await deviceRepo.deliverTokenOnce(deviceCode);
-    if (result.status === 'expired') {
-      res.status(404).json({ success: false, error: 'Device code expired or not found' });
-      return;
-    }
+      const result = await deviceRepo.deliverTokenOnce(deviceCode);
+      if (result.status === 'expired') {
+        res.status(404).json({ success: false, error: 'Device code expired or not found' });
+        return;
+      }
 
-    res.status(200).json({
-      success: true,
-      status: result.status,
-      connectorToken: result.token,
-    });
-  });
+      res.status(200).json({
+        success: true,
+        status: result.status,
+        connectorToken: result.token,
+      });
+    })
+  );
 
-  router.post('/device/approve', authMiddleware(authService), async (req: Request, res: Response) => {
-    const userCode = (req.body?.userCode as string | undefined) ?? '';
-    const userId = (req as unknown as { userId?: string }).userId ?? '';
-    if (!userCode) {
-      res.status(400).json({ success: false, error: 'Missing userCode' });
-      return;
-    }
-    if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+  router.post(
+    '/device/approve',
+    authMiddleware(authService),
+    asyncHandler(async (req: Request, res: Response) => {
+      const userCode = (req.body?.userCode as string | undefined) ?? '';
+      const userId = (req as unknown as { userId?: string }).userId ?? '';
+      if (!userCode) {
+        res.status(400).json({ success: false, error: 'Missing userCode' });
+        return;
+      }
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
 
-    const token = connectorTokenService.createToken(userId, randomUUID());
-    const ok = await deviceRepo.approveByUserCode(userCode, userId, token);
-    if (!ok) {
-      res.status(404).json({ success: false, error: 'User code not found or expired' });
-      return;
-    }
+      const token = connectorTokenService.createToken(userId, randomUUID());
+      const ok = await deviceRepo.approveByUserCode(userCode, userId, token);
+      if (!ok) {
+        res.status(404).json({ success: false, error: 'User code not found or expired' });
+        return;
+      }
 
-    res.status(200).json({ success: true });
-  });
+      res.status(200).json({ success: true });
+    })
+  );
 
   // --- Connector-authenticated ingestion endpoints ---
 
-  router.get('/sources', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const userId = req.connectorUserId ?? '';
-    const sources = await sourceRepo.listByUserId(userId);
-    res.status(200).json({ success: true, sources });
-  });
+  router.get(
+    '/sources',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const sources = await sourceRepo.listByUserId(userId);
+      res.status(200).json({ success: true, sources });
+    })
+  );
 
-  router.post('/sources', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const userId = req.connectorUserId ?? '';
-    const { sourceId, provider, adapterId, displayName, portalBaseUrl } = req.body ?? {};
-    if (!sourceId || !provider || !adapterId || !displayName) {
-      res.status(400).json({ success: false, error: 'Missing required fields' });
-      return;
-    }
+  router.post(
+    '/sources',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const { sourceId, provider, adapterId, displayName, portalBaseUrl } = req.body ?? {};
+      if (!sourceId || !provider || !adapterId || !displayName) {
+        res.status(400).json({ success: false, error: 'Missing required fields' });
+        return;
+      }
 
-    const stored = await sourceRepo.upsert({
-      userId,
-      sourceId,
-      provider,
-      adapterId,
-      displayName,
-      portalBaseUrl,
-    });
+      const stored = await sourceRepo.upsert({
+        userId,
+        sourceId,
+        provider,
+        adapterId,
+        displayName,
+        portalBaseUrl,
+      });
 
-    res.status(200).json({ success: true, source: stored });
-  });
+      res.status(200).json({ success: true, source: stored });
+    })
+  );
 
-  router.post('/runs', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const userId = req.connectorUserId ?? '';
-    const { sourceId } = req.body ?? {};
-    if (!sourceId) {
-      res.status(400).json({ success: false, error: 'Missing sourceId' });
-      return;
-    }
+  router.post(
+    '/runs',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const { sourceId } = req.body ?? {};
+      if (!sourceId) {
+        res.status(400).json({ success: false, error: 'Missing sourceId' });
+        return;
+      }
 
-    const lastCursor = await runRepo.findLastCommittedCursor(userId, sourceId);
-    const runId = randomUUID();
-    await runRepo.startRun({ userId, sourceId, runId, lastCursor });
+      const lastCursor = await runRepo.findLastCommittedCursor(userId, sourceId);
+      const runId = randomUUID();
+      await runRepo.startRun({ userId, sourceId, runId, lastCursor });
 
-    res.status(200).json({ success: true, runId, mode: 'delta', lastCursor });
-  });
+      res.status(200).json({ success: true, runId, mode: 'delta', lastCursor });
+    })
+  );
 
-  router.post('/runs/:runId/envelope', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const userId = req.connectorUserId ?? '';
-    const runId = req.params['runId'];
-    if (!runId) {
-      res.status(400).json({ success: false, error: 'Missing runId' });
-      return;
-    }
-    const envelope = req.body as ISlcIngestEnvelopeV1;
+  router.post(
+    '/runs/:runId/envelope',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        res.status(400).json({ success: false, error: 'Missing runId' });
+        return;
+      }
+      const envelope = req.body as ISlcIngestEnvelopeV1;
 
-    const v = validateEnvelope(envelope);
-    if (!v.valid) {
-      res.status(400).json({ success: false, error: v.error ?? 'Invalid envelope' });
-      return;
-    }
-    if (envelope.run.runId !== runId) {
-      res.status(400).json({ success: false, error: 'runId mismatch' });
-      return;
-    }
+      const v = validateEnvelope(envelope);
+      if (!v.valid) {
+        res.status(400).json({ success: false, error: v.error ?? 'Invalid envelope' });
+        return;
+      }
+      if (envelope.run.runId !== runId) {
+        res.status(400).json({ success: false, error: 'runId mismatch' });
+        return;
+      }
 
-    await applyOps({ database: config.database, userId, ops: envelope.ops });
-    await runRepo.markUploaded(userId, runId);
-    res.status(200).json({ success: true, accepted: true });
-  });
+      await applyOps({ database: config.database, userId, ops: envelope.ops });
+      await runRepo.markUploaded(userId, runId);
+      res.status(200).json({ success: true, accepted: true });
+    })
+  );
 
-  router.post('/runs/:runId/complete', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const userId = req.connectorUserId ?? '';
-    const runId = req.params['runId'];
-    if (!runId) {
-      res.status(400).json({ success: false, error: 'Missing runId' });
-      return;
-    }
-    const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
-    await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
-    // Generate user-facing alerts from ingested tasks (value loop)
-    await generateAlertsFromIngestedAssignments({ database: config.database, userId });
-    res.status(200).json({ success: true, committed: true, newCursor: cursor ?? null, derivedAlertsQueued: true });
-  });
+  router.post(
+    '/runs/:runId/complete',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        res.status(400).json({ success: false, error: 'Missing runId' });
+        return;
+      }
+      const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
+      await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
+      // Generate user-facing alerts from ingested tasks (value loop)
+      await generateAlertsFromIngestedAssignments({ database: config.database, userId });
+      res.status(200).json({
+        success: true,
+        committed: true,
+        newCursor: cursor ?? null,
+        derivedAlertsQueued: true,
+      });
+    })
+  );
 
-  router.post('/validate', connectorAuthMiddleware(connectorTokenService), async (req: IConnectorAuthenticatedRequest, res: Response) => {
-    const envelope = req.body as ISlcIngestEnvelopeV1;
-    const v = validateEnvelope(envelope);
-    if (!v.valid) {
-      res.status(400).json({ success: false, error: v.error ?? 'Invalid envelope', validated: false });
-      return;
-    }
-    res.status(200).json({ success: true, validated: true });
-  });
+  router.post(
+    '/validate',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const envelope = req.body as ISlcIngestEnvelopeV1;
+      const v = validateEnvelope(envelope);
+      if (!v.valid) {
+        res
+          .status(400)
+          .json({ success: false, error: v.error ?? 'Invalid envelope', validated: false });
+        return;
+      }
+      res.status(200).json({ success: true, validated: true });
+    })
+  );
 
   return router;
 }
-
-

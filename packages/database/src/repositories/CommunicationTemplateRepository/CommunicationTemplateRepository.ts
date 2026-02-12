@@ -1,6 +1,9 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { CommunicationTemplate, type ICommunicationTemplateData } from '../../models/CommunicationTemplate';
+import {
+  CommunicationTemplate,
+  type ICommunicationTemplateData,
+} from '../../models/CommunicationTemplate';
 
 export interface ICommunicationTemplateReader {
   findAll(): Promise<readonly CommunicationTemplate[]>;
@@ -15,11 +18,15 @@ export interface ICommunicationTemplateWriter {
 /**
  * Repository for CommunicationTemplate operations (ISP: reader/writer).
  */
-export class CommunicationTemplateRepository implements ICommunicationTemplateReader, ICommunicationTemplateWriter {
+export class CommunicationTemplateRepository
+  implements ICommunicationTemplateReader, ICommunicationTemplateWriter
+{
   private readonly _collection: Collection<ICommunicationTemplateData & { _id?: ObjectId }>;
 
   constructor(database: Db) {
-    this._collection = database.collection<ICommunicationTemplateData & { _id?: ObjectId }>('communication_templates');
+    this._collection = database.collection<ICommunicationTemplateData & { _id?: ObjectId }>(
+      'communication_templates'
+    );
   }
 
   public async findAll(): Promise<readonly CommunicationTemplate[]> {
@@ -53,5 +60,3 @@ export class CommunicationTemplateRepository implements ICommunicationTemplateRe
     return result.modifiedCount > 0;
   }
 }
-
-

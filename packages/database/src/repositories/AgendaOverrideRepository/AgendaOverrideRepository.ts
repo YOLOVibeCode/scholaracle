@@ -1,7 +1,29 @@
 import type { Collection, Db, ObjectId } from 'mongodb';
-import { AgendaOverride, type AgendaItemType, type AgendaOverrideScope, type IAgendaOverrideData } from '../../models/AgendaOverride';
+import {
+  AgendaOverride,
+  type AgendaItemType,
+  type AgendaOverrideScope,
+  type IAgendaOverrideData,
+} from '../../models/AgendaOverride';
 
-export class AgendaOverrideRepository {
+export interface IAgendaOverrideReader {
+  listActiveSnoozes(params: {
+    readonly userId: ObjectId | string;
+    readonly now?: Date;
+  }): Promise<readonly AgendaOverride[]>;
+}
+
+export interface IAgendaOverrideWriter {
+  upsertSnooze(params: {
+    readonly userId: ObjectId | string;
+    readonly itemType: AgendaItemType;
+    readonly itemKey: string;
+    readonly scope: AgendaOverrideScope;
+    readonly snoozedUntil: Date;
+  }): Promise<AgendaOverride>;
+}
+
+export class AgendaOverrideRepository implements IAgendaOverrideReader, IAgendaOverrideWriter {
   private readonly _collection: Collection<IAgendaOverrideData>;
 
   constructor(database: Db) {
@@ -27,7 +49,12 @@ export class AgendaOverrideRepository {
     };
 
     await this._collection.updateOne(
-      { userId: params.userId, itemType: params.itemType, itemKey: params.itemKey, scope: params.scope },
+      {
+        userId: params.userId,
+        itemType: params.itemType,
+        itemKey: params.itemKey,
+        scope: params.scope,
+      },
       { $set: doc },
       { upsert: true }
     );
@@ -39,10 +66,13 @@ export class AgendaOverrideRepository {
       scope: params.scope,
     });
 
-    return new AgendaOverride((stored ?? doc) as IAgendaOverrideData);
+    return new AgendaOverride(stored ?? doc);
   }
 
-  async listActiveSnoozes(params: { readonly userId: ObjectId | string; readonly now?: Date }): Promise<readonly AgendaOverride[]> {
+  async listActiveSnoozes(params: {
+    readonly userId: ObjectId | string;
+    readonly now?: Date;
+  }): Promise<readonly AgendaOverride[]> {
     const now = params.now ?? new Date();
     const docs = await this._collection
       .find({ userId: params.userId, snoozedUntil: { $gt: now } })
@@ -50,5 +80,3 @@ export class AgendaOverrideRepository {
     return docs.map((d) => new AgendaOverride(d, d._id as unknown as ObjectId));
   }
 }
-
-

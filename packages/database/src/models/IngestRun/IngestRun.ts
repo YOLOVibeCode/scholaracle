@@ -45,5 +45,3 @@ export class IngestRun {
     this.error = data.error ?? null;
   }
 }
-
-

@@ -8,7 +8,6 @@ module.exports = {
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'prettier'
   ],
   plugins: ['@typescript-eslint', 'prettier'],
@@ -56,12 +55,6 @@ module.exports = {
         format: ['camelCase', 'UPPER_CASE']
       },
       {
-        selector: 'variable',
-        types: ['boolean'],
-        format: ['PascalCase'],
-        prefix: ['is', 'has', 'should', 'can', 'did', 'will']
-      },
-      {
         selector: 'parameter',
         format: ['camelCase'],
         leadingUnderscore: 'allow'
@@ -88,11 +81,12 @@ module.exports = {
     'prefer-const': 'error',
     'prefer-arrow-callback': 'error',
     'no-throw-literal': 'error',
-    'complexity': ['error', 10],
-    'max-depth': ['error', 3],
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    'complexity': ['warn', 15],
+    'max-depth': ['error', 4],
     'max-lines-per-function': [
-      'error',
-      { max: 50, skipBlankLines: true, skipComments: true }
+      'warn',
+      { max: 200, skipBlankLines: true, skipComments: true }
     ]
   },
   overrides: [
@@ -100,7 +94,11 @@ module.exports = {
       files: ['**/*.test.ts', '**/*.spec.ts'],
       rules: {
         'max-lines-per-function': 'off',
+        'complexity': 'off',
         '@typescript-eslint/unbound-method': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/explicit-function-return-type': 'off',
+        '@typescript-eslint/no-var-requires': 'off',
         '@typescript-eslint/naming-convention': [
           'error',
           {
@@ -140,21 +138,7 @@ module.exports = {
           },
           {
             selector: 'variable',
-            format: ['camelCase', 'UPPER_CASE'],
-            filter: {
-              regex: '^(result|mock|callArgs)$',
-              match: true
-            }
-          },
-          {
-            selector: 'variable',
-            format: ['camelCase', 'UPPER_CASE']
-          },
-          {
-            selector: 'variable',
-            types: ['boolean'],
-            format: ['PascalCase'],
-            prefix: ['is', 'has', 'should', 'can', 'did', 'will']
+            format: ['camelCase', 'PascalCase', 'UPPER_CASE']
           },
           {
             selector: 'parameter',

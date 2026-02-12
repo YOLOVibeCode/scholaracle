@@ -1,4 +1,6 @@
 export { SubscriptionRepository } from './SubscriptionRepository';
-export type { ISubscriptionRepository } from './SubscriptionRepository';
-
-
+export type {
+  ISubscriptionReader,
+  ISubscriptionWriter,
+  ISubscriptionRepository,
+} from './SubscriptionRepository';

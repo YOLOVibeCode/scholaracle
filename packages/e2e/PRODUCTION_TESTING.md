@@ -392,3 +392,5 @@ BASE_URL=<your-url> API_BASE_URL=<your-api-url> pnpm test
 **Remember:** Local development uses FIXED ports (2800-2804). Production URLs are fully configurable via environment variables.
 
 
+
+

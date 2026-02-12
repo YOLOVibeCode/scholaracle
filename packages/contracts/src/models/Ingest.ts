@@ -112,5 +112,3 @@ export interface ISlcEventOverride {
   readonly title?: string;
   readonly category?: ISlcEventSeries['category'];
 }
-
-

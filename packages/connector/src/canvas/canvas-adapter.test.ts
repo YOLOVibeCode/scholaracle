@@ -1,0 +1,205 @@
+import { SLC_INGEST_SCHEMA_VERSION_V1 } from '@scholaracle/contracts';
+import { CanvasAdapter } from './canvas-adapter';
+import { CanvasClient } from './canvas-client';
+
+// Mock CanvasClient
+jest.mock('./canvas-client');
+
+const MockCanvasClient = CanvasClient as jest.MockedClass<typeof CanvasClient>;
+
+describe('CanvasAdapter', () => {
+  let adapter: CanvasAdapter;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    adapter = new CanvasAdapter();
+  });
+
+  describe('meta', () => {
+    it('should have correct provider and adapterId', () => {
+      expect(adapter.meta.provider).toBe('canvas');
+      expect(adapter.meta.adapterId).toBe('com.instructure.canvas');
+      expect(adapter.meta.adapterVersion).toBe('0.1.0');
+      expect(adapter.meta.displayName).toBe('Canvas LMS');
+    });
+  });
+
+  describe('authenticate', () => {
+    it('should set authenticated state', async () => {
+      expect(adapter.isAuthenticated()).toBe(false);
+
+      await adapter.authenticate({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'test-token',
+      });
+
+      expect(adapter.isAuthenticated()).toBe(true);
+    });
+
+    it('should throw if accessToken is missing', async () => {
+      await expect(adapter.authenticate({ baseUrl: 'https://canvas.school.edu' })).rejects.toThrow(
+        'Canvas adapter requires an accessToken'
+      );
+    });
+
+    it('should create a CanvasClient with correct config', async () => {
+      await adapter.authenticate({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'my-token',
+      });
+
+      expect(MockCanvasClient).toHaveBeenCalledWith({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'my-token',
+      });
+    });
+  });
+
+  describe('fetchEnvelope', () => {
+    it('should throw if not authenticated', async () => {
+      await expect(
+        adapter.fetchEnvelope({
+          runId: 'run-1',
+          sourceId: 'src-1',
+          displayName: 'Test',
+        })
+      ).rejects.toThrow('Not authenticated');
+    });
+
+    it('should return a valid envelope with ops from courses', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 1, name: 'Math', course_code: 'M101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([
+          {
+            id: 10,
+            name: 'HW1',
+            course_id: 1,
+            due_at: '2025-10-01T23:59:00Z',
+            points_possible: 50,
+            submission_types: ['online'],
+            has_submitted_submissions: true,
+          },
+        ]),
+        getSubmissions: jest.fn().mockResolvedValue([
+          {
+            id: 20,
+            assignment_id: 10,
+            user_id: 1,
+            score: 45,
+            grade: 'A',
+            workflow_state: 'graded',
+            submitted_at: '2025-09-30T12:00:00Z',
+            late: false,
+            missing: false,
+          },
+        ]),
+        getCalendarEvents: jest.fn().mockResolvedValue([
+          {
+            id: 30,
+            title: 'Exam',
+            start_at: '2025-10-15T09:00:00Z',
+            end_at: '2025-10-15T11:00:00Z',
+            type: 'event',
+            context_code: 'course_1',
+          },
+        ]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      await adapter.authenticate({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'tok',
+      });
+
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'run-1',
+        sourceId: 'src-1',
+        displayName: 'My School',
+        portalBaseUrl: 'https://canvas.school.edu',
+      });
+
+      expect(envelope.schemaVersion).toBe(SLC_INGEST_SCHEMA_VERSION_V1);
+      expect(envelope.run.runId).toBe('run-1');
+      expect(envelope.run.provider).toBe('canvas');
+      expect(envelope.run.adapterId).toBe('com.instructure.canvas');
+      expect(envelope.run.mode).toBe('delta');
+      expect(envelope.source.sourceId).toBe('src-1');
+      expect(envelope.source.displayName).toBe('My School');
+      expect(envelope.source.portalBaseUrl).toBe('https://canvas.school.edu');
+
+      // 1 assignment + 1 calendar event = 2 ops
+      expect(envelope.ops).toHaveLength(2);
+      const op0 = envelope.ops[0]!;
+      const op1 = envelope.ops[1]!;
+      expect(op0.entity).toBe('assignment');
+      expect(op0.record?.['title']).toBe('HW1');
+      expect(op1.entity).toBe('eventSeries');
+      expect(op1.record?.['title']).toBe('Exam');
+    });
+
+    it('should match submissions to assignments by assignment_id', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 1, name: 'Sci', course_code: 'S101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([
+          {
+            id: 10,
+            name: 'Lab',
+            course_id: 1,
+            due_at: null,
+            points_possible: 20,
+            submission_types: [],
+            has_submitted_submissions: false,
+          },
+          {
+            id: 11,
+            name: 'Report',
+            course_id: 1,
+            due_at: null,
+            points_possible: 30,
+            submission_types: [],
+            has_submitted_submissions: false,
+          },
+        ]),
+        getSubmissions: jest.fn().mockResolvedValue([
+          {
+            id: 20,
+            assignment_id: 11,
+            user_id: 1,
+            score: 28,
+            grade: 'A-',
+            workflow_state: 'graded',
+            submitted_at: '2025-10-01T12:00:00Z',
+            late: false,
+            missing: false,
+          },
+        ]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      await adapter.authenticate({ baseUrl: 'https://x.edu', accessToken: 'tok' });
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'r',
+        sourceId: 's',
+        displayName: 'd',
+      });
+
+      expect(envelope.ops).toHaveLength(2);
+      const first = envelope.ops[0]!;
+      const second = envelope.ops[1]!;
+      // First assignment has no submission → unknown status
+      expect(first.record?.['status']).toBe('unknown');
+      // Second assignment matched to submission → graded
+      expect(second.record?.['status']).toBe('graded');
+      expect(second.record?.['pointsEarned']).toBe(28);
+    });
+  });
+});

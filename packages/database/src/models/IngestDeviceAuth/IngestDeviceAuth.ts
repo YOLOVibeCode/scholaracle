@@ -39,5 +39,3 @@ export class IngestDeviceAuth {
     this.approvedAt = data.approvedAt;
   }
 }
-
-

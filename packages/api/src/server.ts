@@ -22,9 +22,9 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
-import { stripeWebhookRouter } from './routes/webhooks/stripe';
+import { squareWebhookRouter } from './routes/webhooks/square';
 import { billingRouter } from './routes/billing';
-import { StripeService } from './services/StripeService';
+import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
 import { agendaRouter } from './routes/agenda';
@@ -53,8 +53,11 @@ export interface IServerConfig {
   readonly twilioAccountSid?: string;
   readonly twilioAuthToken?: string;
   readonly twilioFromNumber?: string;
-  readonly stripeSecretKey?: string;
-  readonly stripeWebhookSecret?: string;
+  readonly squareAccessToken?: string;
+  readonly squareEnvironment?: 'sandbox' | 'production';
+  readonly squareLocationId?: string;
+  readonly squareWebhookSignatureKey?: string;
+  readonly squareWebhookNotificationUrl?: string;
 }
 
 /**
@@ -162,12 +165,20 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
  * @returns MongoDB database instance
  */
 async function initializeDatabase(config: IServerConfig): Promise<Db> {
-  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? process.env['MONGO_URL'] ?? 'mongodb://localhost:27017';
+  const mongodbUri =
+    config.mongodbUri ??
+    process.env['MONGODB_URI'] ??
+    process.env['MONGO_URL'] ??
+    'mongodb://localhost:27017';
   const dbName = config.mongodbDbName ?? process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
 
   // Allow fully self-contained E2E runs without an external MongoDB daemon.
   // Usage: MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_e2e
-  if (mongodbUri === 'memory' || mongodbUri.startsWith('memory:') || process.env['USE_IN_MEMORY_MONGO'] === 'true') {
+  if (
+    mongodbUri === 'memory' ||
+    mongodbUri.startsWith('memory:') ||
+    process.env['USE_IN_MEMORY_MONGO'] === 'true'
+  ) {
     const memoryServer = await MongoMemoryServer.create();
     const uri = memoryServer.getUri();
     const client = new MongoClient(uri);
@@ -210,7 +221,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
   // Resolve JWT secret once - fail hard in production if missing
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
-  const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? (nodeEnv === 'production' ? undefined : 'test-secret');
+  const jwtSecret =
+    config.jwtSecret ??
+    process.env['JWT_SECRET'] ??
+    (nodeEnv === 'production' ? undefined : 'test-secret');
   if (!jwtSecret) {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
@@ -229,7 +243,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
   if (database) {
     const authService = new AuthService(database);
-    
+
     // User-facing API routes
     app.use('/api/auth', authRouter({ database }));
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
@@ -241,7 +255,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/agenda', agendaRouter({ database }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
-    
+
     // Admin API routes (separate authentication)
     app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret }));
     app.use('/api/admin/customers', customersRouter({ database }));
@@ -257,18 +271,43 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // Webhook ingestion (delivery tracking)
     app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));
 
-    // Stripe billing (optional — only registers if secret key is configured)
-    const stripeSecretKey = config.stripeSecretKey ?? process.env['STRIPE_SECRET_KEY'];
-    const stripeWebhookSecret = config.stripeWebhookSecret ?? process.env['STRIPE_WEBHOOK_SECRET'];
-    if (stripeSecretKey && stripeWebhookSecret) {
-      const stripeService = new StripeService({
-        secretKey: stripeSecretKey,
-        webhookSecret: stripeWebhookSecret,
+    // Square billing (optional — only registers if access token and location are configured)
+    const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
+    const squareLocationId = config.squareLocationId ?? process.env['SQUARE_LOCATION_ID'];
+    const squareEnv = (config.squareEnvironment ??
+      process.env['SQUARE_ENVIRONMENT'] ??
+      'sandbox') as 'sandbox' | 'production';
+    const squareWebhookKey =
+      config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
+    const squareWebhookUrl =
+      config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
+
+    if (squareAccessToken && squareLocationId) {
+      const squareService = new SquareService({
+        accessToken: squareAccessToken,
+        environment: squareEnv,
+        locationId: squareLocationId,
+        webhookSignatureKey: squareWebhookKey,
+        webhookNotificationUrl: squareWebhookUrl,
       });
 
-      app.use('/api/billing', authMiddleware(authService), billingRouter({ database, stripeService }));
-      // Stripe webhook uses raw body for signature verification
-      app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter({ database, stripeService }));
+      app.use(
+        '/api/billing',
+        authMiddleware(authService),
+        billingRouter({ database, squareService })
+      );
+      // Square webhook uses raw body for signature verification
+      app.use(
+        '/api/webhooks/square',
+        express.raw({ type: 'application/json' }),
+        (req: Request, _res: Response, next: NextFunction) => {
+          if (Buffer.isBuffer(req.body)) {
+            (req as unknown as { body: string }).body = req.body.toString('utf8');
+          }
+          next();
+        },
+        squareWebhookRouter({ database, squareService })
+      );
     }
   }
 

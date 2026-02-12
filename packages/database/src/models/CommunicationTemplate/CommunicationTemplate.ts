@@ -47,5 +47,3 @@ export class CommunicationTemplate {
     this.updatedAt = data.updatedAt ?? new Date();
   }
 }
-
-

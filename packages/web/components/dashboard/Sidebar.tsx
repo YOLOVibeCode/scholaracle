@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,6 +41,11 @@ const menuItems = [
     title: 'Courses',
     url: '/dashboard/courses',
     icon: BookOpen,
+  },
+  {
+    title: 'Billing',
+    url: '/dashboard/billing',
+    icon: CreditCard,
   },
   {
     title: 'Settings',

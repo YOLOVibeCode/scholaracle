@@ -1,2 +1,2 @@
 export { UserRepository } from './UserRepository';
-export type { IUserRepository } from './UserRepository';
+export type { IUserReader, IUserWriter, IUserRepository } from './UserRepository';

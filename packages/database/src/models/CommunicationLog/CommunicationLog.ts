@@ -8,12 +8,25 @@ export type CommunicationChannel = 'email' | 'sms' | 'push' | 'in_app' | 'phone'
 /**
  * Communication type categories.
  */
-export type CommunicationType = 'notification' | 'marketing' | 'support' | 'billing' | 'system' | 'alert';
+export type CommunicationType =
+  | 'notification'
+  | 'marketing'
+  | 'support'
+  | 'billing'
+  | 'system'
+  | 'alert';
 
 /**
  * Communication delivery status.
  */
-export type CommunicationStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'opened' | 'clicked';
+export type CommunicationStatus =
+  | 'pending'
+  | 'sent'
+  | 'delivered'
+  | 'failed'
+  | 'bounced'
+  | 'opened'
+  | 'clicked';
 
 /**
  * Communication trigger source.
@@ -27,17 +40,17 @@ export interface ICommunicationLogData {
   readonly userId: string;
   readonly channel: CommunicationChannel;
   readonly type: CommunicationType;
-  
+
   // Content
   readonly subject?: string;
   readonly content: string;
   readonly templateId?: string;
   readonly templateName?: string;
-  
+
   // Recipient
   readonly recipientEmail?: string;
   readonly recipientPhone?: string;
-  
+
   // Delivery Status
   readonly status: CommunicationStatus;
   readonly sentAt?: Date;
@@ -46,17 +59,17 @@ export interface ICommunicationLogData {
   readonly clickedAt?: Date;
   readonly failedAt?: Date;
   readonly failureReason?: string;
-  
+
   // Metadata
   readonly triggeredBy: CommunicationTrigger;
   readonly adminUserId?: string;
   readonly relatedEntityType?: string;
   readonly relatedEntityId?: string;
-  
+
   // Provider Details
   readonly providerId?: string;
   readonly providerResponse?: Record<string, unknown>;
-  
+
   readonly createdAt?: Date;
 }
 
@@ -152,5 +165,3 @@ export class CommunicationLog {
     return names[this.channel];
   }
 }
-
-
