@@ -164,11 +164,11 @@ describe('authApi', () => {
   // -------------------------------------------------------------------------
 
   describe('logout', () => {
-    it('clears token from apiClient and localStorage', () => {
+    it('clears token from apiClient and localStorage', async () => {
       apiClient.setToken('existing-token');
       mockStorage['auth_token'] = 'existing-token';
 
-      authApi.logout();
+      await authApi.logout();
 
       expect(apiClient.getToken()).toBeNull();
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_token');

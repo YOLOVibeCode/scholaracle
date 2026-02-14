@@ -10,8 +10,8 @@
     "test:debug": "playwright test --debug",
     "test:report": "playwright show-report",
     "test:codegen": "playwright codegen ${BASE_URL:-http://localhost:2800}",
-    "test:production": "BASE_URL=${BASE_URL:-https://app.scholaracle.com} API_BASE_URL=${API_BASE_URL:-https://api.scholaracle.com} playwright test --project=critical",
-    "test:staging": "BASE_URL=${BASE_URL:-https://staging.scholaracle.com} API_BASE_URL=${API_BASE_URL:-https://staging-api.scholaracle.com} playwright test"
+    "test:production": "BASE_URL=${BASE_URL:-https://app.scholarmancy.com} API_BASE_URL=${API_BASE_URL:-https://api.scholarmancy.com} playwright test --project=critical",
+    "test:staging": "BASE_URL=${BASE_URL:-https://staging.scholarmancy.com} API_BASE_URL=${API_BASE_URL:-https://staging-api.scholarmancy.com} playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",

@@ -145,7 +145,7 @@ export default function AlertsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleAcknowledge(alert.id)}
-                          data-testid="acknowledge-button"
+                          data-testid="button-acknowledge"
                         >
                           <CheckCircle className="mr-2 h-4 w-4" />
                           Acknowledge

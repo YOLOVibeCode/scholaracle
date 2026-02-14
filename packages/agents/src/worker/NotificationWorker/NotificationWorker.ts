@@ -2,9 +2,17 @@ import { MongoQueue, type IJob } from '../../queue/MongoQueue';
 import { NotificationService } from '../../service/NotificationService';
 import { Alert, AlertType } from '@scholaracle/contracts';
 
+/** Resolved parent email/phone for delivery (matches IResolvedRecipients from NotificationService). */
+export interface IResolvedRecipients {
+  parentEmail?: string;
+  parentPhone?: string;
+}
+
 export interface INotificationWorkerConfig {
   readonly pollIntervalMs?: number;
   readonly concurrency?: number;
+  /** Resolve parent userId to email/phone for delivery. When set, worker calls this before processAlert and passes result. */
+  readonly resolveParentRecipients?: (userId: string) => Promise<IResolvedRecipients>;
 }
 
 /**
@@ -16,6 +24,7 @@ export class NotificationWorker {
   private readonly _notificationService: NotificationService;
   private readonly _pollIntervalMs: number;
   private readonly _concurrency: number;
+  private readonly _resolveParentRecipients?: (userId: string) => Promise<IResolvedRecipients>;
   private _running = false;
   private _activeJobs = 0;
   private _processingLoopPromise?: Promise<void>;
@@ -29,6 +38,7 @@ export class NotificationWorker {
     this._notificationService = notificationService;
     this._pollIntervalMs = config.pollIntervalMs ?? 1000;
     this._concurrency = config.concurrency ?? 10;
+    this._resolveParentRecipients = config.resolveParentRecipients;
   }
 
   /**
@@ -77,6 +87,7 @@ export class NotificationWorker {
         type: string;
         severity: string;
         relatedData: Record<string, unknown>;
+        userId?: string;
       };
 
       if (!alertData) {
@@ -88,9 +99,19 @@ export class NotificationWorker {
         type: alertData.type as AlertType,
         severity: alertData.severity,
         relatedData: alertData.relatedData,
+        ...(alertData.userId != null && { userId: alertData.userId }),
       });
 
-      await this._notificationService.processAlert(alert);
+      let resolved: IResolvedRecipients | undefined;
+      const parentUserId = (alert as Alert & { userId?: string }).userId;
+      if (parentUserId && this._resolveParentRecipients) {
+        try {
+          resolved = await this._resolveParentRecipients(parentUserId);
+        } catch (err) {
+          console.error('Failed to resolve parent recipients:', err);
+        }
+      }
+      await this._notificationService.processAlert(alert, resolved);
 
       await this._queue.complete(job._id.toString());
     } catch (error) {

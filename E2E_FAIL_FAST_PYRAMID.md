@@ -151,11 +151,11 @@ test.beforeEach(({ page }) => {
 ```typescript
 const TEST_USERS = {
   parent: { email: 'test.parent@example.com', password: 'ParentPass123!' },
-  super_admin: { email: 'super@scholaracle.com', password: 'SuperAdmin123!' },
-  admin: { email: 'admin@scholaracle.com', password: 'Admin123!' },
-  support: { email: 'support@scholaracle.com', password: 'Support123!' },
-  billing: { email: 'billing@scholaracle.com', password: 'Billing123!' },
-  analyst: { email: 'analyst@scholaracle.com', password: 'Analyst123!' },
+  super_admin: { email: 'super@scholarmancy.com', password: 'SuperAdmin123!' },
+  admin: { email: 'admin@scholarmancy.com', password: 'Admin123!' },
+  support: { email: 'support@scholarmancy.com', password: 'Support123!' },
+  billing: { email: 'billing@scholarmancy.com', password: 'Billing123!' },
+  analyst: { email: 'analyst@scholarmancy.com', password: 'Analyst123!' },
 };
 ```
 

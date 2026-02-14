@@ -49,11 +49,11 @@ describe('Seed API Routes', () => {
         database.collection('admin_users').deleteMany({
           email: {
             $in: [
-              'super@scholaracle.com',
-              'admin@scholaracle.com',
-              'support@scholaracle.com',
-              'billing@scholaracle.com',
-              'analyst@scholaracle.com',
+              'super@scholarmancy.com',
+              'admin@scholarmancy.com',
+              'support@scholarmancy.com',
+              'billing@scholarmancy.com',
+              'analyst@scholarmancy.com',
             ],
           },
         }),
@@ -176,11 +176,11 @@ describe('Seed API Routes', () => {
         expect(response.status).toBe(200);
         expect(response.body.results.admins.created).toEqual(
           expect.arrayContaining([
-            expect.stringContaining('super@scholaracle.com'),
-            expect.stringContaining('admin@scholaracle.com'),
-            expect.stringContaining('support@scholaracle.com'),
-            expect.stringContaining('billing@scholaracle.com'),
-            expect.stringContaining('analyst@scholaracle.com'),
+            expect.stringContaining('super@scholarmancy.com'),
+            expect.stringContaining('admin@scholarmancy.com'),
+            expect.stringContaining('support@scholarmancy.com'),
+            expect.stringContaining('billing@scholarmancy.com'),
+            expect.stringContaining('analyst@scholarmancy.com'),
           ])
         );
         expect(response.body.totals.adminsCreated).toBe(5);
@@ -191,11 +191,11 @@ describe('Seed API Routes', () => {
         await request(app).post('/api/seed');
 
         const expectedAdmins = [
-          { email: 'super@scholaracle.com', role: 'super_admin' },
-          { email: 'admin@scholaracle.com', role: 'admin' },
-          { email: 'support@scholaracle.com', role: 'support' },
-          { email: 'billing@scholaracle.com', role: 'billing' },
-          { email: 'analyst@scholaracle.com', role: 'analyst' },
+          { email: 'super@scholarmancy.com', role: 'super_admin' },
+          { email: 'admin@scholarmancy.com', role: 'admin' },
+          { email: 'support@scholarmancy.com', role: 'support' },
+          { email: 'billing@scholarmancy.com', role: 'billing' },
+          { email: 'analyst@scholarmancy.com', role: 'analyst' },
         ];
 
         for (const expected of expectedAdmins) {
@@ -376,7 +376,7 @@ describe('Seed API Routes', () => {
           .findOne({ action: 'system:export' });
 
         expect(auditLog).not.toBeNull();
-        expect(auditLog!['adminEmail']).toBe('super@scholaracle.com');
+        expect(auditLog!['adminEmail']).toBe('super@scholarmancy.com');
         expect(auditLog!['entityType']).toBe('system');
         expect(auditLog!['entityId']).toBe('seed');
         expect(auditLog!['reason']).toBe('Seed baseline audit entry');

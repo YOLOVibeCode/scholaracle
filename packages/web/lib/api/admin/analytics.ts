@@ -16,6 +16,12 @@ export interface IGrowthDataPoint {
   readonly changePercent: number;
 }
 
+export interface IRevenueDataPoint {
+  readonly period: string;
+  readonly revenue: number;
+  readonly count: number;
+}
+
 /**
  * Admin analytics API client.
  */
@@ -37,14 +43,14 @@ export const adminAnalyticsApi = {
     period?: 'day' | 'week' | 'month' | 'year';
     startDate?: string;
     endDate?: string;
-  }): Promise<{ success: boolean; data: unknown[] }> {
+  }): Promise<{ success: boolean; data: readonly IRevenueDataPoint[] }> {
     const queryParams = new URLSearchParams();
     if (params?.period) queryParams.set('period', params.period);
     if (params?.startDate) queryParams.set('startDate', params.startDate);
     if (params?.endDate) queryParams.set('endDate', params.endDate);
 
     const query = queryParams.toString();
-    return apiClient.get<{ success: boolean; data: unknown[] }>(
+    return apiClient.get<{ success: boolean; data: readonly IRevenueDataPoint[] }>(
       `/admin/analytics/revenue${query ? `?${query}` : ''}`,
       true
     );
@@ -74,6 +80,24 @@ export const adminAnalyticsApi = {
   async getChurnRate(): Promise<{ success: boolean; data: { churnRate: number } }> {
     return apiClient.get<{ success: boolean; data: { churnRate: number } }>(
       '/admin/analytics/churn',
+      true
+    );
+  },
+
+  /**
+   * Get subscription growth over time.
+   */
+  async getSubscriptions(params?: {
+    period?: 'day' | 'week' | 'month' | 'year';
+    months?: number;
+  }): Promise<{ success: boolean; data: readonly IGrowthDataPoint[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.period) queryParams.set('period', params.period);
+    if (params?.months) queryParams.set('months', params.months.toString());
+
+    const query = queryParams.toString();
+    return apiClient.get<{ success: boolean; data: readonly IGrowthDataPoint[] }>(
+      `/admin/analytics/subscriptions${query ? `?${query}` : ''}`,
       true
     );
   },

@@ -72,11 +72,11 @@ export function PaymentRefundPanel({
             variant="destructive"
             onClick={onConfirm}
             disabled={isSubmitting || reason.trim().length === 0}
-            data-testid="confirm-refund-button"
+            data-testid="button-confirm-refund"
           >
             Confirm
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="cancel-refund-button">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="button-cancel-refund">
             Cancel
           </Button>
         </div>

@@ -1,5 +1,12 @@
 export { AuthService } from './AuthService/AuthService';
-export type { IAuthService, IAuthResult } from './AuthService/AuthService';
+export type {
+  IAuthService,
+  IAuthResult,
+  IRegisterOptions,
+  IRequestPasswordResetResult,
+  IRefreshResult,
+} from './AuthService/AuthService';
+export type { IPasswordResetEmailSender } from './PasswordResetEmailSender';
 
 export { AdminAuthService } from './AdminAuthService/AdminAuthService';
 export type {

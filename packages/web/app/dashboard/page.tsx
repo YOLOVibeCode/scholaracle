@@ -1,16 +1,23 @@
 'use client';
 
+import { useState } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, BookOpen, Bell, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { GraduationCap, BookOpen, Bell, TrendingUp, X } from 'lucide-react';
 import { dashboardApi, type IDashboardStats } from '@/lib/api/dashboard';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 
 export default function DashboardPage() {
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const { data: stats, isLoading, error, retry } = useAsyncData<IDashboardStats>(
     () => dashboardApi.getStats(),
     { retryCount: 2, retryDelay: 1000 }
   );
+
+  const showOnboardingBanner =
+    !onboardingDismissed && !isLoading && !error && stats && (stats.totalStudents ?? 0) === 0;
 
   return (
     <div className="space-y-6">
@@ -18,6 +25,31 @@ export default function DashboardPage() {
         <h1 data-testid="dashboard-header" className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-gray-600 dark:text-gray-400">Welcome to Scholaracle</p>
       </div>
+
+      {showOnboardingBanner && (
+        <Card data-testid="onboarding-banner" className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20">
+          <CardContent className="flex flex-row items-center justify-between gap-4 pt-6">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Get started by adding your first student to track their courses and alerts.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button asChild size="sm" data-testid="onboarding-add-student-cta">
+                <Link href="/dashboard/students/new">Add student</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Dismiss"
+                data-testid="button-onboarding-dismiss"
+                onClick={() => setOnboardingDismissed(true)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading && !error && <LoadingSkeleton variant="dashboard" />}
       {error && !isLoading && <ErrorDisplay error={error} title="Failed to load dashboard" onRetry={retry} />}

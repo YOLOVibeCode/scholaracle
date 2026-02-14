@@ -1,5 +1,6 @@
 // User models
 export * from './models/User';
+export * from './models/OAuthAccount';
 export * from './models/Student';
 export * from './models/Alert';
 
@@ -37,3 +38,13 @@ export * from './repositories/AgendaOverrideRepository';
 export * from './repositories/IngestDeviceAuthRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
+
+// Auth
+export * from './repositories/PasswordResetTokenRepository';
+export * from './repositories/RefreshTokenRepository';
+export * from './repositories/AdminRevokedTokenRepository';
+export * from './repositories/AdminPasswordResetTokenRepository';
+export * from './repositories/AdminMFATokenRepository';
+export * from './repositories/AdminStepUpChallengeRepository';
+export * from './repositories/SessionRepository';
+export * from './repositories/OAuthAccountRepository';

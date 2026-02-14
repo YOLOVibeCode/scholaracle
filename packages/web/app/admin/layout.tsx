@@ -27,6 +27,18 @@ function getInitialAdminUser(): { id: string; email: string; name: string; role:
   }
 }
 
+/** Human-readable label for admin role (for display in UI). */
+function getRoleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    super_admin: 'Super Admin',
+    admin: 'Admin',
+    support: 'Support',
+    billing: 'Billing',
+    analyst: 'Analyst',
+  };
+  return labels[role] ?? role;
+}
+
 function isForbiddenByRole(role: string, pathname: string): boolean {
   const forbiddenByRole: Record<string, readonly RegExp[]> = {
     // Support: no billing or system settings
@@ -114,8 +126,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Header */}
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Admin Panel</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {adminUser?.role}
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1" data-testid="admin-role-label">
+              {adminUser ? getRoleLabel(adminUser.role) : ''}
             </p>
           </div>
 
@@ -144,7 +156,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <button
               onClick={handleLogout}
-              data-testid="logout-button"
+              data-testid="button-logout"
               className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" />

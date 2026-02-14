@@ -1,19 +1,63 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
+import jwt from 'jsonwebtoken';
 import { AdminAuthService, MFAService } from '@scholaracle/auth';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
 import type { IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
-import { AdminUserRepository, AuditLogRepository } from '@scholaracle/database';
+import {
+  AdminUserRepository,
+  AdminPasswordResetTokenRepository,
+  AuditLogRepository,
+  type IAdminRevokedTokenStore,
+  type IAdminMFATokenStore,
+  type IAdminStepUpChallengeStore,
+  type ISessionRepository,
+} from '@scholaracle/database';
+import type { IPasswordResetEmailSender } from '@scholaracle/auth';
 import crypto from 'crypto';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../../middleware/rateLimit';
+import { parseUserAgent } from '../../../utils/parseUserAgent';
 
 export interface IAdminAuthRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  readonly revokedTokenStore?: IAdminRevokedTokenStore;
+  readonly mfaTokenStore?: IAdminMFATokenStore;
+  readonly stepUpChallengeStore?: IAdminStepUpChallengeStore;
+  readonly adminPasswordResetTokenStore?: InstanceType<typeof AdminPasswordResetTokenRepository>;
+  readonly adminPasswordResetEmailSender?: IPasswordResetEmailSender;
+  readonly adminBaseUrl?: string;
+  readonly sessionRepository?: ISessionRepository;
 }
 
-type StepUpRecord = { adminId: string; expiresAt: number };
-const stepUpChallenges = new Map<string, StepUpRecord>();
+function getIp(req: Request): string {
+  return (
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+    req.socket.remoteAddress ??
+    ''
+  );
+}
+
+async function createAdminSession(
+  sessionRepository: ISessionRepository | undefined,
+  token: string,
+  req: Request
+): Promise<void> {
+  if (!sessionRepository) return;
+  const decoded = jwt.decode(token) as { adminId?: string; jti?: string } | null;
+  if (!decoded?.adminId || !decoded.jti) return;
+  const deviceInfo = parseUserAgent(req.headers['user-agent']);
+  const ipAddress = getIp(req);
+  const now = new Date();
+  await sessionRepository.create({
+    userId: decoded.adminId,
+    userType: 'admin',
+    refreshTokenFamilyId: decoded.jti,
+    deviceInfo,
+    ipAddress,
+    lastActiveAt: now,
+  });
+}
 
 async function handleLogin(
   req: Request,
@@ -39,6 +83,8 @@ async function handleLogin(
         error: result.error,
         requiresMFA: result.requiresMFA,
         mfaToken: result.mfaToken,
+        requiresMFASetup: result.requiresMFASetup,
+        mfaSetupToken: result.mfaSetupToken,
       });
       return;
     }
@@ -59,7 +105,8 @@ async function handleLogin(
 async function handleMFAVerify(
   req: Request,
   res: Response,
-  adminAuthService: AdminAuthService
+  adminAuthService: AdminAuthService,
+  sessionRepository?: ISessionRepository
 ): Promise<void> {
   try {
     const { mfaToken, token } = req.body;
@@ -82,6 +129,91 @@ async function handleMFAVerify(
       return;
     }
 
+    if (result.token) {
+      await createAdminSession(sessionRepository, result.token, req);
+    }
+    res.status(200).json({
+      success: true,
+      token: result.token,
+      admin: result.admin,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleMFASetupData(
+  req: Request,
+  res: Response,
+  adminAuthService: AdminAuthService
+): Promise<void> {
+  try {
+    const { mfaSetupToken } = req.body as { mfaSetupToken?: string };
+
+    if (!mfaSetupToken || typeof mfaSetupToken !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'mfaSetupToken is required',
+      });
+      return;
+    }
+
+    const result = await adminAuthService.getMFASetupData(mfaSetupToken);
+
+    if ('error' in result) {
+      res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      qrCodeUrl: result.qrCodeUrl,
+      manualEntryKey: result.manualEntryKey,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleMFACompleteSetup(
+  req: Request,
+  res: Response,
+  adminAuthService: AdminAuthService,
+  sessionRepository?: ISessionRepository
+): Promise<void> {
+  try {
+    const { mfaSetupToken, totpToken } = req.body as { mfaSetupToken?: string; totpToken?: string };
+
+    if (!mfaSetupToken || !totpToken) {
+      res.status(400).json({
+        success: false,
+        error: 'mfaSetupToken and totpToken are required',
+      });
+      return;
+    }
+
+    const result = await adminAuthService.completeMFASetup(mfaSetupToken, totpToken);
+
+    if (!result.success) {
+      res.status(401).json({
+        success: false,
+        error: result.error,
+      });
+      return;
+    }
+
+    if (result.token) {
+      await createAdminSession(sessionRepository, result.token, req);
+    }
     res.status(200).json({
       success: true,
       token: result.token,
@@ -183,7 +315,12 @@ async function handleMFAEnable(
   }
 }
 
-async function handleStepUpStart(req: Request, res: Response, adminRepo: AdminUserRepository): Promise<void> {
+async function handleStepUpStart(
+  req: Request,
+  res: Response,
+  adminRepo: AdminUserRepository,
+  stepUpStore: IAdminStepUpChallengeStore
+): Promise<void> {
   try {
     const authReq = req as IAdminAuthenticatedRequest;
     if (!authReq.adminId) {
@@ -203,7 +340,7 @@ async function handleStepUpStart(req: Request, res: Response, adminRepo: AdminUs
 
     const stepUpId = crypto.randomUUID();
     const expiresAt = Date.now() + 5 * 60 * 1000;
-    stepUpChallenges.set(stepUpId, { adminId: authReq.adminId, expiresAt });
+    await stepUpStore.create(stepUpId, authReq.adminId, new Date(expiresAt));
     res.status(200).json({ success: true, data: { stepUpId, expiresAt } });
   } catch (error) {
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
@@ -215,7 +352,8 @@ async function handleStepUpVerify(
   res: Response,
   adminRepo: AdminUserRepository,
   mfaService: MFAService,
-  adminAuthService: AdminAuthService
+  adminAuthService: AdminAuthService,
+  stepUpStore: IAdminStepUpChallengeStore
 ): Promise<void> {
   try {
     const authReq = req as IAdminAuthenticatedRequest;
@@ -230,14 +368,9 @@ async function handleStepUpVerify(
       return;
     }
 
-    const record = stepUpChallenges.get(stepUpId);
+    const record = await stepUpStore.get(stepUpId);
     if (!record || record.adminId !== authReq.adminId) {
       res.status(401).json({ success: false, error: 'Invalid step-up challenge' });
-      return;
-    }
-    if (Date.now() > record.expiresAt) {
-      stepUpChallenges.delete(stepUpId);
-      res.status(401).json({ success: false, error: 'Step-up challenge expired' });
       return;
     }
 
@@ -253,7 +386,7 @@ async function handleStepUpVerify(
       return;
     }
 
-    stepUpChallenges.delete(stepUpId);
+    await stepUpStore.delete(stepUpId);
 
     const stepUpToken = await adminAuthService.issueStepUpToken(authReq.adminId);
     if (!stepUpToken) {
@@ -267,10 +400,81 @@ async function handleStepUpVerify(
   }
 }
 
-async function handleLogout(
+async function handleAdminForgotPassword(
   req: Request,
   res: Response,
   adminAuthService: AdminAuthService
+): Promise<void> {
+  try {
+    const { email } = req.body as { email?: string };
+
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required field: email',
+      });
+      return;
+    }
+
+    const result = await adminAuthService.requestPasswordReset(email.trim());
+
+    if (result.success) {
+      res.status(200).json({ success: true });
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleAdminResetPassword(
+  req: Request,
+  res: Response,
+  adminAuthService: AdminAuthService
+): Promise<void> {
+  try {
+    const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+
+    if (!token || !newPassword || typeof newPassword !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: token, newPassword',
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({
+        success: false,
+        error: 'Password must be at least 8 characters',
+      });
+      return;
+    }
+
+    const result = await adminAuthService.resetPasswordWithToken(token, newPassword);
+
+    if (result.success) {
+      res.status(200).json({ success: true });
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleLogout(
+  req: Request,
+  res: Response,
+  adminAuthService: AdminAuthService,
+  sessionRepository?: ISessionRepository
 ): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
@@ -283,6 +487,12 @@ async function handleLogout(
     }
 
     const token = authHeader.substring(7);
+    if (sessionRepository) {
+      const decoded = jwt.decode(token) as { adminId?: string; jti?: string } | null;
+      if (decoded?.adminId && decoded.jti) {
+        await sessionRepository.revokeByFamilyId(decoded.adminId, 'admin', decoded.jti);
+      }
+    }
     const success = await adminAuthService.logout(token);
 
     res.status(200).json({
@@ -336,10 +546,21 @@ async function handleRefresh(
 
 export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
   const router = Router();
-  const adminAuthService = new AdminAuthService(config.database, config.jwtSecret);
+  const adminAuthService = new AdminAuthService(
+    config.database,
+    config.jwtSecret,
+    undefined,
+    undefined,
+    config.revokedTokenStore,
+    config.mfaTokenStore,
+    config.adminPasswordResetTokenStore,
+    config.adminPasswordResetEmailSender,
+    config.adminBaseUrl
+  );
   const mfaService = new MFAService();
   const adminRepo = new AdminUserRepository(config.database);
   const auditLogRepo = new AuditLogRepository(config.database);
+  const stepUpStore = config.stepUpChallengeStore;
   const limiter = new MemoryRateLimiter();
   const rateLimitEnabled = process.env['RATE_LIMIT_ENABLED'] === 'true';
 
@@ -358,7 +579,15 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
   );
 
   router.post('/mfa/verify', (req: Request, res: Response) => {
-    void handleMFAVerify(req, res, adminAuthService);
+    void handleMFAVerify(req, res, adminAuthService, config.sessionRepository);
+  });
+
+  router.post('/mfa/setup-data', (req: Request, res: Response) => {
+    void handleMFASetupData(req, res, adminAuthService);
+  });
+
+  router.post('/mfa/complete-setup', (req: Request, res: Response) => {
+    void handleMFACompleteSetup(req, res, adminAuthService, config.sessionRepository);
   });
 
   router.post('/mfa/setup', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
@@ -370,15 +599,31 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
   });
 
   router.post('/step-up/start', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void handleStepUpStart(req, res, adminRepo);
+    void (stepUpStore
+      ? handleStepUpStart(req, res, adminRepo, stepUpStore)
+      : Promise.resolve().then(() => {
+          res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+        }));
   });
 
   router.post('/step-up/verify', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService);
+    void (stepUpStore
+      ? handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore)
+      : Promise.resolve().then(() => {
+          res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+        }));
+  });
+
+  router.post('/forgot-password', (req: Request, res: Response) => {
+    void handleAdminForgotPassword(req, res, adminAuthService);
+  });
+
+  router.post('/reset-password', (req: Request, res: Response) => {
+    void handleAdminResetPassword(req, res, adminAuthService);
   });
 
   router.post('/logout', (req: Request, res: Response) => {
-    void handleLogout(req, res, adminAuthService);
+    void handleLogout(req, res, adminAuthService, config.sessionRepository);
   });
 
   router.post('/refresh', (req: Request, res: Response) => {

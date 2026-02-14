@@ -50,7 +50,7 @@ export function ConfirmDialog({
             variant={variant}
             onClick={onConfirm}
             disabled={isSubmitting}
-            data-testid="confirm-dialog-confirm"
+            data-testid="button-confirm-dialog"
           >
             {isSubmitting ? 'Processing...' : confirmLabel}
           </Button>

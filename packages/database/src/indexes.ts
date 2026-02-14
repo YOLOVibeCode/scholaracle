@@ -94,6 +94,46 @@ export async function createIndexes(database: Db): Promise<void> {
   );
   await agendaOverrides.createIndex({ userId: 1, snoozedUntil: 1 });
 
+  // Refresh tokens (TTL for automatic cleanup)
+  const refreshTokensCollection = database.collection('refresh_tokens');
+  await refreshTokensCollection.createIndex({ tokenHash: 1 }, { unique: true });
+  await refreshTokensCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await refreshTokensCollection.createIndex({ familyId: 1 });
+
+  // Admin revoked tokens (TTL for automatic cleanup)
+  const adminRevokedTokens = database.collection('admin_revoked_tokens');
+  await adminRevokedTokens.createIndex({ jti: 1 }, { unique: true });
+  await adminRevokedTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // Admin MFA pending tokens (TTL for automatic cleanup)
+  const adminMFATokens = database.collection('admin_mfa_tokens');
+  await adminMFATokens.createIndex({ mfaToken: 1 }, { unique: true });
+  await adminMFATokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // Admin step-up challenges (TTL for automatic cleanup)
+  const adminStepUpChallenges = database.collection('admin_step_up_challenges');
+  await adminStepUpChallenges.createIndex({ stepUpId: 1 }, { unique: true });
+  await adminStepUpChallenges.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // Admin password reset tokens (TTL for automatic cleanup)
+  const adminPasswordResetTokens = database.collection('admin_password_reset_tokens');
+  await adminPasswordResetTokens.createIndex({ token: 1 });
+  await adminPasswordResetTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // Sessions (multi-device session management)
+  const sessionsCollection = database.collection('sessions');
+  await sessionsCollection.createIndex({ userId: 1, userType: 1 });
+  await sessionsCollection.createIndex({ refreshTokenFamilyId: 1 });
+  await sessionsCollection.createIndex({ revokedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }); // 30 days after revoke
+
+  // OAuth accounts (provider + providerAccountId unique)
+  const oauthAccountsCollection = database.collection('oauth_accounts');
+  await oauthAccountsCollection.createIndex(
+    { provider: 1, providerAccountId: 1 },
+    { unique: true }
+  );
+  await oauthAccountsCollection.createIndex({ userId: 1 });
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }

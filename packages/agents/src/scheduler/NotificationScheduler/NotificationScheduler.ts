@@ -41,6 +41,7 @@ export class NotificationScheduler implements INotificationScheduler {
             type: alert.type,
             severity: alert.severity,
             relatedData: alert.relatedData,
+            ...(alert.userId != null && { userId: alert.userId }),
           },
         },
         {

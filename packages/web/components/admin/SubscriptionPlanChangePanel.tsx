@@ -55,10 +55,10 @@ export function SubscriptionPlanChangePanel({
           </select>
         </div>
         <div className="flex gap-2">
-          <Button variant="default" onClick={onConfirm} disabled={isSubmitting} data-testid="confirm-change-plan-button">
+          <Button variant="default" onClick={onConfirm} disabled={isSubmitting} data-testid="button-confirm-change-plan">
             Confirm
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="cancel-change-plan-button">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="button-cancel-change-plan">
             Cancel
           </Button>
         </div>

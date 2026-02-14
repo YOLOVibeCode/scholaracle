@@ -1,0 +1,1 @@
+export { AdminPasswordResetTokenRepository } from './AdminPasswordResetTokenRepository';

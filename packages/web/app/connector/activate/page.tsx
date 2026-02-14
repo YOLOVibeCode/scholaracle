@@ -23,7 +23,7 @@ export default function ConnectorActivatePage() {
     }
 
     try {
-      const res = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3000/api'}/ingest/v1/device/approve`, {
+      const res = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api'}/ingest/v1/device/approve`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

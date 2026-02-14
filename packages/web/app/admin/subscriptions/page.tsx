@@ -132,7 +132,7 @@ export default function AdminSubscriptionsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => openPlan(s)}
-                          data-testid="change-plan-button"
+                          data-testid="button-change-plan"
                         >
                           Change Plan
                         </Button>
@@ -142,7 +142,7 @@ export default function AdminSubscriptionsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openExtend(s)}
-                            data-testid="extend-trial-button"
+                            data-testid="button-extend-trial"
                           >
                             Extend Trial
                           </Button>
@@ -153,7 +153,7 @@ export default function AdminSubscriptionsPage() {
                             variant="destructive"
                             size="sm"
                             onClick={() => openCancel(s)}
-                            data-testid="cancel-subscription-button"
+                            data-testid="button-cancel-subscription"
                           >
                             Cancel
                           </Button>
@@ -179,7 +179,7 @@ export default function AdminSubscriptionsPage() {
                               }
                             }}
                             disabled={isSubmitting}
-                            data-testid="reactivate-subscription-button"
+                            data-testid="button-reactivate-subscription"
                           >
                             Reactivate
                           </Button>

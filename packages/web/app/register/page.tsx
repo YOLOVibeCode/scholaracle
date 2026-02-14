@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { authApi } from '@/lib/api/auth';
 
 export default function RegisterPage() {
@@ -37,7 +38,10 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const result = await authApi.register(email, password, name);
+      const result = await authApi.register(email, password, name, {
+        phone: phone || undefined,
+        smsConsent,
+      });
 
       if (result.success) {
         router.push('/dashboard');
@@ -58,10 +62,10 @@ export default function RegisterPage() {
           <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
           <CardDescription>Sign up for Scholaracle to get started</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
+        <form data-testid="form-register" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+              <div data-testid="message-error" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
                 {error}
               </div>
             )}
@@ -70,7 +74,7 @@ export default function RegisterPage() {
               <Input
                 id="name"
                 name="name"
-                data-testid="name-input"
+                data-testid="input-name"
                 type="text"
                 placeholder="John Doe"
                 value={name}
@@ -84,7 +88,7 @@ export default function RegisterPage() {
               <Input
                 id="email"
                 name="email"
-                data-testid="email-input"
+                data-testid="input-email"
                 type="email"
                 placeholder="name@example.com"
                 value={email}
@@ -98,7 +102,7 @@ export default function RegisterPage() {
               <Input
                 id="password"
                 name="password"
-                data-testid="password-input"
+                data-testid="input-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -112,7 +116,7 @@ export default function RegisterPage() {
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
-                data-testid="confirm-password-input"
+                data-testid="input-confirm-password"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -126,7 +130,7 @@ export default function RegisterPage() {
               <Input
                 id="phone"
                 name="phone"
-                data-testid="phone-input"
+                data-testid="input-phone"
                 type="tel"
                 placeholder="+1 (555) 123-4567"
                 value={phone}
@@ -176,12 +180,16 @@ export default function RegisterPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="register-button">
+            <OAuthButtons disabled={isLoading} onError={setError} />
+            <div className="relative text-center text-sm text-gray-500">
+              <span className="bg-white px-2 dark:bg-gray-900">or</span>
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-register">
               {isLoading ? 'Creating account...' : 'Create account'}
             </Button>
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
-              <Link href="/login" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+              <Link href="/login" className="font-medium text-blue-600 hover:underline dark:text-blue-400" data-testid="link-login">
                 Sign in
               </Link>
             </div>

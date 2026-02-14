@@ -1,12 +1,7 @@
 export { EmailDelivery } from './EmailDelivery';
 export type { IEmailDeliveryConfig } from './EmailDelivery';
-/**
- * @deprecated Push notifications are not yet implemented. Use EmailDelivery or SMSDelivery instead.
- */
+/** No-op stub; push notifications are not implemented. Use EmailDelivery or SMSDelivery. */
 export { PushDelivery } from './PushDelivery';
-/**
- * @deprecated Push notifications are not yet implemented. Use EmailDelivery or SMSDelivery instead.
- */
 export type { IPushDeliveryConfig } from './PushDelivery';
 export { SMSDelivery } from './SMSDelivery';
 export type { ISMSDeliveryConfig } from './SMSDelivery';

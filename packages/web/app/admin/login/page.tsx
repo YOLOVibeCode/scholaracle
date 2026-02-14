@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { adminAuthApi } from '@/lib/api/admin/auth';
+import { MFASetupWizard } from '@/components/admin/MFASetupWizard';
 import { Shield } from 'lucide-react';
 
 export default function AdminLoginPage() {
@@ -15,6 +16,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaSetupToken, setMfaSetupToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,7 +28,9 @@ export default function AdminLoginPage() {
     try {
       const result = await adminAuthApi.login(email, password);
 
-      if (result.requiresMFA && result.mfaToken) {
+      if (result.requiresMFASetup && result.mfaSetupToken) {
+        setMfaSetupToken(result.mfaSetupToken);
+      } else if (result.requiresMFA && result.mfaToken) {
         setMfaToken(result.mfaToken);
       } else if (result.success) {
         router.push('/admin/dashboard');
@@ -64,6 +68,18 @@ export default function AdminLoginPage() {
     }
   };
 
+  if (mfaSetupToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+        <MFASetupWizard
+          mfaSetupToken={mfaSetupToken}
+          onComplete={() => router.push('/admin/dashboard')}
+          onCancel={() => setMfaSetupToken(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md">
@@ -86,9 +102,9 @@ export default function AdminLoginPage() {
                 <Input
                   id="email"
                   name="email"
-                  data-testid="email-input"
+                  data-testid="input-admin-email"
                   type="email"
-                  placeholder="admin@scholaracle.com"
+                  placeholder="admin@scholarmancy.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -99,7 +115,7 @@ export default function AdminLoginPage() {
                 <Input
                   id="password"
                   name="password"
-                  data-testid="password-input"
+                  data-testid="input-admin-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -107,11 +123,11 @@ export default function AdminLoginPage() {
                 />
               </div>
               {error && (
-                <div data-testid="error-message" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                <div data-testid="message-error" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
                   {error}
                 </div>
               )}
-              <Button type="submit" className="w-full" disabled={isLoading} data-testid="login-button">
+              <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login">
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
@@ -121,7 +137,7 @@ export default function AdminLoginPage() {
                 <Label htmlFor="mfaCode">Authentication Code</Label>
                 <Input
                   id="mfaCode"
-                  data-testid="mfa-code-input"
+                  data-testid="input-mfa-code"
                   type="text"
                   placeholder="000000"
                   value={mfaCode}
@@ -135,7 +151,7 @@ export default function AdminLoginPage() {
                 </p>
               </div>
               {error && (
-                <div data-testid="error-message" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                <div data-testid="message-error" className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
                   {error}
                 </div>
               )}
@@ -148,7 +164,7 @@ export default function AdminLoginPage() {
                 >
                   Back
                 </Button>
-                <Button type="submit" className="w-full" disabled={isLoading} data-testid="verify-mfa-button">
+                <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-verify-mfa">
                   {isLoading ? 'Verifying...' : 'Verify'}
                 </Button>
               </div>

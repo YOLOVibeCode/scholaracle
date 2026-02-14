@@ -67,8 +67,8 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     await expect(page).toHaveURL('/dashboard/students/new');
     
     // Verify form elements
-    await expect(page.locator('[data-testid="student-name"], input[name="name"]')).toBeVisible();
-    await expect(page.locator('[data-testid="student-grade"], input[name="grade"]')).toBeVisible();
+    await expect(page.locator('[data-testid="input-student-name"], input[name="name"]')).toBeVisible();
+    await expect(page.locator('[data-testid="input-student-grade"], input[name="grade"]')).toBeVisible();
   });
 
   test('DASH-P-004: Student Detail page renders', async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     
     if (count > 0) {
       await notificationSection.first().click();
-      await expect(page.locator('[data-testid="push-toggle"]').first()).toBeVisible({ timeout: 2000 });
+      await expect(page.locator('[data-testid="toggle-push"]').first()).toBeVisible({ timeout: 2000 });
     } else {
       // Settings might be on single page, verify page loads
       await expect(page.locator('body')).toBeVisible();
@@ -134,7 +134,7 @@ test.describe('@dashboard Layer 2: Parent Dashboard Pages', () => {
     
     if (count > 0) {
       await thresholdSection.first().click();
-      await expect(page.locator('[data-testid="grade-drop-threshold"]').first()).toBeVisible({ timeout: 2000 });
+      await expect(page.locator('[data-testid="input-grade-drop-threshold"]').first()).toBeVisible({ timeout: 2000 });
     } else {
       // Settings might be on single page
       await expect(page.locator('body')).toBeVisible();

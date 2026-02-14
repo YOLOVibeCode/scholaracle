@@ -31,7 +31,7 @@ export function ErrorDisplay({ error, title = 'Error', onRetry, className }: IEr
                 size="sm"
                 onClick={onRetry}
                 className="mt-3 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/40"
-                data-testid="error-retry-button"
+                data-testid="button-error-retry"
               >
                 Retry
               </Button>

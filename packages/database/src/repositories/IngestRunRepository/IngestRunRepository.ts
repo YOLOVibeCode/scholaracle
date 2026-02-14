@@ -7,6 +7,11 @@ export interface IIngestRunReader {
     userId: ObjectId | string,
     sourceId: string
   ): Promise<{ type: 'opaque'; value: string } | null>;
+  listByUserIdAndSourceId(
+    userId: ObjectId | string,
+    sourceId: string,
+    limit?: number
+  ): Promise<readonly IngestRun[]>;
 }
 
 export interface IIngestRunWriter {
@@ -96,5 +101,18 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     const doc = last[0];
     if (!doc?.newCursor) return null;
     return doc.newCursor;
+  }
+
+  async listByUserIdAndSourceId(
+    userId: ObjectId | string,
+    sourceId: string,
+    limit = 50
+  ): Promise<readonly IngestRun[]> {
+    const docs = await this._collection
+      .find({ userId, sourceId })
+      .sort({ startedAt: -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((d) => new IngestRun(d, d._id as unknown as ObjectId));
   }
 }

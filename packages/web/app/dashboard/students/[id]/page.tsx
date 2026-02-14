@@ -3,12 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { studentsApi, type IStudent } from '@/lib/api/students';
+import { StudentOverviewTab } from '@/components/dashboard/students/StudentOverviewTab';
+import { StudentDataSourcesTab } from '@/components/dashboard/students/StudentDataSourcesTab';
+import { StudentAlertsTab } from '@/components/dashboard/students/StudentAlertsTab';
+import { StudentGradesTab } from '@/components/dashboard/students/StudentGradesTab';
+import { ConnectSourceWizard } from '@/components/dashboard/students/ConnectSourceWizard';
+
+type TabId = 'overview' | 'sources' | 'alerts' | 'grades';
 
 export default function EditStudentPage() {
   const router = useRouter();
@@ -22,12 +26,15 @@ export default function EditStudentPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [connectWizardOpen, setConnectWizardOpen] = useState(false);
 
   useEffect(() => {
     void loadStudent();
   }, [studentId]);
 
   const loadStudent = async () => {
+    if (!studentId) return;
     setIsLoading(true);
     try {
       const data = await studentsApi.getById(studentId);
@@ -35,7 +42,7 @@ export default function EditStudentPage() {
         setStudent(data);
         setName(data.name);
         setGrade(data.grade ?? '');
-        setStudentIdField('');
+        setStudentIdField(data.studentId ?? data.school ?? '');
       } else {
         setError('Student not found');
       }
@@ -50,14 +57,14 @@ export default function EditStudentPage() {
     e.preventDefault();
     setError('');
     setIsSaving(true);
-
     try {
       const result = await studentsApi.update(studentId, {
         name,
         grade: grade || undefined,
+        studentId: studentIdField || undefined,
       });
-
       if (result) {
+        setStudent(result);
         router.push('/dashboard/students');
       } else {
         setError('Failed to update student');
@@ -67,6 +74,23 @@ export default function EditStudentPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveOverrides = async (prefs: {
+    useCustomSettings?: boolean;
+    gradeDrop?: number;
+    lowGradeThreshold?: number;
+    frequency?: string;
+  }) => {
+    const result = await studentsApi.update(studentId, {
+      alertPreferences: {
+        useCustomSettings: prefs.useCustomSettings,
+        gradeDrop: prefs.gradeDrop,
+        lowGradeThreshold: prefs.lowGradeThreshold,
+        frequency: prefs.frequency,
+      },
+    });
+    if (result) setStudent(result);
   };
 
   if (isLoading) {
@@ -98,78 +122,103 @@ export default function EditStudentPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Edit Student</h1>
-          <p className="text-gray-600 dark:text-gray-400">Update student information</p>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold tracking-tight">{student?.name ?? 'Student'}</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            {student?.grade ? `Grade ${student.grade}` : 'Update student information'}
+          </p>
         </div>
+        <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
+          <Link href={`/dashboard/students/${studentId}/view`}>
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            View as student
+          </Link>
+        </Button>
       </div>
 
-      <Card className="max-w-2xl">
-        <form onSubmit={handleSubmit}>
-          <CardHeader>
-            <CardTitle>Student Information</CardTitle>
-            <CardDescription>Update the student's information</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                name="name"
-                data-testid="student-name"
-                type="text"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="grade">Grade</Label>
-              <Input
-                id="grade"
-                name="grade"
-                data-testid="student-grade"
-                type="number"
-                placeholder="10"
-                min="1"
-                max="12"
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="studentId">Student ID</Label>
-              <Input
-                id="studentId"
-                name="studentId"
-                data-testid="student-external-id"
-                type="text"
-                placeholder="Optional external ID"
-                value={studentIdField}
-                onChange={(e) => setStudentIdField(e.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <Button variant="outline" type="button" asChild disabled={isSaving}>
-              <Link href="/dashboard/students">Cancel</Link>
-            </Button>
-            <Button type="submit" disabled={isSaving} data-testid="save-student-button">
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+      <div role="tablist" aria-label="Student sections" className="flex gap-2" data-testid="student-tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'overview'}
+          data-testid="tab-overview"
+          className="px-3 py-2 rounded border"
+          onClick={() => setActiveTab('overview')}
+        >
+          Overview
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'sources'}
+          data-testid="tab-sources"
+          className="px-3 py-2 rounded border"
+          onClick={() => setActiveTab('sources')}
+        >
+          Data Sources
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'alerts'}
+          data-testid="tab-alerts"
+          className="px-3 py-2 rounded border"
+          onClick={() => setActiveTab('alerts')}
+        >
+          Alerts
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'grades'}
+          data-testid="tab-grades"
+          className="px-3 py-2 rounded border"
+          onClick={() => setActiveTab('grades')}
+        >
+          Grades
+        </button>
+      </div>
+
+      {activeTab === 'overview' && (
+        <StudentOverviewTab
+          studentId={studentId}
+          student={student}
+          name={name}
+          grade={grade}
+          studentIdField={studentIdField}
+          error={error}
+          isSaving={isSaving}
+          onNameChange={setName}
+          onGradeChange={setGrade}
+          onStudentIdFieldChange={setStudentIdField}
+          onSubmit={handleSubmit}
+          onCancel={() => router.push('/dashboard/students')}
+        />
+      )}
+
+      {activeTab === 'sources' && (
+        <StudentDataSourcesTab
+          studentId={studentId}
+          onConnectSource={() => setConnectWizardOpen(true)}
+        />
+      )}
+
+      {activeTab === 'alerts' && (
+        <StudentAlertsTab
+          studentId={studentId}
+          student={student}
+          onSaveOverrides={handleSaveOverrides}
+        />
+      )}
+
+      {activeTab === 'grades' && <StudentGradesTab studentId={studentId} />}
+
+      <ConnectSourceWizard
+        open={connectWizardOpen}
+        studentId={studentId}
+        onClose={() => setConnectWizardOpen(false)}
+        onConnected={loadStudent}
+      />
     </div>
   );
 }
-

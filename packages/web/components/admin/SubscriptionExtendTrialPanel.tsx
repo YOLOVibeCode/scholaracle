@@ -68,11 +68,11 @@ export function SubscriptionExtendTrialPanel({
             variant="default"
             onClick={onConfirm}
             disabled={isSubmitting || reason.trim().length === 0}
-            data-testid="confirm-extend-trial-button"
+            data-testid="button-confirm-extend-trial"
           >
             Confirm
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="cancel-extend-trial-button">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="button-cancel-extend-trial">
             Cancel
           </Button>
         </div>

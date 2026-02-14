@@ -149,7 +149,7 @@ export function CustomerSubscriptionTab({ customerId, subscriptionId }: ICustome
                 setSelectedPlan(subscription.plan);
                 setIsPlanOpen(true);
               }}
-              data-testid="change-plan-button"
+              data-testid="button-change-plan"
             >
               Change Plan
             </Button>
@@ -162,7 +162,7 @@ export function CustomerSubscriptionTab({ customerId, subscriptionId }: ICustome
                   setExtendReason('');
                   setIsExtendTrialOpen(true);
                 }}
-                data-testid="extend-trial-button"
+                data-testid="button-extend-trial"
               >
                 Extend Trial
               </Button>
@@ -175,7 +175,7 @@ export function CustomerSubscriptionTab({ customerId, subscriptionId }: ICustome
                   setCancelReason('');
                   setIsCancelOpen(true);
                 }}
-                data-testid="cancel-subscription-button"
+                data-testid="button-cancel-subscription"
               >
                 Cancel Subscription
               </Button>
@@ -199,7 +199,7 @@ export function CustomerSubscriptionTab({ customerId, subscriptionId }: ICustome
                   }
                 }}
                 disabled={isSubmitting}
-                data-testid="reactivate-subscription-button"
+                data-testid="button-reactivate-subscription"
               >
                 Reactivate Subscription
               </Button>

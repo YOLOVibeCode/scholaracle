@@ -124,11 +124,11 @@ export function CustomerOverviewTab({ customer, onSuspend, onUnsuspend }: ICusto
 
           <div className="flex gap-2">
             {customer.isSuspended ? (
-              <Button variant="default" onClick={onUnsuspend} data-testid="unsuspend-button">
+              <Button variant="default" onClick={onUnsuspend} data-testid="button-unsuspend">
                 Unsuspend Customer
               </Button>
             ) : (
-              <Button variant="destructive" onClick={onSuspend} data-testid="suspend-button">
+              <Button variant="destructive" onClick={onSuspend} data-testid="button-suspend">
                 Suspend Customer
               </Button>
             )}

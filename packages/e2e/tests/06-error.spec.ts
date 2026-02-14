@@ -34,10 +34,10 @@ test.describe('@error Layer 6: Error Handling', () => {
     await page.goto('/dashboard/students/new');
     
     // Submit empty form
-    await page.click('[data-testid="save-student-button"], button[type="submit"]');
+    await page.click('[data-testid="button-save-student"], button[type="submit"]');
     
     // Should show validation errors or API error message
-    const errorVisible = await page.locator('[data-testid="error-message"], .text-red-500, [role="alert"]').isVisible({ timeout: 2000 });
+    const errorVisible = await page.locator('[data-testid="message-error"], .text-red-500, [role="alert"]').isVisible({ timeout: 2000 });
     
     // Or form validation should prevent submission
     const formErrors = await page.locator('input:invalid').count();
@@ -75,10 +75,10 @@ test.describe('@error Layer 6: Error Handling', () => {
     await page.goto('/dashboard/students/new');
     
     // Try to submit with invalid data
-    await page.fill('[data-testid="student-name"], input[name="name"]', ''); // Empty name
-    await page.fill('[data-testid="student-grade"], input[name="grade"]', '99'); // Out of range
+    await page.fill('[data-testid="input-student-name"], input[name="name"]', ''); // Empty name
+    await page.fill('[data-testid="input-student-grade"], input[name="grade"]', '99'); // Out of range
     
-    await page.click('[data-testid="save-student-button"], button[type="submit"]');
+    await page.click('[data-testid="button-save-student"], button[type="submit"]');
     
     // Should show validation errors
     await page.waitForTimeout(500);

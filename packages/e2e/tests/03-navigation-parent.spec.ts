@@ -30,7 +30,7 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
   test('NAV-P-003: Add Student from empty state', async ({ page }) => {
     await page.goto('/dashboard/students');
     
-    const addButton = page.locator('[data-testid="add-student-button"], button:has-text("Add Student"), a:has-text("Add Student")');
+    const addButton = page.locator('[data-testid="button-add-student"], button:has-text("Add Student"), a:has-text("Add Student")');
     const count = await addButton.count();
     
     if (count > 0) {
@@ -83,7 +83,7 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
   test('NAV-P-007: Logout button visible', async ({ page }) => {
     await page.goto('/dashboard');
     
-    const logoutButton = page.locator('[data-testid="logout-button"], button:has-text("Logout")');
+    const logoutButton = page.locator('[data-testid="button-logout"], button:has-text("Logout")');
     await expect(logoutButton).toBeVisible();
   });
 

@@ -75,7 +75,7 @@ export const adminAuditLogsApi = {
     if (query.from) qs.set('from', query.from);
     if (query.to) qs.set('to', query.to);
 
-    const base = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3000/api';
+    const base = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
     const url = `${base}/admin/audit-logs/export${qs.toString() ? `?${qs.toString()}` : ''}`;
     const adminToken = typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null;
 

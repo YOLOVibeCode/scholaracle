@@ -56,11 +56,21 @@ test.describe('User Registration', () => {
     await registerPage.register(email, 'First User', 'FirstPass123!');
     await expect(page).toHaveURL('/dashboard');
     
-    // Logout and try to register again with same email
+    // Navigate back to register and attempt duplicate registration
     await page.goto('/register');
-    await registerPage.register(email, 'Second User', 'SecondPass123!');
+    registerPage = new RegisterPage(page);
+    await registerPage.emailInput.fill(email);
+    await registerPage.nameInput.fill('Second User');
+    await registerPage.passwordInput.fill('SecondPass123!');
+    if ((await registerPage.confirmPasswordInput.count()) > 0) {
+      await registerPage.confirmPasswordInput.fill('SecondPass123!');
+    }
+    if ((await registerPage.termsConsentCheckbox.count()) > 0) {
+      await registerPage.termsConsentCheckbox.check({ force: true });
+    }
+    await registerPage.registerButton.click();
     
-    // Should show error or stay on register page
+    // Should show error and stay on register page (not redirect to dashboard)
     await registerPage.expectError();
   });
 

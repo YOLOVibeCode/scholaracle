@@ -39,7 +39,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await loginAsRole('super_admin');
     await page.goto('/admin/customers');
     
-    const filterDropdown = page.locator('[data-testid="filter-dropdown"], select').first();
+    const filterDropdown = page.locator('[data-testid="select-filter"], select').first();
     const count = await filterDropdown.count();
     
     if (count > 0) {
@@ -79,14 +79,14 @@ test.describe('@feature Layer 4: Admin Features', () => {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
       
-      const suspendButton = page.locator('[data-testid="suspend-button"]');
+      const suspendButton = page.locator('[data-testid="button-suspend"]');
       const suspendCount = await suspendButton.count();
       
       if (suspendCount > 0) {
         await suspendButton.click();
         
         // Confirm dialog appears
-        const confirmButton = page.locator('[data-testid="confirm-suspend-button"]');
+        const confirmButton = page.locator('[data-testid="button-confirm-suspend"]');
         const confirmCount = await confirmButton.count();
         
         if (confirmCount > 0) {
@@ -111,7 +111,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
       
-      const unsuspendButton = page.locator('[data-testid="unsuspend-button"]');
+      const unsuspendButton = page.locator('[data-testid="button-unsuspend"]');
       const unsuspendCount = await unsuspendButton.count();
       
       // If button exists, test it
@@ -140,7 +140,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
       if (tabCount > 0) {
         await subscriptionTab.click();
         
-        const changePlanButton = page.locator('[data-testid="change-plan-button"]');
+        const changePlanButton = page.locator('[data-testid="button-change-plan"]');
         const buttonCount = await changePlanButton.count();
         
         if (buttonCount > 0) {
@@ -163,12 +163,12 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(row).toBeVisible();
 
     // Cancel requires reason (we seed trialing; if no cancel button, the test is invalid).
-    const cancelButton = page.locator('[data-testid="cancel-subscription-button"]').first();
+    const cancelButton = page.locator('[data-testid="button-cancel-subscription"]').first();
     await expect(cancelButton).toBeVisible();
     await cancelButton.click();
 
     await expect(page.locator('[data-testid="cancel-subscription-panel"]')).toBeVisible();
-    const confirm = page.locator('[data-testid="confirm-cancel-subscription-button"]');
+    const confirm = page.locator('[data-testid="button-confirm-cancel-subscription"]');
     await expect(confirm).toBeDisabled();
     await page.fill('[data-testid="cancel-subscription-reason"]', 'Customer request');
     await expect(confirm).toBeEnabled();
@@ -188,7 +188,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     const paymentRow = page.locator('[data-testid="payment-row"]').first();
     await expect(paymentRow).toBeVisible();
 
-    const refundButton = page.locator('[data-testid="refund-button"]').first();
+    const refundButton = page.locator('[data-testid="button-refund"]').first();
     await expect(refundButton).toBeVisible();
     await refundButton.click();
 
@@ -198,7 +198,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(refundAmount).toBeVisible();
     await refundAmount.fill('10.00');
 
-    const confirmButton = page.locator('[data-testid="confirm-refund-button"]');
+    const confirmButton = page.locator('[data-testid="button-confirm-refund"]');
     await expect(confirmButton).toBeDisabled();
 
     await page.fill('[data-testid="refund-reason"]', 'Customer request');
@@ -226,7 +226,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
       if (tabCount > 0) {
         await notesTab.click();
         
-        const addNoteButton = page.locator('[data-testid="add-note-button"]');
+        const addNoteButton = page.locator('[data-testid="button-add-note"]');
         const buttonCount = await addNoteButton.count();
         
         if (buttonCount > 0) {
@@ -288,7 +288,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
           await deleteButton.click();
           
           // Confirm dialog appears
-          const confirmButton = page.locator('[data-testid="confirm-dialog-confirm"]');
+          const confirmButton = page.locator('[data-testid="button-confirm-dialog"]');
           await confirmButton.click();
           await assertToastMessage(page, /deleted|success/i);
         }
@@ -303,11 +303,11 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
     // Fill compose form (no skipping: requires real UI)
-    await page.locator('[data-testid="recipient-input"]').fill('test.parent@example.com');
-    await page.locator('[data-testid="subject-input"]').fill('Test Communication');
-    await page.locator('[data-testid="content-textarea"]').fill('Test message from E2E');
+    await page.locator('[data-testid="input-recipient"]').fill('test.parent@example.com');
+    await page.locator('[data-testid="input-subject"]').fill('Test Communication');
+    await page.locator('[data-testid="input-content"]').fill('Test message from E2E');
 
-    await page.locator('[data-testid="send-communication-button"]').click();
+    await page.locator('[data-testid="button-send-communication"]').click();
     await assertToastMessage(page, /sent|success/i);
 
     // Verify it appears in log table
@@ -324,7 +324,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
     // Create template
-    await page.locator('[data-testid="template-add-button"]').click();
+    await page.locator('[data-testid="button-template-add"]').click();
     await expect(page.locator('[data-testid="template-create-panel"]')).toBeVisible();
 
     const templateName = `Tpl ${Date.now()}`;
@@ -338,8 +338,8 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await page.locator('[data-testid="template-select"]').selectOption({ label: templateName });
     await expect(page.locator('[data-testid="template-hint"]')).toContainText(templateName);
 
-    await page.locator('[data-testid="recipient-input"]').fill('test.parent@example.com');
-    await page.locator('[data-testid="send-communication-button"]').click();
+    await page.locator('[data-testid="input-recipient"]').fill('test.parent@example.com');
+    await page.locator('[data-testid="button-send-communication"]').click();
     await assertToastMessage(page, /sent|success/i);
 
     // Verify log row includes templated subject and template name column
@@ -357,7 +357,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
     // Ensure a template exists to use for bulk send
-    await page.locator('[data-testid="template-add-button"]').click();
+    await page.locator('[data-testid="button-template-add"]').click();
     await expect(page.locator('[data-testid="template-create-panel"]')).toBeVisible();
     const templateName = `BulkTpl ${Date.now()}`;
     await page.locator('[data-testid="template-name"]').fill(templateName);
@@ -369,7 +369,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     // Create bulk send using template, targeting parents
     await page.locator('[data-testid="bulk-segment"]').selectOption('parent');
     await page.locator('[data-testid="bulk-template"]').selectOption({ label: templateName });
-    await page.locator('[data-testid="bulk-send-button"]').click();
+    await page.locator('[data-testid="button-bulk-send"]').click();
     await assertToastMessage(page, /bulk send created|created/i);
 
     // Verify a batch row appears
@@ -390,10 +390,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
     const subject = `Webhook ${Date.now()}`;
-    await page.locator('[data-testid="recipient-input"]').fill('test.parent@example.com');
-    await page.locator('[data-testid="subject-input"]').fill(subject);
-    await page.locator('[data-testid="content-textarea"]').fill('Webhook message');
-    await page.locator('[data-testid="send-communication-button"]').click();
+    await page.locator('[data-testid="input-recipient"]').fill('test.parent@example.com');
+    await page.locator('[data-testid="input-subject"]').fill(subject);
+    await page.locator('[data-testid="input-content"]').fill('Webhook message');
+    await page.locator('[data-testid="button-send-communication"]').click();
     await assertToastMessage(page, /sent|success/i);
 
     // Fetch newest log id via admin API
@@ -417,7 +417,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     expect(whRes.ok()).toBeTruthy();
 
     // Refresh logs UI and assert status updated
-    await page.locator('[data-testid="refresh-logs-button"]').click({ force: true });
+    await page.locator('[data-testid="button-refresh-logs"]').click({ force: true });
     const row = page.locator('[data-testid="communication-log-row"]').filter({ hasText: subject }).first();
     await expect(row).toContainText('opened', { timeout: 10_000 });
   });
@@ -429,15 +429,15 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(page.locator('[data-testid="admin-settings-page"]')).toBeVisible();
     await page.locator('[data-testid="admin-users-section"]').scrollIntoViewIfNeeded();
 
-    await page.locator('[data-testid="add-admin-button"]').click();
+    await page.locator('[data-testid="button-add-admin"]').click();
 
-    const email = `admin.${Date.now()}@scholaracle.com`;
-    await page.locator('[data-testid="admin-email"]').fill(email);
-    await page.locator('[data-testid="admin-name"]').fill('Test Admin');
-    await page.locator('[data-testid="admin-role"]').selectOption('admin');
-    await page.locator('[data-testid="admin-password"]').fill('Admin123!');
+    const email = `admin.${Date.now()}@scholarmancy.com`;
+    await page.locator('[data-testid="input-admin-email"]').fill(email);
+    await page.locator('[data-testid="input-admin-name"]').fill('Test Admin');
+    await page.locator('[data-testid="select-admin-role"]').selectOption('admin');
+    await page.locator('[data-testid="input-admin-password"]').fill('Admin123!');
 
-    await page.locator('[data-testid="admin-save-button"]').click();
+    await page.locator('[data-testid="button-admin-save"]').click();
     await assertToastMessage(page, /created|success/i);
 
     // Verify row appears
@@ -454,9 +454,9 @@ test.describe('@feature Layer 4: Admin Features', () => {
     const firstRow = page.locator('[data-testid="admin-user-row"]').first();
     await expect(firstRow).toBeVisible();
 
-    await firstRow.locator('[data-testid="edit-admin-button"]').click();
-    await page.locator('[data-testid="edit-admin-role"]').selectOption('support');
-    await page.locator('[data-testid="admin-update-button"]').click();
+    await firstRow.locator('[data-testid="button-edit-admin"]').click();
+    await page.locator('[data-testid="select-edit-admin-role"]').selectOption('support');
+    await page.locator('[data-testid="button-admin-update"]').click();
     await assertToastMessage(page, /updated|success/i);
   });
 });

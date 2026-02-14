@@ -16,8 +16,8 @@ import { authApi } from '@/lib/api/auth';
 export function UserMenu() {
   const router = useRouter();
 
-  const handleLogout = () => {
-    authApi.logout();
+  const handleLogout = async () => {
+    await authApi.logout();
     router.push('/login');
   };
 

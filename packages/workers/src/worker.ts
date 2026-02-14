@@ -1,8 +1,6 @@
 import { createServer } from 'http';
 import { MongoClient, type Db } from 'mongodb';
-import { MongoQueue } from '@scholaracle/agents';
-import { NotificationWorker } from '@scholaracle/agents';
-import { NotificationService } from '@scholaracle/agents';
+import { MongoQueue, NotificationWorker, NotificationService } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
 import { ParentNotificationGenerator } from '@scholaracle/agents';
 import { DeliveryRouter } from '@scholaracle/agents';
@@ -10,7 +8,7 @@ import { EmailDelivery } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
 import { PushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
-import { messaging, type messaging as MessagingType } from 'firebase-admin';
+import { UserRepository } from '@scholaracle/database';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import type { MailService } from '@sendgrid/mail';
@@ -45,7 +43,7 @@ function getSendGridConfig(config: IWorkerConfig): {
     fromEmail:
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
-      'notifications@scholaracle.com',
+      'notifications@scholarmancy.com',
     fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
   };
 }
@@ -69,22 +67,6 @@ function getTwilioConfig(config: IWorkerConfig): {
 }
 
 /**
- * Initialize Firebase messaging service.
- *
- * @returns Firebase messaging instance
- */
-function initializeFirebaseMessaging(): MessagingType.Messaging {
-  try {
-    return messaging();
-  } catch {
-    // Firebase not initialized - create a mock messaging instance
-    return {
-      send: async () => Promise.resolve('mock-message-id'),
-    } as unknown as MessagingType.Messaging;
-  }
-}
-
-/**
  * Initialize notification service with delivery services.
  *
  * @param config - Worker configuration
@@ -104,8 +86,7 @@ function initializeNotificationService(config: IWorkerConfig): NotificationServi
   const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
 
   const firebaseProjectId = config.firebaseProjectId ?? 'default';
-  const fcmMessaging = initializeFirebaseMessaging();
-  const pushDelivery = new PushDelivery({ projectId: firebaseProjectId }, fcmMessaging);
+  const pushDelivery = new PushDelivery({ projectId: firebaseProjectId });
   const inAppDelivery = new InAppDelivery();
 
   const deliveryRouter = new DeliveryRouter([
@@ -141,12 +122,23 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Initialize notification service
   const notificationService = initializeNotificationService(config);
 
+  // Resolve parent userId to email/phone for delivery
+  const userRepository = new UserRepository(database);
+  const resolveParentRecipients = async (userId: string): Promise<{ parentEmail?: string; parentPhone?: string }> => {
+    const user = await userRepository.findById(userId);
+    return {
+      parentEmail: user?.email,
+      parentPhone: user?.phone,
+    };
+  };
+
   // Initialize worker
   const pollIntervalMs = config.pollIntervalMs ?? 1000;
   const concurrency = config.concurrency ?? 10;
   const notificationWorker = new NotificationWorker(mongoQueue, notificationService, {
     pollIntervalMs,
     concurrency,
+    resolveParentRecipients,
   });
 
   // Start worker

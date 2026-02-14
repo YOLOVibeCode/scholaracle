@@ -24,7 +24,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
       await navigateToSidebar(page, 'Dashboard');
       await expect(page).toHaveURL(/\/admin\/dashboard/);
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -51,7 +51,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
         await expect(page).toHaveURL('/admin/payments');
       }
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -199,7 +199,7 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
     await loginAsRole('super_admin');
     await page.goto('/admin/customers');
     
-    const searchInput = page.locator('[data-testid="search-input"], input[placeholder*="Search"]');
+    const searchInput = page.locator('[data-testid="input-search"], input[placeholder*="Search"]');
     const count = await searchInput.count();
     
     if (count > 0) {

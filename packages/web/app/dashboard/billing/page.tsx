@@ -132,7 +132,7 @@ export default function BillingPage() {
           {isFreePlan ? (
             <Button
               onClick={() => handleUpgrade('starter', 'monthly')}
-              data-testid="upgrade-button"
+              data-testid="button-upgrade"
             >
               Upgrade to Starter
             </Button>
@@ -141,7 +141,7 @@ export default function BillingPage() {
               variant="outline"
               onClick={handleManageBilling}
               disabled={isPortalLoading}
-              data-testid="manage-billing-button"
+              data-testid="button-manage-billing"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               {isPortalLoading ? 'Opening...' : 'Manage Billing'}

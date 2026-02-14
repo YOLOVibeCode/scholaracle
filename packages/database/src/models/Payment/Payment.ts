@@ -45,7 +45,7 @@ export interface IPaymentData {
   readonly expiryMonth?: number;
   readonly expiryYear?: number;
 
-  // Stripe Integration (deprecated - use Square)
+  // Legacy Stripe integration (Square is primary)
   readonly stripePaymentIntentId?: string;
   readonly stripeChargeId?: string;
   readonly stripeInvoiceId?: string;

@@ -11,6 +11,14 @@ import { SubscriptionRepository } from '@scholaracle/database';
 import { AuditLogRepository } from '@scholaracle/database';
 import { CommunicationLogRepository } from '@scholaracle/database';
 import type { AdminRole } from '@scholaracle/database';
+import {
+  DEMO_USER,
+  DEMO_STUDENTS,
+  buildDemoCourseDocs,
+  buildDemoAssignmentDocs,
+  buildDemoEventSeries,
+  buildDemoAlerts,
+} from './demo-data';
 
 export interface ISeedRouterConfig {
   readonly database: Db;
@@ -37,31 +45,31 @@ const TEST_USERS = {
     name: 'Test Parent 3',
   },
   super_admin: {
-    email: 'super@scholaracle.com',
+    email: 'super@scholarmancy.com',
     password: 'SuperAdmin123!',
     name: 'Super Admin',
     role: 'super_admin' as AdminRole,
   },
   admin: {
-    email: 'admin@scholaracle.com',
+    email: 'admin@scholarmancy.com',
     password: 'Admin123!',
     name: 'Admin User',
     role: 'admin' as AdminRole,
   },
   support: {
-    email: 'support@scholaracle.com',
+    email: 'support@scholarmancy.com',
     password: 'Support123!',
     name: 'Support User',
     role: 'support' as AdminRole,
   },
   billing: {
-    email: 'billing@scholaracle.com',
+    email: 'billing@scholarmancy.com',
     password: 'Billing123!',
     name: 'Billing User',
     role: 'billing' as AdminRole,
   },
   analyst: {
-    email: 'analyst@scholaracle.com',
+    email: 'analyst@scholarmancy.com',
     password: 'Analyst123!',
     name: 'Analyst User',
     role: 'analyst' as AdminRole,
@@ -551,6 +559,156 @@ async function handleSeed(
   }
 }
 
+function isDemoAllowed(): boolean {
+  const demoEnabled = process.env['DEMO_ENABLED'] === 'true';
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  return demoEnabled || nodeEnv !== 'production';
+}
+
+/**
+ * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
+ */
+async function handleDemoSeed(req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
+  try {
+    if (!isDemoAllowed()) {
+      res.status(403).json({ success: false, error: 'Demo is not enabled' });
+      return;
+    }
+
+    const userRepository = new UserRepository(config.database);
+    const studentRepository = new StudentRepository(config.database);
+    const alertRepository = new AlertRepository(config.database);
+    const authService = new AuthService(config.database);
+
+    let user = await userRepository.findByEmail(DEMO_USER.email);
+    if (!user) {
+      const result = await authService.register(
+        DEMO_USER.email,
+        DEMO_USER.password,
+        DEMO_USER.name
+      );
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error ?? 'Failed to create demo user' });
+        return;
+      }
+      user = await userRepository.findByEmail(DEMO_USER.email);
+    }
+    if (!user?._id) {
+      res.status(500).json({ success: false, error: 'Demo user not found after create' });
+      return;
+    }
+
+    const userId = user._id.toString();
+
+    let students = await studentRepository.findByUserId(userId);
+    const existingNames = new Set(students.map((s) => s.name));
+    for (const demoStudent of DEMO_STUDENTS) {
+      if (!existingNames.has(demoStudent.name)) {
+        const created = await studentRepository.create({
+          userId: user._id,
+          name: demoStudent.name,
+          grade: demoStudent.grade,
+          studentId: demoStudent.studentId,
+        });
+        students.push(created);
+        existingNames.add(demoStudent.name);
+      }
+    }
+
+    const emma = students.find((s) => s.studentId === DEMO_STUDENTS[0].studentId);
+    const liam = students.find((s) => s.studentId === DEMO_STUDENTS[1].studentId);
+    const emmaId = emma?._id?.toString();
+    const liamId = liam?._id?.toString();
+
+    const assignmentsColl = config.database.collection('slc_assignments');
+    const coursesColl = config.database.collection('slc_courses');
+    const eventSeriesColl = config.database.collection('slc_event_series');
+
+    const existingAssignments = await assignmentsColl.countDocuments({ userId, provider: 'demo' });
+    const baseDate = new Date();
+
+    if (existingAssignments === 0) {
+      const courseDocs = buildDemoCourseDocs(userId);
+      await coursesColl.insertMany(courseDocs);
+      const assignmentDocs = buildDemoAssignmentDocs(userId, baseDate);
+      await assignmentsColl.insertMany(assignmentDocs);
+      const eventDocs = buildDemoEventSeries(userId, baseDate);
+      await eventSeriesColl.insertMany(eventDocs);
+    }
+
+    if (emmaId && liamId) {
+      const existingAlerts = await config.database.collection('alerts').countDocuments({
+        userId,
+        studentId: { $in: [emmaId, liamId] },
+      });
+      if (existingAlerts === 0) {
+        const alertDocs = buildDemoAlerts(userId, emmaId, liamId);
+        for (const a of alertDocs) {
+          await alertRepository.create({
+            studentId: a.studentId,
+            userId: a.userId,
+            type: a.type,
+            severity: a.severity,
+            message: a.message,
+            relatedData: a.relatedData,
+            acknowledged: a.acknowledged,
+          });
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Demo data ready',
+      demoEmail: DEMO_USER.email,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+/**
+ * POST /api/seed/demo/reset — Wipe demo user data and re-seed.
+ */
+async function handleDemoReset(req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
+  try {
+    if (!isDemoAllowed()) {
+      res.status(403).json({ success: false, error: 'Demo is not enabled' });
+      return;
+    }
+
+    const userRepository = new UserRepository(config.database);
+    const studentRepository = new StudentRepository(config.database);
+    const user = await userRepository.findByEmail(DEMO_USER.email);
+    if (!user?._id) {
+      res.status(200).json({ success: true, message: 'No demo user to reset' });
+      return;
+    }
+
+    const userId = user._id.toString();
+
+    await config.database.collection('slc_assignments').deleteMany({ userId });
+    await config.database.collection('slc_courses').deleteMany({ userId });
+    await config.database.collection('slc_event_series').deleteMany({ userId });
+    await config.database.collection('alerts').deleteMany({ userId });
+
+    const students = await studentRepository.findByUserId(userId);
+    for (const s of students) {
+      if (s._id) await studentRepository.delete(s._id.toString());
+    }
+
+    await handleDemoSeed(req, res, config);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
 /**
  * Create seed router.
  *
@@ -568,6 +726,22 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post('/', (req: Request, res: Response) => {
     void handleSeed(req, res, config);
+  });
+
+  /**
+   * POST /api/seed/demo
+   * Ensure demo user and realistic SLC data exist (for "Try Demo").
+   */
+  router.post('/demo', (req: Request, res: Response) => {
+    void handleDemoSeed(req, res, config);
+  });
+
+  /**
+   * POST /api/seed/demo/reset
+   * Wipe demo user's data and re-seed from scratch.
+   */
+  router.post('/demo/reset', (req: Request, res: Response) => {
+    void handleDemoReset(req, res, config);
   });
 
   return router;

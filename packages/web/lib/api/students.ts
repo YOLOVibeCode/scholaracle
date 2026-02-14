@@ -5,12 +5,72 @@ export interface IStudent {
   readonly userId: string;
   readonly name: string;
   readonly grade: string;
-  readonly school: string;
+  readonly school?: string;
+  readonly studentId?: string;
   readonly stats?: {
     readonly currentGPA?: number;
     readonly totalAssignments?: number;
     readonly missingAssignments?: number;
   };
+  readonly dataSources?: readonly unknown[];
+  readonly alertPreferences?: {
+    readonly useCustomSettings?: boolean;
+    readonly gradeDrop?: number;
+    readonly lowGradeThreshold?: number;
+    readonly frequency?: string;
+  };
+}
+
+export interface IStudentAlert {
+  readonly id: string;
+  readonly studentId: string;
+  readonly type: string;
+  readonly severity: string;
+  readonly message: string;
+  readonly acknowledged: boolean;
+  readonly acknowledgedAt?: string;
+  readonly createdAt: string;
+}
+
+export type AssignmentStatus = 'missing' | 'submitted' | 'graded' | 'late' | 'unknown';
+
+export interface ICourseAssignment {
+  readonly externalId: string;
+  readonly title: string;
+  readonly dueAt?: string;
+  readonly status: AssignmentStatus;
+  readonly pointsPossible?: number;
+  readonly pointsEarned?: number;
+  readonly isOverdue: boolean;
+  readonly weight?: number;
+}
+
+export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical';
+
+export interface ICourseGrade {
+  readonly courseExternalId: string;
+  readonly courseName: string;
+  readonly grade: number;
+  readonly letterGrade: string;
+  readonly totalAssignments: number;
+  readonly gradedAssignments: number;
+  readonly missingAssignments: number;
+  readonly lateAssignments: number;
+  readonly totalPointsPossible: number;
+  readonly totalPointsEarned: number;
+  readonly recentTrend: 'improving' | 'stable' | 'declining';
+  readonly riskLevel: RiskLevel;
+  readonly riskExplanation?: string;
+  readonly assignments: readonly ICourseAssignment[];
+}
+
+export interface IStudentGradesResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly overallGPA: number;
+  readonly courseGrades: readonly ICourseGrade[];
+  readonly atRiskCourses: number;
+  readonly aiOverview?: string;
 }
 
 export interface ICreateStudentRequest {
@@ -62,12 +122,30 @@ export const studentsApi = {
   /**
    * Update a student.
    */
-  async update(id: string, updates: Partial<ICreateStudentRequest>): Promise<IStudent | null> {
+  async update(
+    id: string,
+    updates: Partial<ICreateStudentRequest> & {
+      studentId?: string;
+      alertPreferences?: IStudent['alertPreferences'];
+    }
+  ): Promise<IStudent | null> {
     try {
       return await apiClient.put<IStudent>(`/students/${id}`, updates);
     } catch (error) {
       console.error('Failed to update student:', error);
       return null;
+    }
+  },
+
+  /**
+   * Get alerts for a student.
+   */
+  async getAlerts(studentId: string): Promise<readonly IStudentAlert[]> {
+    try {
+      return await apiClient.get<readonly IStudentAlert[]>(`/students/${studentId}/alerts`);
+    } catch (error) {
+      console.error('Failed to load student alerts:', error);
+      return [];
     }
   },
 
@@ -81,6 +159,18 @@ export const studentsApi = {
     } catch (error) {
       console.error('Failed to delete student:', error);
       return false;
+    }
+  },
+
+  /**
+   * Get per-course grades and assignment breakdown for a student.
+   */
+  async getGrades(id: string): Promise<IStudentGradesResponse | null> {
+    try {
+      return await apiClient.get<IStudentGradesResponse>(`/students/${id}/grades`);
+    } catch (error) {
+      console.error('Failed to load student grades:', error);
+      return null;
     }
   },
 };

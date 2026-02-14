@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, GraduationCap, Edit, Trash2 } from 'lucide-react';
+import { Plus, GraduationCap, Edit, Trash2, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
@@ -60,7 +60,7 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <Button asChild data-testid="add-student-button">
+        <Button asChild data-testid="button-add-student">
           <Link href="/dashboard/students/new">
             <Plus className="mr-2 h-4 w-4" />
             Add Student
@@ -83,7 +83,7 @@ export default function StudentsPage() {
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Get started by adding your first student
             </p>
-            <Button asChild data-testid="add-student-button">
+            <Button asChild data-testid="button-add-student">
               <Link href="/dashboard/students/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Student
@@ -131,8 +131,14 @@ export default function StudentsPage() {
                     )}
                   </div>
                 )}
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" asChild data-testid="edit-student-button">
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
+                    <Link href={`/dashboard/students/${student.id}/view`}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      View as student
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild data-testid="button-edit-student">
                     <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
                       <Edit className="mr-2 h-4 w-4" />
                       Edit
@@ -143,7 +149,7 @@ export default function StudentsPage() {
                     size="sm"
                     onClick={() => handleDeleteClick(student.id)}
                     className="text-red-600 hover:text-red-700"
-                    data-testid="delete-student-button"
+                    data-testid="button-delete-student"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete

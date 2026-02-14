@@ -136,7 +136,7 @@ export function CustomerNotesTab({ customerId }: ICustomerNotesTabProps) {
               <Label htmlFor="note-internal">Internal only</Label>
             </div>
           </div>
-          <Button onClick={handleCreateNote} data-testid="add-note-button">
+          <Button onClick={handleCreateNote} data-testid="button-add-note">
             Add Note
           </Button>
         </CardContent>

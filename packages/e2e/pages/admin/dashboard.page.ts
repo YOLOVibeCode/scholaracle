@@ -26,8 +26,8 @@ export class AdminDashboardPage {
     this.reportsLink = page.locator('a[href="/admin/reports"], [data-testid="reports-link"]');
     this.settingsLink = page.locator('a[href="/admin/settings"], [data-testid="settings-link"]');
     this.auditLogsLink = page.locator('a[href="/admin/audit-logs"], [data-testid="audit-logs-link"]');
-    this.logoutButton = page.locator('[data-testid="logout-button"], button:has-text("Logout")');
-    this.kpiCards = page.locator('[data-testid="kpi-card"], .stat-card');
+    this.logoutButton = page.locator('[data-testid="button-logout"], button:has-text("Logout")');
+    this.kpiCards = page.locator('.stat-card, [data-testid="admin-header"] ~ div');
   }
 
   async goto(): Promise<void> {

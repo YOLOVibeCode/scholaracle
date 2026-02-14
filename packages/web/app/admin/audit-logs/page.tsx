@@ -148,14 +148,14 @@ export default function AdminAuditLogsPage() {
             data-testid="audit-filter-adminEmail"
           />
           <div className="md:col-span-3 flex gap-2">
-            <Button variant="outline" onClick={() => refresh()} data-testid="audit-refresh-button">
+            <Button variant="outline" onClick={() => refresh()} data-testid="button-audit-refresh">
               Refresh
             </Button>
             <Button
               variant="outline"
               onClick={() => void handleExport()}
               disabled={isExporting}
-              data-testid="audit-export-button"
+              data-testid="button-audit-export"
             >
               {isExporting ? 'Exporting…' : 'Export CSV'}
             </Button>
@@ -167,7 +167,7 @@ export default function AdminAuditLogsPage() {
                 setAdminEmail('');
                 setPage(1);
               }}
-              data-testid="audit-clear-button"
+              data-testid="button-audit-clear"
             >
               Clear
             </Button>

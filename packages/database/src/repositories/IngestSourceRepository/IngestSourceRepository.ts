@@ -11,6 +11,10 @@ export interface IIngestSourceReader {
 
 export interface IIngestSourceWriter {
   upsert(source: IIngestSourceData): Promise<IngestSource>;
+  deleteByUserIdAndSourceId(
+    userId: ObjectId | string,
+    sourceId: string
+  ): Promise<boolean>;
 }
 
 export class IngestSourceRepository implements IIngestSourceReader, IIngestSourceWriter {
@@ -54,5 +58,13 @@ export class IngestSourceRepository implements IIngestSourceReader, IIngestSourc
     const doc = await this._collection.findOne({ userId, sourceId });
     if (!doc) return null;
     return new IngestSource(doc, doc._id as unknown as ObjectId);
+  }
+
+  async deleteByUserIdAndSourceId(
+    userId: ObjectId | string,
+    sourceId: string
+  ): Promise<boolean> {
+    const result = await this._collection.deleteOne({ userId, sourceId });
+    return result.deletedCount === 1;
   }
 }

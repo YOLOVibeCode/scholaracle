@@ -14,7 +14,7 @@ describe('EmailDelivery', () => {
 
   const testConfig = {
     apiKey: 'test-api-key',
-    fromEmail: 'notifications@scholaracle.com',
+    fromEmail: 'notifications@scholarmancy.com',
     fromName: 'Scholaracle',
   };
 

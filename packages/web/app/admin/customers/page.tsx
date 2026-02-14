@@ -93,7 +93,7 @@ export default function AdminCustomersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                data-testid="search-input"
+                data-testid="input-search"
                 placeholder="Search by name or email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -101,7 +101,7 @@ export default function AdminCustomersPage() {
                 className="pl-10"
               />
             </div>
-            <Button onClick={handleSearch} data-testid="search-button">Search</Button>
+            <Button onClick={handleSearch} data-testid="button-search">Search</Button>
           </div>
         </CardHeader>
         <CardContent>

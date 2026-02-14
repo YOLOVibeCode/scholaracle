@@ -308,7 +308,7 @@ export default function AdminCommunicationsPage() {
               <Input
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
-                data-testid="recipient-input"
+                data-testid="input-recipient"
                 placeholder="customer@example.com"
                 disabled={isSending}
               />
@@ -318,7 +318,7 @@ export default function AdminCommunicationsPage() {
               <Input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                data-testid="subject-input"
+                data-testid="input-subject"
                 placeholder="Subject"
                 disabled={isSending || isUsingTemplate}
               />
@@ -329,17 +329,17 @@ export default function AdminCommunicationsPage() {
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              data-testid="content-textarea"
+              data-testid="input-content"
               placeholder="Write your message…"
               disabled={isSending || isUsingTemplate}
               className="min-h-[120px]"
             />
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleSend} disabled={isSending} data-testid="send-communication-button">
+            <Button onClick={handleSend} disabled={isSending} data-testid="button-send-communication">
               {isSending ? 'Sending…' : 'Send'}
             </Button>
-            <Button variant="outline" onClick={() => refresh()} disabled={isSending} data-testid="refresh-logs-button">
+            <Button variant="outline" onClick={() => refresh()} disabled={isSending} data-testid="button-refresh-logs">
               Refresh logs
             </Button>
           </div>
@@ -352,7 +352,7 @@ export default function AdminCommunicationsPage() {
             <CardTitle>Templates</CardTitle>
             <CardDescription>Reusable messages for common scenarios.</CardDescription>
           </div>
-          <Button onClick={openCreateTemplate} data-testid="template-add-button">
+          <Button onClick={openCreateTemplate} data-testid="button-template-add">
             Add Template
           </Button>
         </CardHeader>
@@ -498,7 +498,7 @@ export default function AdminCommunicationsPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => void handleBulkSend()} disabled={isBulkSending} data-testid="bulk-send-button">
+            <Button onClick={() => void handleBulkSend()} disabled={isBulkSending} data-testid="button-bulk-send">
               {isBulkSending ? 'Creating…' : 'Create Bulk Send'}
             </Button>
             <Button variant="outline" onClick={() => refreshBatches()} disabled={isBulkSending} data-testid="bulk-refresh">

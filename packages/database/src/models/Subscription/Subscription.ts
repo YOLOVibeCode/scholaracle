@@ -132,7 +132,7 @@ export interface ISubscriptionData {
   readonly nextPaymentDate?: Date;
   readonly nextPaymentAmount?: number;
 
-  // Stripe Integration (deprecated - use Square)
+  // Legacy Stripe integration (Square is primary)
   readonly stripeSubscriptionId?: string;
   readonly stripeCustomerId?: string;
 

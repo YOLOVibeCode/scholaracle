@@ -29,6 +29,7 @@ export interface IUserPreferences {
     readonly prioritizeHighImpact?: boolean;
     readonly emphasizeWeakSubjects?: boolean;
     readonly celebrateWins?: boolean;
+    readonly enabledTypes?: Record<string, { readonly enabled: boolean; readonly severity: string }>;
   };
 }
 
@@ -47,10 +48,15 @@ export interface IUserSubscription {
 
 export interface IUserData {
   readonly email: string;
+  /** Required for password login; OAuth-only users get a random placeholder hash. */
   readonly passwordHash: string;
   readonly name: string;
   readonly phone?: string;
   readonly phoneVerified?: boolean;
+  /** Whether the user gave explicit consent to receive SMS alerts at registration. */
+  readonly smsConsent?: boolean;
+  /** Denormalized list of linked OAuth providers (e.g. ['google', 'apple']). */
+  readonly oauthProviders?: readonly string[];
   readonly preferences?: IUserPreferences;
   readonly devices?: readonly IUserDevice[];
   readonly subscription?: IUserSubscription;
@@ -72,6 +78,10 @@ export class User {
   public readonly name: string;
   public readonly phone?: string;
   public readonly phoneVerified: boolean;
+  /** Whether the user gave explicit consent to receive SMS alerts at registration. */
+  public readonly smsConsent: boolean;
+  /** Denormalized list of linked OAuth providers. */
+  public readonly oauthProviders: readonly string[];
   public readonly preferences: IUserPreferences;
   public readonly devices: readonly IUserDevice[];
   public readonly subscription: IUserSubscription;
@@ -87,9 +97,20 @@ export class User {
     this.email = data.email;
     this.passwordHash = data.passwordHash;
     this.name = data.name;
+    this.oauthProviders = data.oauthProviders ?? [];
     this.phone = data.phone;
     this.phoneVerified = data.phoneVerified ?? false;
-    this.preferences = data.preferences ?? this._getDefaultPreferences();
+    this.smsConsent = data.smsConsent ?? false;
+    const defaultPrefs = this._getDefaultPreferences();
+    if (!data.preferences && this.smsConsent) {
+      // When user consented to SMS at registration, enable SMS notifications by default
+      this.preferences = {
+        ...defaultPrefs,
+        notifications: { ...defaultPrefs.notifications, sms: true },
+      };
+    } else {
+      this.preferences = data.preferences ?? defaultPrefs;
+    }
     this.devices = data.devices ?? [];
     this.subscription = data.subscription ?? {
       plan: 'free',

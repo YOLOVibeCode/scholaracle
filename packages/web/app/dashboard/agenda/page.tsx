@@ -1,10 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { agendaApi, type IAgendaItem, type IAgendaResponse } from '@/lib/api/agenda';
-import { Button } from '@/components/ui/button';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
+import {
+  AgendaDateGroup,
+  AgendaFilterBar,
+  groupItemsByDate,
+  filterItems,
+} from '@/components/dashboard/agenda';
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -15,9 +20,12 @@ function startOfDay(d: Date): Date {
 export default function AgendaPage() {
   const range = useMemo(() => {
     const from = startOfDay(new Date());
-    const to = new Date(from.getTime() + 7 * 24 * 60 * 60_000);
+    const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
     return { from, to };
   }, []);
+
+  const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
   const { data: agendaResponse, isLoading: loading, error, retry, refresh } = useAsyncData<IAgendaResponse>(
     async () => {
@@ -30,87 +38,120 @@ export default function AgendaPage() {
     { retryCount: 2, retryDelay: 1000 }
   );
 
-  const items = agendaResponse?.items ?? [];
-  const hasItems = items.length > 0;
+  const rawItems = agendaResponse?.items ?? [];
+  const filteredItems = useMemo(
+    () => filterItems(rawItems, selectedLabels, selectedStudents),
+    [rawItems, selectedLabels, selectedStudents]
+  );
+  const grouped = useMemo(() => groupItemsByDate(filteredItems), [filteredItems]);
+  const hasItems = rawItems.length > 0;
 
-  const handleSnooze = async (id: string) => {
-    // id is `${type}:${itemKey}`
-    const [type, ...rest] = id.split(':');
-    const itemType = (type as 'assignment' | 'event_occurrence') ?? 'assignment';
-    const itemKey = rest.join(':');
-    const snoozedUntil = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+  const handleSnooze = useCallback(
+    async (id: string) => {
+      const [type, ...rest] = id.split(':');
+      const itemType = (type as 'assignment' | 'event_occurrence') ?? 'assignment';
+      const itemKey = rest.join(':');
+      const snoozedUntil = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+      try {
+        await agendaApi.snooze({ itemType, itemKey, snoozedUntil, scope: 'occurrence' });
+        refresh();
+      } catch {
+        // Error handling is done by the hook
+      }
+    },
+    [refresh]
+  );
 
-    try {
-      await agendaApi.snooze({ itemType, itemKey, snoozedUntil, scope: 'occurrence' });
-      refresh(); // Refresh the agenda after snoozing
-    } catch (err) {
-      // Error handling is done by the hook
-      console.error('Failed to snooze item:', err);
-    }
-  };
+  const handleToggleLabel = useCallback((label: string) => {
+    setSelectedLabels((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }, []);
+
+  const handleToggleStudent = useCallback((student: string) => {
+    setSelectedStudents((prev) => {
+      const next = new Set(prev);
+      if (next.has(student)) next.delete(student);
+      else next.add(student);
+      return next;
+    });
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setSelectedLabels(new Set());
+    setSelectedStudents(new Set());
+  }, []);
 
   return (
     <div className="space-y-4" data-testid="agenda-page">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Agenda</h1>
-        <p className="text-gray-600 dark:text-gray-400">Next 7 days across all children and schools.</p>
+        <p className="text-muted-foreground">
+          Next 14 days across all children and schools.
+        </p>
       </div>
 
-      {/* Show a full loading skeleton only on initial load (no data yet). Keep stale data visible during refresh for better UX/stability. */}
       {loading && !hasItems && (
         <div data-testid="agenda-loading">
           <LoadingSkeleton variant="list" count={5} />
         </div>
       )}
       {error && !hasItems && (
-        <ErrorDisplay error={error} title="Failed to load agenda" onRetry={retry} data-testid="agenda-error" />
+        <ErrorDisplay
+          error={error}
+          title="Failed to load agenda"
+          onRetry={retry}
+          data-testid="agenda-error"
+        />
       )}
 
-      {/* If we have existing items, keep them visible even if loading or error occurs. */}
       {(hasItems || (!loading && !error)) && (
-        <div className="space-y-2" data-testid="agenda-list">
+        <>
           {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200" data-testid="agenda-error-inline">
-              Failed to refresh agenda: {error}
+            <div
+              className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+              data-testid="agenda-error-inline"
+            >
+              Failed to refresh agenda: {error.message}
             </div>
           )}
-          {items.length === 0 ? (
-            <div className="text-sm text-gray-600" data-testid="agenda-empty">
-              No upcoming items.
-            </div>
-          ) : (
-            items.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between rounded-md border p-3"
-                data-testid="agenda-item"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{item.title}</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {item.courseName && (
-                      <span className="font-medium text-gray-700 dark:text-gray-300">{item.courseName}</span>
-                    )}
-                    {item.courseName && ' • '}
-                    {new Date(item.timeAt).toLocaleString()}
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSnooze(item.id)}
-                  data-testid="agenda-snooze"
-                  className="ml-4"
-                >
-                  Snooze 1d
-                </Button>
+
+          <AgendaFilterBar
+            items={rawItems}
+            selectedLabels={selectedLabels}
+            selectedStudents={selectedStudents}
+            onToggleLabel={handleToggleLabel}
+            onToggleStudent={handleToggleStudent}
+            onClearFilters={handleClearFilters}
+          />
+
+          <div className="space-y-6" data-testid="agenda-list">
+            {filteredItems.length === 0 ? (
+              <div className="text-muted-foreground text-sm" data-testid="agenda-empty">
+                {rawItems.length === 0
+                  ? 'No upcoming items.'
+                  : 'No items match the current filters.'}
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              grouped.map(
+                (group) =>
+                  group.items.length > 0 && (
+                    <AgendaDateGroup
+                      key={group.label}
+                      label={group.label}
+                      items={group.items}
+                      onSnooze={handleSnooze}
+                      onReminderSent={refresh}
+                    />
+                  )
+              )
+            )}
+          </div>
+        </>
       )}
     </div>
   );
 }
-
-

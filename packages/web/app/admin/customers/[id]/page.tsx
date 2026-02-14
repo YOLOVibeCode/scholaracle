@@ -144,7 +144,7 @@ export default function AdminCustomerDetailPage() {
               <button
                 className="rounded-md border px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-900"
                 onClick={handleImpersonate}
-                data-testid="impersonate-button"
+                data-testid="button-impersonate"
               >
                 Login as user
               </button>

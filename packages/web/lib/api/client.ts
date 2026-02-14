@@ -1,4 +1,27 @@
-const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3000/api';
+const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
+
+const REFRESH_TOKEN_KEY = 'refresh_token';
+const REMEMBER_ME_KEY = 'remember_me';
+
+/** Seconds before token expiry at which we trigger a proactive background refresh. */
+const PROACTIVE_REFRESH_THRESHOLD_SEC = 2 * 60; // 2 minutes
+
+/**
+ * Decode JWT payload without verification (browser-safe, no crypto needed).
+ * Returns the `exp` claim in seconds or null.
+ */
+function getTokenExp(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
+    const json = typeof atob !== 'undefined' ? atob(base64) : '';
+    const payload = JSON.parse(json) as { exp?: number };
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface IApiError {
   readonly success: false;
@@ -28,10 +51,13 @@ export class ApiClientError extends Error {
 
 /**
  * API client for making requests to the backend.
+ * On 401, attempts to refresh the access token and retries the request once.
+ * Concurrent 401s share a single in-flight refresh (request queuing); after refresh completes, each request retries once.
  */
 export class ApiClient {
   private readonly _baseUrl: string;
   private _token: string | null = null;
+  private _refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this._baseUrl = baseUrl;
@@ -53,6 +79,99 @@ export class ApiClient {
    */
   public getToken(): string | null {
     return this._token;
+  }
+
+  /**
+   * Set refresh token. When useSessionStorage is true (session-only), store in sessionStorage; otherwise localStorage.
+   */
+  public setRefreshToken(token: string | null, useSessionStorage?: boolean): void {
+    if (typeof window !== 'undefined') {
+      const session = useSessionStorage ?? (localStorage.getItem(REMEMBER_ME_KEY) === 'false');
+      const storage = session ? sessionStorage : localStorage;
+      if (token) storage.setItem(REFRESH_TOKEN_KEY, token);
+      else {
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+      }
+    }
+  }
+
+  /**
+   * Get refresh token from the storage indicated by remember_me (localStorage or sessionStorage).
+   */
+  public getRefreshToken(): string | null {
+    if (typeof window !== 'undefined') {
+      const useSessionStorage = localStorage.getItem(REMEMBER_ME_KEY) === 'false';
+      const storage = useSessionStorage ? sessionStorage : localStorage;
+      return storage.getItem(REFRESH_TOKEN_KEY);
+    }
+    return null;
+  }
+
+  /**
+   * Attempt to refresh access token. Returns true if new token was set.
+   * Sends credentials and rememberMe so cookie and storage stay in sync.
+   */
+  private async _tryRefresh(): Promise<boolean> {
+    const refreshToken = this.getRefreshToken();
+    const rememberMe = typeof window !== 'undefined' && localStorage.getItem(REMEMBER_ME_KEY) !== 'false';
+
+    try {
+      const response = await fetch(`${this._baseUrl}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refreshToken ?? undefined, rememberMe }),
+      });
+
+      if (!response.ok) return false;
+
+      const data = (await response.json()) as {
+        success?: boolean;
+        token?: string;
+        refreshToken?: string;
+        rememberMe?: boolean;
+      };
+      if (!data.success || !data.token) return false;
+
+      this.setToken(data.token);
+      const useSessionStorage = data.rememberMe === false;
+      if (data.refreshToken) this.setRefreshToken(data.refreshToken, useSessionStorage);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_token', data.token);
+        if (data.rememberMe !== undefined) {
+          localStorage.setItem(REMEMBER_ME_KEY, useSessionStorage ? 'false' : 'true');
+        }
+        const maxAge = 15 * 60; // 15 min in seconds
+        document.cookie = `auth_token=${data.token}; path=/; max-age=${maxAge}; SameSite=Lax`;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Proactively refresh the access token in the background if it is about to expire.
+   * This is a fire-and-forget call that does not block the current request.
+   */
+  private _maybeProactiveRefresh(): void {
+    if (typeof window === 'undefined') return;
+    const token = this._token ?? localStorage.getItem('auth_token');
+    if (!token) return;
+
+    const exp = getTokenExp(token);
+    if (exp == null) return;
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (exp > nowSec && exp - nowSec < PROACTIVE_REFRESH_THRESHOLD_SEC) {
+      // Token is valid but close to expiry – refresh in the background
+      if (!this._refreshPromise) {
+        this._refreshPromise = this._tryRefresh().finally(() => {
+          this._refreshPromise = null;
+        });
+      }
+    }
   }
 
   /**
@@ -145,10 +264,35 @@ export class ApiClient {
     }
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      const fetchOpts = { ...options, headers, credentials: 'include' as RequestCredentials };
+      let response = await fetch(url, fetchOpts);
+
+      if (response.status === 401 && typeof window !== 'undefined' && !useAdminToken) {
+        if (!this._refreshPromise) {
+          this._refreshPromise = this._tryRefresh().finally(() => {
+            this._refreshPromise = null;
+          });
+        }
+        const refreshed = await this._refreshPromise;
+        if (refreshed) {
+          const newToken = this.getToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+          if (newToken) {
+            headers['Authorization'] = `Bearer ${newToken}`;
+            response = await fetch(url, { ...options, headers, credentials: 'include' });
+          }
+        }
+        if (response.status === 401) {
+          this._token = null;
+          this.setRefreshToken(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('auth_token');
+            sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+            document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
+            document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+            window.location.href = '/login?reason=session_expired';
+          }
+        }
+      }
 
       if (!response.ok) {
         let errorData: Partial<IApiError> | null = null;
@@ -162,6 +306,9 @@ export class ApiClient {
         const code = errorData?.code;
         throw new ApiClientError(message, response.status, code, errorData);
       }
+
+      // After a successful response, proactively refresh if the token is near expiry
+      this._maybeProactiveRefresh();
 
       return (await response.json()) as T;
     } catch (error) {

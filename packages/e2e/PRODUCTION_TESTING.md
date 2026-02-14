@@ -12,8 +12,8 @@ This guide explains how to run E2E tests against production, staging, or any env
 
 | Variable | Description | Default (Local) | Example (Production) |
 |----------|-------------|-----------------|---------------------|
-| `BASE_URL` | Web application URL | `http://localhost:2800` | `https://app.scholaracle.com` |
-| `API_BASE_URL` | API server URL | `http://localhost:2801` | `https://api.scholaracle.com` |
+| `BASE_URL` | Web application URL | `http://localhost:2800` | `https://app.scholarmancy.com` |
+| `API_BASE_URL` | API server URL | `http://localhost:2801` | `https://api.scholarmancy.com` |
 
 ---
 
@@ -45,8 +45,8 @@ make test-up  # Starts MongoDB, MailHog, API
 
 ```bash
 cd packages/e2e
-BASE_URL=https://staging.scholaracle.com \
-API_BASE_URL=https://staging-api.scholaracle.com \
+BASE_URL=https://staging.scholarmancy.com \
+API_BASE_URL=https://staging-api.scholarmancy.com \
 pnpm exec playwright test
 ```
 
@@ -60,8 +60,8 @@ pnpm exec playwright test
 
 ```bash
 cd packages/e2e
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical  # Start with critical only
 ```
 
@@ -76,13 +76,13 @@ pnpm exec playwright test --project=critical  # Start with critical only
 **Recommended Production Test Flow:**
 ```bash
 # 1. Test critical infrastructure only
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test tests/00-critical.spec.ts
 
 # 2. If critical passes, test authentication
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test tests/01-auth.spec.ts
 
 # 3. Continue layer by layer if needed
@@ -107,9 +107,9 @@ pnpm exec playwright test tests/01-auth.spec.ts
 **Example:**
 ```bash
 # Use test accounts via environment variables
-PARENT_TEST_EMAIL=test-parent@scholaracle.com \
+PARENT_TEST_EMAIL=test-parent@scholarmancy.com \
 PARENT_TEST_PASSWORD=TestPass123! \
-BASE_URL=https://app.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
 pnpm exec playwright test
 ```
 
@@ -127,16 +127,16 @@ pnpm test
 ### Staging
 ```bash
 cd packages/e2e
-BASE_URL=https://staging.scholaracle.com \
-API_BASE_URL=https://staging-api.scholaracle.com \
+BASE_URL=https://staging.scholarmancy.com \
+API_BASE_URL=https://staging-api.scholarmancy.com \
 pnpm exec playwright test
 ```
 
 ### Production (Critical Only)
 ```bash
 cd packages/e2e
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 ```
 
@@ -192,8 +192,8 @@ jobs:
       - name: Run E2E tests against staging
         run: |
           cd packages/e2e
-          BASE_URL=https://staging.scholaracle.com \
-          API_BASE_URL=https://staging-api.scholaracle.com \
+          BASE_URL=https://staging.scholarmancy.com \
+          API_BASE_URL=https://staging-api.scholarmancy.com \
           pnpm exec playwright test
         env:
           PARENT_TEST_EMAIL: ${{ secrets.STAGING_PARENT_EMAIL }}
@@ -219,8 +219,8 @@ jobs:
       - name: Run Critical tests against production
         run: |
           cd packages/e2e
-          BASE_URL=https://app.scholaracle.com \
-          API_BASE_URL=https://api.scholaracle.com \
+          BASE_URL=https://app.scholarmancy.com \
+          API_BASE_URL=https://api.scholarmancy.com \
           pnpm exec playwright test --project=critical
         env:
           PARENT_TEST_EMAIL: ${{ secrets.PROD_TEST_PARENT_EMAIL }}
@@ -236,8 +236,8 @@ jobs:
 Run only critical tests to verify production is up:
 
 ```bash
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 ```
 
@@ -249,8 +249,8 @@ pnpm exec playwright test --project=critical
 Run all tests against staging before production deployment:
 
 ```bash
-BASE_URL=https://staging.scholaracle.com \
-API_BASE_URL=https://staging-api.scholaracle.com \
+BASE_URL=https://staging.scholarmancy.com \
+API_BASE_URL=https://staging-api.scholarmancy.com \
 pnpm exec playwright test
 ```
 
@@ -263,13 +263,13 @@ Run tests incrementally, stopping if a layer fails:
 
 ```bash
 # Layer 0: Critical
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 
 # Layer 1: Auth (only if Layer 0 passes)
-BASE_URL=https://app.scholaracle.com \
-API_BASE_URL=https://api.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
+API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=auth
 
 # Continue with remaining layers...
@@ -291,15 +291,15 @@ pnpm exec playwright test --project=auth
 **Solutions:**
 ```bash
 # Verify URLs are accessible
-curl https://app.scholaracle.com
-curl https://api.scholaracle.com/api/health
+curl https://app.scholarmancy.com
+curl https://api.scholarmancy.com/api/health
 
 # Check environment variables
 echo $BASE_URL
 echo $API_BASE_URL
 
 # Run with debug output
-DEBUG=pw:api BASE_URL=https://app.scholaracle.com pnpm test
+DEBUG=pw:api BASE_URL=https://app.scholarmancy.com pnpm test
 ```
 
 ### Issue: Web server auto-starts when it shouldn't
@@ -307,7 +307,7 @@ DEBUG=pw:api BASE_URL=https://app.scholaracle.com pnpm test
 **Cause:** `BASE_URL` includes `localhost`  
 **Solution:** Use full production URL:
 ```bash
-BASE_URL=https://app.scholaracle.com  # Not localhost
+BASE_URL=https://app.scholarmancy.com  # Not localhost
 ```
 
 ### Issue: Tests timeout against production
@@ -315,7 +315,7 @@ BASE_URL=https://app.scholaracle.com  # Not localhost
 **Cause:** Production slower than localhost  
 **Solution:** Increase timeout:
 ```bash
-BASE_URL=https://app.scholaracle.com \
+BASE_URL=https://app.scholarmancy.com \
 pnpm exec playwright test --timeout=120000  # 2 minutes
 ```
 
@@ -327,7 +327,7 @@ pnpm exec playwright test --timeout=120000  # 2 minutes
 
 ```bash
 # ❌ BAD - Hardcoded in code
-const email = 'admin@scholaracle.com';
+const email = 'admin@scholarmancy.com';
 const password = 'Secret123!';
 
 # ✅ GOOD - Environment variables
@@ -378,10 +378,10 @@ const password = process.env.PARENT_TEST_PASSWORD;
 make test-e2e
 
 # Staging
-BASE_URL=https://staging.scholaracle.com API_BASE_URL=https://staging-api.scholaracle.com pnpm test
+BASE_URL=https://staging.scholarmancy.com API_BASE_URL=https://staging-api.scholarmancy.com pnpm test
 
 # Production (critical only)
-BASE_URL=https://app.scholaracle.com API_BASE_URL=https://api.scholaracle.com pnpm test --project=critical
+BASE_URL=https://app.scholarmancy.com API_BASE_URL=https://api.scholarmancy.com pnpm test --project=critical
 
 # Custom environment
 BASE_URL=<your-url> API_BASE_URL=<your-api-url> pnpm test

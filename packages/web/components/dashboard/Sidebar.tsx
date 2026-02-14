@@ -2,9 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard } from 'lucide-react';
+import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
@@ -16,46 +15,31 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
-const menuItems = [
-  {
-    title: 'Dashboard',
-    url: '/dashboard',
-    icon: Home,
-  },
-  {
-    title: 'Students',
-    url: '/dashboard/students',
-    icon: GraduationCap,
-  },
-  {
-    title: 'Alerts',
-    url: '/dashboard/alerts',
-    icon: Bell,
-  },
-  {
-    title: 'Agenda',
-    url: '/dashboard/agenda',
-    icon: Calendar,
-  },
-  {
-    title: 'Courses',
-    url: '/dashboard/courses',
-    icon: BookOpen,
-  },
-  {
-    title: 'Billing',
-    url: '/dashboard/billing',
-    icon: CreditCard,
-  },
-  {
-    title: 'Settings',
-    url: '/dashboard/settings',
-    icon: Settings,
-  },
+const parentMenuItems = [
+  { title: 'Dashboard', url: '/dashboard', icon: Home },
+  { title: 'Students', url: '/dashboard/students', icon: GraduationCap },
+  { title: 'Alerts', url: '/dashboard/alerts', icon: Bell },
+  { title: 'Agenda', url: '/dashboard/agenda', icon: Calendar },
+  { title: 'Courses', url: '/dashboard/courses', icon: BookOpen },
+  { title: 'Billing', url: '/dashboard/billing', icon: CreditCard },
+  { title: 'Settings', url: '/dashboard/settings', icon: Settings },
 ];
+
+function getStudentMenuItems(studentId: string) {
+  const base = `/dashboard/students/${studentId}/view`;
+  return [
+    { title: 'Dashboard', url: base, icon: LayoutDashboard },
+    { title: 'Agenda', url: `${base}/agenda`, icon: Calendar },
+    { title: 'Alerts', url: `${base}/alerts`, icon: Bell },
+    { title: 'Courses', url: `${base}/courses`, icon: BookOpen },
+    { title: 'Back to my dashboard', url: '/dashboard', icon: Home },
+  ];
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { isStudentView, studentId } = useStudentView();
+  const menuItems = isStudentView && studentId ? getStudentMenuItems(studentId) : parentMenuItems;
 
   return (
     <SidebarComponent>

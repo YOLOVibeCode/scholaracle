@@ -32,11 +32,11 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     
     // 3. Add first student
     await page.goto('/dashboard/students/new');
-    await page.fill('[data-testid="student-name"], input[name="name"]', 'Jane Student');
-    await page.fill('[data-testid="student-grade"], input[name="grade"]', '9');
-    await page.fill('[data-testid="student-school"], input[name="school"]', 'Lincoln High');
+    await page.fill('[data-testid="input-student-name"], input[name="name"]', 'Jane Student');
+    await page.fill('[data-testid="input-student-grade"], input[name="grade"]', '9');
+    await page.fill('[data-testid="input-student-school"], input[name="school"]', 'Lincoln High');
     
-    await page.click('[data-testid="save-student-button"], button[type="submit"]');
+    await page.click('[data-testid="button-save-student"], button[type="submit"]');
     await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
     
     // 4. Verify student appears on dashboard
@@ -46,14 +46,14 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     
     // 5. Configure notification settings
     await page.goto('/dashboard/settings');
-    const smsToggle = page.locator('[data-testid="sms-toggle"], input[type="checkbox"][name*="sms"]').first();
+    const smsToggle = page.locator('[data-testid="toggle-sms"], input[type="checkbox"][name*="sms"]').first();
     const smsCount = await smsToggle.count();
     
     if (smsCount > 0) {
       await smsToggle.uncheck();
     }
     
-    const thresholdInput = page.locator('[data-testid="grade-drop-threshold"], input[name*="threshold"]').first();
+    const thresholdInput = page.locator('[data-testid="input-grade-drop-threshold"], input[name*="threshold"]').first();
     const thresholdCount = await thresholdInput.count();
     
     if (thresholdCount > 0) {
@@ -61,7 +61,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
       await thresholdInput.fill('80');
     }
     
-    const saveButton = page.locator('[data-testid="save-settings-button"], button:has-text("Save")');
+    const saveButton = page.locator('[data-testid="button-save-settings"], button:has-text("Save")');
     const saveCount = await saveButton.count();
     
     if (saveCount > 0) {
@@ -74,7 +74,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     await expect(page).toHaveURL('/dashboard/alerts');
     
     // 7. Logout
-    await page.locator('[data-testid="logout-button"], button:has-text("Logout")').first().click({ force: true });
+    await page.locator('[data-testid="button-logout"], button:has-text("Logout")').first().click({ force: true });
     await expect(page).toHaveURL(/\/login/);
     
     // 8. Login again
@@ -97,19 +97,19 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     await assertOnDashboard(page);
     
     // 2. Admin views customer
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     
     const adminLoginPage = new AdminDashboardPage(page);
     await page.goto('/admin/login');
-    await page.fill('[data-testid="email-input"], input[name="email"]', 'super@scholaracle.com');
-    await page.fill('[data-testid="password-input"], input[name="password"]', 'SuperAdmin123!');
-    await page.click('[data-testid="login-button"], button[type="submit"]');
-    
+    await page.fill('[data-testid="input-admin-email"], input[name="email"]', 'super@scholarmancy.com');
+    await page.fill('[data-testid="input-admin-password"], input[name="password"]', 'SuperAdmin123!');
+    await page.click('[data-testid="button-login"], button[type="submit"]');
+
     await assertOnAdminDashboard(page);
-    
+
     // 3. Search for customer
     await page.goto('/admin/customers');
-    const searchInput = page.locator('[data-testid="search-input"], input[placeholder*="Search"]');
+    const searchInput = page.locator('[data-testid="input-search"], input[placeholder*="Search"]');
     const searchCount = await searchInput.count();
     
     if (searchCount > 0) {
@@ -131,7 +131,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
       if (tabCount > 0) {
         await notesTab.click();
         
-        const addNoteButton = page.locator('[data-testid="add-note-button"], button:has-text("Add Note")');
+        const addNoteButton = page.locator('[data-testid="button-add-note"], button:has-text("Add Note")');
         const buttonCount = await addNoteButton.count();
         
         if (buttonCount > 0) {
@@ -157,16 +157,16 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     await registerPage.register(parentEmail, 'Test Parent', 'SecurePass123!');
     
     // 2. Admin upgrades subscription
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     await page.waitForURL('**/login', { timeout: 10000 }).catch(() => undefined);
     
     await page.goto('/admin/login');
     await page.waitForLoadState('networkidle');
-    await page.fill('[data-testid="email-input"], input[name="email"]', 'super@scholaracle.com');
-    await page.fill('[data-testid="password-input"], input[name="password"]', 'SuperAdmin123!');
-    await page.click('[data-testid="login-button"], button[type="submit"]');
+    await page.fill('[data-testid="input-admin-email"], input[name="email"]', 'super@scholarmancy.com');
+    await page.fill('[data-testid="input-admin-password"], input[name="password"]', 'SuperAdmin123!');
+    await page.click('[data-testid="button-login"], button[type="submit"]');
     await assertOnAdminDashboard(page);
-    
+
     // Wait for admin dashboard to fully load before navigating
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(500);
@@ -174,7 +174,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     await page.goto('/admin/customers');
     await page.waitForLoadState('networkidle');
     
-    const searchInput = page.locator('[data-testid="search-input"]');
+    const searchInput = page.locator('[data-testid="input-search"]');
     const searchCount = await searchInput.count();
     
     if (searchCount > 0) {
@@ -215,7 +215,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
       if (tabCount > 0) {
         await subscriptionTab.click();
         
-        const upgradeButton = page.locator('[data-testid="upgrade-button"], button:has-text("Upgrade")');
+        const upgradeButton = page.locator('[data-testid="button-upgrade"], button:has-text("Upgrade")');
         const upgradeCount = await upgradeButton.count();
         
         if (upgradeCount > 0) {
@@ -438,7 +438,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     await expect(page).toHaveURL('/dashboard/alerts');
     
     // 3. Acknowledge alert if exists
-    const acknowledgeButton = page.locator('[data-testid="acknowledge-button"], button:has-text("Acknowledge")').first();
+    const acknowledgeButton = page.locator('[data-testid="button-acknowledge"], button:has-text("Acknowledge")').first();
     const count = await acknowledgeButton.count();
     
     if (count > 0) {
@@ -462,11 +462,11 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     
     for (const studentName of students) {
       await page.goto('/dashboard/students/new');
-      await page.fill('[data-testid="student-name"], input[name="name"]', studentName);
-      await page.fill('[data-testid="student-grade"], input[name="grade"]', '10');
-      await page.fill('[data-testid="student-school"], input[name="school"]', 'Test High');
+      await page.fill('[data-testid="input-student-name"], input[name="name"]', studentName);
+      await page.fill('[data-testid="input-student-grade"], input[name="grade"]', '10');
+      await page.fill('[data-testid="input-student-school"], input[name="school"]', 'Test High');
       
-      await page.click('[data-testid="save-student-button"], button[type="submit"]');
+      await page.click('[data-testid="button-save-student"], button[type="submit"]');
       await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
     }
     

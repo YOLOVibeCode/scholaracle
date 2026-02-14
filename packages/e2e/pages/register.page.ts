@@ -9,21 +9,25 @@ export class RegisterPage {
   readonly nameInput: Locator;
   readonly passwordInput: Locator;
   readonly confirmPasswordInput: Locator;
+  readonly termsConsentCheckbox: Locator;
+  readonly smsConsentCheckbox: Locator;
   readonly registerButton: Locator;
   readonly errorMessage: Locator;
   readonly loginLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.locator('[data-testid="email-input"], input[name="email"]');
-    this.nameInput = page.locator('[data-testid="name-input"], input[name="name"]');
-    this.passwordInput = page.locator('[data-testid="password-input"], input[name="password"]');
+    this.emailInput = page.locator('[data-testid="input-email"], input[name="email"]');
+    this.nameInput = page.locator('[data-testid="input-name"], input[name="name"]');
+    this.passwordInput = page.locator('[data-testid="input-password"], input[name="password"]');
     this.confirmPasswordInput = page.locator(
-      '[data-testid="confirm-password-input"], input[name="confirmPassword"], input#confirmPassword'
+      '[data-testid="input-confirm-password"], input[name="confirmPassword"], input#confirmPassword'
     );
-    this.registerButton = page.locator('[data-testid="register-button"], button[type="submit"]');
-    this.errorMessage = page.locator('[data-testid="error-message"], .text-red-500, .text-destructive');
-    this.loginLink = page.locator('[data-testid="login-link"], a[href="/login"]');
+    this.termsConsentCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
+    this.smsConsentCheckbox = page.locator('[data-testid="sms-consent-checkbox"]');
+    this.registerButton = page.locator('[data-testid="button-register"], button[type="submit"]');
+    this.errorMessage = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive');
+    this.loginLink = page.locator('[data-testid="link-login"], a[href="/login"]');
   }
 
   async goto(): Promise<void> {
@@ -36,6 +40,10 @@ export class RegisterPage {
     await this.passwordInput.fill(password);
     if ((await this.confirmPasswordInput.count()) > 0) {
       await this.confirmPasswordInput.fill(password);
+    }
+    // Check terms consent (required by the form)
+    if ((await this.termsConsentCheckbox.count()) > 0) {
+      await this.termsConsentCheckbox.check({ force: true });
     }
     await this.registerButton.click();
     await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });

@@ -26,9 +26,11 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.556.0",
     "next": "16.0.10",
+    "next-auth": "^5.0.0-beta.25",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-hook-form": "^7.68.0",
+    "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.1.13"
   },

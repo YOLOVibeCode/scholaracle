@@ -53,11 +53,11 @@ export function CustomerSuspendPanel({
             variant="destructive"
             onClick={onConfirm}
             disabled={isSubmitting || reason.trim().length === 0}
-            data-testid="confirm-suspend-button"
+            data-testid="button-confirm-suspend"
           >
             Confirm
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="cancel-suspend-button">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="button-cancel-suspend">
             Cancel
           </Button>
         </div>

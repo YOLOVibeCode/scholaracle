@@ -52,11 +52,11 @@ export function SubscriptionCancelPanel({
             variant="destructive"
             onClick={onConfirm}
             disabled={isSubmitting || reason.trim().length === 0}
-            data-testid="confirm-cancel-subscription-button"
+            data-testid="button-confirm-cancel-subscription"
           >
             Confirm
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="cancel-cancel-subscription-button">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} data-testid="button-cancel-cancel-subscription">
             Cancel
           </Button>
         </div>

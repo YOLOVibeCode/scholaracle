@@ -68,7 +68,7 @@ export async function assertToastMessage(page: Page, message: string | RegExp): 
  * Assert error message is displayed.
  */
 export async function assertErrorMessage(page: Page, message?: string | RegExp): Promise<void> {
-  const errorLocator = page.locator('[data-testid="error-message"], .text-red-500, .text-destructive, [role="alert"]');
+  const errorLocator = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive, [role="alert"]');
   await expect(errorLocator).toBeVisible();
   if (message) {
     await expect(errorLocator).toContainText(message);

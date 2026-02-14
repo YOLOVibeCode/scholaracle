@@ -33,7 +33,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await assertOnDashboard(page);
     
     // Logout
-    const logoutButton = page.locator('[data-testid="logout-button"], button:has-text("Logout")').first();
+    const logoutButton = page.locator('[data-testid="button-logout"], button:has-text("Logout")').first();
     await expect(logoutButton).toBeVisible();
     await logoutButton.click({ force: true });
 

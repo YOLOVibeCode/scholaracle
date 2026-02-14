@@ -67,12 +67,10 @@ export class ParentNotificationGenerator implements INotificationGenerator {
     const templateResult: ITemplateResult = template.generate(alert);
     const { subject, body, actions } = templateResult;
 
-    // Note: userId should be parent's user ID, not student's
-    // For now, using studentId as placeholder - will be updated when user system is implemented
     return new Notification({
       agentType: AgentType.PARENT,
       studentId: alert.studentId,
-      userId: alert.studentId, // TODO: Replace with actual parent userId
+      userId: alert.userId ?? alert.studentId,
       subject,
       body,
       priority: this._mapSeverityToPriority(alert.severity),

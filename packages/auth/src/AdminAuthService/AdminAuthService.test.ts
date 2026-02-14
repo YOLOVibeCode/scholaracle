@@ -435,9 +435,9 @@ describe('AdminAuthService', () => {
       expect(logoutResult).toBe(true);
     });
 
-    it('should return false for invalid token', async () => {
+    it('should return true for invalid token (no jti to revoke)', async () => {
       const logoutResult = await authService.logout('invalid-token');
-      expect(logoutResult).toBe(false);
+      expect(logoutResult).toBe(true);
     });
   });
 });

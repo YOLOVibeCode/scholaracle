@@ -80,6 +80,10 @@ export interface IAdminUserData {
   readonly createdBy?: string;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
+  /** Failed login count; reset on success. Used for lockout. */
+  readonly failedLoginAttempts?: number;
+  /** When lockout ends (e.g. after 5 failures). */
+  readonly lockedUntil?: Date;
 }
 
 /**
@@ -99,6 +103,8 @@ export class AdminUser {
   public readonly createdBy?: string;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
+  public readonly failedLoginAttempts: number;
+  public readonly lockedUntil?: Date;
 
   constructor(data: IAdminUserData, id?: ObjectId) {
     this._id = id;
@@ -114,6 +120,8 @@ export class AdminUser {
     this.createdBy = data.createdBy;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
+    this.failedLoginAttempts = data.failedLoginAttempts ?? 0;
+    this.lockedUntil = data.lockedUntil;
   }
 
   /**

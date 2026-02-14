@@ -2,13 +2,32 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DollarSign, Users, TrendingUp, TrendingDown } from 'lucide-react';
-import { adminAnalyticsApi, type IAnalyticsOverview } from '@/lib/api/admin/analytics';
+import {
+  adminAnalyticsApi,
+  type IAnalyticsOverview,
+  type IRevenueDataPoint,
+  type IGrowthDataPoint,
+} from '@/lib/api/admin/analytics';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<IAnalyticsOverview | null>(null);
+  const [revenue, setRevenue] = useState<IRevenueDataPoint[]>([]);
+  const [subscriptionGrowth, setSubscriptionGrowth] = useState<IGrowthDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -18,8 +37,14 @@ export default function AdminDashboardPage() {
   const loadStats = async () => {
     setIsLoading(true);
     try {
-      const result = await adminAnalyticsApi.getOverview();
-      setStats(result.data);
+      const [overviewRes, revenueRes, subsRes] = await Promise.all([
+        adminAnalyticsApi.getOverview(),
+        adminAnalyticsApi.getRevenue({ period: 'month' }),
+        adminAnalyticsApi.getSubscriptions({ period: 'month', months: 6 }),
+      ]);
+      if (overviewRes.success && overviewRes.data) setStats(overviewRes.data);
+      if (revenueRes.success && revenueRes.data) setRevenue([...revenueRes.data]);
+      if (subsRes.success && subsRes.data) setSubscriptionGrowth([...subsRes.data]);
     } catch (error) {
       console.error('Failed to load stats:', error);
     } finally {
@@ -97,6 +122,56 @@ export default function AdminDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {revenue.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Revenue by period</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={revenue} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="period" className="text-xs" />
+                      <YAxis className="text-xs" tickFormatter={(v) => `$${v}`} />
+                      <Tooltip formatter={(v: number) => [`$${v?.toFixed(2)}`, 'Revenue']} />
+                      <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Revenue" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {subscriptionGrowth.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Subscription growth</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={subscriptionGrowth} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="period" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="count"
+                        stroke="#8b5cf6"
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        name="Subscriptions"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card>

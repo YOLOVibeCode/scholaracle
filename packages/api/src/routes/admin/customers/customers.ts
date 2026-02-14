@@ -416,6 +416,85 @@ async function handleUnsuspendCustomer(
   }
 }
 
+async function handleBulkAction(
+  req: Request,
+  res: Response,
+  userRepository: UserRepository,
+  auditLogRepository: AuditLogRepository,
+  adminId: string,
+  adminEmail: string
+): Promise<void> {
+  try {
+    const { action, customerIds, reason } = (req.body ?? {}) as {
+      action?: string;
+      customerIds?: string[];
+      reason?: string;
+    };
+
+    if (!action || !Array.isArray(customerIds) || customerIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'action (suspend | unsuspend) and non-empty customerIds array are required',
+      });
+      return;
+    }
+
+    if (action === 'suspend' && !reason) {
+      res.status(400).json({
+        success: false,
+        error: 'reason is required for suspend action',
+      });
+      return;
+    }
+
+    if (action !== 'suspend' && action !== 'unsuspend') {
+      res.status(400).json({
+        success: false,
+        error: 'action must be suspend or unsuspend',
+      });
+      return;
+    }
+
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const id of customerIds) {
+      const customer = await userRepository.findById(id);
+      if (!customer) {
+        results.push({ id, success: false, error: 'Not found' });
+        continue;
+      }
+      const success =
+        action === 'suspend'
+          ? await userRepository.suspendUser(id, reason ?? 'Bulk suspend')
+          : await userRepository.unsuspendUser(id);
+      if (success) {
+        await auditLogRepository.create({
+          adminUserId: adminId,
+          adminEmail,
+          action: action === 'suspend' ? 'customer:bulk_suspend' : 'customer:bulk_unsuspend',
+          entityType: 'customer',
+          entityId: id,
+          ipAddress: req.ip ?? 'unknown',
+          userAgent: req.headers['user-agent'] ?? 'unknown',
+        });
+        results.push({ id, success: true });
+      } else {
+        results.push({ id, success: false, error: 'Update failed' });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      results,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
 export function customersRouter(config: ICustomersRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
@@ -430,6 +509,18 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
 
   router.get('/', (req: Request, res: Response) => {
     void handleGetCustomers(req, res, userRepository);
+  });
+
+  router.post('/bulk-action', (req: Request, res: Response) => {
+    const authReq = req as IAdminAuthenticatedRequest;
+    void handleBulkAction(
+      req,
+      res,
+      userRepository,
+      auditLogRepository,
+      authReq.adminId!,
+      authReq.adminEmail!
+    );
   });
 
   router.get('/:id', (req: Request, res: Response) => {

@@ -177,4 +177,110 @@ describe('AuthService', () => {
       expect(decoded?.email).toBe('issued@example.com');
     });
   });
+
+  describe('requestPasswordReset', () => {
+    const mockTokenStore = {
+      create: jest.fn(),
+      findValidByToken: jest.fn(),
+      invalidateForUser: jest.fn(),
+    };
+    const mockEmailSender = {
+      sendResetLink: jest.fn().mockResolvedValue(undefined),
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return success when user does not exist (no email enumeration)', async () => {
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender, 'https://app.example.com');
+      const result = await service.requestPasswordReset('nonexistent@example.com');
+
+      expect(result.success).toBe(true);
+      expect(mockTokenStore.create).not.toHaveBeenCalled();
+      expect(mockEmailSender.sendResetLink).not.toHaveBeenCalled();
+    });
+
+    it('should invalidate existing tokens, create new token, and send email when user exists', async () => {
+      await authService.register('reset@example.com', 'Password123!', 'Reset User');
+      const user = await userRepository.findByEmail('reset@example.com');
+      expect(user).not.toBeNull();
+
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender, 'https://app.example.com');
+      const result = await service.requestPasswordReset('reset@example.com');
+
+      expect(result.success).toBe(true);
+      expect(mockTokenStore.invalidateForUser).toHaveBeenCalledWith(user!._id!.toString());
+      expect(mockTokenStore.create).toHaveBeenCalledTimes(1);
+      expect(mockTokenStore.create).toHaveBeenCalledWith(
+        user!._id!.toString(),
+        expect.any(String),
+        expect.any(Date)
+      );
+      expect(mockEmailSender.sendResetLink).toHaveBeenCalledWith(
+        'reset@example.com',
+        expect.stringMatching(/^https:\/\/app\.example\.com\/reset-password\?token=/)
+      );
+    });
+
+    it('should return success false when password reset not configured', async () => {
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES);
+      const result = await service.requestPasswordReset('any@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('resetPasswordWithToken', () => {
+    const mockTokenStore = {
+      create: jest.fn(),
+      findValidByToken: jest.fn(),
+      invalidateForUser: jest.fn(),
+    };
+    const mockEmailSender = { sendResetLink: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should update password and invalidate token when token is valid', async () => {
+      await authService.register('resetuser@example.com', 'OldPass123!', 'Reset User');
+      const user = await userRepository.findByEmail('resetuser@example.com');
+      const userId = user!._id!.toString();
+
+      mockTokenStore.findValidByToken.mockResolvedValue({ userId });
+      mockTokenStore.invalidateForUser.mockResolvedValue(undefined);
+
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender);
+      const result = await service.resetPasswordWithToken('valid-token-123', 'NewPass456!');
+
+      expect(result.success).toBe(true);
+      expect(mockTokenStore.invalidateForUser).toHaveBeenCalledWith(userId);
+
+      const updated = await userRepository.findById(userId);
+      expect(updated).not.toBeNull();
+      const validNew = await UserRepository.verifyPassword('NewPass456!', updated!.passwordHash);
+      expect(validNew).toBe(true);
+    });
+
+    it('should return error when token is invalid or expired', async () => {
+      mockTokenStore.findValidByToken.mockResolvedValue(null);
+
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender);
+      const result = await service.resetPasswordWithToken('invalid-token', 'NewPass456!');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/invalid|expired/i);
+      expect(mockTokenStore.invalidateForUser).not.toHaveBeenCalled();
+    });
+
+    it('should return success false when password reset not configured', async () => {
+      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES);
+      const result = await service.resetPasswordWithToken('any-token', 'NewPass123!');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+  });
 });

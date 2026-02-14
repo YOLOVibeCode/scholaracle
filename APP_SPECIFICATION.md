@@ -24,6 +24,10 @@ This document is the authoritative source for “what Scholaracle should do” *
   - `/dashboard/alerts`
   - `/dashboard/courses`
   - `/dashboard/settings`
+  - `/dashboard/students/[id]/view` (student view home)
+  - `/dashboard/students/[id]/view/agenda`
+  - `/dashboard/students/[id]/view/alerts`
+  - `/dashboard/students/[id]/view/courses`
 
 **Core behaviors (acceptance criteria)**
 - **Authentication**
@@ -79,6 +83,12 @@ This document is the authoritative source for “what Scholaracle should do” *
 
 **Roles**
 - `super_admin`, `admin`, `support`, `billing`, `analyst`
+
+**Admin vs Super Admin**
+- The admin dashboard is a **single application** at `/admin/*`; there is no separate "super admin dashboard" vs "admin dashboard."
+- **super_admin** is a role with full access to all admin routes (Settings, Audit Logs, Customers, etc.).
+- Other roles (`admin`, `support`, `billing`, `analyst`) see a subset of pages; RBAC restricts which routes each role can access.
+- The UI shows the current role (e.g. "Super Admin", "Admin", "Support") so admins know which permissions they have.
 
 **Core behaviors (acceptance criteria)**
 - **Admin auth**

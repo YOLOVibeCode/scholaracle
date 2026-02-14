@@ -173,7 +173,7 @@ export default function AdminSettingsPage() {
             <CardTitle>Admin Users</CardTitle>
             <CardDescription>Create and manage admin accounts (super_admin only).</CardDescription>
           </div>
-          <Button onClick={openCreate} data-testid="add-admin-button">
+          <Button onClick={openCreate} data-testid="button-add-admin">
             Add Admin
           </Button>
         </CardHeader>
@@ -204,7 +204,7 @@ export default function AdminSettingsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => startEdit(a.id, a.role)}
-                        data-testid="edit-admin-button"
+                        data-testid="button-edit-admin"
                       >
                         Edit
                       </Button>
@@ -231,12 +231,12 @@ export default function AdminSettingsPage() {
             <CardDescription>Provide credentials and role.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} data-testid="admin-email" placeholder="email" />
-            <Input value={createName} onChange={(e) => setCreateName(e.target.value)} data-testid="admin-name" placeholder="name" />
+            <Input value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} data-testid="input-admin-email" placeholder="email" />
+            <Input value={createName} onChange={(e) => setCreateName(e.target.value)} data-testid="input-admin-name" placeholder="name" />
             <select
               value={createRole}
               onChange={(e) => setCreateRole(e.target.value as AdminRole)}
-              data-testid="admin-role"
+              data-testid="select-admin-role"
               className="w-full rounded-md border px-3 py-2 text-sm"
             >
               {roleOptions.map((r) => (
@@ -248,15 +248,15 @@ export default function AdminSettingsPage() {
             <Input
               value={createPassword}
               onChange={(e) => setCreatePassword(e.target.value)}
-              data-testid="admin-password"
+              data-testid="input-admin-password"
               placeholder="temporary password"
               type="password"
             />
             <div className="flex gap-2">
-              <Button onClick={submitCreate} disabled={isSaving} data-testid="admin-save-button">
+              <Button onClick={submitCreate} disabled={isSaving} data-testid="button-admin-save">
                 Save
               </Button>
-              <Button variant="outline" onClick={closeCreate} disabled={isSaving} data-testid="admin-cancel-button">
+              <Button variant="outline" onClick={closeCreate} disabled={isSaving} data-testid="button-admin-cancel">
                 Cancel
               </Button>
             </div>
@@ -274,7 +274,7 @@ export default function AdminSettingsPage() {
             <select
               value={editRole}
               onChange={(e) => setEditRole(e.target.value as AdminRole)}
-              data-testid="edit-admin-role"
+              data-testid="select-edit-admin-role"
               className="w-full rounded-md border px-3 py-2 text-sm"
             >
               {roleOptions.map((r) => (
@@ -284,10 +284,10 @@ export default function AdminSettingsPage() {
               ))}
             </select>
             <div className="flex gap-2">
-              <Button onClick={submitEdit} disabled={isSaving} data-testid="admin-update-button">
+              <Button onClick={submitEdit} disabled={isSaving} data-testid="button-admin-update">
                 Update
               </Button>
-              <Button variant="outline" onClick={cancelEdit} disabled={isSaving} data-testid="admin-cancel-edit-button">
+              <Button variant="outline" onClick={cancelEdit} disabled={isSaving} data-testid="button-admin-cancel-edit">
                 Cancel
               </Button>
             </div>

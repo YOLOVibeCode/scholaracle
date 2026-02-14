@@ -7,6 +7,8 @@ export interface AlertData {
   readonly severity: string;
   readonly relatedData: Record<string, unknown>;
   readonly createdAt?: Date;
+  /** Parent/user ID who owns this alert (for parent notifications). */
+  readonly userId?: string;
 }
 
 /**
@@ -19,6 +21,7 @@ export class Alert {
   public readonly severity: string;
   public readonly relatedData: Record<string, unknown>;
   public readonly createdAt: Date;
+  public readonly userId?: string;
 
   constructor(data: AlertData) {
     this._validate(data);
@@ -29,6 +32,7 @@ export class Alert {
     this.severity = data.severity;
     this.relatedData = data.relatedData;
     this.createdAt = data.createdAt ?? new Date();
+    this.userId = data.userId;
   }
 
   private _validate(data: AlertData): void {

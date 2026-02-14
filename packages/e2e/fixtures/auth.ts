@@ -45,25 +45,26 @@ export const test = base.extend<AuthFixtures>({
       const user = TEST_USERS[role];
       // Use relative URLs - baseURL from config handles localhost vs production
       const loginUrl = role === 'parent' || role === 'newUser' ? '/login' : '/admin/login';
-      
+      const isAdmin = role !== 'parent' && role !== 'newUser';
+
       await page.goto(loginUrl);
       await disableNextDevOverlay();
-      
-      // Use stable data-testid selectors for reliability
-      const emailInput = page.locator('[data-testid="email-input"]');
-      const passwordInput = page.locator('[data-testid="password-input"]');
-      const loginButton = page.locator('[data-testid="login-button"]');
-      
+
+      // Use stable data-testid selectors (admin uses input-admin-email / input-admin-password)
+      const emailInput = page.locator(isAdmin ? '[data-testid="input-admin-email"]' : '[data-testid="input-email"]');
+      const passwordInput = page.locator(isAdmin ? '[data-testid="input-admin-password"]' : '[data-testid="input-password"]');
+      const loginButton = page.locator('[data-testid="button-login"]');
+
       await emailInput.fill(user.email);
       await passwordInput.fill(user.password);
       await loginButton.first().click({ force: true });
-      
-      // Wait for redirect based on role
+
+      // Wait for redirect: prefer dashboard landmark for stability
       if (role === 'parent' || role === 'newUser') {
-        await page.waitForURL('/dashboard', { timeout: 10000 });
+        await page.waitForURL('/dashboard', { timeout: 15000 });
+        await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
       } else {
-        // Admin app may land on /admin or /admin/dashboard depending on routing
-        await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 10000 });
+        await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
       }
     };
     
@@ -81,19 +82,24 @@ export const test = base.extend<AuthFixtures>({
         `,
       })
       .catch(() => {});
-    await page.fill('[data-testid="email-input"]', testUser.email);
-    await page.fill('[data-testid="name-input"]', testUser.name);
-    await page.fill('[data-testid="password-input"]', testUser.password);
+    await page.fill('[data-testid="input-email"]', testUser.email);
+    await page.fill('[data-testid="input-name"]', testUser.name);
+    await page.fill('[data-testid="input-password"]', testUser.password);
     // Confirm password if present
-    const confirmPassword = page.locator('[data-testid="confirm-password-input"]');
+    const confirmPassword = page.locator('[data-testid="input-confirm-password"]');
     if ((await confirmPassword.count()) > 0) {
       await confirmPassword.fill(testUser.password);
     }
-    await page.locator('[data-testid="register-button"]').first().click({ force: true });
-    
-    // Wait for dashboard
-    await page.waitForURL('/dashboard', { timeout: 10000 });
-    
+    // Check terms consent (required)
+    const termsCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
+    if ((await termsCheckbox.count()) > 0) {
+      await termsCheckbox.check({ force: true });
+    }
+    await page.locator('[data-testid="button-register"]').first().click({ force: true });
+
+    await page.waitForURL('/dashboard', { timeout: 15000 });
+    await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+
     await use(page);
   },
 });
@@ -113,10 +119,11 @@ export async function login(page: Page, email: string, password: string): Promis
       `,
     })
     .catch(() => {});
-  await page.fill('[data-testid="email-input"]', email);
-  await page.fill('[data-testid="password-input"]', password);
-  await page.locator('[data-testid="login-button"]').first().click({ force: true });
-  await page.waitForURL('/dashboard', { timeout: 10000 });
+  await page.fill('[data-testid="input-email"]', email);
+  await page.fill('[data-testid="input-password"]', password);
+  await page.locator('[data-testid="button-login"]').first().click({ force: true });
+  await page.waitForURL('/dashboard', { timeout: 15000 });
+  await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
 }
 
 /**
@@ -132,9 +139,9 @@ export async function loginAdmin(page: Page, email: string, password: string): P
       `,
     })
     .catch(() => {});
-  await page.fill('[data-testid="email-input"]', email);
-  await page.fill('[data-testid="password-input"]', password);
-  await page.locator('[data-testid="login-button"]').first().click({ force: true });
+  await page.fill('[data-testid="input-admin-email"]', email);
+  await page.fill('[data-testid="input-admin-password"]', password);
+  await page.locator('[data-testid="button-login"]').first().click({ force: true });
   await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 10000 });
 }
 
@@ -143,7 +150,7 @@ export async function loginAdmin(page: Page, email: string, password: string): P
  */
 export async function logout(page: Page): Promise<void> {
   // Prefer explicit logout button if present; otherwise use user menu.
-  const directLogout = page.locator('[data-testid="logout-button"]');
+  const directLogout = page.locator('[data-testid="button-logout"]');
   if ((await directLogout.count()) > 0) {
     await directLogout.first().click({ force: true });
   } else {
@@ -169,14 +176,19 @@ export async function register(
   name: string
 ): Promise<void> {
   await page.goto('/register');
-  await page.fill('[data-testid="email-input"]', email);
-  await page.fill('[data-testid="name-input"]', name);
-  await page.fill('[data-testid="password-input"]', password);
-  const confirmPassword = page.locator('[data-testid="confirm-password-input"]');
+  await page.fill('[data-testid="input-email"]', email);
+  await page.fill('[data-testid="input-name"]', name);
+  await page.fill('[data-testid="input-password"]', password);
+  const confirmPassword = page.locator('[data-testid="input-confirm-password"]');
   if ((await confirmPassword.count()) > 0) {
     await confirmPassword.fill(password);
   }
-  await page.click('[data-testid="register-button"]');
+  // Check terms consent (required)
+  const termsCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
+  if ((await termsCheckbox.count()) > 0) {
+    await termsCheckbox.check({ force: true });
+  }
+  await page.click('[data-testid="button-register"]');
   await page.waitForURL('/dashboard', { timeout: 10000 });
 }
 

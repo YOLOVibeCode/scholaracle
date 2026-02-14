@@ -90,14 +90,25 @@ export class AdminUserRepository implements IAdminUserReader, IAdminUserWriter {
    */
   public async update(id: string, updates: Partial<IAdminUserData>): Promise<AdminUser | null> {
     const objectId = new ObjectId(id);
-    const updateDoc = {
-      ...updates,
-      updatedAt: new Date(),
-    };
+    const setDoc: Record<string, unknown> = { updatedAt: new Date() };
+    const unsetKeys: string[] = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) {
+        unsetKeys.push(key);
+      } else {
+        setDoc[key] = value;
+      }
+    }
+
+    const updateOp: Record<string, unknown> = { $set: setDoc };
+    if (unsetKeys.length > 0) {
+      updateOp['$unset'] = Object.fromEntries(unsetKeys.map((k) => [k, '']));
+    }
 
     const result = await this._collection.findOneAndUpdate(
       { _id: objectId },
-      { $set: updateDoc },
+      updateOp,
       { returnDocument: 'after' }
     );
 
@@ -142,7 +153,7 @@ export class AdminUserRepository implements IAdminUserReader, IAdminUserWriter {
    */
   public async findAll(): Promise<readonly AdminUser[]> {
     const documents = await this._collection.find({}).toArray();
-    return documents.map((doc) => new AdminUser(doc, doc._id));
+    return documents.map((doc: IAdminUserData & { _id?: ObjectId }) => new AdminUser(doc, doc._id));
   }
 
   /**

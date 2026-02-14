@@ -73,7 +73,7 @@ export default function NewStudentPage() {
               <Input
                 id="name"
                 name="name"
-                data-testid="student-name"
+                data-testid="input-student-name"
                 type="text"
                 placeholder="John Doe"
                 value={name}
@@ -87,7 +87,7 @@ export default function NewStudentPage() {
               <Input
                 id="grade"
                 name="grade"
-                data-testid="student-grade"
+                data-testid="input-student-grade"
                 type="number"
                 placeholder="10"
                 min="1"
@@ -102,7 +102,7 @@ export default function NewStudentPage() {
               <Input
                 id="school"
                 name="school"
-                data-testid="student-school"
+                data-testid="input-student-school"
                 type="text"
                 placeholder="School name"
                 value={school}
@@ -115,7 +115,7 @@ export default function NewStudentPage() {
             <Button variant="outline" type="button" asChild disabled={isLoading}>
               <Link href="/dashboard/students">Cancel</Link>
             </Button>
-            <Button type="submit" disabled={isLoading} data-testid="save-student-button">
+            <Button type="submit" disabled={isLoading} data-testid="button-save-student">
               {isLoading ? 'Creating...' : 'Create Student'}
             </Button>
           </CardFooter>

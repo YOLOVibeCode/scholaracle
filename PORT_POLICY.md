@@ -33,7 +33,6 @@ These ports are standardized because they are:
 
 3. **Documented across multiple files:**
    - `DOCKER_SETUP.md`
-   - `PORT_MAPPING.md`
    - `README.md`
    - Test documentation
 
@@ -86,6 +85,31 @@ Changing these ports will break:
 - Modify ports to avoid conflicts (fix conflicts instead)
 - Document alternative port numbers
 - Create port "variants" or "alternatives"
+
+## Connection Strings
+
+### Development (from host machine)
+```bash
+http://localhost:2800              # Web App
+http://localhost:2801/api/health   # API
+mongodb://localhost:2802/scholaracle  # MongoDB
+http://localhost:2804              # MailHog UI
+```
+
+### Environment Variables
+```bash
+# Web App
+NEXT_PUBLIC_API_URL=http://localhost:2801/api
+PORT=3000  # Internal (maps to 2800 external)
+
+# API Server
+MONGODB_URI=mongodb://localhost:2802/scholaracle
+PORT=3002  # Internal (maps to 2801 external)
+
+# E2E Tests
+API_BASE_URL=http://localhost:2801
+BASE_URL=http://localhost:2800
+```
 
 ## Verification
 

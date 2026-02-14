@@ -59,7 +59,7 @@ describe('config', () => {
       const filePath = join(dir, 'config.json');
 
       const original: ISlcLocalConfig = {
-        apiBaseUrl: 'https://api.scholaracle.com',
+        apiBaseUrl: 'https://api.scholarmancy.com',
         connectorToken: 'tok_abc123',
         sources: [
           {

@@ -17,4 +17,5 @@ export { SubscriptionCancelPanel, type ISubscriptionCancelPanelProps } from './S
 export { SubscriptionPlanChangePanel, type ISubscriptionPlanChangePanelProps } from './SubscriptionPlanChangePanel';
 export { AdminStepUpSheet, type IAdminStepUpSheetProps } from './AdminStepUpSheet';
 export { AuditLogDetailSheet, type IAuditLogDetailSheetProps } from './AuditLogDetailSheet';
+export { MFASetupWizard, type MFASetupWizardProps } from './MFASetupWizard';
 

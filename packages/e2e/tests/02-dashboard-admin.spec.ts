@@ -35,7 +35,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page.locator('body')).toBeVisible();
       
       // Logout for next iteration
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -70,7 +70,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/payments');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -84,7 +84,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/subscriptions');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -98,7 +98,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/communications');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -112,7 +112,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL('/admin/reports');
       await expect(page.locator('body')).toBeVisible();
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 
@@ -138,15 +138,15 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
   test('DASH-A-021: Audit Logs export CSV works (super_admin only)', async ({ page, loginAsRole }) => {
     await loginAsRole('super_admin');
     await page.goto('/admin/audit-logs');
-    await expect(page.locator('[data-testid="audit-export-button"]')).toBeVisible();
+    await expect(page.locator('[data-testid="button-audit-export"]')).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
-    await page.locator('[data-testid="audit-export-button"]').click({ force: true });
+    await page.locator('[data-testid="button-audit-export"]').click({ force: true });
     const download = await downloadPromise;
     expect(await download.suggestedFilename()).toMatch(/audit-logs-.*\.csv/i);
 
     // After export, an audit entry should be created; refresh and assert it appears.
-    await page.locator('[data-testid="audit-refresh-button"]').click({ force: true });
+    await page.locator('[data-testid="button-audit-refresh"]').click({ force: true });
     await expect(page.locator('[data-testid="audit-log-row"]').first()).toContainText('system:export', { timeout: 10_000 });
   });
 
@@ -170,7 +170,7 @@ test.describe('@dashboard Layer 2: Admin Dashboard Pages', () => {
       await expect(page).toHaveURL(/\/admin\/analytics/);
       await expect(page.locator('body')).toBeVisible();
       
-      await page.locator('[data-testid="logout-button"]').click({ force: true });
+      await page.locator('[data-testid="button-logout"]').click({ force: true });
     }
   });
 

@@ -48,15 +48,15 @@ test.describe('@critical Layer 0: Critical Infrastructure', () => {
     await assertPageLoadsWithoutCrash(page, '/login');
     
     // Verify login form elements are present (using stable data-testid selectors)
-    await expect(page.locator('[data-testid="email-input"]')).toBeVisible();
-    await expect(page.locator('[data-testid="password-input"]')).toBeVisible();
-    await expect(page.locator('[data-testid="login-button"]')).toBeVisible();
+    await expect(page.locator('[data-testid="input-email"]')).toBeVisible();
+    await expect(page.locator('[data-testid="input-password"]')).toBeVisible();
+    await expect(page.locator('[data-testid="button-login"]')).toBeVisible();
   });
 
   test('CRIT-003: API health check', async ({ request }) => {
     // Support production URLs via environment variable
     // Local: http://localhost:2801 (FIXED PORT)
-    // Production: https://api.scholaracle.com (or set API_BASE_URL)
+    // Production: https://api.scholarmancy.com (or set API_BASE_URL)
     const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:2801';
     const response = await request.get(`${apiBaseUrl}/api/health`);
     

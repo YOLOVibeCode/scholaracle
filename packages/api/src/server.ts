@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import { MongoClient, type Db } from 'mongodb';
@@ -10,7 +11,18 @@ import { studentsRouter } from './routes/students/students';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
-import { AuthService } from '@scholaracle/auth';
+import { AuthService, AdminAuthService } from '@scholaracle/auth';
+import {
+  AdminMFATokenRepository,
+  AdminPasswordResetTokenRepository,
+  AdminRevokedTokenRepository,
+  AdminStepUpChallengeRepository,
+  OAuthAccountRepository,
+  PasswordResetTokenRepository,
+  RefreshTokenRepository,
+  SessionRepository,
+} from '@scholaracle/database';
+import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { adminAuthRouter } from './routes/admin/auth';
 import { customersRouter } from './routes/admin/customers/customers';
 import { analyticsRouter } from './routes/admin/analytics';
@@ -18,9 +30,11 @@ import { reportsRouter } from './routes/admin/reports';
 import { notesRouter } from './routes/admin/notes';
 import { subscriptionsRouter } from './routes/admin/subscriptions';
 import { paymentsRouter } from './routes/admin/payments';
+import { invoicesRouter } from './routes/admin/invoices/invoices';
 import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
+import { adminSessionsRouter } from './routes/admin/sessions/sessions';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
 import { billingRouter } from './routes/billing';
@@ -28,6 +42,7 @@ import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
 import { agendaRouter } from './routes/agenda';
+import { sessionsRouter } from './routes/sessions/sessions';
 import { NotificationService } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
 import { ParentNotificationGenerator } from '@scholaracle/agents';
@@ -36,7 +51,6 @@ import { EmailDelivery } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
 import { PushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
-import { messaging } from 'firebase-admin';
 import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
 import sgMail from '@sendgrid/mail';
@@ -47,6 +61,7 @@ export interface IServerConfig {
   readonly mongodbUri?: string;
   readonly mongodbDbName?: string;
   readonly jwtSecret?: string;
+  readonly baseUrl?: string;
   readonly sendGridApiKey?: string;
   readonly sendGridFromEmail?: string;
   readonly sendGridFromName?: string;
@@ -90,7 +105,7 @@ function getSendGridConfig(config: IServerConfig): {
     fromEmail:
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
-      'notifications@scholaracle.com',
+      'notifications@scholarmancy.com',
     fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
   };
 }
@@ -131,19 +146,7 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
 
   const emailDelivery = new EmailDelivery(sendGridConfig, sendGrid);
   const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
-  // PushDelivery is deprecated but still needed for notifications that include push channel
-  // Initialize with empty config and mocked FCM for testing
-  // Firebase is optional - only needed for push notifications (not implemented yet)
-  let fcmMessaging: ReturnType<typeof messaging>;
-  try {
-    fcmMessaging = messaging();
-  } catch {
-    // Firebase not initialized - create a mock messaging instance for testing
-    fcmMessaging = {
-      send: async () => Promise.resolve('mock-message-id'),
-    } as unknown as ReturnType<typeof messaging>;
-  }
-  const pushDelivery = new PushDelivery({ projectId: 'test-project' }, fcmMessaging);
+  const pushDelivery = new PushDelivery({ projectId: 'test-project' });
   const inAppDelivery = new InAppDelivery();
   const deliveryRouter = new DeliveryRouter([
     emailDelivery,
@@ -216,6 +219,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     })
   );
 
+  // Cookie parsing (for refresh_token httpOnly cookie)
+  app.use(cookieParser());
+
   // Body parsing with size limit
   app.use(express.json({ limit: '10mb' }));
 
@@ -242,25 +248,97 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   app.use('/api/alerts', alertsRouter(notificationService));
 
   if (database) {
-    const authService = new AuthService(database);
+    const baseUrl =
+      config.baseUrl ??
+      process.env['BASE_URL'] ??
+      process.env['WEB_URL'] ??
+      'http://localhost:2800';
+    const passwordResetTokenStore = new PasswordResetTokenRepository(database);
+    const refreshTokenStore = new RefreshTokenRepository(database);
+    const sessionRepository = new SessionRepository(database);
+    const oauthAccountRepository = new OAuthAccountRepository(database);
+    const sendGridConfig = getSendGridConfig(config);
+    const sendGrid = sgMail as unknown as MailService;
+    const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
+
+    const authService = new AuthService(
+      database,
+      jwtSecret,
+      process.env['JWT_ACCESS_EXPIRES_IN'] ?? process.env['JWT_EXPIRES_IN'] ?? '15m',
+      passwordResetTokenStore,
+      passwordResetEmailSender,
+      baseUrl,
+      refreshTokenStore,
+      process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d',
+      process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ?? '24h',
+      oauthAccountRepository
+    );
 
     // User-facing API routes
-    app.use('/api/auth', authRouter({ database }));
+    app.use('/api/auth', authRouter({
+      database,
+      jwtSecret,
+      jwtExpiresIn:
+        process.env['JWT_ACCESS_EXPIRES_IN'] ??
+        process.env['JWT_EXPIRES_IN'] ??
+        '15m',
+      passwordResetTokenStore,
+      passwordResetEmailSender,
+      baseUrl,
+      refreshTokenStore,
+      refreshTokenExpiresIn: process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d',
+      sessionRefreshTokenExpiresIn: process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ?? '24h',
+      sessionRepository,
+      oauthAccountRepository,
+      authService,
+    }));
+    app.use('/api/sessions', sessionsRouter({ database, authService }));
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Settings API routes
-    app.use('/api/settings', authMiddleware(authService), settingsRouter({ database }));
+    app.use('/api/settings', authMiddleware(authService), settingsRouter({ database, authService }));
     // Agenda API routes (unified assignments + recurring events)
-    app.use('/api/agenda', agendaRouter({ database }));
+    app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
 
     // Admin API routes (separate authentication)
-    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret }));
+    const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
+    const adminMfaTokenStore = new AdminMFATokenRepository(database);
+    const adminStepUpChallengeStore = new AdminStepUpChallengeRepository(database);
+    const adminPasswordResetTokenStore = new AdminPasswordResetTokenRepository(database);
+    const adminAuthService = new AdminAuthService(
+      database,
+      jwtSecret,
+      undefined,
+      undefined,
+      adminRevokedTokenStore,
+      adminMfaTokenStore,
+      adminPasswordResetTokenStore,
+      passwordResetEmailSender,
+      baseUrl
+    );
+    app.use('/api/admin/auth', adminAuthRouter({
+      database,
+      jwtSecret,
+      revokedTokenStore: adminRevokedTokenStore,
+      mfaTokenStore: adminMfaTokenStore,
+      stepUpChallengeStore: adminStepUpChallengeStore,
+      adminPasswordResetTokenStore,
+      adminPasswordResetEmailSender: passwordResetEmailSender,
+      adminBaseUrl: baseUrl,
+      sessionRepository,
+    }));
+    app.use('/api/admin/sessions', adminSessionsRouter({
+      database,
+      adminAuthService,
+      adminJwtSecret: jwtSecret ?? process.env['JWT_SECRET'] ?? '',
+    }));
     app.use('/api/admin/customers', customersRouter({ database }));
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
     app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));

@@ -17,6 +17,7 @@ Scholaracle is an AI-powered parenting assistant that helps parents track their 
 - **AI-Powered Insights**: Receive recommendations and pattern recognition
 - **Multi-Channel Notifications**: Email, push, SMS, and in-app notifications
 - **Student & Parent Agents**: Separate notification systems for students and parents
+- **Super Admin Dashboard**: Full customer and subscription management
 
 ## Project Structure
 
@@ -28,14 +29,18 @@ scholaracle/
 │   ├── interfaces/    # @scholaracle/interfaces - ISP interfaces
 │   ├── contracts/     # @scholaracle/contracts - Data models & enums
 │   ├── agents/        # @scholaracle/agents - Notification generators
-│   ├── api/           # @scholaracle/api - Express API server (coming soon)
-│   ├── workers/       # @scholaracle/workers - Background jobs (coming soon)
-│   └── web/           # @scholaracle/web - Next.js frontend (coming soon)
+│   ├── database/      # @scholaracle/database - MongoDB repositories
+│   ├── auth/          # @scholaracle/auth - JWT authentication
+│   ├── connector/     # @scholaracle/connector - LMS data connector (CLI)
+│   ├── api/           # @scholaracle/api - Express API server
+│   ├── workers/       # @scholaracle/workers - Background notification jobs
+│   ├── web/           # @scholaracle/web - Next.js frontend
+│   └── e2e/           # E2E tests (Playwright)
 ```
 
 ## Getting Started
 
-**⚠️ PORT POLICY: All services use FIXED ports in the 28XX series (2800-2804). These ports MUST NOT be changed.**
+**PORT POLICY: All local services use FIXED ports in the 28XX series (2800-2804). These ports MUST NOT be changed.**
 - **2800**: Web App (FIXED)
 - **2801**: API Server (FIXED)
 - **2802**: MongoDB (FIXED)
@@ -78,14 +83,8 @@ pnpm build
 # Run all tests
 pnpm test
 
-# Run tests with coverage (requires 100%)
-pnpm test:coverage
-
 # Lint all packages
 pnpm lint
-
-# Format all packages
-pnpm format
 
 # Type check all packages
 pnpm type-check
@@ -109,13 +108,6 @@ pnpm --filter @scholaracle/interfaces lint
 
 ## Architecture
 
-### Methodology
-
-- **TDD (Test-Driven Development)**: All code written test-first
-- **ISP (Interface Segregation Principle)**: Small, focused interfaces
-- **SOLID Principles**: Clean, maintainable architecture
-- **100% Test Coverage**: Required for all packages
-
 ### Package Dependencies
 
 ```
@@ -123,93 +115,45 @@ interfaces (no dependencies)
     ↓
 contracts (depends on interfaces)
     ↓
-agents (depends on interfaces + contracts)
+database, auth, agents (depend on interfaces + contracts)
+    ↓
+connector (depends on contracts + interfaces)
     ↓
 api, workers, web (depend on all above)
 ```
 
-## Current Status
+## Deployment
 
-### ✅ Completed (Week 1-2)
-
-- [x] Monorepo structure setup
-- [x] Interfaces package (`@scholaracle/interfaces`)
-- [x] Contracts package (`@scholaracle/contracts`) - 100% coverage
-- [x] Student Notification Generator (`@scholaracle/agents`) - 100% coverage
-- [x] All 6 student notification templates
-
-### 🚧 In Progress
-
-- [ ] Parent Notification Generator
-- [ ] Delivery services (Email, Push, SMS)
-- [ ] MongoDB queue system
-- [ ] API server
-- [ ] Frontend dashboard
-
-## Standards
-
-All code must follow:
-
-- **[CODING_STANDARDS.md](./CODING_STANDARDS.md)** - Mandatory coding standards
-- **[TECHNOLOGY_BEST_PRACTICES.md](./TECHNOLOGY_BEST_PRACTICES.md)** - Technology-specific best practices
-- **[IMPLEMENTATION_PLAN_FINAL.md](./IMPLEMENTATION_PLAN_FINAL.md)** - 8-week TDD implementation plan
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details.
-
-### Development Workflow
-
-1. Create a feature branch: `git checkout -b feature/amazing-feature`
-2. Write tests first (TDD)
-3. Implement the feature
-4. Ensure 100% test coverage
-5. Run linting and formatting: `pnpm lint && pnpm format`
-6. Commit following [Conventional Commits](https://www.conventionalcommits.org/)
-7. Push and create a Pull Request
-
-### Commit Message Format
-
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+- **API + Workers**: Railway (Docker) — see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
+- **Web**: Railway (Docker)
+- **MongoDB**: Railway MongoDB plugin
+- **Production URL**: https://scholarmancy.com
+- **API URL**: https://api.scholarmancy.com
 
 ## Documentation
 
-- [Architecture Overview](./ARCHITECTURE.md)
-- [Database Schema](./DATABASE_SCHEMA.md)
-- [Notification Agents Specification](./NOTIFICATION_AGENTS_SPECIFICATION.md)
-- [Implementation Plan](./IMPLEMENTATION_PLAN_FINAL.md)
-- [Coding Standards](./CODING_STANDARDS.md)
-- **[Port Policy](./PORT_POLICY.md)** - ⚠️ **FIXED ports (2800-2804) - DO NOT CHANGE**
-- [Docker Setup](./DOCKER_SETUP.md) - Complete Docker infrastructure guide
-- [Port Mapping](./PORT_MAPPING.md) - Port reference guide
+- [App Specification](./APP_SPECIFICATION.md) — Authoritative v1 feature spec
+- [Super Admin Dashboard Spec](./SUPER_ADMIN_DASHBOARD_SPECIFICATION.md) — Admin roles & permissions
+- [Port Policy](./PORT_POLICY.md) — Fixed ports (2800-2804)
+- [Docker Setup](./DOCKER_SETUP.md) — Local Docker infrastructure guide
+- [Railway Deployment](./RAILWAY_DEPLOYMENT.md) — Production deployment reference
+- [Seed Endpoint](./SEED_ENDPOINT_USAGE.md) — Test data seeding
+- [E2E Test Guide](./RUN_ALL_TESTS.md) — Running the E2E test suite
+- [Specification Coverage](./SPECIFICATION_COVERAGE.md) — Test coverage matrix
+- [Automation Testability](./AUTOMATION_TESTABILITY.md) — data-testid conventions
+- [E2E Fail-Fast Pyramid](./E2E_FAIL_FAST_PYRAMID.md) — Layered test architecture
 
 ## Technology Stack
 
 - **Runtime**: Node.js 20 LTS
 - **Language**: TypeScript 5.3+ (strict mode)
 - **Package Manager**: PNPM 8+
-- **Testing**: Jest 29+ (100% coverage required)
+- **Testing**: Jest 29+ / Playwright
 - **Linting**: ESLint + Prettier
-- **Database**: MongoDB (on Railway)
-- **Hosting**: Railway (MVP)
+- **Database**: MongoDB (Railway plugin)
+- **Frontend**: Next.js 16
+- **Hosting**: Railway (API, Workers, Web) + custom domain
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/YOLOVibeCode/scholaracle/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YOLOVibeCode/scholaracle/discussions)
-
-## Acknowledgments
-
-Built with ❤️ by [YOLOVibeCode](https://github.com/YOLOVibeCode)

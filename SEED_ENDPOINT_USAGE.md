@@ -73,11 +73,11 @@ console.log(forceResult);
     },
     "admins": {
       "created": [
-        "Super Admin: super@scholaracle.com",
-        "admin: admin@scholaracle.com",
-        "support: support@scholaracle.com",
-        "billing: billing@scholaracle.com",
-        "analyst: analyst@scholaracle.com"
+        "Super Admin: super@scholarmancy.com",
+        "admin: admin@scholarmancy.com",
+        "support: support@scholarmancy.com",
+        "billing: billing@scholarmancy.com",
+        "analyst: analyst@scholarmancy.com"
       ],
       "existing": [],
       "errors": []
@@ -123,11 +123,11 @@ console.log(forceResult);
 
 | Role | Email | Password | Name |
 |------|-------|----------|------|
-| super_admin | `super@scholaracle.com` | `SuperAdmin123!` | Super Admin |
-| admin | `admin@scholaracle.com` | `Admin123!` | Admin User |
-| support | `support@scholaracle.com` | `Support123!` | Support User |
-| billing | `billing@scholaracle.com` | `Billing123!` | Billing User |
-| analyst | `analyst@scholaracle.com` | `Analyst123!` | Analyst User |
+| super_admin | `super@scholarmancy.com` | `SuperAdmin123!` | Super Admin |
+| admin | `admin@scholarmancy.com` | `Admin123!` | Admin User |
+| support | `support@scholarmancy.com` | `Support123!` | Support User |
+| billing | `billing@scholarmancy.com` | `Billing123!` | Billing User |
+| analyst | `analyst@scholarmancy.com` | `Analyst123!` | Analyst User |
 
 ## Test Data Created
 

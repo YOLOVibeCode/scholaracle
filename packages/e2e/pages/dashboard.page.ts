@@ -20,16 +20,16 @@ export class DashboardPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.locator('h1:has-text("Dashboard")');
-    this.studentCountCard = page.locator('[data-testid="student-count"], :has-text("Students") >> ..');
-    this.coursesCard = page.locator('[data-testid="courses-count"], :has-text("Active Courses") >> ..');
-    this.alertsCard = page.locator('[data-testid="alerts-count"], :has-text("Alerts") >> ..');
-    this.gpaCard = page.locator('[data-testid="gpa"], :has-text("Average GPA") >> ..');
-    this.recentAlerts = page.locator(':has-text("Recent Alerts")').first();
-    this.upcomingDeadlines = page.locator(':has-text("Upcoming Deadlines")').first();
-    this.studentsLink = page.locator('a[href="/dashboard/students"], [data-testid="students-link"]');
-    this.alertsLink = page.locator('a[href="/dashboard/alerts"], [data-testid="alerts-link"]');
-    this.settingsLink = page.locator('a[href="/dashboard/settings"], [data-testid="settings-link"]');
-    this.logoutButton = page.locator('[data-testid="logout-button"], button:has-text("Logout")');
+    this.studentCountCard = page.locator('[data-testid="student-count"]');
+    this.coursesCard = page.locator(':has-text("Active Courses") >> ..');
+    this.alertsCard = page.locator(':has-text("Alerts") >> ..');
+    this.gpaCard = page.locator(':has-text("Average GPA") >> ..');
+    this.recentAlerts = page.locator('[data-testid="dashboard-recent-alerts"]');
+    this.upcomingDeadlines = page.locator('[data-testid="dashboard-upcoming-deadlines"]');
+    this.studentsLink = page.locator('a[href="/dashboard/students"]');
+    this.alertsLink = page.locator('a[href="/dashboard/alerts"]');
+    this.settingsLink = page.locator('a[href="/dashboard/settings"]');
+    this.logoutButton = page.locator('[data-testid="button-logout"], button:has-text("Logout")');
   }
 
   async goto(): Promise<void> {

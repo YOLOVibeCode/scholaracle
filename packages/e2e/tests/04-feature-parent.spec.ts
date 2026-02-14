@@ -16,11 +16,11 @@ test.describe('@feature Layer 4: Parent Features', () => {
     await page.goto('/dashboard/students/new');
     
     const studentName = `Test Student ${Date.now()}`;
-    await page.fill('[data-testid="student-name"]', studentName);
-    await page.fill('[data-testid="student-grade"]', '10');
-    await page.fill('[data-testid="student-school"]', 'Test High School');
+    await page.fill('[data-testid="input-student-name"]', studentName);
+    await page.fill('[data-testid="input-student-grade"]', '10');
+    await page.fill('[data-testid="input-student-school"]', 'Test High School');
     
-    await page.click('[data-testid="save-student-button"]');
+    await page.click('[data-testid="button-save-student"]');
     
     // Should redirect to students list or show success
     await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
@@ -48,7 +48,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
     await loginAsRole('parent');
     await page.goto('/dashboard/students');
     
-    const editButton = page.locator('[data-testid="edit-student-button"]').first();
+    const editButton = page.locator('[data-testid="button-edit-student"]').first();
     const count = await editButton.count();
     
     if (count > 0) {
@@ -56,11 +56,11 @@ test.describe('@feature Layer 4: Parent Features', () => {
       await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 3000 });
       
       // Update name
-      const nameInput = page.locator('[data-testid="student-name"]');
+      const nameInput = page.locator('[data-testid="input-student-name"]');
       await nameInput.clear();
       await nameInput.fill('Updated Student Name');
       
-      await page.click('[data-testid="save-student-button"]');
+      await page.click('[data-testid="button-save-student"]');
       
       // Verify redirect and update
       await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
@@ -72,14 +72,14 @@ test.describe('@feature Layer 4: Parent Features', () => {
     await loginAsRole('parent');
     await page.goto('/dashboard/students');
     
-    const deleteButton = page.locator('[data-testid="delete-student-button"]').first();
+    const deleteButton = page.locator('[data-testid="button-delete-student"]').first();
     const count = await deleteButton.count();
     
     if (count > 0) {
       await deleteButton.click();
       
       // Confirm dialog appears
-      const confirmButton = page.locator('[data-testid="confirm-dialog-confirm"]');
+      const confirmButton = page.locator('[data-testid="button-confirm-dialog"]');
       await confirmButton.click();
       
       await page.waitForTimeout(1000);
@@ -100,7 +100,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
     await loginAsRole('parent');
     await page.goto('/dashboard/alerts');
     
-    const acknowledgeButton = page.locator('[data-testid="acknowledge-button"]').first();
+    const acknowledgeButton = page.locator('[data-testid="button-acknowledge"]').first();
     const count = await acknowledgeButton.count();
     
     if (count > 0) {
@@ -140,7 +140,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
     const page = authenticatedPage;
     await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
     
-    const pushToggle = page.locator('[data-testid="push-toggle"]').first();
+    const pushToggle = page.locator('[data-testid="toggle-push"]').first();
     const count = await pushToggle.count();
     
     if (count > 0) {
@@ -153,7 +153,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
       expect(newState).toBe(!initialState);
       
       // Save if save button exists
-      const saveButton = page.locator('[data-testid="save-settings-button"]');
+      const saveButton = page.locator('[data-testid="button-save-settings"]');
       const saveCount = await saveButton.count();
       
       if (saveCount > 0) {
@@ -168,14 +168,14 @@ test.describe('@feature Layer 4: Parent Features', () => {
     const page = authenticatedPage;
     await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
     
-    const thresholdInput = page.locator('[data-testid="grade-drop-threshold"]').first();
+    const thresholdInput = page.locator('[data-testid="input-grade-drop-threshold"]').first();
     const count = await thresholdInput.count();
     
     if (count > 0) {
       await thresholdInput.clear();
       await thresholdInput.fill('7');
       
-      const saveButton = page.locator('[data-testid="save-settings-button"]');
+      const saveButton = page.locator('[data-testid="button-save-settings"]');
       const saveCount = await saveButton.count();
       
       if (saveCount > 0) {
@@ -190,7 +190,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
     const page = authenticatedPage;
     await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
     
-    const pushToggle = page.locator('[data-testid="push-toggle"]').first();
+    const pushToggle = page.locator('[data-testid="toggle-push"]').first();
     const count = await pushToggle.count();
     
     if (count > 0) {
@@ -202,7 +202,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
         await expect(pushToggle).toBeChecked({ timeout: 2000 });
       }
       
-      const saveButton = page.locator('[data-testid="save-settings-button"]');
+      const saveButton = page.locator('[data-testid="button-save-settings"]');
       const saveCount = await saveButton.count();
       
       if (saveCount > 0) {
@@ -215,7 +215,7 @@ test.describe('@feature Layer 4: Parent Features', () => {
       await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
       
       // Verify setting persisted
-      const newToggle = page.locator('[data-testid="push-toggle"]').first();
+      const newToggle = page.locator('[data-testid="toggle-push"]').first();
       const persistedState = await newToggle.isChecked();
       expect(persistedState).toBe(!initialState);
     }

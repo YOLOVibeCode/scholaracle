@@ -1,4 +1,5 @@
 import type { ObjectId } from 'mongodb';
+import type { IStudentAlertPreferences } from '@scholaracle/contracts';
 
 export interface IDataSourceCredentials {
   readonly encrypted: string;
@@ -45,6 +46,7 @@ export interface IStudentData {
   readonly studentId?: string;
   readonly dataSources?: readonly IDataSource[];
   readonly stats?: IStudentStats;
+  readonly alertPreferences?: IStudentAlertPreferences;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -60,6 +62,7 @@ export class Student {
   public readonly studentId?: string;
   public readonly dataSources: readonly IDataSource[];
   public readonly stats?: IStudentStats;
+  public readonly alertPreferences?: IStudentAlertPreferences;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -71,6 +74,7 @@ export class Student {
     this.studentId = data.studentId;
     this.dataSources = data.dataSources ?? [];
     this.stats = data.stats;
+    this.alertPreferences = data.alertPreferences;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }

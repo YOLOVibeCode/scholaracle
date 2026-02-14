@@ -173,7 +173,7 @@ export default function AdminPaymentsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openRefund(p)}
-                            data-testid="refund-button"
+                            data-testid="button-refund"
                           >
                             Refund
                           </Button>
@@ -183,7 +183,7 @@ export default function AdminPaymentsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => retryPayment(p.id)}
-                            data-testid="retry-button"
+                            data-testid="button-retry"
                           >
                             Retry
                           </Button>

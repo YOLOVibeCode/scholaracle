@@ -48,7 +48,7 @@ export default defineConfig({
   use: {
     // Support production URLs via environment variable
     // Local: http://localhost:2800 (FIXED PORT)
-    // Production: https://app.scholaracle.com (or set BASE_URL)
+    // Production: https://app.scholarmancy.com (or set BASE_URL)
     baseURL: process.env.BASE_URL ?? 'http://localhost:2800',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -68,7 +68,7 @@ export default defineConfig({
     // Layer 1: Auth (depends on critical)
     {
       name: 'auth',
-      testMatch: /01-auth\.spec\.ts/,
+      testMatch: /01-auth\.spec\.ts|auth\/.*\.spec\.ts/,
       dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
@@ -145,7 +145,7 @@ export default defineConfig({
   //   Start with: MONGODB_URI=mongodb://localhost:2802/scholaracle PORT=3002 pnpm --filter @scholaracle/api start
   //   Or use Docker: make test-up (starts Web on 2800, API on 2801, MongoDB on 2802)
   // - Production: Set API_BASE_URL environment variable to production API URL
-  //   Example: API_BASE_URL=https://api.scholaracle.com pnpm test
+  //   Example: API_BASE_URL=https://api.scholarmancy.com pnpm test
 });
 
 

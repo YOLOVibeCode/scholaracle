@@ -10,14 +10,16 @@ export class LoginPage {
   readonly loginButton: Locator;
   readonly errorMessage: Locator;
   readonly registerLink: Locator;
+  readonly forgotPasswordLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.locator('[data-testid="email-input"]');
-    this.passwordInput = page.locator('[data-testid="password-input"]');
-    this.loginButton = page.locator('[data-testid="login-button"]');
-    this.errorMessage = page.locator('[data-testid="error-message"], .text-red-500, .text-destructive, .bg-red-50');
-    this.registerLink = page.locator('a[href="/register"]');
+    this.emailInput = page.locator('[data-testid="input-email"]');
+    this.passwordInput = page.locator('[data-testid="input-password"]');
+    this.loginButton = page.locator('[data-testid="button-login"]');
+    this.errorMessage = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50');
+    this.registerLink = page.locator('[data-testid="link-register"], a[href="/register"]');
+    this.forgotPasswordLink = page.locator('[data-testid="link-forgot-password"], a[href="/forgot-password"]');
   }
 
   async goto(): Promise<void> {

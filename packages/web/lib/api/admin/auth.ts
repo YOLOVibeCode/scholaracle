@@ -10,6 +10,8 @@ export interface IAdminLoginResponse {
   readonly token?: string;
   readonly requiresMFA?: boolean;
   readonly mfaToken?: string;
+  readonly requiresMFASetup?: boolean;
+  readonly mfaSetupToken?: string;
   readonly admin?: {
     readonly id: string;
     readonly email: string;
@@ -85,7 +87,35 @@ export const adminAuthApi = {
   },
 
   /**
-   * Setup MFA for admin user.
+   * Get MFA setup data (QR code and manual key) using mfaSetupToken from login.
+   * Unauthenticated; uses mfaSetupToken in body.
+   */
+  async getMFASetupData(mfaSetupToken: string): Promise<IMFASetupResponse> {
+    return apiClient.post<IMFASetupResponse>('/admin/auth/mfa/setup-data', {
+      mfaSetupToken,
+    });
+  },
+
+  /**
+   * Complete MFA setup with TOTP verification; returns admin token on success.
+   * Unauthenticated; uses mfaSetupToken in body.
+   */
+  async completeMFASetup(mfaSetupToken: string, totpToken: string): Promise<IAdminLoginResponse> {
+    const response = await apiClient.post<IAdminLoginResponse>('/admin/auth/mfa/complete-setup', {
+      mfaSetupToken,
+      totpToken,
+    });
+
+    if (response.success && response.token) {
+      localStorage.setItem('adminToken', response.token);
+      localStorage.setItem('adminUser', JSON.stringify(response.admin));
+    }
+
+    return response;
+  },
+
+  /**
+   * Setup MFA for admin user (when already logged in).
    */
   async setupMFA(): Promise<IMFASetupResponse> {
     return apiClient.get<IMFASetupResponse>('/admin/auth/mfa/setup', true);

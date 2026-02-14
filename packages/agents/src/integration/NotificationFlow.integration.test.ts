@@ -39,7 +39,6 @@ describe('NotificationFlow Integration', () => {
   let pushDelivery: PushDelivery;
   let mockSendGrid: jest.Mocked<MailService>;
   let mockTwilio: jest.Mocked<Twilio>;
-  let mockFcm: { send: jest.Mock };
 
   async function waitForCount(params: {
     readonly collection: string;
@@ -107,9 +106,8 @@ describe('NotificationFlow Integration', () => {
       mockTwilio
     );
 
-    mockFcm = { send: jest.fn() };
     inAppDelivery = new InAppDelivery();
-    pushDelivery = new PushDelivery({ projectId: 'test' }, mockFcm as any);
+    pushDelivery = new PushDelivery({ projectId: 'test' });
 
     // Include all default channels used by Notification defaults (PUSH/EMAIL/SMS/IN_APP)
     deliveryRouter = new DeliveryRouter([emailDelivery, smsDelivery, inAppDelivery, pushDelivery]);
@@ -147,7 +145,6 @@ describe('NotificationFlow Integration', () => {
 
     // Reset mocks
     jest.clearAllMocks();
-    mockFcm.send.mockResolvedValue('push-123');
   });
 
   describe('End-to-End Flow', () => {
