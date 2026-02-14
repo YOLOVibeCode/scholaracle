@@ -195,11 +195,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const doc of assignmentDocs) {
         const courseExternalId = (doc['courseExternalId'] as string) ?? '_unknown';
         const record = doc['record'] as Record<string, unknown> | undefined;
-        const dueAt = record?.dueAt as string | undefined;
-        const status = (record?.status as AssignmentStatus) ?? 'unknown';
-        const pointsPossible = typeof record?.pointsPossible === 'number' ? record.pointsPossible : undefined;
-        const pointsEarned = typeof record?.pointsEarned === 'number' ? record.pointsEarned : undefined;
-        const title = (record?.title as string) ?? 'Assignment';
+        const dueAt = record?.['dueAt'] as string | undefined;
+        const status = (record?.['status'] as AssignmentStatus) ?? 'unknown';
+        const pointsPossible = typeof record?.['pointsPossible'] === 'number' ? record!['pointsPossible'] : undefined;
+        const pointsEarned = typeof record?.['pointsEarned'] === 'number' ? record!['pointsEarned'] : undefined;
+        const title = (record?.['title'] as string) ?? 'Assignment';
         const externalId = (doc['externalId'] as string) ?? '';
 
         if (!courseData.has(courseExternalId)) {

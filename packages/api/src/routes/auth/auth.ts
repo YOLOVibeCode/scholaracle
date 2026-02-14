@@ -325,7 +325,7 @@ async function handleRefresh(
 ): Promise<void> {
   try {
     const refreshToken =
-      (req.cookies?.refresh_token as string | undefined) ??
+      (req.cookies?.['refresh_token'] as string | undefined) ??
       (req.body as { refreshToken?: string }).refreshToken;
     const rememberMe = (req.body as { rememberMe?: boolean }).rememberMe !== false;
 
@@ -441,7 +441,7 @@ async function handleLogout(
 ): Promise<void> {
   try {
     const refreshToken =
-      (req.cookies?.refresh_token as string | undefined) ??
+      (req.cookies?.['refresh_token'] as string | undefined) ??
       (req.body as { refreshToken?: string }).refreshToken;
 
     if (refreshToken && typeof refreshToken === 'string') {

@@ -568,7 +568,7 @@ function isDemoAllowed(): boolean {
 /**
  * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
  */
-async function handleDemoSeed(req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
+async function handleDemoSeed(_req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
   try {
     if (!isDemoAllowed()) {
       res.status(403).json({ success: false, error: 'Demo is not enabled' });
@@ -600,7 +600,7 @@ async function handleDemoSeed(req: Request, res: Response, config: ISeedRouterCo
 
     const userId = user._id.toString();
 
-    let students = await studentRepository.findByUserId(userId);
+    let students = [...(await studentRepository.findByUserId(userId))];
     const existingNames = new Set(students.map((s) => s.name));
     for (const demoStudent of DEMO_STUDENTS) {
       if (!existingNames.has(demoStudent.name)) {

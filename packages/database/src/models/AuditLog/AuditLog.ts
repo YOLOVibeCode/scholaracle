@@ -10,6 +10,8 @@ export type AuditAction =
   | 'customer:delete'
   | 'customer:suspend'
   | 'customer:unsuspend'
+  | 'customer:bulk_suspend'
+  | 'customer:bulk_unsuspend'
   | 'customer:impersonate'
   // Payment actions
   | 'payment:view'
@@ -150,6 +152,8 @@ export class AuditLog {
       'customer:delete': 'Deleted customer account',
       'customer:suspend': 'Suspended customer account',
       'customer:unsuspend': 'Unsuspended customer account',
+      'customer:bulk_suspend': 'Bulk suspended customer accounts',
+      'customer:bulk_unsuspend': 'Bulk unsuspended customer accounts',
       'customer:impersonate': 'Logged in as customer',
       'payment:view': 'Viewed payment details',
       'payment:refund': 'Issued refund',
