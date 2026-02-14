@@ -16,26 +16,30 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_PER_EMAIL = 5;
 const RATE_LIMIT_PER_IP = 20;
 
+function cleanStaleRateLimit(now: number): void {
+  for (const [k, v] of forgotPasswordRateLimit.entries()) {
+    if (v.resetAt < now) forgotPasswordRateLimit.delete(k);
+  }
+}
+
+function getOrInitRateLimitEntry(key: string, now: number): { count: number; resetAt: number } {
+  let entry = forgotPasswordRateLimit.get(key);
+  if (!entry || entry.resetAt < now) {
+    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    forgotPasswordRateLimit.set(key, entry);
+  }
+  return entry;
+}
+
 function checkForgotPasswordRateLimit(email: string, ip: string): boolean {
   const now = Date.now();
-  const cleanStale = () => {
-    for (const [k, v] of forgotPasswordRateLimit.entries()) {
-      if (v.resetAt < now) forgotPasswordRateLimit.delete(k);
-    }
-  };
-  cleanStale();
+  cleanStaleRateLimit(now);
 
   const emailKey = `email:${email.toLowerCase().trim()}`;
   const ipKey = `ip:${ip || 'unknown'}`;
 
-  const getOrInit = (key: string) => {
-    let entry = forgotPasswordRateLimit.get(key);
-    if (!entry || entry.resetAt < now) {
-      entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-      forgotPasswordRateLimit.set(key, entry);
-    }
-    return entry;
-  };
+  const getOrInit = (key: string): { count: number; resetAt: number } =>
+    getOrInitRateLimitEntry(key, now);
 
   const emailEntry = getOrInit(emailKey);
   const ipEntry = getOrInit(ipKey);
@@ -246,7 +250,10 @@ async function handleForgotPassword(
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.socket.remoteAddress ?? '';
+    const ip =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+      req.socket.remoteAddress ??
+      '';
     if (!checkForgotPasswordRateLimit(email.trim(), ip)) {
       res.status(429).json({
         success: false,
@@ -368,6 +375,49 @@ async function handleRefresh(
   }
 }
 
+function validateOAuthSecret(req: Request): boolean {
+  const secret =
+    req.headers['x-internal-api-secret'] ??
+    req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+  const expected = process.env['INTERNAL_API_SECRET'];
+  return Boolean(expected && secret === expected);
+}
+
+function validateOAuthPayload(body: unknown):
+  | {
+      ok: true;
+      provider: 'google' | 'apple' | 'microsoft';
+      providerAccountId: string;
+      email: string;
+      name: string;
+    }
+  | { ok: false; error: string } {
+  const b = body as {
+    provider?: string;
+    providerAccountId?: string;
+    email?: string;
+    name?: string;
+  };
+  const { provider, providerAccountId, email, name } = b;
+  if (!provider || !providerAccountId || !email || !name) {
+    return {
+      ok: false,
+      error: 'Missing required fields: provider, providerAccountId, email, name',
+    };
+  }
+  const validProviders = ['google', 'apple', 'microsoft'];
+  if (!validProviders.includes(provider)) {
+    return { ok: false, error: 'Invalid provider' };
+  }
+  return {
+    ok: true,
+    provider: provider as 'google' | 'apple' | 'microsoft',
+    providerAccountId,
+    email,
+    name,
+  };
+}
+
 /**
  * Handle OAuth callback from Next.js server (internal).
  * Validates INTERNAL_API_SECRET header; finds/creates user and issues JWT tokens.
@@ -378,36 +428,21 @@ async function handleOAuth(
   authService: AuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  const secret = req.headers['x-internal-api-secret'] ?? req.headers['authorization']?.replace(/^Bearer\s+/i, '');
-  const expected = process.env['INTERNAL_API_SECRET'];
-  if (!expected || secret !== expected) {
+  if (!validateOAuthSecret(req)) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
     return;
   }
+  const payload = validateOAuthPayload(req.body);
+  if (!payload.ok) {
+    res.status(400).json({ success: false, error: payload.error });
+    return;
+  }
   try {
-    const { provider, providerAccountId, email, name } = req.body as {
-      provider?: string;
-      providerAccountId?: string;
-      email?: string;
-      name?: string;
-    };
-    if (!provider || !providerAccountId || !email || !name) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: provider, providerAccountId, email, name',
-      });
-      return;
-    }
-    const validProviders = ['google', 'apple', 'microsoft'];
-    if (!validProviders.includes(provider)) {
-      res.status(400).json({ success: false, error: 'Invalid provider' });
-      return;
-    }
     const result = await authService.loginOrRegisterOAuth(
-      provider as 'google' | 'apple' | 'microsoft',
-      providerAccountId,
-      email,
-      name
+      payload.provider,
+      payload.providerAccountId,
+      payload.email,
+      payload.name
     );
     if (result.success && result.user?.id && result.familyId) {
       await upsertSession(sessionRepository, result.user.id, result.familyId, req);

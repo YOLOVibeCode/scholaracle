@@ -21,6 +21,57 @@ function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
 }
 
+function percentToLetter(pct: number): string {
+  if (pct >= 93) return 'A';
+  if (pct >= 90) return 'A-';
+  if (pct >= 87) return 'B+';
+  if (pct >= 83) return 'B';
+  if (pct >= 80) return 'B-';
+  if (pct >= 77) return 'C+';
+  if (pct >= 73) return 'C';
+  if (pct >= 70) return 'C-';
+  if (pct >= 67) return 'D+';
+  if (pct >= 63) return 'D';
+  if (pct >= 60) return 'D-';
+  return 'F';
+}
+
+function trendFromScores(
+  recentPossible: number,
+  recentEarned: number,
+  olderPossible: number,
+  olderEarned: number
+): 'improving' | 'stable' | 'declining' {
+  if (recentPossible <= 0 || olderPossible <= 0) return 'stable';
+  const recentPct = (recentEarned / recentPossible) * 100;
+  const olderPct = (olderEarned / olderPossible) * 100;
+  const diff = recentPct - olderPct;
+  if (diff >= 5) return 'improving';
+  if (diff <= -5) return 'declining';
+  return 'stable';
+}
+
+function riskFromGradeAndMissing(
+  grade: number,
+  missingCount: number,
+  totalAssignments: number
+): { level: 'none' | 'low' | 'medium' | 'high' | 'critical'; explanation?: string } {
+  const missingRatio = totalAssignments > 0 ? missingCount / totalAssignments : 0;
+  if (grade < 60) return { level: 'critical', explanation: 'Grade below 60%' };
+  if (grade < 70 || missingRatio > 0.2)
+    return {
+      level: 'high',
+      explanation: missingRatio > 0.2 ? 'Multiple missing assignments' : 'Grade in D range',
+    };
+  if (grade < 80 || missingRatio > 0.1)
+    return {
+      level: 'medium',
+      explanation: missingRatio > 0.1 ? 'Some missing work' : 'Grade in C range',
+    };
+  if (missingCount > 0) return { level: 'low', explanation: 'At least one missing assignment' };
+  return { level: 'none' };
+}
+
 /**
  * Create students router.
  *
@@ -149,7 +200,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         })
         .toArray();
 
-      const courseIds = [...new Set((assignmentDocs.map((d) => d['courseExternalId'] as string).filter(Boolean)) as string[])];
+      const courseIds = [
+        ...new Set(
+          assignmentDocs.map((d) => d['courseExternalId'] as string).filter(Boolean) as string[]
+        ),
+      ];
       const courseMap = new Map<string, string>();
       if (courseIds.length > 0) {
         const courseDocs = await coursesColl
@@ -197,8 +252,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const record = doc['record'] as Record<string, unknown> | undefined;
         const dueAt = record?.['dueAt'] as string | undefined;
         const status = (record?.['status'] as AssignmentStatus) ?? 'unknown';
-        const pointsPossible = typeof record?.['pointsPossible'] === 'number' ? record!['pointsPossible'] : undefined;
-        const pointsEarned = typeof record?.['pointsEarned'] === 'number' ? record!['pointsEarned'] : undefined;
+        const pointsPossible =
+          typeof record?.['pointsPossible'] === 'number' ? record!['pointsPossible'] : undefined;
+        const pointsEarned =
+          typeof record?.['pointsEarned'] === 'number' ? record!['pointsEarned'] : undefined;
         const title = (record?.['title'] as string) ?? 'Assignment';
         const externalId = (doc['externalId'] as string) ?? '';
 
@@ -231,15 +288,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
         if (status === 'graded' && pointsPossible != null && pointsPossible > 0) {
           data.totalPointsPossible += pointsPossible;
-          data.totalPointsEarned += (pointsEarned ?? 0);
+          data.totalPointsEarned += pointsEarned ?? 0;
           data.gradedCount += 1;
           const dueTime = dueAt ? new Date(dueAt).getTime() : 0;
           if (dueTime >= twoWeeksAgo.getTime()) {
             data.recentPointsPossible += pointsPossible;
-            data.recentPointsEarned += (pointsEarned ?? 0);
+            data.recentPointsEarned += pointsEarned ?? 0;
           } else if (dueTime >= fourWeeksAgo.getTime()) {
             data.olderPointsPossible += pointsPossible;
-            data.olderPointsEarned += (pointsEarned ?? 0);
+            data.olderPointsEarned += pointsEarned ?? 0;
           }
         }
         if (status === 'missing') data.missingCount += 1;
@@ -272,54 +329,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }>;
       }> = [];
 
-      function percentToLetter(pct: number): string {
-        if (pct >= 93) return 'A';
-        if (pct >= 90) return 'A-';
-        if (pct >= 87) return 'B+';
-        if (pct >= 83) return 'B';
-        if (pct >= 80) return 'B-';
-        if (pct >= 77) return 'C+';
-        if (pct >= 73) return 'C';
-        if (pct >= 70) return 'C-';
-        if (pct >= 67) return 'D+';
-        if (pct >= 63) return 'D';
-        if (pct >= 60) return 'D-';
-        return 'F';
-      }
-
-      function trendFromScores(
-        recentPossible: number,
-        recentEarned: number,
-        olderPossible: number,
-        olderEarned: number
-      ): 'improving' | 'stable' | 'declining' {
-        if (recentPossible <= 0 || olderPossible <= 0) return 'stable';
-        const recentPct = (recentEarned / recentPossible) * 100;
-        const olderPct = (olderEarned / olderPossible) * 100;
-        const diff = recentPct - olderPct;
-        if (diff >= 5) return 'improving';
-        if (diff <= -5) return 'declining';
-        return 'stable';
-      }
-
-      function riskFromGradeAndMissing(
-        grade: number,
-        missingCount: number,
-        totalAssignments: number
-      ): { level: 'none' | 'low' | 'medium' | 'high' | 'critical'; explanation?: string } {
-        const missingRatio = totalAssignments > 0 ? missingCount / totalAssignments : 0;
-        if (grade < 60) return { level: 'critical', explanation: 'Grade below 60%' };
-        if (grade < 70 || missingRatio > 0.2) return { level: 'high', explanation: missingRatio > 0.2 ? 'Multiple missing assignments' : 'Grade in D range' };
-        if (grade < 80 || missingRatio > 0.1) return { level: 'medium', explanation: missingRatio > 0.1 ? 'Some missing work' : 'Grade in C range' };
-        if (missingCount > 0) return { level: 'low', explanation: 'At least one missing assignment' };
-        return { level: 'none' };
-      }
-
       for (const [courseExternalId, data] of courseData) {
         const totalAssignments = data.assignments.length;
-        const grade = data.totalPointsPossible > 0
-          ? Math.round((data.totalPointsEarned / data.totalPointsPossible) * 1000) / 10
-          : 0;
+        const grade =
+          data.totalPointsPossible > 0
+            ? Math.round((data.totalPointsEarned / data.totalPointsPossible) * 1000) / 10
+            : 0;
         const letterGrade = percentToLetter(grade);
         const trend = trendFromScores(
           data.recentPointsPossible,
@@ -355,10 +370,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         });
       }
 
-      const overallGPA = student.stats?.currentGPA ?? (courseGrades.length > 0
-        ? courseGrades.reduce((s, c) => s + c.grade, 0) / courseGrades.length
-        : 0);
-      const atRiskCourses = courseGrades.filter((c) => ['medium', 'high', 'critical'].includes(c.riskLevel)).length;
+      const overallGPA =
+        student.stats?.currentGPA ??
+        (courseGrades.length > 0
+          ? courseGrades.reduce((s, c) => s + c.grade, 0) / courseGrades.length
+          : 0);
+      const atRiskCourses = courseGrades.filter((c) =>
+        ['medium', 'high', 'critical'].includes(c.riskLevel)
+      ).length;
 
       let aiOverview: string | undefined;
       const gradeRiskService = new GradeRiskService({
@@ -844,14 +863,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const runs = await ingestRunRepository.listByUserIdAndSourceId(userId, sourceId, limit);
 
       res.status(200).json(
-        runs.map((r: { runId: string; status: string; startedAt: Date; uploadedAt?: Date; committedAt?: Date; error?: string | null }) => ({
-          runId: r.runId,
-          status: r.status,
-          startedAt: r.startedAt.toISOString(),
-          uploadedAt: r.uploadedAt?.toISOString(),
-          committedAt: r.committedAt?.toISOString(),
-          error: r.error ?? null,
-        }))
+        runs.map(
+          (r: {
+            runId: string;
+            status: string;
+            startedAt: Date;
+            uploadedAt?: Date;
+            committedAt?: Date;
+            error?: string | null;
+          }) => ({
+            runId: r.runId,
+            status: r.status,
+            startedAt: r.startedAt.toISOString(),
+            uploadedAt: r.uploadedAt?.toISOString(),
+            committedAt: r.committedAt?.toISOString(),
+            error: r.error ?? null,
+          })
+        )
       );
     } catch (error) {
       res.status(500).json({
@@ -957,5 +985,3 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
   return router;
 }
-
-

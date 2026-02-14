@@ -80,11 +80,7 @@ const TEST_USERS = {
  * Handle seed request.
  * Creates all test users, students, and alerts for E2E testing.
  */
-async function handleSeed(
-  req: Request,
-  res: Response,
-  config: ISeedRouterConfig
-): Promise<void> {
+async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
   try {
     // Only allow seeding in development/test environments
     const nodeEnv = process.env['NODE_ENV'] ?? 'development';
@@ -211,7 +207,9 @@ async function handleSeed(
           else results.users.errors.push(`Parent: ${result.error}`);
         }
       } catch (error) {
-        results.users.errors.push(`Parent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        results.users.errors.push(
+          `Parent: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
       }
     }
 
@@ -223,7 +221,9 @@ async function handleSeed(
       let superAdmin = await adminRepository.findByEmail(TEST_USERS.super_admin.email);
       if (!superAdmin) {
         // Create super_admin directly (bypassing the service requirement)
-        const passwordHash = await AdminUserRepository.hashPassword(TEST_USERS.super_admin.password);
+        const passwordHash = await AdminUserRepository.hashPassword(
+          TEST_USERS.super_admin.password
+        );
         const adminData = {
           email: TEST_USERS.super_admin.email,
           passwordHash,
@@ -238,7 +238,9 @@ async function handleSeed(
           // Delete existing super_admin using database collection directly
           const objectId = superAdmin._id!;
           await config.database.collection('admin_users').deleteOne({ _id: objectId });
-          const passwordHash = await AdminUserRepository.hashPassword(TEST_USERS.super_admin.password);
+          const passwordHash = await AdminUserRepository.hashPassword(
+            TEST_USERS.super_admin.password
+          );
           const adminData = {
             email: TEST_USERS.super_admin.email,
             passwordHash,
@@ -260,7 +262,12 @@ async function handleSeed(
     }
 
     // Create other admin users
-    const adminRoles: Array<'admin' | 'support' | 'billing' | 'analyst'> = ['admin', 'support', 'billing', 'analyst'];
+    const adminRoles: Array<'admin' | 'support' | 'billing' | 'analyst'> = [
+      'admin',
+      'support',
+      'billing',
+      'analyst',
+    ];
     for (const role of adminRoles) {
       if (!superAdminId) {
         results.admins.errors.push(`${role}: Cannot create - super_admin not available`);
@@ -351,7 +358,9 @@ async function handleSeed(
             studentId: studentData.studentId,
           });
 
-          results.students.created.push(`Student: ${studentData.name} (${student._id?.toString()})`);
+          results.students.created.push(
+            `Student: ${studentData.name} (${student._id?.toString()})`
+          );
         } catch (error) {
           results.students.errors.push(
             `${studentData.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -474,7 +483,9 @@ async function handleSeed(
     // 7. Create baseline audit log (for audit log viewer E2E)
     if (superAdminId) {
       try {
-        const existingCount = await config.database.collection('audit_logs').countDocuments({ action: 'system:export' });
+        const existingCount = await config.database
+          .collection('audit_logs')
+          .countDocuments({ action: 'system:export' });
         if (existingCount === 0 || shouldForce) {
           if (shouldForce) {
             await config.database.collection('audit_logs').deleteMany({ action: 'system:export' });
@@ -499,10 +510,14 @@ async function handleSeed(
     // 8. Create baseline communication log (for communications center E2E)
     if (parentUser && parentUser._id && superAdminId) {
       try {
-        const existingCount = await config.database.collection('communication_logs').countDocuments({ subject: 'Seed Communication' });
+        const existingCount = await config.database
+          .collection('communication_logs')
+          .countDocuments({ subject: 'Seed Communication' });
         if (existingCount === 0 || shouldForce) {
           if (shouldForce) {
-            await config.database.collection('communication_logs').deleteMany({ subject: 'Seed Communication' });
+            await config.database
+              .collection('communication_logs')
+              .deleteMany({ subject: 'Seed Communication' });
           }
           const comm = await communicationLogRepository.create({
             userId: parentUser._id.toString(),
@@ -516,10 +531,14 @@ async function handleSeed(
             triggeredBy: 'admin',
             adminUserId: superAdminId,
           });
-          results.communications.created.push(`CommunicationLog: Seed Communication (${comm._id?.toString()})`);
+          results.communications.created.push(
+            `CommunicationLog: Seed Communication (${comm._id?.toString()})`
+          );
         }
       } catch (error) {
-        results.communications.errors.push(error instanceof Error ? error.message : 'Unknown error');
+        results.communications.errors.push(
+          error instanceof Error ? error.message : 'Unknown error'
+        );
       }
     }
 
@@ -568,7 +587,11 @@ function isDemoAllowed(): boolean {
 /**
  * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
  */
-async function handleDemoSeed(_req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
+async function handleDemoSeed(
+  _req: Request,
+  res: Response,
+  config: ISeedRouterConfig
+): Promise<void> {
   try {
     if (!isDemoAllowed()) {
       res.status(403).json({ success: false, error: 'Demo is not enabled' });
@@ -588,7 +611,9 @@ async function handleDemoSeed(_req: Request, res: Response, config: ISeedRouterC
         DEMO_USER.name
       );
       if (!result.success) {
-        res.status(500).json({ success: false, error: result.error ?? 'Failed to create demo user' });
+        res
+          .status(500)
+          .json({ success: false, error: result.error ?? 'Failed to create demo user' });
         return;
       }
       user = await userRepository.findByEmail(DEMO_USER.email);
@@ -600,7 +625,7 @@ async function handleDemoSeed(_req: Request, res: Response, config: ISeedRouterC
 
     const userId = user._id.toString();
 
-    let students = [...(await studentRepository.findByUserId(userId))];
+    const students = [...(await studentRepository.findByUserId(userId))];
     const existingNames = new Set(students.map((s) => s.name));
     for (const demoStudent of DEMO_STUDENTS) {
       if (!existingNames.has(demoStudent.name)) {
@@ -673,7 +698,11 @@ async function handleDemoSeed(_req: Request, res: Response, config: ISeedRouterC
 /**
  * POST /api/seed/demo/reset — Wipe demo user data and re-seed.
  */
-async function handleDemoReset(req: Request, res: Response, config: ISeedRouterConfig): Promise<void> {
+async function handleDemoReset(
+  req: Request,
+  res: Response,
+  config: ISeedRouterConfig
+): Promise<void> {
   try {
     if (!isDemoAllowed()) {
       res.status(403).json({ success: false, error: 'Demo is not enabled' });
