@@ -104,7 +104,7 @@ export default function AdminLoginPage() {
                   name="email"
                   data-testid="input-admin-email"
                   type="email"
-                  placeholder="admin@scholarmancy.com"
+                  placeholder="admin@scholaracle.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

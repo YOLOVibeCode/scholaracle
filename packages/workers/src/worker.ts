@@ -43,7 +43,7 @@ function getSendGridConfig(config: IWorkerConfig): {
     fromEmail:
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
-      'notifications@scholarmancy.com',
+      'notifications@scholaracle.com',
     fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
   };
 }
@@ -108,7 +108,11 @@ function initializeNotificationService(config: IWorkerConfig): NotificationServi
  * @param config - Worker configuration
  */
 export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
-  const mongodbUri = config.mongodbUri ?? process.env['MONGODB_URI'] ?? process.env['MONGO_URL'] ?? 'mongodb://localhost:27017';
+  const mongodbUri =
+    config.mongodbUri ??
+    process.env['MONGODB_URI'] ??
+    process.env['MONGO_URL'] ??
+    'mongodb://localhost:27017';
   const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle';
 
   // Connect to MongoDB
@@ -124,7 +128,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
 
   // Resolve parent userId to email/phone for delivery
   const userRepository = new UserRepository(database);
-  const resolveParentRecipients = async (userId: string): Promise<{ parentEmail?: string; parentPhone?: string }> => {
+  const resolveParentRecipients = async (
+    userId: string
+  ): Promise<{ parentEmail?: string; parentPhone?: string }> => {
     const user = await userRepository.findById(userId);
     return {
       parentEmail: user?.email,

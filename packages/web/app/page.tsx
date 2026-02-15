@@ -74,8 +74,7 @@ export default function HomePage() {
             <p>
               Scholaracle helps families stay on top of student progress, assignments, and deadlines.
               Connect your school or LMS data, get proactive alerts, and see a single view of grades and
-              upcoming work. This app is part of the Scholarmancy project—you can run your own instance
-              or use this one to try it out.
+              upcoming work. You can run your own instance or use this one to try it out.
             </p>
           </div>
         </section>

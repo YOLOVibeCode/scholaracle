@@ -105,7 +105,7 @@ function getSendGridConfig(config: IServerConfig): {
     fromEmail:
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
-      'notifications@scholarmancy.com',
+      'notifications@scholaracle.com',
     fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
   };
 }
@@ -275,29 +275,34 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     );
 
     // User-facing API routes
-    app.use('/api/auth', authRouter({
-      database,
-      jwtSecret,
-      jwtExpiresIn:
-        process.env['JWT_ACCESS_EXPIRES_IN'] ??
-        process.env['JWT_EXPIRES_IN'] ??
-        '15m',
-      passwordResetTokenStore,
-      passwordResetEmailSender,
-      baseUrl,
-      refreshTokenStore,
-      refreshTokenExpiresIn: process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d',
-      sessionRefreshTokenExpiresIn: process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ?? '24h',
-      sessionRepository,
-      oauthAccountRepository,
-      authService,
-    }));
+    app.use(
+      '/api/auth',
+      authRouter({
+        database,
+        jwtSecret,
+        jwtExpiresIn:
+          process.env['JWT_ACCESS_EXPIRES_IN'] ?? process.env['JWT_EXPIRES_IN'] ?? '15m',
+        passwordResetTokenStore,
+        passwordResetEmailSender,
+        baseUrl,
+        refreshTokenStore,
+        refreshTokenExpiresIn: process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d',
+        sessionRefreshTokenExpiresIn: process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ?? '24h',
+        sessionRepository,
+        oauthAccountRepository,
+        authService,
+      })
+    );
     app.use('/api/sessions', sessionsRouter({ database, authService }));
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Settings API routes
-    app.use('/api/settings', authMiddleware(authService), settingsRouter({ database, authService }));
+    app.use(
+      '/api/settings',
+      authMiddleware(authService),
+      settingsRouter({ database, authService })
+    );
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
@@ -319,22 +324,28 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       passwordResetEmailSender,
       baseUrl
     );
-    app.use('/api/admin/auth', adminAuthRouter({
-      database,
-      jwtSecret,
-      revokedTokenStore: adminRevokedTokenStore,
-      mfaTokenStore: adminMfaTokenStore,
-      stepUpChallengeStore: adminStepUpChallengeStore,
-      adminPasswordResetTokenStore,
-      adminPasswordResetEmailSender: passwordResetEmailSender,
-      adminBaseUrl: baseUrl,
-      sessionRepository,
-    }));
-    app.use('/api/admin/sessions', adminSessionsRouter({
-      database,
-      adminAuthService,
-      adminJwtSecret: jwtSecret ?? process.env['JWT_SECRET'] ?? '',
-    }));
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret,
+        revokedTokenStore: adminRevokedTokenStore,
+        mfaTokenStore: adminMfaTokenStore,
+        stepUpChallengeStore: adminStepUpChallengeStore,
+        adminPasswordResetTokenStore,
+        adminPasswordResetEmailSender: passwordResetEmailSender,
+        adminBaseUrl: baseUrl,
+        sessionRepository,
+      })
+    );
+    app.use(
+      '/api/admin/sessions',
+      adminSessionsRouter({
+        database,
+        adminAuthService,
+        adminJwtSecret: jwtSecret ?? process.env['JWT_SECRET'] ?? '',
+      })
+    );
     app.use('/api/admin/customers', customersRouter({ database }));
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
     app.use('/api/admin/payments', paymentsRouter({ database }));
