@@ -178,7 +178,7 @@ export default function StudentViewDashboardPage() {
               <CardContent>
                 {studentItems.length > 0 ? (
                   <ul className="space-y-2" data-testid="student-view-agenda-list">
-                    {studentItems
+                    {[...studentItems]
                       .sort((a, b) => new Date(a.timeAt).getTime() - new Date(b.timeAt).getTime())
                       .slice(0, 5)
                       .map((i: IAgendaItem) => (

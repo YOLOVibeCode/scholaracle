@@ -115,7 +115,7 @@ export default function AgendaPage() {
               className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
               data-testid="agenda-error-inline"
             >
-              Failed to refresh agenda: {error.message}
+              Failed to refresh agenda: {error}
             </div>
           )}
 
