@@ -22,7 +22,8 @@
 
 - **Shared:** `NODE_ENV`, `JWT_SECRET`, `MONGODB_DB_NAME`
 - **API:** `RAILWAY_DOCKERFILE_PATH`, `PORT`, `CORS_ORIGINS`, `MONGO_URL` (from MongoDB plugin)
-- **Web:** `RAILWAY_DOCKERFILE_PATH`, `PORT`, `NEXT_PUBLIC_API_URL`, `MONGO_URL`
+- **Web:** `RAILWAY_DOCKERFILE_PATH`, `PORT`, `NEXT_PUBLIC_API_URL`, `MONGO_URL`  
+  - `NEXT_PUBLIC_API_URL` must be set (e.g. `https://api.scholarmancy.com/api`). It is baked into the client bundle at build time via Dockerfile `ARG`/`ENV`.
 - **Workers:** `RAILWAY_DOCKERFILE_PATH`, `MONGO_URL` (from MongoDB plugin)
 
 ## Redeploy

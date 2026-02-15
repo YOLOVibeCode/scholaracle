@@ -35,6 +35,9 @@ CMD ["pnpm", "--filter", "@scholaracle/web", "dev"]
 # Production stage
 FROM base AS production
 COPY . .
+# Next.js bakes NEXT_PUBLIC_* into the client bundle at build time. Railway passes env as build args.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN pnpm --filter @scholaracle/web build
 ENV NODE_ENV=production
 EXPOSE 3000
