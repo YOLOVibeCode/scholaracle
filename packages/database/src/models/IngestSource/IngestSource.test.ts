@@ -155,5 +155,80 @@ describe('IngestSource', () => {
       // Assert
       expect(source._id).toBe(mockId);
     });
+
+    it('should default schedule to every_6h when omitted', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+      };
+      const source = new IngestSource(data);
+      expect(source.schedule).toBe('every_6h');
+    });
+
+    it('should use provided schedule', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+        schedule: 'hourly',
+      };
+      const source = new IngestSource(data);
+      expect(source.schedule).toBe('hourly');
+    });
+
+    it('should default dataTypes to empty array when omitted', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+      };
+      const source = new IngestSource(data);
+      expect(source.dataTypes).toEqual([]);
+    });
+
+    it('should use provided dataTypes', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+        dataTypes: ['grades', 'assignments', 'calendar'],
+      };
+      const source = new IngestSource(data);
+      expect(source.dataTypes).toEqual(['grades', 'assignments', 'calendar']);
+    });
+
+    it('should default enabled to true when omitted', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+      };
+      const source = new IngestSource(data);
+      expect(source.enabled).toBe(true);
+    });
+
+    it('should use provided enabled', () => {
+      const data = {
+        userId: 'user-123',
+        sourceId: 'source-456',
+        provider: 'canvas',
+        adapterId: 'canvas-v2',
+        displayName: 'My Canvas LMS',
+        enabled: false,
+      };
+      const source = new IngestSource(data);
+      expect(source.enabled).toBe(false);
+    });
   });
 });

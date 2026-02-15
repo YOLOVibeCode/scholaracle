@@ -29,7 +29,14 @@ export interface IUserPreferences {
     readonly prioritizeHighImpact?: boolean;
     readonly emphasizeWeakSubjects?: boolean;
     readonly celebrateWins?: boolean;
-    readonly enabledTypes?: Record<string, { readonly enabled: boolean; readonly severity: string }>;
+    readonly enabledTypes?: Record<
+      string,
+      { readonly enabled: boolean; readonly severity: string }
+    >;
+  };
+  /** Dashboard UI preferences (e.g. grade display mode). Synced across devices when user logs in elsewhere. */
+  readonly dashboard?: {
+    readonly gradeDisplay?: 'letter' | 'score';
   };
 }
 
@@ -155,6 +162,9 @@ export class User {
         prioritizeHighImpact: true,
         emphasizeWeakSubjects: true,
         celebrateWins: true,
+      },
+      dashboard: {
+        gradeDisplay: 'letter',
       },
     };
   }

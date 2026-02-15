@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { studentsApi, type IStudentGradesResponse, type ICourseGrade } from '@/lib/api/students';
 import { GradeSidebar } from '@/components/dashboard/students/GradeSidebar';
 import { AssignmentTable } from '@/components/dashboard/students/AssignmentTable';
+import { CourseGradeSummaryCard } from '@/components/dashboard/students/CourseGradeSummaryCard';
 
 export default function StudentGradesPage() {
   const params = useParams();
@@ -104,15 +105,7 @@ export default function StudentGradesPage() {
 
         {selectedCourse ? (
           <>
-            {selectedCourse.riskExplanation && (
-              <div
-                className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/30"
-                data-testid="course-risk-explanation"
-              >
-                <strong className="text-amber-800 dark:text-amber-200">{selectedCourse.courseName}</strong>
-                <p className="mt-1 text-amber-900 dark:text-amber-100">{selectedCourse.riskExplanation}</p>
-              </div>
-            )}
+            <CourseGradeSummaryCard course={selectedCourse} />
             <div>
               <h2 className="mb-2 text-lg font-semibold">{selectedCourse.courseName} — Assignments</h2>
               <AssignmentTable

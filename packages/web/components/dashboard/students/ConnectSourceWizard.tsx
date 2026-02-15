@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { IAddSourceRequest } from '@/lib/api/sources';
+import type { IAddSourceRequest, ISourceCredentialsRequest } from '@/lib/api/sources';
 
 export interface ConnectSourceWizardProps {
   open: boolean;
@@ -35,6 +35,10 @@ export function ConnectSourceWizard({
   const [provider, setProvider] = useState<typeof PROVIDERS[number] | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [portalBaseUrl, setPortalBaseUrl] = useState('');
+  const [credentialMode, setCredentialMode] = useState<'api' | 'login' | 'skip' | null>(null);
+  const [accessToken, setAccessToken] = useState('');
+  const [credsUsername, setCredsUsername] = useState('');
+  const [credsPassword, setCredsPassword] = useState('');
   const [schedule, setSchedule] = useState<IAddSourceRequest['schedule']>('every_6h');
   const [dataTypes, setDataTypes] = useState<string[]>(['grades', 'assignments', 'calendar']);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +48,10 @@ export function ConnectSourceWizard({
     setProvider(null);
     setDisplayName('');
     setPortalBaseUrl('');
+    setCredentialMode(null);
+    setAccessToken('');
+    setCredsUsername('');
+    setCredsPassword('');
     setSchedule('every_6h');
     setDataTypes(['grades', 'assignments', 'calendar']);
     onClose();
@@ -59,6 +67,10 @@ export function ConnectSourceWizard({
     setStep(3);
   };
 
+  const handleStep3Next = () => {
+    setStep(4);
+  };
+
   const handleConnect = async () => {
     if (!provider) return;
     setSubmitting(true);
@@ -72,6 +84,22 @@ export function ConnectSourceWizard({
       dataTypes,
     };
     const result = await sourcesApi.addToStudent(studentId, payload);
+    if (result && credentialMode && credentialMode !== 'skip') {
+      const hasApiCreds = credentialMode === 'api' && accessToken.trim();
+      const hasLoginCreds = credentialMode === 'login' && credsUsername.trim() && credsPassword;
+      if (hasApiCreds || hasLoginCreds) {
+        const creds: ISourceCredentialsRequest =
+          credentialMode === 'api'
+            ? { authType: 'api', accessToken: accessToken.trim(), baseUrl: portalBaseUrl || undefined }
+            : {
+                authType: 'login',
+                username: credsUsername.trim(),
+                password: credsPassword,
+                baseUrl: portalBaseUrl || undefined,
+              };
+        await sourcesApi.setCredentials(studentId, result.id, creds);
+      }
+    }
     setSubmitting(false);
     if (result) {
       onConnected?.();
@@ -145,6 +173,93 @@ export function ConnectSourceWizard({
 
           {step === 3 && provider && (
             <>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Add credentials so we can log in to the API or portal. You can add them later from the source settings.
+              </p>
+              <div className="space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant={credentialMode === 'api' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCredentialMode('api')}
+                    data-testid="credential-mode-api"
+                  >
+                    API / access token
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={credentialMode === 'login' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCredentialMode('login')}
+                    data-testid="credential-mode-login"
+                  >
+                    Log in to portal
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={credentialMode === 'skip' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCredentialMode('skip')}
+                    data-testid="credential-mode-skip"
+                  >
+                    Skip for now
+                  </Button>
+                </div>
+                {credentialMode === 'api' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="access-token">Access token</Label>
+                    <Input
+                      id="access-token"
+                      type="password"
+                      placeholder="Paste your API or access token"
+                      value={accessToken}
+                      onChange={(e) => setAccessToken(e.target.value)}
+                      data-testid="input-access-token"
+                    />
+                  </div>
+                )}
+                {credentialMode === 'login' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="creds-username">Username</Label>
+                    <Input
+                      id="creds-username"
+                      type="text"
+                      autoComplete="username"
+                      placeholder="Portal username"
+                      value={credsUsername}
+                      onChange={(e) => setCredsUsername(e.target.value)}
+                      data-testid="input-creds-username"
+                    />
+                    <Label htmlFor="creds-password">Password</Label>
+                    <Input
+                      id="creds-password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Portal password"
+                      value={credsPassword}
+                      onChange={(e) => setCredsPassword(e.target.value)}
+                      data-testid="input-creds-password"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Used to log in to the school portal when scraping. Stored securely and never shown again.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-4">
+                <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                  Back
+                </Button>
+                <Button type="button" onClick={handleStep3Next} data-testid="button-step3-next">
+                  Next
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === 4 && provider && (
+            <>
               <p className="text-sm text-gray-600 dark:text-gray-400">Configure sync</p>
               <div className="space-y-2">
                 <Label>Schedule</Label>
@@ -183,7 +298,7 @@ export function ConnectSourceWizard({
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                <Button type="button" variant="outline" onClick={() => setStep(3)}>
                   Back
                 </Button>
                 <Button

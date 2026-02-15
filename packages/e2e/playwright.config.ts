@@ -113,6 +113,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
     },
+    // Layer 7: Onboarding Wizard (self-contained, exercises full UX flow)
+    {
+      name: 'onboarding',
+      testMatch: /07-onboarding-wizard\.spec\.ts/,
+      dependencies: ['critical'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 90 * 1000,
+    },
   ],
 
   // Web server configuration
@@ -131,7 +139,7 @@ export default defineConfig({
     // Web app (FIXED port 2800)
     {
       // Disable Next.js dev tools overlay which can intercept pointer events and cause Playwright flakiness.
-      command: 'PORT=2800 NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
+      command: 'PORT=2800 AUTH_SECRET=e2e-test-secret NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
       url: 'http://localhost:2800',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,

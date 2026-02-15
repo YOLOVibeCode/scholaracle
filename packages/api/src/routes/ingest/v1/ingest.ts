@@ -20,10 +20,12 @@ import {
   IngestDeviceAuthRepository,
   IngestRunRepository,
   IngestSourceRepository,
+  StudentRepository,
   UserRepository,
   AlertRepository,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import { decryptCredentials } from '../../../utils/credentialsCipher';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -294,6 +296,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   const deviceRepo = new IngestDeviceAuthRepository(config.database);
   const sourceRepo = new IngestSourceRepository(config.database);
   const runRepo = new IngestRunRepository(config.database);
+  const studentRepo = new StudentRepository(config.database);
 
   // --- Device auth (public start/poll; approve requires user JWT) ---
 
@@ -374,6 +377,59 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userId = req.connectorUserId ?? '';
       const sources = await sourceRepo.listByUserId(userId);
       res.status(200).json({ success: true, sources });
+    })
+  );
+
+  router.get(
+    '/sources/:sourceId/credentials',
+    connectorAuthMiddleware(connectorTokenService),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const sourceId = req.params['sourceId'];
+      if (!sourceId) {
+        res.status(400).json({ success: false, error: 'Missing sourceId' });
+        return;
+      }
+      const students = await studentRepo.findByUserId(userId);
+      for (const student of students) {
+        const ds = student.dataSources.find((s) => s.id === sourceId);
+        if (!ds?.credentials?.encrypted) continue;
+        const plain = decryptCredentials({
+          encrypted: ds.credentials.encrypted,
+          iv: ds.credentials.iv,
+        });
+        if (!plain) {
+          res.status(503).json({ success: false, error: 'Credentials could not be decrypted' });
+          return;
+        }
+        let credentials: {
+          authType: string;
+          accessToken?: string;
+          username?: string;
+          password?: string;
+          baseUrl?: string;
+        };
+        try {
+          credentials = JSON.parse(plain) as typeof credentials;
+        } catch {
+          res.status(500).json({ success: false, error: 'Invalid credentials payload' });
+          return;
+        }
+        const ingestSource = await sourceRepo.findByUserIdAndSourceId(userId, sourceId);
+        const baseUrl = credentials.baseUrl ?? ingestSource?.portalBaseUrl ?? '';
+        if (credentials.authType === 'api') {
+          res.status(200).json({ baseUrl, accessToken: credentials.accessToken ?? '' });
+          return;
+        }
+        res.status(200).json({
+          baseUrl,
+          username: credentials.username,
+          password: credentials.password,
+          accessToken: undefined,
+        });
+        return;
+      }
+      res.status(404).json({ success: false, error: 'Source not found or no credentials set' });
     })
   );
 

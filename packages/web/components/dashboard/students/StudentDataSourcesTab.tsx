@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Link2, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { Key, Link2, Plug, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { sourcesApi, type IDataSource } from '@/lib/api/sources';
 import { SyncHistorySheet } from './SyncHistorySheet';
+import { SourceCredentialsSheet } from './SourceCredentialsSheet';
+import { ConnectToIntegrationSheet } from '@/components/dashboard/integrations/ConnectToIntegrationSheet';
 
 export interface StudentDataSourcesTabProps {
   studentId: string;
@@ -16,6 +19,8 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
   const [sources, setSources] = useState<readonly IDataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [openRunSourceId, setOpenRunSourceId] = useState<string | null>(null);
+  const [credentialsSource, setCredentialsSource] = useState<IDataSource | null>(null);
+  const [connectToIntegrationOpen, setConnectToIntegrationOpen] = useState(false);
 
   useEffect(() => {
     void loadSources();
@@ -36,18 +41,31 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
     );
   }
 
+  const linkedSourceIds = sources.map((s) => s.id);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Connected Sources</h2>
-        <Button
-          type="button"
-          onClick={onConnectSource}
-          data-testid="button-connect-source"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Connect New Source
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConnectToIntegrationOpen(true)}
+            data-testid="button-connect-to-integration"
+          >
+            <Plug className="mr-2 h-4 w-4" />
+            Connect to existing integration
+          </Button>
+          <Button
+            type="button"
+            onClick={onConnectSource}
+            data-testid="button-connect-source"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Connect New Source
+          </Button>
+        </div>
       </div>
 
       {sources.length === 0 ? (
@@ -93,7 +111,15 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                     </span>
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      href={`/dashboard/integrations/${source.id}`}
+                      data-testid={`link-integration-${source.id}`}
+                    >
+                      View in Integrations
+                    </Link>
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -102,6 +128,16 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                     data-testid={`button-view-runs-${source.id}`}
                   >
                     View Runs
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setCredentialsSource(source)}
+                    data-testid={`button-credentials-${source.id}`}
+                  >
+                    <Key className="h-3.5 w-3.5 mr-1" />
+                    {source.hasCredentials ? 'Update credentials' : 'Add credentials'}
                   </Button>
                 </div>
               </CardContent>
@@ -118,6 +154,23 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
           onSyncDone={() => void loadSources()}
         />
       )}
+      {credentialsSource && (
+        <SourceCredentialsSheet
+          open={Boolean(credentialsSource)}
+          studentId={studentId}
+          sourceId={credentialsSource.id}
+          displayName={credentialsSource.displayName}
+          onClose={() => setCredentialsSource(null)}
+          onSaved={() => void loadSources()}
+        />
+      )}
+      <ConnectToIntegrationSheet
+        open={connectToIntegrationOpen}
+        studentId={studentId}
+        linkedSourceIds={linkedSourceIds}
+        onClose={() => setConnectToIntegrationOpen(false)}
+        onConnected={() => void loadSources()}
+      />
     </div>
   );
 }

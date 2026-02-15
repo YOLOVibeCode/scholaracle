@@ -41,6 +41,8 @@ export function useAsyncData<T>(
   const [attempt, setAttempt] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchFnRef = useRef(fetchFn);
+  fetchFnRef.current = fetchFn;
 
   const loadData = useCallback(async () => {
     // If there is a pending retry timer from a previous failure, cancel it.
@@ -53,7 +55,7 @@ export function useAsyncData<T>(
     setError(null);
 
     try {
-      const result = await fetchFn();
+      const result = await fetchFnRef.current();
       setData(result);
       setError(null);
       setAttempt(0);
@@ -71,7 +73,7 @@ export function useAsyncData<T>(
     } finally {
       setIsLoading(false);
     }
-  }, [fetchFn, attempt, retryCount, retryDelay]);
+  }, [attempt, retryCount, retryDelay]);
 
   useEffect(() => {
     void loadData();

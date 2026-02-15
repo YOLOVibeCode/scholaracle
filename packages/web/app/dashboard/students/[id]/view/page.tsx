@@ -19,8 +19,8 @@ function startOfDay(d: Date): Date {
 
 export default function StudentViewDashboardPage() {
   const params = useParams();
-  const studentId = params.id as string;
-  const { studentName, studentExternalId } = useStudentView();
+  const studentId = params?.id as string | undefined;
+  const { studentName, studentExternalId, studentLoading, studentLoadError, clearStudentView } = useStudentView();
 
   const range = useMemo(() => {
     const from = startOfDay(new Date());
@@ -76,6 +76,59 @@ export default function StudentViewDashboardPage() {
     agendaRetry();
     alertsRetry();
   };
+
+  if (!studentId) {
+    return (
+      <div className="space-y-6" data-testid="student-view-invalid">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Invalid student</h1>
+          <p className="text-gray-600 dark:text-gray-400">No student ID in the URL.</p>
+        </div>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  if (studentLoadError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Student not found</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            We couldn&apos;t find this student. The link may be outdated or the student may have been removed.
+          </p>
+        </div>
+        <Link
+          href="/dashboard"
+          onClick={(e) => {
+            e.preventDefault();
+            clearStudentView();
+          }}
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          data-testid="student-not-found-back"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  if (studentLoading) {
+    return (
+      <div className="space-y-6" data-testid="student-view-loading">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Student Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400">Loading student…</p>
+        </div>
+        <LoadingSkeleton variant="dashboard" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

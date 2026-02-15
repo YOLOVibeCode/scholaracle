@@ -29,7 +29,13 @@ export interface IAlertThresholds {
   readonly enabledTypes?: Record<string, { readonly enabled: boolean; readonly severity: string }>;
 }
 
+/** Dashboard UI preferences (synced across devices). */
+export interface IDashboardSettings {
+  readonly gradeDisplay?: 'letter' | 'score';
+}
+
 export interface IUserSettings {
+  readonly dashboard?: IDashboardSettings;
   readonly notifications: {
     readonly push: boolean;
     readonly email: boolean;
@@ -60,6 +66,7 @@ export interface IUserSettings {
 }
 
 export interface IUpdateSettingsRequest {
+  readonly dashboard?: IDashboardSettings;
   readonly notifications?: INotificationSettings;
   readonly alerts?: IAlertThresholds;
 }
@@ -73,6 +80,7 @@ export interface IUserSettingsResponse extends IUserSettings {
 }
 
 const defaultSettings: IUserSettings = {
+  dashboard: { gradeDisplay: 'letter' },
   notifications: {
     push: true,
     email: true,
@@ -113,6 +121,7 @@ export const settingsApi = {
     try {
       const res = await apiClient.get<IUserSettingsResponse>('/settings');
       return {
+        dashboard: { ...defaultSettings.dashboard, ...res.dashboard },
         notifications: { ...defaultSettings.notifications, ...res.notifications },
         alerts: { ...defaultSettings.alerts, ...res.alerts },
         profile: res.profile,
@@ -140,7 +149,7 @@ export const settingsApi = {
   },
 
   /**
-   * Update all settings.
+   * Update all settings. Send only the keys you want to change (e.g. { dashboard: { gradeDisplay: 'score' } }).
    */
   async update(settings: IUpdateSettingsRequest): Promise<boolean> {
     try {

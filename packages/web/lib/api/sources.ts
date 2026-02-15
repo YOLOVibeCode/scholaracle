@@ -10,9 +10,19 @@ export interface IDataSource {
   readonly schedule: string;
   readonly dataTypes: string[];
   readonly status: 'active' | 'error' | 'disabled';
+  readonly hasCredentials?: boolean;
   readonly lastScraped?: string;
   readonly lastSuccess?: string;
   readonly lastError?: string | null;
+}
+
+/** Credentials for API (token) or portal login (username/password for scraping). */
+export interface ISourceCredentialsRequest {
+  readonly authType: 'api' | 'login';
+  readonly accessToken?: string;
+  readonly username?: string;
+  readonly password?: string;
+  readonly baseUrl?: string;
 }
 
 export interface IAddSourceRequest {
@@ -100,6 +110,23 @@ export const sourcesApi = {
     } catch (error) {
       console.error('Failed to trigger sync:', error);
       return null;
+    }
+  },
+
+  async setCredentials(
+    studentId: string,
+    sourceId: string,
+    credentials: ISourceCredentialsRequest
+  ): Promise<boolean> {
+    try {
+      const res = await apiClient.put<{ success?: boolean }>(
+        `/students/${studentId}/sources/${sourceId}/credentials`,
+        credentials
+      );
+      return res?.success ?? false;
+    } catch (error) {
+      console.error('Failed to set source credentials', error);
+      return false;
     }
   },
 };

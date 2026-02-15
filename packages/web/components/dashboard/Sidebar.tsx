@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug } from 'lucide-react';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import {
   Sidebar as SidebarComponent,
@@ -21,6 +21,7 @@ const parentMenuItems = [
   { title: 'Alerts', url: '/dashboard/alerts', icon: Bell },
   { title: 'Agenda', url: '/dashboard/agenda', icon: Calendar },
   { title: 'Courses', url: '/dashboard/courses', icon: BookOpen },
+  { title: 'Integrations', url: '/dashboard/integrations', icon: Plug },
   { title: 'Billing', url: '/dashboard/billing', icon: CreditCard },
   { title: 'Settings', url: '/dashboard/settings', icon: Settings },
 ];

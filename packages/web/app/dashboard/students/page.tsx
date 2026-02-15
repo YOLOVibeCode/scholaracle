@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
 import { ConfirmDialog } from '@/components/common';
+import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<readonly IStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     void loadStudents();
@@ -60,11 +62,9 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <Button asChild data-testid="button-add-student">
-          <Link href="/dashboard/students/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Student
-          </Link>
+        <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Student
         </Button>
       </div>
 
@@ -81,13 +81,11 @@ export default function StudentsPage() {
             <GraduationCap className="h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No students yet</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Get started by adding your first student
+              Get started by adding your first student and connecting their grade portal
             </p>
-            <Button asChild data-testid="button-add-student">
-              <Link href="/dashboard/students/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Student
-              </Link>
+            <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Student
             </Button>
           </CardContent>
         </Card>
@@ -170,6 +168,12 @@ export default function StudentsPage() {
         isSubmitting={isDeleting}
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+      />
+
+      <AddStudentWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onStudentAdded={() => void loadStudents()}
       />
     </div>
   );

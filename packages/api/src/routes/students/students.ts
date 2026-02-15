@@ -7,11 +7,13 @@ import {
   IngestRunRepository,
   AlertRepository,
   type IDataSource,
+  type IDataSourceCredentials,
   type IStudentData,
 } from '@scholaracle/database';
 import { GradeRiskService } from '@scholaracle/agents';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
-import { addSourceSchema, updateSourceSchema } from './schemas';
+import { encryptCredentials } from '../../utils/credentialsCipher';
+import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -596,6 +598,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         schedule: string;
         dataTypes: string[];
         status: string;
+        hasCredentials?: boolean;
         lastScraped?: string;
         lastSuccess?: string;
         lastError?: string | null;
@@ -614,6 +617,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           schedule: ds.schedule ?? 'every_6h',
           dataTypes: ds.dataTypes ? [...ds.dataTypes] : [],
           status: ds.status ?? 'active',
+          hasCredentials: Boolean(ds.credentials?.encrypted),
           lastScraped: ds.lastScraped?.toISOString(),
           lastSuccess: ds.lastSuccess?.toISOString(),
           lastError: ds.lastError ?? null,
@@ -781,6 +785,70 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         dataTypes: updatedDs.dataTypes ?? ds.dataTypes ?? [],
         status: ds.status ?? 'active',
       });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * PUT /api/students/:id/sources/:sourceId/credentials
+   * Set or update credentials for a source (API token or login for scraping). Stored encrypted.
+   */
+  router.put('/:id/sources/:sourceId/credentials', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentId, sourceId } = req.params;
+      if (!studentId || !sourceId) {
+        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
+        return;
+      }
+      const parsed = credentialsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
+        res.status(400).json({ success: false, error: msg });
+        return;
+      }
+      const credentials = parsed.data;
+
+      const student = await studentRepository.findById(studentId);
+      if (!student || student.userId.toString() !== userId) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const idx = student.dataSources.findIndex((ds) => ds.id === sourceId);
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Source not found' });
+        return;
+      }
+
+      const plain = JSON.stringify(credentials);
+      const encrypted = encryptCredentials(plain);
+      if (!encrypted) {
+        res.status(503).json({
+          success: false,
+          error: 'Credential encryption is not configured. Set CREDENTIALS_ENCRYPTION_KEY.',
+        });
+        return;
+      }
+
+      const updatedCredentials: IDataSourceCredentials = {
+        encrypted: encrypted.encrypted,
+        iv: encrypted.iv,
+      };
+      const dataSourcesUpdated = student.dataSources.map((d, i) =>
+        i === idx ? { ...d, credentials: updatedCredentials } : d
+      );
+      await studentRepository.update(studentId, { dataSources: dataSourcesUpdated });
+
+      res.status(200).json({ success: true, hasCredentials: true });
     } catch (error) {
       res.status(500).json({
         success: false,

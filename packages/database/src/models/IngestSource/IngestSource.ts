@@ -7,6 +7,9 @@ export interface IIngestSourceData {
   readonly adapterId: string;
   readonly displayName: string;
   readonly portalBaseUrl?: string;
+  readonly schedule?: string;
+  readonly dataTypes?: readonly string[];
+  readonly enabled?: boolean;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -19,6 +22,9 @@ export class IngestSource {
   public readonly adapterId: string;
   public readonly displayName: string;
   public readonly portalBaseUrl?: string;
+  public readonly schedule: string;
+  public readonly dataTypes: readonly string[];
+  public readonly enabled: boolean;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -30,6 +36,9 @@ export class IngestSource {
     this.adapterId = data.adapterId;
     this.displayName = data.displayName;
     this.portalBaseUrl = data.portalBaseUrl;
+    this.schedule = data.schedule ?? 'every_6h';
+    this.dataTypes = data.dataTypes ?? [];
+    this.enabled = data.enabled ?? true;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }

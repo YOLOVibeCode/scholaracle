@@ -1,23 +1,59 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, BookOpen, Bell, TrendingUp, X } from 'lucide-react';
+import { X, Plus, GraduationCap, Plug } from 'lucide-react';
 import { dashboardApi, type IDashboardStats } from '@/lib/api/dashboard';
+import { studentsApi } from '@/lib/api/students';
+import { settingsApi } from '@/lib/api/settings';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
+import { StudentGradeStripRow } from '@/components/dashboard/StudentGradeStripRow';
+import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
+import type { GradeDisplayMode } from '@/components/dashboard/StudentGradePanel';
 
 export default function DashboardPage() {
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [gradeDisplayMode, setGradeDisplayMode] = useState<GradeDisplayMode>('letter');
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  useEffect(() => {
+    void settingsApi.get().then((settings) => {
+      const mode = settings.dashboard?.gradeDisplay ?? 'letter';
+      setGradeDisplayMode(mode as GradeDisplayMode);
+    });
+  }, []);
+
+  const handleGradeDisplayToggle = () => {
+    const next: GradeDisplayMode = gradeDisplayMode === 'letter' ? 'score' : 'letter';
+    setGradeDisplayMode(next);
+    void settingsApi.update({ dashboard: { gradeDisplay: next } });
+  };
+
+  const fetchStats = useCallback(() => dashboardApi.getStats(), []);
   const { data: stats, isLoading, error, retry } = useAsyncData<IDashboardStats>(
-    () => dashboardApi.getStats(),
+    fetchStats,
+    { retryCount: 2, retryDelay: 1000 }
+  );
+
+  const fetchStudentsAndGrades = useCallback(async () => {
+    const students = await studentsApi.getAll();
+    const grades = await Promise.all(students.map((s) => studentsApi.getGrades(s.id)));
+    return { students, grades };
+  }, []);
+
+  const { data: studentsAndGrades, isLoading: studentsSectionLoading, error: studentsSectionError, retry: studentsSectionRetry } = useAsyncData(
+    fetchStudentsAndGrades,
     { retryCount: 2, retryDelay: 1000 }
   );
 
   const showOnboardingBanner =
-    !onboardingDismissed && !isLoading && !error && stats && (stats.totalStudents ?? 0) === 0;
+    !onboardingDismissed &&
+    !studentsSectionLoading &&
+    !studentsSectionError &&
+    studentsAndGrades &&
+    studentsAndGrades.students.length === 0;
 
   return (
     <div className="space-y-6">
@@ -28,24 +64,37 @@ export default function DashboardPage() {
 
       {showOnboardingBanner && (
         <Card data-testid="onboarding-banner" className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20">
-          <CardContent className="flex flex-row items-center justify-between gap-4 pt-6">
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              Get started by adding your first student to track their courses and alerts.
-            </p>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button asChild size="sm" data-testid="onboarding-add-student-cta">
-                <Link href="/dashboard/students/new">Add student</Link>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Dismiss"
-                data-testid="button-onboarding-dismiss"
-                onClick={() => setOnboardingDismissed(true)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+          <CardContent className="pt-6 pb-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="rounded-full bg-blue-100 p-3 dark:bg-blue-900/40">
+                <GraduationCap className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-1">Welcome to Scholaracle!</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md">
+                  Add your first student and connect their grade portal so you can track courses, grades, and alerts — all in one place.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  data-testid="onboarding-add-student-cta"
+                  onClick={() => setWizardOpen(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add your first student
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Dismiss"
+                  data-testid="button-onboarding-dismiss"
+                  onClick={() => setOnboardingDismissed(true)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -55,56 +104,68 @@ export default function DashboardPage() {
       {error && !isLoading && <ErrorDisplay error={error} title="Failed to load dashboard" onRetry={retry} />}
       {!isLoading && !error && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Students</CardTitle>
-                <GraduationCap className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="student-count">
-                  {stats?.totalStudents ?? 0}
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Total students</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Courses</CardTitle>
-                <BookOpen className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalCourses ?? 0}</div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Enrolled courses</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Alerts</CardTitle>
-                <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalAlerts ?? 0}</div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Pending alerts</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Average GPA</CardTitle>
-                <TrendingUp className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {stats?.averageGPA !== null && stats?.averageGPA !== undefined
-                    ? stats.averageGPA.toFixed(2)
-                    : '-'}
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Overall performance</p>
-              </CardContent>
-            </Card>
+          <div data-testid="dashboard-grade-summary">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-xl font-semibold tracking-tight">Grade summary</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGradeDisplayToggle}
+                data-testid="grade-display-toggle"
+                aria-pressed={gradeDisplayMode === 'score'}
+                aria-label={gradeDisplayMode === 'letter' ? 'Show numeric score; currently showing letter grade' : 'Show letter grade; currently showing score'}
+              >
+                {gradeDisplayMode === 'letter' ? 'Show score' : 'Show letter'}
+              </Button>
+            </div>
+            {studentsSectionLoading && (
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3].map((i) => (
+                  <StudentGradeStripRow
+                    key={i}
+                    student={{ id: '', userId: '', name: '…', grade: '' }}
+                    grades={null}
+                    loading
+                    displayMode={gradeDisplayMode}
+                  />
+                ))}
+              </div>
+            )}
+            {studentsSectionError && !studentsSectionLoading && (
+              <Card>
+                <CardContent className="pt-6">
+                  <ErrorDisplay
+                    error={studentsSectionError}
+                    title="Failed to load grades"
+                    onRetry={studentsSectionRetry}
+                  />
+                </CardContent>
+              </Card>
+            )}
+            {!studentsSectionLoading && !studentsSectionError && studentsAndGrades && studentsAndGrades.students.length > 0 && (
+              <div className="flex flex-col gap-2" data-testid="dashboard-grade-strip">
+                {studentsAndGrades.students.map((student, i) => (
+                  <StudentGradeStripRow
+                    key={student.id}
+                    student={student}
+                    grades={studentsAndGrades.grades[i] ?? null}
+                    displayMode={gradeDisplayMode}
+                  />
+                ))}
+              </div>
+            )}
+            {!studentsSectionLoading && !studentsSectionError && studentsAndGrades && studentsAndGrades.students.length === 0 && (
+              <Card>
+                <CardContent className="flex flex-col items-center py-8 text-center">
+                  <Plug className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground mb-3">Add students to see their grades here.</p>
+                  <Button size="sm" onClick={() => setWizardOpen(true)} data-testid="grade-summary-add-student">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add student
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -156,6 +217,15 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      <AddStudentWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onStudentAdded={() => {
+          studentsSectionRetry();
+          retry();
+        }}
+      />
     </div>
   );
 }

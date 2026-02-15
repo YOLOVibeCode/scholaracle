@@ -12,10 +12,29 @@ export interface ILmsAdapterMeta {
 
 /**
  * Credentials for authenticating with an LMS.
+ *
+ * Extended to support multiple auth methods:
+ * - Bearer token: baseUrl + accessToken (Canvas)
+ * - OAuth 2.0: baseUrl + accessToken + refreshToken + clientId + clientSecret (Google Classroom, OneRoster)
+ * - OAuth 1.0a: baseUrl + consumerKey + consumerSecret + oauthToken + oauthTokenSecret (Schoology)
+ * - API key: baseUrl + apiKey (Aeries, Alma)
+ * - Credentials: baseUrl + username + password (browser scraping)
+ *
+ * Each adapter validates the fields it requires in authenticate().
  */
 export interface ILmsCredentials {
   readonly baseUrl: string;
   readonly accessToken?: string;
+  readonly refreshToken?: string;
+  readonly clientId?: string;
+  readonly clientSecret?: string;
+  readonly consumerKey?: string;
+  readonly consumerSecret?: string;
+  readonly oauthToken?: string;
+  readonly oauthTokenSecret?: string;
+  readonly apiKey?: string;
+  readonly username?: string;
+  readonly password?: string;
 }
 
 /**

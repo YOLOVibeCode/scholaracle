@@ -49,11 +49,17 @@ function validateAlertThresholds(alerts: IAlertThresholds): string | undefined {
     return 'gradeDrop must be between 0 and 100';
   }
 
-  if (alerts.daysBeforeDeadline !== undefined && (alerts.daysBeforeDeadline < 0 || alerts.daysBeforeDeadline > 30)) {
+  if (
+    alerts.daysBeforeDeadline !== undefined &&
+    (alerts.daysBeforeDeadline < 0 || alerts.daysBeforeDeadline > 30)
+  ) {
     return 'daysBeforeDeadline must be between 0 and 30';
   }
 
-  if (alerts.lowGradeThreshold !== undefined && (alerts.lowGradeThreshold < 0 || alerts.lowGradeThreshold > 100)) {
+  if (
+    alerts.lowGradeThreshold !== undefined &&
+    (alerts.lowGradeThreshold < 0 || alerts.lowGradeThreshold > 100)
+  ) {
     return 'lowGradeThreshold must be between 0 and 100';
   }
 
@@ -69,8 +75,10 @@ function validateQuietHours(q: INotificationSettings['quietHours']): string | un
 
 function validateDigestSchedule(d: INotificationSettings['digestSchedule']): string | undefined {
   if (!d) return undefined;
-  if (d.daily?.time !== undefined && !HHMM_REGEX.test(d.daily.time)) return 'digestSchedule.daily.time must be HH:mm';
-  if (d.weekly?.time !== undefined && !HHMM_REGEX.test(d.weekly.time)) return 'digestSchedule.weekly.time must be HH:mm';
+  if (d.daily?.time !== undefined && !HHMM_REGEX.test(d.daily.time))
+    return 'digestSchedule.daily.time must be HH:mm';
+  if (d.weekly?.time !== undefined && !HHMM_REGEX.test(d.weekly.time))
+    return 'digestSchedule.weekly.time must be HH:mm';
   return undefined;
 }
 
@@ -92,12 +100,18 @@ function defaultEnabledTypes(): Record<string, { enabled: boolean; severity: str
   return map;
 }
 
+const VALID_GRADE_DISPLAY = ['letter', 'score'] as const;
+
 function buildSettingsResponse(prefs: IUserPreferences): Record<string, unknown> {
   const notif = prefs.notifications;
   const alerts = prefs.alerts ?? {};
+  const dashboard = prefs.dashboard ?? {};
   const defaults = defaultEnabledTypes();
   const enabledTypes = { ...defaults, ...alerts.enabledTypes };
   return {
+    dashboard: {
+      gradeDisplay: dashboard.gradeDisplay ?? 'letter',
+    },
     notifications: {
       push: notif.push ?? true,
       email: notif.email ?? true,
@@ -146,11 +160,17 @@ async function handleUnlinkOAuth(
       return;
     }
     const provider = req.params['provider'] as string;
-    if (!provider || !VALID_OAUTH_PROVIDERS.includes(provider as (typeof VALID_OAUTH_PROVIDERS)[number])) {
+    if (
+      !provider ||
+      !VALID_OAUTH_PROVIDERS.includes(provider as (typeof VALID_OAUTH_PROVIDERS)[number])
+    ) {
       res.status(400).json({ success: false, error: 'Invalid provider' });
       return;
     }
-    const result = await authService.unlinkOAuthAccount(userId, provider as 'google' | 'apple' | 'microsoft');
+    const result = await authService.unlinkOAuthAccount(
+      userId,
+      provider as 'google' | 'apple' | 'microsoft'
+    );
     if (result.success) {
       res.status(200).json({ success: true });
     } else {
@@ -239,9 +259,14 @@ async function handleUpdateSettings(
       return;
     }
 
-    const { notifications, alerts } = req.body as {
+    const {
+      notifications,
+      alerts,
+      dashboard: dashboardBody,
+    } = req.body as {
       notifications?: INotificationSettings;
       alerts?: IAlertThresholds;
+      dashboard?: { gradeDisplay?: 'letter' | 'score' };
     };
 
     if (alerts) {
@@ -266,11 +291,27 @@ async function handleUpdateSettings(
       }
     }
     if (notifications?.tone !== undefined && !VALID_TONES.includes(notifications.tone)) {
-      res.status(400).json({ success: false, error: 'tone must be formal, casual, or encouraging' });
+      res
+        .status(400)
+        .json({ success: false, error: 'tone must be formal, casual, or encouraging' });
       return;
     }
-    if (notifications?.frequency !== undefined && !VALID_FREQUENCIES.includes(notifications.frequency)) {
-      res.status(400).json({ success: false, error: 'frequency must be minimal, balanced, or proactive' });
+    if (
+      notifications?.frequency !== undefined &&
+      !VALID_FREQUENCIES.includes(notifications.frequency)
+    ) {
+      res
+        .status(400)
+        .json({ success: false, error: 'frequency must be minimal, balanced, or proactive' });
+      return;
+    }
+    if (
+      dashboardBody?.gradeDisplay !== undefined &&
+      !VALID_GRADE_DISPLAY.includes(dashboardBody.gradeDisplay)
+    ) {
+      res
+        .status(400)
+        .json({ success: false, error: 'dashboard.gradeDisplay must be letter or score' });
       return;
     }
 
@@ -282,32 +323,43 @@ async function handleUpdateSettings(
     }
 
     const notif = user.preferences.notifications;
+    const existingDashboard = user.preferences.dashboard ?? { gradeDisplay: 'letter' as const };
     const updatedPreferences: IUserPreferences = {
       notifications: {
         push: notifications?.push ?? notif.push ?? true,
         email: notifications?.email ?? notif.email ?? true,
         sms: notifications?.sms ?? notif.sms ?? false,
-        quietHours: notifications?.quietHours ?? notif.quietHours ?? {
-          enabled: true,
-          start: '22:00',
-          end: '07:00',
-          criticalOverride: true,
-        },
-        digestSchedule: notifications?.digestSchedule ?? notif.digestSchedule ?? {
-          daily: { enabled: true, time: '07:00' },
-          weekly: { enabled: true, day: 'sunday', time: '18:00' },
-        },
+        quietHours: notifications?.quietHours ??
+          notif.quietHours ?? {
+            enabled: true,
+            start: '22:00',
+            end: '07:00',
+            criticalOverride: true,
+          },
+        digestSchedule: notifications?.digestSchedule ??
+          notif.digestSchedule ?? {
+            daily: { enabled: true, time: '07:00' },
+            weekly: { enabled: true, day: 'sunday', time: '18:00' },
+          },
         tone: notifications?.tone ?? notif.tone ?? 'encouraging',
         frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
       },
       alerts: {
         gradeDrop: alerts?.gradeDrop ?? user.preferences.alerts?.gradeDrop ?? 5,
-        daysBeforeDeadline: alerts?.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline ?? 2,
-        lowGradeThreshold: alerts?.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold ?? 80,
-        prioritizeHighImpact: alerts?.prioritizeHighImpact ?? user.preferences.alerts?.prioritizeHighImpact ?? true,
-        emphasizeWeakSubjects: alerts?.emphasizeWeakSubjects ?? user.preferences.alerts?.emphasizeWeakSubjects ?? true,
+        daysBeforeDeadline:
+          alerts?.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline ?? 2,
+        lowGradeThreshold:
+          alerts?.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold ?? 80,
+        prioritizeHighImpact:
+          alerts?.prioritizeHighImpact ?? user.preferences.alerts?.prioritizeHighImpact ?? true,
+        emphasizeWeakSubjects:
+          alerts?.emphasizeWeakSubjects ?? user.preferences.alerts?.emphasizeWeakSubjects ?? true,
         celebrateWins: alerts?.celebrateWins ?? user.preferences.alerts?.celebrateWins ?? true,
-        enabledTypes: alerts?.enabledTypes ?? user.preferences.alerts?.enabledTypes ?? defaultEnabledTypes(),
+        enabledTypes:
+          alerts?.enabledTypes ?? user.preferences.alerts?.enabledTypes ?? defaultEnabledTypes(),
+      },
+      dashboard: {
+        gradeDisplay: dashboardBody?.gradeDisplay ?? existingDashboard.gradeDisplay ?? 'letter',
       },
     };
 
@@ -431,7 +483,8 @@ async function handleUpdateAlerts(
       alerts: {
         ...user.preferences.alerts,
         gradeDrop: alerts.gradeDrop ?? user.preferences.alerts?.gradeDrop,
-        daysBeforeDeadline: alerts.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline,
+        daysBeforeDeadline:
+          alerts.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline,
         lowGradeThreshold: alerts.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold,
       },
     };
@@ -501,4 +554,3 @@ export function settingsRouter(config: ISettingsRouterConfig): Router {
 
   return router;
 }
-

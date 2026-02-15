@@ -112,3 +112,39 @@ export interface ISlcEventOverride {
   readonly title?: string;
   readonly category?: ISlcEventSeries['category'];
 }
+
+export interface ISlcCourse {
+  readonly title: string;
+  readonly courseCode?: string;
+  readonly subjectArea?: string;
+  readonly teacherName?: string;
+}
+
+export interface ISlcAcademicTerm {
+  readonly title: string;
+  readonly startDate: string; // ISO date (YYYY-MM-DD)
+  readonly endDate: string; // ISO date (YYYY-MM-DD)
+  readonly type?: 'semester' | 'quarter' | 'trimester' | 'year' | 'other';
+}
+
+export interface ISlcGradeSnapshot {
+  readonly courseExternalId: string;
+  readonly termExternalId?: string;
+  readonly letterGrade?: string;
+  readonly percentGrade?: number;
+  readonly gpa?: number;
+  readonly asOfDate: string; // ISO date (YYYY-MM-DD)
+}
+
+export interface ISlcAttendanceEvent {
+  readonly date: string; // ISO date (YYYY-MM-DD)
+  readonly status: 'present' | 'absent' | 'tardy' | 'excused';
+  readonly periodName?: string;
+  readonly notes?: string;
+}
+
+export interface ISlcInstitution {
+  readonly name: string;
+  readonly type?: 'school' | 'district' | 'other';
+  readonly address?: string;
+}

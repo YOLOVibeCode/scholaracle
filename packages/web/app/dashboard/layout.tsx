@@ -11,7 +11,7 @@ import { StudentViewProvider } from '@/lib/contexts/StudentViewContext';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
 
-const STUDENT_VIEW_PATH = /^\/dashboard\/students\/([^/]+)\/view/;
+const STUDENT_VIEW_PATH = /^\/dashboard\/students\/([^/]+)\/view\/?/;
 
 function getStudentIdFromPath(pathname: string): string | null {
   const match = pathname.match(STUDENT_VIEW_PATH);

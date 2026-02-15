@@ -8,6 +8,7 @@ import { healthRouter } from './routes/health';
 import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { studentsRouter } from './routes/students/students';
+import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
@@ -295,6 +296,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     );
     app.use('/api/sessions', sessionsRouter({ database, authService }));
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
+    app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Settings API routes

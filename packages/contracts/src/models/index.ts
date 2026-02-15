@@ -2,3 +2,4 @@ export { Notification, type NotificationData, type NotificationAction } from './
 export { DeliveryResult } from './DeliveryResult';
 export { Alert, type AlertData } from './Alert';
 export * from './Ingest';
+export * from './Connector';

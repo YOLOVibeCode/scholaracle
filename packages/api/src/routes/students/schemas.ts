@@ -16,3 +16,23 @@ export const updateSourceSchema = addSourceSchema.partial().extend({
 });
 
 export type IUpdateSourceBody = z.infer<typeof updateSourceSchema>;
+
+/** Credentials for API (token) or login (username/password) to scrape. */
+export const credentialsSchema = z
+  .object({
+    authType: z.enum(['api', 'login']),
+    accessToken: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    baseUrl: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.authType === 'api') return Boolean(data.accessToken?.trim());
+      if (data.authType === 'login') return Boolean(data.username?.trim() && data.password);
+      return false;
+    },
+    { message: 'api requires accessToken; login requires username and password' }
+  );
+
+export type ICredentialsBody = z.infer<typeof credentialsSchema>;

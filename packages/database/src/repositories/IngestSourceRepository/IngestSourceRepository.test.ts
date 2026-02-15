@@ -124,6 +124,26 @@ describe('IngestSourceRepository', () => {
     expect(sourceIds).toEqual(['src-a', 'src-b', 'src-c']);
   });
 
+  it('persists and returns schedule, dataTypes, and enabled', async () => {
+    await repo.upsert({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      provider: 'canvas',
+      adapterId: 'com.instructure.canvas',
+      displayName: 'Canvas LMS',
+      portalBaseUrl: 'https://school.instructure.com',
+      schedule: 'hourly',
+      dataTypes: ['grades', 'assignments', 'calendar'],
+      enabled: false,
+    });
+
+    const found = await repo.findByUserIdAndSourceId('user-1', 'src-1');
+    expect(found).not.toBeNull();
+    expect(found!.schedule).toBe('hourly');
+    expect(found!.dataTypes).toEqual(['grades', 'assignments', 'calendar']);
+    expect(found!.enabled).toBe(false);
+  });
+
   it('isolates sources between users', async () => {
     await repo.upsert({
       userId: 'user-1',

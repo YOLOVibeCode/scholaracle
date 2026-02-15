@@ -17,6 +17,10 @@ export interface StudentViewValue {
   /** External id (e.g. SLC) for filtering agenda by student. */
   studentExternalId: string | null;
   isStudentView: boolean;
+  /** True while student is being fetched (getById in progress). */
+  studentLoading: boolean;
+  /** Set when student fetch failed or returned null (e.g. 'not_found'). */
+  studentLoadError: string | null;
   /** Clear student view and go back to parent dashboard. */
   clearStudentView: () => void;
 }
@@ -31,6 +35,8 @@ export function useStudentView(): StudentViewValue {
       studentName: null,
       studentExternalId: null,
       isStudentView: false,
+      studentLoading: false,
+      studentLoadError: null,
       clearStudentView: () => {},
     };
   }
@@ -52,29 +58,41 @@ export function StudentViewProvider({
 }: StudentViewProviderProps) {
   const [studentName, setStudentName] = useState<string | null>(null);
   const [studentExternalId, setStudentExternalId] = useState<string | null>(null);
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [studentLoadError, setStudentLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!studentIdFromPath) {
       setStudentName(null);
       setStudentExternalId(null);
+      setStudentLoadError(null);
+      setStudentLoading(false);
       return;
     }
     let cancelled = false;
+    setStudentLoading(true);
+    setStudentLoadError(null);
     void (async () => {
       try {
         const student = await studentsApi.getById(studentIdFromPath);
-        if (!cancelled && student) {
+        if (cancelled) return;
+        if (student) {
           setStudentName(student.name);
           setStudentExternalId(student.studentId ?? null);
-        } else if (!cancelled) {
-          setStudentName('Student');
+          setStudentLoadError(null);
+        } else {
+          setStudentName(null);
           setStudentExternalId(null);
+          setStudentLoadError('not_found');
         }
       } catch {
         if (!cancelled) {
-          setStudentName('Student');
+          setStudentName(null);
           setStudentExternalId(null);
+          setStudentLoadError('not_found');
         }
+      } finally {
+        if (!cancelled) setStudentLoading(false);
       }
     })();
     return () => {
@@ -89,11 +107,13 @@ export function StudentViewProvider({
       studentName: studentIdFromPath ? studentName : null,
       studentExternalId: studentIdFromPath ? studentExternalId : null,
       isStudentView,
+      studentLoading: Boolean(studentIdFromPath && studentLoading),
+      studentLoadError: studentIdFromPath ? studentLoadError : null,
       clearStudentView: () => {
         onClear?.();
       },
     };
-  }, [studentIdFromPath, studentName, studentExternalId, onClear]);
+  }, [studentIdFromPath, studentName, studentExternalId, studentLoading, studentLoadError, onClear]);
 
   return (
     <StudentViewContext.Provider value={value}>
