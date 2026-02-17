@@ -11,8 +11,9 @@ import { StudentDataSourcesTab } from '@/components/dashboard/students/StudentDa
 import { StudentAlertsTab } from '@/components/dashboard/students/StudentAlertsTab';
 import { StudentGradesTab } from '@/components/dashboard/students/StudentGradesTab';
 import { ConnectSourceWizard } from '@/components/dashboard/students/ConnectSourceWizard';
+import { ManageParentsCard } from '@/components/dashboard/students/ManageParentsCard';
 
-type TabId = 'overview' | 'sources' | 'alerts' | 'grades';
+type TabId = 'overview' | 'sources' | 'alerts' | 'grades' | 'parents';
 
 export default function EditStudentPage() {
   const router = useRouter();
@@ -177,6 +178,16 @@ export default function EditStudentPage() {
         >
           Grades
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'parents'}
+          data-testid="tab-parents"
+          className="px-3 py-2 rounded border"
+          onClick={() => setActiveTab('parents')}
+        >
+          Parents
+        </button>
       </div>
 
       {activeTab === 'overview' && (
@@ -212,6 +223,14 @@ export default function EditStudentPage() {
       )}
 
       {activeTab === 'grades' && <StudentGradesTab studentId={studentId} />}
+
+      {activeTab === 'parents' && student && (
+        <ManageParentsCard
+          studentId={studentId}
+          studentName={student.name}
+          isOwner={true}
+        />
+      )}
 
       <ConnectSourceWizard
         open={connectWizardOpen}

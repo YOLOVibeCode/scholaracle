@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { AdminAuthService } from '@scholaracle/auth';
 import { UserRepository } from '@scholaracle/database';
 import { AdminUserRepository } from '@scholaracle/database';
 import { StudentRepository } from '@scholaracle/database';
@@ -44,35 +43,11 @@ const TEST_USERS = {
     password: 'TestPass123!',
     name: 'Test Parent 3',
   },
-  super_admin: {
-    email: 'super@scholarmancy.com',
-    password: 'SuperAdmin123!',
-    name: 'Super Admin',
-    role: 'super_admin' as AdminRole,
-  },
   admin: {
     email: 'admin@scholarmancy.com',
     password: 'Admin123!',
     name: 'Admin User',
     role: 'admin' as AdminRole,
-  },
-  support: {
-    email: 'support@scholarmancy.com',
-    password: 'Support123!',
-    name: 'Support User',
-    role: 'support' as AdminRole,
-  },
-  billing: {
-    email: 'billing@scholarmancy.com',
-    password: 'Billing123!',
-    name: 'Billing User',
-    role: 'billing' as AdminRole,
-  },
-  analyst: {
-    email: 'analyst@scholarmancy.com',
-    password: 'Analyst123!',
-    name: 'Analyst User',
-    role: 'analyst' as AdminRole,
   },
 } as const;
 
@@ -104,9 +79,6 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
     const auditLogRepository = new AuditLogRepository(config.database);
     const communicationLogRepository = new CommunicationLogRepository(config.database);
     const authService = new AuthService(config.database);
-    const jwtSecret = config.jwtSecret ?? process.env['JWT_SECRET'] ?? 'test-secret';
-    const adminAuthService = new AdminAuthService(config.database, jwtSecret);
-
     const results = {
       users: {
         created: [] as string[],
@@ -213,109 +185,48 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
       }
     }
 
-    // 2. Create admin users (need super_admin first)
+    // 2. Create admin user
     let superAdminId: string | null = null;
 
-    // First, check if super_admin exists or create it
+    // Create admin user
+    // Create admin user
     try {
-      let superAdmin = await adminRepository.findByEmail(TEST_USERS.super_admin.email);
-      if (!superAdmin) {
-        // Create super_admin directly (bypassing the service requirement)
-        const passwordHash = await AdminUserRepository.hashPassword(
-          TEST_USERS.super_admin.password
-        );
-        const adminData = {
-          email: TEST_USERS.super_admin.email,
-          passwordHash,
-          name: TEST_USERS.super_admin.name,
-          role: TEST_USERS.super_admin.role,
-          isActive: true,
-        };
-        superAdmin = await adminRepository.create(adminData);
-        results.admins.created.push(`Super Admin: ${TEST_USERS.super_admin.email}`);
-      } else {
+      const userConfig = TEST_USERS.admin;
+      const existingAdmin = await adminRepository.findByEmail(userConfig.email);
+      if (existingAdmin) {
         if (shouldForce) {
-          // Delete existing super_admin using database collection directly
-          const objectId = superAdmin._id!;
+          const objectId = existingAdmin._id!;
           await config.database.collection('admin_users').deleteOne({ _id: objectId });
-          const passwordHash = await AdminUserRepository.hashPassword(
-            TEST_USERS.super_admin.password
-          );
-          const adminData = {
-            email: TEST_USERS.super_admin.email,
+          const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
+          const admin = await adminRepository.create({
+            email: userConfig.email,
             passwordHash,
-            name: TEST_USERS.super_admin.name,
-            role: TEST_USERS.super_admin.role,
+            name: userConfig.name,
+            role: userConfig.role,
             isActive: true,
-          };
-          superAdmin = await adminRepository.create(adminData);
-          results.admins.created.push(`Super Admin: ${TEST_USERS.super_admin.email}`);
+          });
+          superAdminId = admin._id!.toString();
+          results.admins.created.push(`admin: ${userConfig.email}`);
         } else {
-          results.admins.existing.push(`Super Admin: ${TEST_USERS.super_admin.email}`);
+          superAdminId = existingAdmin._id!.toString();
+          results.admins.existing.push(`admin: ${userConfig.email}`);
         }
+      } else {
+        const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
+        const admin = await adminRepository.create({
+          email: userConfig.email,
+          passwordHash,
+          name: userConfig.name,
+          role: userConfig.role,
+          isActive: true,
+        });
+        superAdminId = admin._id!.toString();
+        results.admins.created.push(`admin: ${userConfig.email}`);
       }
-      superAdminId = superAdmin._id!.toString();
     } catch (error) {
       results.admins.errors.push(
-        `Super Admin: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `admin: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
-    }
-
-    // Create other admin users
-    const adminRoles: Array<'admin' | 'support' | 'billing' | 'analyst'> = [
-      'admin',
-      'support',
-      'billing',
-      'analyst',
-    ];
-    for (const role of adminRoles) {
-      if (!superAdminId) {
-        results.admins.errors.push(`${role}: Cannot create - super_admin not available`);
-        continue;
-      }
-
-      try {
-        const userConfig = TEST_USERS[role];
-        const existingAdmin = await adminRepository.findByEmail(userConfig.email);
-        if (existingAdmin) {
-          if (shouldForce) {
-            // Delete existing admin using database collection directly
-            const objectId = existingAdmin._id!;
-            await config.database.collection('admin_users').deleteOne({ _id: objectId });
-            const result = await adminAuthService.register(
-              userConfig.email,
-              userConfig.password,
-              userConfig.name,
-              userConfig.role,
-              superAdminId
-            );
-            if (result.success) {
-              results.admins.created.push(`${role}: ${userConfig.email}`);
-            } else {
-              results.admins.errors.push(`${role}: ${result.error}`);
-            }
-          } else {
-            results.admins.existing.push(`${role}: ${userConfig.email}`);
-          }
-        } else {
-          const result = await adminAuthService.register(
-            userConfig.email,
-            userConfig.password,
-            userConfig.name,
-            userConfig.role,
-            superAdminId
-          );
-          if (result.success) {
-            results.admins.created.push(`${role}: ${userConfig.email}`);
-          } else {
-            results.admins.errors.push(`${role}: ${result.error}`);
-          }
-        }
-      } catch (error) {
-        results.admins.errors.push(
-          `${role}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-      }
     }
 
     // 3. Create test students for parent user
@@ -492,7 +403,7 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
           }
           const log = await auditLogRepository.create({
             adminUserId: superAdminId,
-            adminEmail: TEST_USERS.super_admin.email,
+            adminEmail: TEST_USERS.admin.email,
             action: 'system:export',
             entityType: 'system',
             entityId: 'seed',

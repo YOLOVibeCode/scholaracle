@@ -5,6 +5,18 @@ export type {
   ICanvasAssignment,
   ICanvasSubmission,
   ICanvasCalendarEvent,
+  ICanvasEnrollment,
+  ICanvasAssignmentGroup,
+  ICanvasModule,
+  ICanvasModuleItem,
+  ICanvasTodoItem,
+  ICanvasUserProfile,
+  ICanvasFile,
+  ICanvasFolder,
+  ICanvasPage,
+  ICanvasAnnouncement,
+  ICanvasDiscussionTopic,
+  ICanvasRubric,
   ICanvasClientConfig,
 } from './canvas-client';
 export {

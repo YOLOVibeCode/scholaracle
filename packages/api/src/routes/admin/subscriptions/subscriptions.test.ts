@@ -2,8 +2,8 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { subscriptionsRouter } from './subscriptions';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, SubscriptionRepository, UserRepository } from '@scholaracle/database';
+import { SubscriptionRepository, UserRepository } from '@scholaracle/database';
+import { createTestAdmin } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Subscription Routes', () => {
   let app: Express;
@@ -18,18 +18,13 @@ describe('Admin Subscription Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    // Create admin user
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const { token } = await createTestAdmin(database, 'test-secret', {
       email: 'sub-admin@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Subscription Admin',
-      role: 'billing',
+      role: 'admin',
     });
-
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    const loginResult = await adminAuthService.login('sub-admin@test.com', 'AdminPass123!');
-    adminToken = loginResult.token!;
+    adminToken = token;
 
     // Create test user
     const userPasswordHash = await UserRepository.hashPassword('TestPass123!');

@@ -1,0 +1,149 @@
+---
+description: Pattern for building new LMS/SIS connector adapters (client, transformer, adapter, scraper)
+globs: packages/connector/src/**/*.ts
+alwaysApply: false
+---
+
+# Connector Adapter Pattern
+
+Every connector follows a **three-layer architecture**: Adapter → Client → Transformer.
+When no public API is available, add a Playwright **browser scraper** as a fourth layer.
+
+## File Structure
+
+For a platform called `{name}` (e.g. `aeries`, `skyward`, `canvas`):
+
+```
+packages/connector/src/{name}/
+  {name}-client.ts          # HTTP client OR scraper interface + response types
+  {name}-transformer.ts     # Pure functions: platform data → ISlcDeltaOp[]
+  {name}-adapter.ts         # ILmsAdapterWithTest implementation
+  {name}-adapter.test.ts    # Adapter unit tests (mock the client)
+  {name}-transformer.test.ts # Transformer unit tests
+  index.ts                  # Barrel exports
+
+packages/connector/src/harness/
+  {name}-browser-scrape.ts  # (optional) Playwright scraper for portals without APIs
+```
+
+## 1. Client (`{name}-client.ts`)
+
+- Define **readonly interfaces** for every API/scraper response shape (e.g. `IAeriesStudent`, `IAeriesCourse`)
+- Define a **config interface** (`I{Name}ClientConfig`) with auth fields
+- Implement a **class** with typed methods per endpoint
+- Auth goes in headers, not query params (e.g. `AERIES-CERT` header, `Authorization: Bearer`)
+- For API clients, use `fetch()` directly or the shared `getJson()` from `../http`
+
+```typescript
+export class {Name}Client {
+  constructor(config: I{Name}ClientConfig) { ... }
+  async getStudent(): Promise<I{Name}Student> { ... }
+  async getCourses(): Promise<readonly I{Name}Course[]> { ... }
+}
+```
+
+## 2. Transformer (`{name}-transformer.ts`)
+
+- **Pure functions only** — no I/O, no side effects
+- Each function maps one platform entity to one `ISlcDeltaOp<T>`
+- Use `type BaseKey = Omit<ISlcEntityKey, 'externalId'>` for the shared key fields
+- External IDs follow pattern: `{provider}-{entity}-{platformId}` (e.g. `aeries-course-0301`)
+- Use `reconcileCourse()` from `../reconciliation/subject-reconciler` for course subject mapping
+- Target entity types from `@scholaracle/contracts`: `assignment`, `gradeSnapshot`, `course`, `academicTerm`, `attendanceEvent`, `teacher`, `institution`, `courseMaterial`, `message`
+
+```typescript
+export function transformAssignmentToOp(
+  assignment: I{Name}Assignment,
+  score: I{Name}Score | undefined,
+  courseId: string,
+  baseKey: BaseKey
+): ISlcDeltaOp<ISlcAssignment> { ... }
+```
+
+## 3. Adapter (`{name}-adapter.ts`)
+
+- Implement `ILmsAdapterWithTest` (includes `testConnection()`)
+- Set `meta` with: `provider`, `adapterId` (reverse-domain), `adapterVersion`, `displayName`
+- `authenticate()` validates required credential fields, creates the client
+- `testConnection()` makes a lightweight API call (e.g. get student + course count)
+- `fetchEnvelope()` orchestrates all data fetching in phases, each wrapped in try/catch
+- Collect `warnings: string[]` for non-fatal failures; include in envelope if non-empty
+- For dual-mode adapters (API + scraper): detect mode from credentials — `apiKey` → API, `username + password` → scraper
+
+### Fetch phases (in order):
+
+1. **Institution** — school/district info
+2. **Terms** — marking periods / academic terms
+3. **Grades** — report card / grade snapshots per course per term
+4. **Courses + Teachers** — course details, section info, teacher names/emails
+5. **Assignments** — per-course gradebook assignments with scores
+6. **Attendance** — absence/tardy records
+7. **Messages / Documents** — (if available)
+
+## 4. Browser Scraper (`harness/{name}-browser-scrape.ts`)
+
+- Standalone script runnable via `npx ts-node --transpile-only`
+- Uses Playwright `chromium.launch({ headless: true })`
+- **Excluded from tsconfig.json** (uses DOM types in `page.evaluate()` callbacks)
+- Config from env vars: `{NAME}_URL`, `{NAME}_EMAIL`, `{NAME}_PASSWORD`
+- Exports: `scrape{Name}Complete(url, email, password): Promise<I{Name}FullExtract>`
+- Extract types defined in the scraper file; mirror types in adapter for decoupling
+- Save debug artifacts to `harness-output/`: HTML snapshots, screenshots, JSON extract
+- Print a summary report when run as CLI
+
+### Login pattern:
+
+```typescript
+async function login(page: Page, url: string, email: string, password: string): Promise<void> {
+  await page.goto(url, { waitUntil: 'networkidle' });
+  // Fill credentials, click through multi-step forms
+  // Wait for redirect to dashboard
+}
+```
+
+### Data extraction pattern:
+
+```typescript
+const data = await page.evaluate(() => {
+  // DOM queries run in browser context — TypeScript won't type-check these
+  const rows = document.querySelectorAll('table tr');
+  // Parse and return plain objects
+  return results;
+});
+```
+
+## 5. Registration Checklist
+
+When adding a new connector, update these files:
+
+- [ ] `discovery/platform-registry.ts` — change `status` from `'planned'` to `'implemented'`
+- [ ] `index.ts` (connector barrel) — add `export { {Name}Adapter, {Name}Client } from './{name}'`
+- [ ] `tsconfig.json` — if scraper file exists, add to `exclude` array
+- [ ] Tests pass: `npx jest --config packages/connector/jest.config.js --testPathPattern='{name}'`
+- [ ] Type check passes: `npx tsc --noEmit --project packages/connector/tsconfig.json`
+
+## 6. Testing Pattern
+
+**Adapter tests** — mock the client class with `jest.mock('./{name}-client')`:
+
+```typescript
+jest.mock('./{name}-client');
+const Mock{Name}Client = {Name}Client as jest.MockedClass<typeof {Name}Client>;
+
+// In each test: mockInstance.getXxx.mockResolvedValue(...)
+// Then: adapter.authenticate() → adapter.fetchEnvelope() → assert envelope
+```
+
+**Transformer tests** — call pure functions directly, assert `op`, `entity`, `key`, `record`:
+
+```typescript
+const op = transformAssignmentToOp(assignment, score, 'COURSE-ID', BASE_KEY);
+expect(op.entity).toBe('assignment');
+expect(op.record!.title).toBe('Homework 1');
+```
+
+## Reference Implementations
+
+- **API-only**: `canvas/` (Bearer token auth)
+- **Scraper-only**: `skyward/` (Playwright + skyward-rest)
+- **Dual-mode (API + scraper)**: `aeries/` (AERIES-CERT API or parent portal login)

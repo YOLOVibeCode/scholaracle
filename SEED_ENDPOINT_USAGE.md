@@ -5,7 +5,7 @@
 ## Overview
 
 The seed endpoint (`POST /api/seed`) scaffolds all test data needed for E2E tests, including:
-- All test users (parent + 5 admin roles)
+- All test users (parent + admin)
 - Test students for the parent user
 - Test alerts
 
@@ -73,11 +73,7 @@ console.log(forceResult);
     },
     "admins": {
       "created": [
-        "Super Admin: super@scholarmancy.com",
-        "admin: admin@scholarmancy.com",
-        "support: support@scholarmancy.com",
-        "billing: billing@scholarmancy.com",
-        "analyst: analyst@scholarmancy.com"
+        "Admin: admin@scholarmancy.com"
       ],
       "existing": [],
       "errors": []
@@ -101,7 +97,7 @@ console.log(forceResult);
     "usersCreated": 1,
     "usersExisting": 0,
     "usersErrors": 0,
-    "adminsCreated": 5,
+    "adminsCreated": 1,
     "adminsExisting": 0,
     "adminsErrors": 0,
     "studentsCreated": 2,
@@ -119,15 +115,11 @@ console.log(forceResult);
 - **Password**: `TestPass123!`
 - **Name**: `Test Parent`
 
-### Admin Users
+### Admin User
 
 | Role | Email | Password | Name |
 |------|-------|----------|------|
-| super_admin | `super@scholarmancy.com` | `SuperAdmin123!` | Super Admin |
 | admin | `admin@scholarmancy.com` | `Admin123!` | Admin User |
-| support | `support@scholarmancy.com` | `Support123!` | Support User |
-| billing | `billing@scholarmancy.com` | `Billing123!` | Billing User |
-| analyst | `analyst@scholarmancy.com` | `Analyst123!` | Analyst User |
 
 ## Test Data Created
 
@@ -208,4 +200,4 @@ Or partial success with errors:
 - The endpoint is idempotent - you can call it multiple times safely
 - Use `force=true` to reset test data between test runs
 - All passwords match the test data in `packages/e2e/fixtures/test-data.ts`
-- The endpoint creates a super_admin first, then uses it to create other admin users
+- The endpoint creates a single admin user for testing

@@ -8,6 +8,7 @@ import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay } from '@/components/common';
 import { IntegrationCard } from '@/components/dashboard/integrations/IntegrationCard';
 import { AddProviderWizard } from '@/components/dashboard/integrations/AddProviderWizard';
+import { SelfHostedScraperCard } from '@/components/dashboard/integrations/SelfHostedScraperCard';
 
 export default function IntegrationsPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -37,6 +38,8 @@ export default function IntegrationsPage() {
           Add Provider
         </Button>
       </div>
+
+      <SelfHostedScraperCard />
 
       {isLoading && (
         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">

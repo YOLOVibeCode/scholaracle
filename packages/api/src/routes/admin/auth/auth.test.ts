@@ -2,8 +2,9 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { adminAuthRouter } from './auth';
-import { AdminUserRepository } from '@scholaracle/database';
+import { AdminUserRepository, AdminStepUpChallengeRepository } from '@scholaracle/database';
 import { MFAService } from '@scholaracle/auth';
+import { createTestAdmin } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Auth Routes', () => {
   let app: Express;
@@ -20,7 +21,14 @@ describe('Admin Auth Routes', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret: 'test-secret',
+        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
+      })
+    );
   });
 
   afterAll(async () => {
@@ -32,7 +40,7 @@ describe('Admin Auth Routes', () => {
   });
 
   describe('POST /api/admin/auth/login', () => {
-    it('should login successfully', async () => {
+    it('should require MFA setup when credentials are valid but MFA not configured', async () => {
       const passwordHash = await AdminUserRepository.hashPassword('LoginPass123!');
       await new AdminUserRepository(database).create({
         email: 'login@test.com',
@@ -48,10 +56,10 @@ describe('Admin Auth Routes', () => {
           password: 'LoginPass123!',
         });
 
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.token).toBeDefined();
-      expect(response.body.admin).toBeDefined();
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+      expect(response.body.requiresMFASetup).toBe(true);
+      expect(response.body.mfaSetupToken).toBeDefined();
     });
 
     it('should reject invalid credentials', async () => {
@@ -186,34 +194,18 @@ describe('Admin Auth Routes', () => {
 
   describe('Step-up MFA', () => {
     it('should enable MFA and mint step-up token', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('StepUpPass123!');
-      await new AdminUserRepository(database).create({
-        email: 'stepup@test.com',
-        passwordHash,
-        name: 'Step Up Admin',
-        role: 'admin',
-      });
+      const { token: adminToken, mfaSecret: secret } = await createTestAdmin(
+        database,
+        'test-secret',
+        {
+          email: 'stepup@test.com',
+          password: 'StepUpPass123!',
+          name: 'Step Up Admin',
+          role: 'admin',
+        }
+      );
 
-      // Login (no MFA yet)
-      const loginRes = await request(app).post('/api/admin/auth/login').send({
-        email: 'stepup@test.com',
-        password: 'StepUpPass123!',
-      });
-      expect(loginRes.status).toBe(200);
-      const adminToken = loginRes.body.token as string;
-      expect(adminToken).toBeTruthy();
-
-      // Setup MFA (client would normally call /mfa/setup)
-      const { secret } = mfaService.generateSecret('stepup@test.com');
       const speakeasy = require('speakeasy');
-      const totp = speakeasy.totp({ secret, encoding: 'base32' });
-
-      const enableRes = await request(app)
-        .post('/api/admin/auth/mfa/enable')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ secret, token: totp });
-      expect(enableRes.status).toBe(200);
-      expect(enableRes.body.success).toBe(true);
 
       const startRes = await request(app)
         .post('/api/admin/auth/step-up/start')
@@ -237,22 +229,12 @@ describe('Admin Auth Routes', () => {
 
   describe('POST /api/admin/auth/logout', () => {
     it('should logout successfully', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('LogoutPass123!');
-      await new AdminUserRepository(database).create({
+      const { token } = await createTestAdmin(database, 'test-secret', {
         email: 'logout@test.com',
-        passwordHash,
+        password: 'LogoutPass123!',
         name: 'Logout Admin',
         role: 'admin',
       });
-
-      const loginResponse = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'logout@test.com',
-          password: 'LogoutPass123!',
-        });
-
-      const token = loginResponse.body.token;
 
       const logoutResponse = await request(app)
         .post('/api/admin/auth/logout')
@@ -265,22 +247,12 @@ describe('Admin Auth Routes', () => {
 
   describe('POST /api/admin/auth/refresh', () => {
     it('should refresh token successfully', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('RefreshPass123!');
-      await new AdminUserRepository(database).create({
+      const { token } = await createTestAdmin(database, 'test-secret', {
         email: 'refresh@test.com',
-        passwordHash,
+        password: 'RefreshPass123!',
         name: 'Refresh Admin',
         role: 'admin',
       });
-
-      const loginResponse = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'refresh@test.com',
-          password: 'RefreshPass123!',
-        });
-
-      const token = loginResponse.body.token;
 
       const refreshResponse = await request(app)
         .post('/api/admin/auth/refresh')

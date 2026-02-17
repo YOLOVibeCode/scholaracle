@@ -13,7 +13,7 @@ import { TEST_USERS } from '../fixtures/test-data';
  */
 test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-001: Read customer list', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customersPage = new AdminCustomersPage(page);
@@ -24,7 +24,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-002: Search customers', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customersPage = new AdminCustomersPage(page);
@@ -36,7 +36,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-003: Filter customers by plan', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const filterDropdown = page.locator('[data-testid="select-filter"], select').first();
@@ -50,7 +50,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-004: View customer detail', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -68,8 +68,8 @@ test.describe('@feature Layer 4: Admin Features', () => {
     }
   });
 
-  test('FEAT-A-005: Suspend customer (super_admin only)', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+  test('FEAT-A-005: Suspend customer', async ({ page, loginAsRole }) => {
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -98,8 +98,8 @@ test.describe('@feature Layer 4: Admin Features', () => {
     }
   });
 
-  test('FEAT-A-006: Unsuspend customer (super_admin only)', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+  test('FEAT-A-006: Unsuspend customer', async ({ page, loginAsRole }) => {
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     // This test would require a suspended customer
@@ -123,7 +123,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-007: Update subscription plan', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -153,7 +153,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-008: Cancel subscription', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/subscriptions');
     
     await expect(page.locator('[data-testid="admin-subscriptions-page"]')).toBeVisible();
@@ -177,8 +177,8 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await assertToastMessage(page, /cancelled|success/i);
   });
 
-  test('FEAT-A-009: Issue refund (billing roles)', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+  test('FEAT-A-009: Issue refund', async ({ page, loginAsRole }) => {
+    await loginAsRole('admin');
     await page.goto('/admin/payments');
     
     // Payments table must exist (no silent skipping).
@@ -209,7 +209,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-010: Create admin note', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -243,7 +243,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-011: Update admin note', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -265,7 +265,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-012: Delete admin note', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/customers');
     
     const customerRow = page.locator('[data-testid="customer-row"]').first();
@@ -297,7 +297,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-013: Send communication to customer', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/communications');
     
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
@@ -319,7 +319,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-013b: Create template and send using it', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/communications');
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
@@ -352,7 +352,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-013c: Create bulk send batch (parents segment)', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/communications');
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
@@ -385,7 +385,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-013d: Webhook status update reflects in UI', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/communications');
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
@@ -422,8 +422,8 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(row).toContainText('opened', { timeout: 10_000 });
   });
 
-  test('FEAT-A-014: Create admin user (super_admin only)', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+  test('FEAT-A-014: Create admin user', async ({ page, loginAsRole }) => {
+    await loginAsRole('admin');
     await page.goto('/admin/settings');
 
     await expect(page.locator('[data-testid="admin-settings-page"]')).toBeVisible();
@@ -445,7 +445,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   });
 
   test('FEAT-A-015: Update admin user role', async ({ page, loginAsRole }) => {
-    await loginAsRole('super_admin');
+    await loginAsRole('admin');
     await page.goto('/admin/settings');
 
     await expect(page.locator('[data-testid="admin-settings-page"]')).toBeVisible();
@@ -455,7 +455,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await expect(firstRow).toBeVisible();
 
     await firstRow.locator('[data-testid="button-edit-admin"]').click();
-    await page.locator('[data-testid="select-edit-admin-role"]').selectOption('support');
+    await page.locator('[data-testid="select-edit-admin-role"]').selectOption('admin');
     await page.locator('[data-testid="button-admin-update"]').click();
     await assertToastMessage(page, /updated|success/i);
   });

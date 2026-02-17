@@ -52,17 +52,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await assertRedirectedToLogin(page);
   });
 
-  test('AUTH-003: Super Admin can login', async ({ page }) => {
-    const adminLoginPage = new AdminLoginPage(page);
-    await adminLoginPage.goto();
-    
-    const user = TEST_USERS.super_admin;
-    await adminLoginPage.login(user.email, user.password);
-    
-    await assertOnAdminDashboard(page);
-  });
-
-  test('AUTH-004: Admin can login', async ({ page }) => {
+  test('AUTH-003: Admin can login', async ({ page }) => {
     const adminLoginPage = new AdminLoginPage(page);
     await adminLoginPage.goto();
     

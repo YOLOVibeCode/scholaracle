@@ -48,13 +48,7 @@ describe('Seed API Routes', () => {
         }),
         database.collection('admin_users').deleteMany({
           email: {
-            $in: [
-              'super@scholarmancy.com',
-              'admin@scholarmancy.com',
-              'support@scholarmancy.com',
-              'billing@scholarmancy.com',
-              'analyst@scholarmancy.com',
-            ],
+            $in: ['admin@scholarmancy.com'],
           },
         }),
         database.collection('students').deleteMany({
@@ -175,36 +169,20 @@ describe('Seed API Routes', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.results.admins.created).toEqual(
-          expect.arrayContaining([
-            expect.stringContaining('super@scholarmancy.com'),
-            expect.stringContaining('admin@scholarmancy.com'),
-            expect.stringContaining('support@scholarmancy.com'),
-            expect.stringContaining('billing@scholarmancy.com'),
-            expect.stringContaining('analyst@scholarmancy.com'),
-          ])
+          expect.arrayContaining([expect.stringContaining('admin@scholarmancy.com')])
         );
-        expect(response.body.totals.adminsCreated).toBe(5);
+        expect(response.body.totals.adminsCreated).toBe(1);
         expect(response.body.totals.adminsErrors).toBe(0);
       });
 
-      it('should store admin users in the database with correct roles', async () => {
+      it('should store admin user in the database with correct role', async () => {
         await request(app).post('/api/seed');
 
-        const expectedAdmins = [
-          { email: 'super@scholarmancy.com', role: 'super_admin' },
-          { email: 'admin@scholarmancy.com', role: 'admin' },
-          { email: 'support@scholarmancy.com', role: 'support' },
-          { email: 'billing@scholarmancy.com', role: 'billing' },
-          { email: 'analyst@scholarmancy.com', role: 'analyst' },
-        ];
+        const admin = await database.collection('admin_users').findOne({ email: 'admin@scholarmancy.com' });
 
-        for (const expected of expectedAdmins) {
-          const admin = await database.collection('admin_users').findOne({ email: expected.email });
-
-          expect(admin).not.toBeNull();
-          expect(admin!['role']).toBe(expected.role);
-          expect(admin!['isActive']).toBe(true);
-        }
+        expect(admin).not.toBeNull();
+        expect(admin!['role']).toBe('admin');
+        expect(admin!['isActive']).toBe(true);
       });
     });
 
@@ -376,7 +354,7 @@ describe('Seed API Routes', () => {
           .findOne({ action: 'system:export' });
 
         expect(auditLog).not.toBeNull();
-        expect(auditLog!['adminEmail']).toBe('super@scholarmancy.com');
+        expect(auditLog!['adminEmail']).toBe('admin@scholarmancy.com');
         expect(auditLog!['entityType']).toBe('system');
         expect(auditLog!['entityId']).toBe('seed');
         expect(auditLog!['reason']).toBe('Seed baseline audit entry');
@@ -451,7 +429,7 @@ describe('Seed API Routes', () => {
         expect(totals.usersCreated).toBe(3);
         expect(totals.usersExisting).toBe(0);
         expect(totals.usersErrors).toBe(0);
-        expect(totals.adminsCreated).toBe(5);
+        expect(totals.adminsCreated).toBe(1);
         expect(totals.adminsExisting).toBe(0);
         expect(totals.adminsErrors).toBe(0);
         expect(totals.studentsCreated).toBe(2);
@@ -488,13 +466,13 @@ describe('Seed API Routes', () => {
         // First seed
         const first = await request(app).post('/api/seed');
         expect(first.status).toBe(200);
-        expect(first.body.totals.adminsCreated).toBe(5);
+        expect(first.body.totals.adminsCreated).toBe(1);
 
         // Second seed without force
         const second = await request(app).post('/api/seed');
         expect(second.status).toBe(200);
         expect(second.body.totals.adminsCreated).toBe(0);
-        expect(second.body.totals.adminsExisting).toBe(5);
+        expect(second.body.totals.adminsExisting).toBe(1);
         expect(second.body.totals.adminsErrors).toBe(0);
       });
 
@@ -579,12 +557,12 @@ describe('Seed API Routes', () => {
         // First seed
         const first = await request(app).post('/api/seed');
         expect(first.status).toBe(200);
-        expect(first.body.totals.adminsCreated).toBe(5);
+        expect(first.body.totals.adminsCreated).toBe(1);
 
         // Force seed
         const forced = await request(app).post('/api/seed?force=true');
         expect(forced.status).toBe(200);
-        expect(forced.body.totals.adminsCreated).toBe(5);
+        expect(forced.body.totals.adminsCreated).toBe(1);
         expect(forced.body.totals.adminsExisting).toBe(0);
         expect(forced.body.totals.adminsErrors).toBe(0);
       });
