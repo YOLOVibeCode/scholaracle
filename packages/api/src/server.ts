@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { studentsRouter } from './routes/students/students';
 import { integrationsRouter } from './routes/integrations/integrations';
+import { createSyncRouter } from './routes/sync/sync';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
@@ -45,18 +46,23 @@ import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
-import { NotificationService } from '@scholaracle/agents';
-import { StudentNotificationGenerator } from '@scholaracle/agents';
-import { ParentNotificationGenerator } from '@scholaracle/agents';
-import { DeliveryRouter } from '@scholaracle/agents';
-import { EmailDelivery } from '@scholaracle/agents';
+import {
+  NotificationService,
+  StudentNotificationGenerator,
+  ParentNotificationGenerator,
+  DeliveryRouter,
+  EmailDelivery,
+  SendGridTransport,
+  SmtpTransport,
+} from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
-import { PushDelivery } from '@scholaracle/agents';
-import { InAppDelivery } from '@scholaracle/agents';
+import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
+import type { IEmailTransport } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
+import nodemailer from 'nodemailer';
 
 export interface IServerConfig {
   readonly port?: number;
@@ -140,22 +146,38 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
 
-  const sendGrid = sgMail as unknown as MailService;
-  const twilioClient =
-    twilioConfig.accountSid && twilioConfig.authToken
-      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
-      : ({} as unknown as Twilio);
+  const smtpHost = process.env['SMTP_HOST'];
+  const transport: IEmailTransport = smtpHost
+    ? new SmtpTransport(
+        {
+          host: smtpHost,
+          port: Number(process.env['SMTP_PORT'] ?? 1025),
+        },
+        nodemailer.createTransport({
+          host: smtpHost,
+          port: Number(process.env['SMTP_PORT'] ?? 1025),
+          secure: false,
+        })
+      )
+    : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
 
-  const emailDelivery = new EmailDelivery(sendGridConfig, sendGrid);
+  const emailDelivery = new EmailDelivery(
+    { fromEmail: sendGridConfig.fromEmail, fromName: sendGridConfig.fromName },
+    transport
+  );
+  const twilioConfigured =
+    Boolean(twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.fromNumber);
+  const twilioClient = twilioConfigured
+    ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+    : ({} as unknown as Twilio);
   const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
-  const pushDelivery = new PushDelivery({ projectId: 'test-project' });
-  const inAppDelivery = new InAppDelivery();
-  const deliveryRouter = new DeliveryRouter([
+
+  const deliveryServices: readonly INotificationDelivery[] = [
     emailDelivery,
-    smsDelivery,
-    pushDelivery,
-    inAppDelivery,
-  ]);
+    ...(twilioConfigured ? [smsDelivery] : []),
+    // Push and InApp are optional; omit when not configured to avoid delivery errors.
+  ];
+  const deliveryRouter = new DeliveryRouter(deliveryServices);
 
   const studentGenerator = new StudentNotificationGenerator();
   const parentGenerator = new ParentNotificationGenerator();
@@ -298,6 +320,13 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/sessions', sessionsRouter({ database, authService }));
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
+
+    // Sync API — trigger and monitor data-source sync jobs
+    const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
+    const syncQueue = new MongoQueue(database);
+    const syncScheduler = new SyncScheduler(syncQueue, database);
+    app.use('/api/sync', authMiddleware(authService), createSyncRouter({ database, syncScheduler }));
+
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Settings API routes
