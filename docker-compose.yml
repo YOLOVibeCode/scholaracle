@@ -2,7 +2,7 @@ version: '3.8'
 
 # ⚠️ PORT POLICY: All ports are FIXED in the 28XX series and MUST NOT be changed.
 # Changing these ports will break E2E tests, CI/CD pipelines, and documentation.
-# Ports: 2800 (Web), 2801 (API), 2802 (MongoDB), 2803 (MailHog SMTP), 2804 (MailHog UI)
+# Ports: 2800 (Web), 2801 (API), 2802 (MongoDB), 2803 (Mailpit SMTP), 2804 (Mailpit UI)
 
 services:
   # MongoDB Database
@@ -26,16 +26,16 @@ services:
     networks:
       - scholaracle-network
 
-  # MailHog - Email Testing Server
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: scholaracle-mailhog
+  # Mailpit - Email Testing Server
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: scholaracle-mailpit
     restart: unless-stopped
     ports:
       - "2803:1025"  # SMTP server
       - "2804:8025"  # Web UI
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025/api/v1/info"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,11 +60,11 @@ services:
       MONGODB_URI_EXTERNAL: mongodb://localhost:2802/scholaracle
       MONGODB_DB_NAME: scholaracle
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      # Email configuration (using MailHog)
+      # Email configuration (using Mailpit when SMTP_HOST set)
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@scholaracle.local}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Scholaracle}
-      SMTP_HOST: mailhog
+      SMTP_HOST: mailpit
       SMTP_PORT: 1025
       # Twilio (optional)
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
@@ -84,7 +84,7 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-      mailhog:
+      mailpit:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/api/health"]

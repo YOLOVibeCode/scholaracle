@@ -5,50 +5,41 @@ import {
   NotificationChannel,
   DeliveryError,
 } from '@scholaracle/contracts';
-import type { MailService } from '@sendgrid/mail';
+import type { IEmailTransport, IEmailEnvelope } from './IEmailTransport';
 
 export interface IEmailDeliveryConfig {
-  readonly apiKey: string;
   readonly fromEmail: string;
   readonly fromName: string;
 }
 
 /**
- * Email delivery service using SendGrid.
- * Implements INotificationDelivery for email channel.
+ * Email delivery service. Implements INotificationDelivery for email channel.
+ * Depends on IEmailTransport (ISP) so SendGrid or SMTP can be swapped.
  */
 export class EmailDelivery implements INotificationDelivery {
-  private readonly _config: IEmailDeliveryConfig;
-  private readonly _sendGrid: MailService;
+  constructor(
+    private readonly _config: IEmailDeliveryConfig,
+    private readonly _transport: IEmailTransport
+  ) {}
 
-  constructor(config: IEmailDeliveryConfig, sendGrid: MailService) {
-    this._config = config;
-    this._sendGrid = sendGrid;
-    this._sendGrid.setApiKey(config.apiKey);
-  }
-
-  /**
-   * Check if this delivery service supports the given channel.
-   *
-   * @param channel - The notification channel to check
-   * @returns True if this service can deliver via the channel
-   */
   public supports(channel: NotificationChannel): boolean {
     return channel === NotificationChannel.EMAIL;
   }
 
-  /**
-   * Deliver a notification via email.
-   *
-   * @param notification - The notification to deliver
-   * @returns Delivery result with success status and message ID
-   * @throws {DeliveryError} If delivery fails
-   */
   public async deliver(notification: Notification): Promise<DeliveryResult> {
+    const to = notification.userId?.trim();
+    if (!to || !to.includes('@')) {
+      return {
+        success: false,
+        channel: NotificationChannel.EMAIL,
+        error: 'No recipients defined',
+      };
+    }
+
     try {
       const htmlBody = this._formatHtmlBody(notification.body);
-      const [response] = await this._sendGrid.send({
-        to: notification.userId,
+      const envelope: IEmailEnvelope = {
+        to,
         from: {
           email: this._config.fromEmail,
           name: this._config.fromName,
@@ -56,98 +47,35 @@ export class EmailDelivery implements INotificationDelivery {
         subject: notification.subject,
         text: notification.body,
         html: htmlBody,
-      });
+      };
 
-      this._validateResponse(response, notification.id);
-
-      const messageId = this._extractMessageId(response);
+      const result = await this._transport.send(envelope);
 
       return {
         success: true,
         channel: NotificationChannel.EMAIL,
-        messageId,
+        messageId: result.messageId,
         deliveredAt: new Date(),
       };
     } catch (error) {
       if (error instanceof DeliveryError) {
         throw error;
       }
-
       throw this._createDeliveryError(error, notification.id);
     }
   }
 
-  /**
-   * Validate SendGrid response status code.
-   *
-   * @param response - SendGrid response
-   * @param notificationId - Notification ID for error context
-   * @throws {DeliveryError} If status code is not 202
-   */
-  private _validateResponse(
-    response: { statusCode: number; body: unknown },
-    notificationId: string
-  ): void {
-    if (response.statusCode !== 202) {
-      throw new DeliveryError(
-        `SendGrid returned status ${response.statusCode}`,
-        NotificationChannel.EMAIL,
-        {
-          statusCode: response.statusCode,
-          body: response.body,
-          notificationId,
-        }
-      );
-    }
-  }
-
-  /**
-   * Extract message ID from SendGrid response.
-   *
-   * @param response - SendGrid response
-   * @returns Message ID or undefined
-   */
-  private _extractMessageId(response: { body: unknown }): string | undefined {
-    if (
-      typeof response.body === 'object' &&
-      response.body !== null &&
-      'message_id' in response.body
-    ) {
-      return String(response.body.message_id);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Create DeliveryError from unknown error.
-   *
-   * @param error - Unknown error
-   * @param notificationId - Notification ID for error context
-   * @returns DeliveryError instance
-   */
   private _createDeliveryError(error: unknown, notificationId: string): DeliveryError {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error occurred during email delivery';
-
     const errorContext = this._extractErrorContext(error);
-
     return new DeliveryError(
       `Failed to deliver email: ${errorMessage}`,
       NotificationChannel.EMAIL,
-      {
-        notificationId,
-        ...errorContext,
-      }
+      { notificationId, ...errorContext }
     );
   }
 
-  /**
-   * Extract error context from SendGrid error.
-   *
-   * @param error - Unknown error
-   * @returns Error context or undefined
-   */
   private _extractErrorContext(error: unknown): Record<string, unknown> | undefined {
     if (
       error &&
@@ -161,21 +89,12 @@ export class EmailDelivery implements INotificationDelivery {
         body: 'body' in error.response ? error.response.body : undefined,
       };
     }
-
     return undefined;
   }
 
-  /**
-   * Format plain text body as HTML.
-   * Converts newlines to <br> tags and wraps in basic HTML structure.
-   *
-   * @param body - Plain text body
-   * @returns HTML formatted body
-   */
   private _formatHtmlBody(body: string): string {
     const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const htmlBody = escapedBody.replace(/\n/g, '<br>');
-
     return `
 <!DOCTYPE html>
 <html>
