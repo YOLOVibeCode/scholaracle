@@ -13,25 +13,24 @@ export class GradeDropTemplate {
    * @returns Template result with subject, body, and actions
    */
   public generate(alert: Alert): ITemplateResult {
-    const relatedData = alert.relatedData as {
-      studentName: string;
-      course: string;
-      previousGrade: number;
-      currentGrade: number;
-      change: number;
-      timeframe: string;
-      contributingFactors: string[];
+    const relatedData = (alert.relatedData ?? {}) as {
+      studentName?: string;
+      courseName?: string;
+      course?: string;
+      previousGrade?: number;
+      currentGrade?: number;
+      change?: number;
+      timeframe?: string;
+      contributingFactors?: string[];
     };
 
-    const {
-      studentName,
-      course,
-      previousGrade,
-      currentGrade,
-      change,
-      timeframe,
-      contributingFactors,
-    } = relatedData;
+    const studentName = relatedData.studentName ?? 'Student';
+    const course = relatedData.course ?? relatedData.courseName ?? 'Course';
+    const previousGrade = relatedData.previousGrade ?? 0;
+    const currentGrade = relatedData.currentGrade ?? 0;
+    const change = relatedData.change ?? previousGrade - currentGrade;
+    const timeframe = relatedData.timeframe ?? 'recent';
+    const contributingFactors = relatedData.contributingFactors ?? [];
 
     const previousLetter = this._getLetterGrade(previousGrade);
     const currentLetter = this._getLetterGrade(currentGrade);

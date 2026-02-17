@@ -45,6 +45,8 @@ describe('Integrations API Routes', () => {
     if (database) {
       await database.collection('students').deleteMany({});
       await database.collection('slc_sources').deleteMany({});
+      await database.collection('generated_scrapers').deleteMany({});
+      await database.collection('scraper_generation_jobs').deleteMany({});
       await database.collection('users').deleteMany({ email: 'integrations@example.com' });
 
       const registerResult = await authService.register(
@@ -511,6 +513,288 @@ describe('Integrations API Routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('POST /api/integrations/generate-scraper', () => {
+    it('returns 401 without token', async () => {
+      const response = await request(app)
+        .post('/api/integrations/generate-scraper')
+        .send({
+          platformName: 'OtherLMS',
+          loginUrl: 'https://example.edu/login',
+          loginMethod: 'form',
+        });
+      expect(response.status).toBe(401);
+    });
+
+    it('returns 400 when missing platformName, loginUrl, or loginMethod', async () => {
+      const response = await request(app)
+        .post('/api/integrations/generate-scraper')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ platformName: 'Canvas' });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Missing required fields');
+    });
+
+    it('returns 200 with knownPlatform and reference code for known platform (Canvas)', async () => {
+      const response = await request(app)
+        .post('/api/integrations/generate-scraper')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          platformName: 'Canvas',
+          loginUrl: 'https://canvas.example.edu',
+          loginMethod: 'form',
+        });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.knownPlatform).toBe(true);
+      expect(response.body.scraperId).toBeNull();
+      expect(response.body.jobId).toBeNull();
+      expect(response.body.code).toBeDefined();
+      expect(response.body.code.scraper).toContain('Reference scraper for Canvas');
+    });
+
+    it('returns 200 with jobId for unknown platform (queued)', async () => {
+      const response = await request(app)
+        .post('/api/integrations/generate-scraper')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          platformName: 'UnknownLMS',
+          loginUrl: 'https://unknown.example.edu/login',
+          loginMethod: 'form',
+        });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.jobId).toBeDefined();
+      expect(typeof response.body.jobId).toBe('string');
+      expect(response.body.status).toBe('queued');
+    });
+  });
+
+  describe('GET /api/integrations/generate-status', () => {
+    it('returns 401 without token', async () => {
+      const response = await request(app)
+        .get('/api/integrations/generate-status?jobId=some-id')
+        .send();
+      expect(response.status).toBe(401);
+    });
+
+    it('returns 400 when jobId is missing', async () => {
+      const response = await request(app)
+        .get('/api/integrations/generate-status')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('jobId');
+    });
+
+    it('returns 404 when job not found', async () => {
+      const response = await request(app)
+        .get('/api/integrations/generate-status?jobId=00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(404);
+      expect(response.body.error).toContain('Job not found');
+    });
+
+    it('returns 200 with status and result when job is ready', async () => {
+      if (!database) return;
+      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      if (!user) throw new Error('Test user not found');
+      const userId = (user._id as import('mongodb').ObjectId).toString();
+      const jobId = 'test-ready-job-id';
+      await database.collection('scraper_generation_jobs').insertOne({
+        jobId,
+        userId,
+        platformName: 'TestPlatform',
+        loginUrl: 'https://test.edu',
+        cacheKey: 'abc',
+        status: 'ready',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        steps: [],
+        result: {
+          scraperId: '507f1f77bcf86cd799439011',
+          scraperCode: '// test',
+          transformerCode: '// test',
+          metadata: '{}',
+        },
+      });
+      const response = await request(app)
+        .get(`/api/integrations/generate-status?jobId=${encodeURIComponent(jobId)}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.jobId).toBe(jobId);
+      expect(response.body.status).toBe('ready');
+      expect(response.body.result).toBeDefined();
+      expect(response.body.result.scraperId).toBe('507f1f77bcf86cd799439011');
+    });
+  });
+
+  describe('POST /api/integrations/scraper-download', () => {
+    it('downloading a bundle does not revoke unrelated scraper tokens', async () => {
+      if (!database) return;
+      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      if (!user) throw new Error('Test user not found');
+      const userId = (user._id as import('mongodb').ObjectId).toString();
+      const revokedColl = database.collection('revoked_connector_tokens');
+      await revokedColl.deleteMany({ userId });
+      await revokedColl.insertOne({
+        userId,
+        jti: 'single-platform-jti',
+        tokenPurpose: 'scraper',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+      const bundleRes = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          connections: [
+            {
+              platformId: 'canvas',
+              platformName: 'Canvas',
+              loginUrl: 'https://canvas.example.edu',
+              credentials: { username: 'u', password: 'p' },
+            },
+          ],
+        });
+      expect(bundleRes.status).toBe(200);
+      const scraperTokenDoc = await revokedColl.findOne({
+        userId,
+        tokenPurpose: 'scraper',
+        jti: 'single-platform-jti',
+      });
+      expect(scraperTokenDoc).not.toBeNull();
+      expect(scraperTokenDoc?.['revokedAt']).toBeNull();
+    });
+
+    it('returns 200 and script with scraperId (single-platform)', async () => {
+      if (!database) return;
+      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      if (!user) throw new Error('Test user not found');
+      const insertResult = await database.collection('generated_scrapers').insertOne({
+        platformName: 'TestPlatform',
+        loginUrl: 'https://test.edu',
+        scraperCode: '// custom scraper',
+        transformerCode: '// transformer',
+        metadata: '{}',
+        cacheKey: 'test-key',
+        createdAt: new Date(),
+      });
+      const scraperId = insertResult.insertedId.toString();
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          scraperId,
+          credentials: { studentName: 'Test', username: 'u', password: 'p' },
+        });
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/x-sh|octet-stream/);
+      expect(response.headers['content-disposition']).toContain('scholaracle-testplatform.command');
+      const script = response.text;
+      expect(script).toContain('ts-node');
+      expect(script).toContain('run.js');
+      expect(script).toContain('scraper.ts');
+      expect(script).toContain('// custom scraper');
+    });
+
+    it('returns 200 and script with platform + url (reference path)', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          platform: 'Canvas',
+          url: 'https://canvas.example.edu',
+          credentials: { studentName: 'Student', username: 'u', password: 'p' },
+        });
+      expect(response.status).toBe(200);
+      expect(response.text).toContain('Reference scraper for Canvas');
+      expect(response.text).toContain('run.js');
+    });
+
+    it('returns 400 when neither scraperId, platform, nor connections/students provided', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ os: 'mac' });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('scraperId');
+    });
+
+    it('returns 404 when scraperId is not found', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          scraperId: '507f1f77bcf86cd799439011',
+          credentials: { username: 'u', password: 'p' },
+        });
+      expect(response.status).toBe(404);
+      expect(response.body.error).toContain('Scraper not found');
+    });
+
+    it('returns 200 and bundle script with payload.json and run.js for connections', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          connections: [
+            {
+              platformId: 'canvas',
+              platformName: 'Canvas',
+              loginUrl: 'https://canvas.example.edu',
+              credentials: { username: 'u', password: 'p' },
+            },
+          ],
+        });
+      expect(response.status).toBe(200);
+      expect(response.headers['content-disposition']).toContain('scholaracle-bundle.command');
+      const script = response.text;
+      expect(script).toContain('payload.json');
+      expect(script).toContain('run.js');
+      expect(script).toContain('Canvas');
+    });
+
+    it('returns 200 and multi-student script when body.students is provided', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          os: 'mac',
+          students: [
+            {
+              studentId: 'stu-1',
+              studentName: 'Alice',
+              platforms: [
+                {
+                  platform: 'Canvas',
+                  loginUrl: 'https://canvas.example.edu',
+                  credentials: { studentName: 'Alice', username: 'alice@test.com', password: 'secret' },
+                },
+              ],
+            },
+          ],
+        });
+      expect(response.status).toBe(200);
+      expect(response.headers['content-disposition']).toContain('scholaracle-sync.command');
+      const script = response.text;
+      expect(script).toContain('payload.json');
+      expect(script).toContain('run.js');
+    });
+
+    it('returns 400 when useAllStudents is true but user has no students with platforms', async () => {
+      const response = await request(app)
+        .post('/api/integrations/scraper-download')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ os: 'mac', useAllStudents: true });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/No students or platforms/);
     });
   });
 });

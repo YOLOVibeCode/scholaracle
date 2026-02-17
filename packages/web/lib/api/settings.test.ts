@@ -30,7 +30,7 @@ function fakeResponse(body: unknown, status = 200): Response {
 // Test suite
 // ---------------------------------------------------------------------------
 
-const BASE = 'http://localhost:3000/api';
+const BASE = 'http://localhost:2801/api';
 
 const DEFAULT_SETTINGS: IUserSettings = {
   notifications: {
@@ -42,6 +42,9 @@ const DEFAULT_SETTINGS: IUserSettings = {
     gradeDrop: 5,
     daysBeforeDeadline: 2,
     lowGradeThreshold: 80,
+    prioritizeHighImpact: true,
+    emphasizeWeakSubjects: true,
+    celebrateWins: true,
   },
 };
 
@@ -76,7 +79,12 @@ describe('settingsApi', () => {
         `${BASE}/settings`,
         expect.objectContaining({ method: 'GET' }),
       );
-      expect(result).toEqual(serverSettings);
+      // get() merges with defaults, so result has server values plus default alert booleans
+      expect(result.notifications).toMatchObject(serverSettings.notifications as object);
+      expect(result.alerts).toMatchObject(serverSettings.alerts as object);
+      expect(result.alerts?.prioritizeHighImpact).toBe(true);
+      expect(result.alerts?.emphasizeWeakSubjects).toBe(true);
+      expect(result.alerts?.celebrateWins).toBe(true);
     });
 
     it('returns default settings when the request fails', async () => {
@@ -84,7 +92,7 @@ describe('settingsApi', () => {
 
       const result = await settingsApi.get();
 
-      expect(result).toEqual(DEFAULT_SETTINGS);
+      expect(result).toMatchObject(DEFAULT_SETTINGS);
     });
   });
 

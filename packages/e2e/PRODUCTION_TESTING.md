@@ -12,7 +12,7 @@ This guide explains how to run E2E tests against production, staging, or any env
 
 | Variable | Description | Default (Local) | Example (Production) |
 |----------|-------------|-----------------|---------------------|
-| `BASE_URL` | Web application URL | `http://localhost:2800` | `https://app.scholarmancy.com` |
+| `BASE_URL` | Web application URL | `http://localhost:2800` | `https://scholarmancy.com` |
 | `API_BASE_URL` | API server URL | `http://localhost:2801` | `https://api.scholarmancy.com` |
 
 ---
@@ -60,7 +60,7 @@ pnpm exec playwright test
 
 ```bash
 cd packages/e2e
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical  # Start with critical only
 ```
@@ -76,12 +76,12 @@ pnpm exec playwright test --project=critical  # Start with critical only
 **Recommended Production Test Flow:**
 ```bash
 # 1. Test critical infrastructure only
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test tests/00-critical.spec.ts
 
 # 2. If critical passes, test authentication
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test tests/01-auth.spec.ts
 
@@ -109,7 +109,7 @@ pnpm exec playwright test tests/01-auth.spec.ts
 # Use test accounts via environment variables
 PARENT_TEST_EMAIL=test-parent@scholarmancy.com \
 PARENT_TEST_PASSWORD=TestPass123! \
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 pnpm exec playwright test
 ```
 
@@ -135,7 +135,7 @@ pnpm exec playwright test
 ### Production (Critical Only)
 ```bash
 cd packages/e2e
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 ```
@@ -219,7 +219,7 @@ jobs:
       - name: Run Critical tests against production
         run: |
           cd packages/e2e
-          BASE_URL=https://app.scholarmancy.com \
+          BASE_URL=https://scholarmancy.com \
           API_BASE_URL=https://api.scholarmancy.com \
           pnpm exec playwright test --project=critical
         env:
@@ -236,7 +236,7 @@ jobs:
 Run only critical tests to verify production is up:
 
 ```bash
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 ```
@@ -263,12 +263,12 @@ Run tests incrementally, stopping if a layer fails:
 
 ```bash
 # Layer 0: Critical
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical
 
 # Layer 1: Auth (only if Layer 0 passes)
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=auth
 
@@ -291,7 +291,7 @@ pnpm exec playwright test --project=auth
 **Solutions:**
 ```bash
 # Verify URLs are accessible
-curl https://app.scholarmancy.com
+curl https://scholarmancy.com
 curl https://api.scholarmancy.com/api/health
 
 # Check environment variables
@@ -299,7 +299,7 @@ echo $BASE_URL
 echo $API_BASE_URL
 
 # Run with debug output
-DEBUG=pw:api BASE_URL=https://app.scholarmancy.com pnpm test
+DEBUG=pw:api BASE_URL=https://scholarmancy.com pnpm test
 ```
 
 ### Issue: Web server auto-starts when it shouldn't
@@ -307,7 +307,7 @@ DEBUG=pw:api BASE_URL=https://app.scholarmancy.com pnpm test
 **Cause:** `BASE_URL` includes `localhost`  
 **Solution:** Use full production URL:
 ```bash
-BASE_URL=https://app.scholarmancy.com  # Not localhost
+BASE_URL=https://scholarmancy.com  # Not localhost
 ```
 
 ### Issue: Tests timeout against production
@@ -315,7 +315,7 @@ BASE_URL=https://app.scholarmancy.com  # Not localhost
 **Cause:** Production slower than localhost  
 **Solution:** Increase timeout:
 ```bash
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 pnpm exec playwright test --timeout=120000  # 2 minutes
 ```
 
@@ -381,7 +381,7 @@ make test-e2e
 BASE_URL=https://staging.scholarmancy.com API_BASE_URL=https://staging-api.scholarmancy.com pnpm test
 
 # Production (critical only)
-BASE_URL=https://app.scholarmancy.com API_BASE_URL=https://api.scholarmancy.com pnpm test --project=critical
+BASE_URL=https://scholarmancy.com API_BASE_URL=https://api.scholarmancy.com pnpm test --project=critical
 
 # Custom environment
 BASE_URL=<your-url> API_BASE_URL=<your-api-url> pnpm test
