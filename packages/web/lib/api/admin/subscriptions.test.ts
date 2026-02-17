@@ -91,7 +91,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.list();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions',
+        'http://localhost:2801/api/admin/subscriptions',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -106,7 +106,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.getById('sub-abc-123');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions/sub-abc-123',
+        'http://localhost:2801/api/admin/subscriptions/sub-abc-123',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -121,7 +121,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.getByUserId('user-42');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions?userId=user-42',
+        'http://localhost:2801/api/admin/subscriptions?userId=user-42',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -136,7 +136,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.changePlan('user-42', 'enterprise');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions/user-42/plan',
+        'http://localhost:2801/api/admin/subscriptions/user-42/plan',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({ plan: 'enterprise' }),
@@ -154,7 +154,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.cancel('user-42', 'Customer requested cancellation');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions/user-42/cancel',
+        'http://localhost:2801/api/admin/subscriptions/user-42/cancel',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ reason: 'Customer requested cancellation' }),
@@ -173,7 +173,7 @@ describe('adminSubscriptionsApi', () => {
       await adminSubscriptionsApi.extendTrial('user-42', request);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/subscriptions/user-42/extend-trial',
+        'http://localhost:2801/api/admin/subscriptions/user-42/extend-trial',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(request),

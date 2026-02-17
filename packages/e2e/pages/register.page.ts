@@ -49,9 +49,9 @@ export class RegisterPage {
     await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });
   }
 
-  async expectError(message?: string): Promise<void> {
-    await expect(this.errorMessage).toBeVisible();
-    if (message) {
+  async expectError(message?: string | RegExp, timeoutMs?: number): Promise<void> {
+    await expect(this.errorMessage).toBeVisible({ timeout: timeoutMs });
+    if (message !== undefined) {
       await expect(this.errorMessage).toContainText(message);
     }
   }

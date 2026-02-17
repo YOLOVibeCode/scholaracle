@@ -90,7 +90,7 @@ describe('adminPaymentsApi', () => {
       await adminPaymentsApi.list();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/payments',
+        'http://localhost:2801/api/admin/payments',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -105,7 +105,7 @@ describe('adminPaymentsApi', () => {
       await adminPaymentsApi.getByUserId('user-55');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/payments?userId=user-55',
+        'http://localhost:2801/api/admin/payments?userId=user-55',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -121,7 +121,7 @@ describe('adminPaymentsApi', () => {
       await adminPaymentsApi.refund('pay-abc-123', request);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/payments/pay-abc-123/refund',
+        'http://localhost:2801/api/admin/payments/pay-abc-123/refund',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(request),
@@ -139,7 +139,7 @@ describe('adminPaymentsApi', () => {
       await adminPaymentsApi.retry('pay-xyz-789');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/payments/pay-xyz-789/retry',
+        'http://localhost:2801/api/admin/payments/pay-xyz-789/retry',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),

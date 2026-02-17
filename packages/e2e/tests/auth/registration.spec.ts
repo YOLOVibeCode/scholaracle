@@ -50,14 +50,22 @@ test.describe('User Registration', () => {
   });
 
   test('REG-006: Should show error for existing email', async ({ page }) => {
-    const email = generateUniqueEmail('duplicate');
-    
+    const email = `dup.${Date.now()}@example.com`;
+
     // Register first time
     await registerPage.register(email, 'First User', 'FirstPass123!');
     await expect(page).toHaveURL('/dashboard');
-    
-    // Navigate back to register and attempt duplicate registration
+
+    // Clear auth state so middleware won't redirect /register → /dashboard
+    await page.context().clearCookies();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+
+    // Navigate to register page (now accessible since we cleared auth)
     await page.goto('/register');
+    await expect(page).toHaveURL(/\/register/);
     registerPage = new RegisterPage(page);
     await registerPage.emailInput.fill(email);
     await registerPage.nameInput.fill('Second User');
@@ -68,10 +76,11 @@ test.describe('User Registration', () => {
     if ((await registerPage.termsConsentCheckbox.count()) > 0) {
       await registerPage.termsConsentCheckbox.check({ force: true });
     }
+
     await registerPage.registerButton.click();
-    
-    // Should show error and stay on register page (not redirect to dashboard)
-    await registerPage.expectError();
+    // API returns 400 for duplicate email; form shows error and stays on /register
+    await expect(page).toHaveURL(/\/register/, { timeout: 10000 });
+    await registerPage.expectError(undefined, 10000);
   });
 
   test('REG-008: Should navigate to login page', async ({ page }) => {

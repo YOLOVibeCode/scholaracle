@@ -76,7 +76,7 @@ describe('adminNotesApi', () => {
       await adminNotesApi.getByCustomerId('cust-abc-123');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-abc-123/notes',
+        'http://localhost:2801/api/admin/customers/cust-abc-123/notes',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -92,7 +92,7 @@ describe('adminNotesApi', () => {
       await adminNotesApi.create('cust-abc-123', note);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-abc-123/notes',
+        'http://localhost:2801/api/admin/customers/cust-abc-123/notes',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(note),
@@ -111,7 +111,7 @@ describe('adminNotesApi', () => {
       await adminNotesApi.update('note-xyz-789', updates);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/notes/note-xyz-789',
+        'http://localhost:2801/api/admin/notes/note-xyz-789',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify(updates),
@@ -129,7 +129,7 @@ describe('adminNotesApi', () => {
       await adminNotesApi.delete('note-xyz-789');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/notes/note-xyz-789',
+        'http://localhost:2801/api/admin/notes/note-xyz-789',
         expect.objectContaining({
           method: 'DELETE',
           body: JSON.stringify({}),
@@ -147,7 +147,7 @@ describe('adminNotesApi', () => {
       await adminNotesApi.togglePin('note-xyz-789');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/notes/note-xyz-789/pin',
+        'http://localhost:2801/api/admin/notes/note-xyz-789/pin',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),

@@ -6,16 +6,22 @@
 
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { ingestV1Router } from '../../routes/ingest/v1/ingest';
 import {
   packageSingleFile,
+  packageBundle,
   getRunJsContent,
+  emitBundleFiles,
+  generateBundleRunJs,
   type IPackageOptions,
   type IUserCredentials,
+  type IPackageBundleOptions,
 } from './packager';
 import type { IGeneratedScraper } from './ai-generator';
+import { resolveScraperCode } from './scraper-code-resolver';
+import type { Collection } from 'mongodb';
 
 // ---------------------------------------------------------------------------
 // Stub scraper + transformer for E2E (no browser; returns one course op)
@@ -136,6 +142,230 @@ describe('Packager', () => {
       expect(script).toContain('scraper.ts');
       expect(script).toContain('transformer.ts');
     });
+  });
+
+  describe('packageBundle', () => {
+    const stubScraper = { scraperCode: '// stub', transformerCode: '// stub tf', metadata: '{}' };
+    const bundleOptions: IPackageBundleOptions = {
+      connectorToken: 'test-token',
+      apiBaseUrl: 'http://localhost:9999',
+      os: 'mac',
+      connections: [
+        {
+          platformId: 'aeries',
+          platformName: 'Aeries',
+          loginUrl: 'https://aeries.example.edu',
+          credentials: { username: 'u1', password: 'p1' },
+          scraper: stubScraper,
+        },
+        {
+          platformId: 'canvas',
+          platformName: 'Canvas',
+          loginUrl: 'https://canvas.example.edu',
+          credentials: { username: 'u2', password: 'p2', studentNameHint: 'Emma' },
+          scraper: stubScraper,
+        },
+      ],
+    };
+
+    it('produces script with payload.json and run.js containing connections', () => {
+      const script = packageBundle(bundleOptions);
+      expect(script).toContain('payload.json');
+      expect(script).toContain('run.js');
+      expect(script).toContain('connections');
+      expect(script).toContain('CONCURRENCY');
+      expect(script).toContain('Aeries');
+      expect(script).toContain('Canvas');
+    });
+
+    it('produces Windows bat when os is windows', () => {
+      const script = packageBundle({ ...bundleOptions, os: 'windows' });
+      expect(script).toContain('@echo off');
+      expect(script).toContain('payload.json');
+      expect(script).toContain('run.js');
+    });
+
+    it('Mac script contains embedded scraper files, ts-node, tsconfig, full lifecycle run.js, chmod 600', () => {
+      const script = packageBundle({
+        connectorToken: 'tok',
+        apiBaseUrl: 'http://localhost',
+        os: 'mac',
+        connections: [
+          {
+            platformId: 'aeries',
+            platformName: 'Aeries',
+            loginUrl: 'https://aeries.example.edu',
+            credentials: { username: 'u', password: 'p', studentNameHint: 'Emma' },
+            scraper: { scraperCode: '// aeries', transformerCode: '// tf', metadata: '{}' },
+          },
+        ],
+      });
+      expect(script).toContain('scraper-aeries.ts');
+      expect(script).toContain('ts-node');
+      expect(script).toContain('tsconfig.json');
+      expect(script).toContain('discoverStudents');
+      expect(script).toContain('chmod 600');
+      expect(script).toContain('payload.json');
+    });
+
+    it('Windows bat contains base64-encoded scraper files', () => {
+      const script = packageBundle({
+        connectorToken: 'tok',
+        apiBaseUrl: 'http://localhost',
+        os: 'windows',
+        connections: [
+          {
+            platformId: 'aeries',
+            platformName: 'Aeries',
+            loginUrl: 'https://aeries.example.edu',
+            credentials: { username: 'u', password: 'p' },
+            scraper: { scraperCode: '// aeries', transformerCode: '// tf', metadata: '{}' },
+          },
+        ],
+      });
+      expect(script).toContain('@echo off');
+      expect(script).toContain('scraper-aeries.ts');
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ScraperCodeResolver (Cycle 1)
+// ---------------------------------------------------------------------------
+
+function mockCollection(docs: Record<string, { scraperCode: string; transformerCode: string; metadata: string }>): Collection {
+  return {
+    findOne: async (filter: { _id?: unknown }) => {
+      if (filter._id) {
+        const id = (filter._id as ObjectId).toString();
+        return docs[id] ?? null;
+      }
+      return null;
+    },
+  } as unknown as Collection;
+}
+
+describe('ScraperCodeResolver', () => {
+  it('resolves scraper code from generated_scrapers by scraperId', async () => {
+    const id = new ObjectId();
+    const doc = {
+      scraperCode: '// custom scraper code',
+      transformerCode: '// custom transformer',
+      metadata: '{"name":"Custom"}',
+    };
+    const collection = mockCollection({ [id.toString()]: doc });
+    const code = await resolveScraperCode(collection, {
+      scraperId: id.toString(),
+      platformName: 'Custom',
+      loginUrl: 'https://example.edu/login',
+    });
+    expect(code.scraperCode).toBe('// custom scraper code');
+    expect(code.transformerCode).toBe('// custom transformer');
+    expect(code.metadata).toBe('{"name":"Custom"}');
+  });
+
+  it('returns reference stub for known platforms when scraperId is null', async () => {
+    const collection = mockCollection({});
+    const code = await resolveScraperCode(collection, {
+      scraperId: null,
+      platformName: 'Canvas',
+      loginUrl: 'https://canvas.example.edu',
+    });
+    expect(code.scraperCode).toContain('Reference scraper for Canvas');
+  });
+
+  it('returns generic fallback for unknown platforms with no scraperId', async () => {
+    const collection = mockCollection({});
+    const code = await resolveScraperCode(collection, {
+      scraperId: null,
+      platformName: 'UnknownLMS',
+      loginUrl: 'https://unknown.edu',
+    });
+    expect(code.scraperCode).toContain('generic');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BundleFileEmitter / emitBundleFiles (Cycle 2)
+// ---------------------------------------------------------------------------
+
+import type { IScraperCode } from './scraper-code-resolver';
+
+function resolved(
+  platformId: string,
+  scraper: IScraperCode
+): { platformId: string; platformName: string; loginUrl: string; credentials: { username: string; password: string; studentNameHint?: string }; scraper: IScraperCode } {
+  return {
+    platformId,
+    platformName: platformId.charAt(0).toUpperCase() + platformId.slice(1),
+    loginUrl: `https://${platformId}.example.edu`,
+    credentials: { username: 'u', password: 'p' },
+    scraper,
+  };
+}
+
+describe('BundleFileEmitter', () => {
+  it('embeds per-connection scraper files with unique names', () => {
+    const files = emitBundleFiles([
+      resolved('aeries', { scraperCode: '// aeries code', transformerCode: '// aeries tf', metadata: '{}' }),
+      resolved('canvas', { scraperCode: '// canvas code', transformerCode: '// canvas tf', metadata: '{}' }),
+    ], { apiBaseUrl: 'http://localhost', connectorToken: 'tok' });
+    expect(files).toContainEqual(
+      expect.objectContaining({ filename: 'scraper-aeries.ts', content: '// aeries code' })
+    );
+    expect(files).toContainEqual(
+      expect.objectContaining({ filename: 'scraper-canvas.ts', content: '// canvas code' })
+    );
+    expect(files).toContainEqual(expect.objectContaining({ filename: 'tsconfig.json' }));
+  });
+
+  it('includes ts-node and typescript in package.json', () => {
+    const files = emitBundleFiles(
+      [resolved('aeries', { scraperCode: '// a', transformerCode: '// t', metadata: '{}' })],
+      { apiBaseUrl: 'http://localhost', connectorToken: 'tok' }
+    );
+    const pkgJson = files.find((f) => f.filename === 'package.json');
+    expect(pkgJson?.content).toContain('ts-node');
+    expect(pkgJson?.content).toContain('typescript');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateBundleRunJs (Cycle 3)
+// ---------------------------------------------------------------------------
+
+describe('generateBundleRunJs', () => {
+  it('registers ts-node and loads per-connection scraper files', () => {
+    const js = generateBundleRunJs([{ platformId: 'aeries', platformName: 'Aeries' }]);
+    expect(js).toContain("require('ts-node/register')");
+    expect(js).toContain('scraper-aeries.ts');
+  });
+
+  it('runs full BaseScraper lifecycle: initialize, authenticate, discoverStudents, switchToStudent, scrape, transform', () => {
+    const js = generateBundleRunJs([{ platformId: 'x', platformName: 'X' }]);
+    expect(js).toContain('instance.initialize');
+    expect(js).toContain('instance.authenticate');
+    expect(js).toContain('discoverStudents');
+    expect(js).toContain('switchToStudent');
+    expect(js).toContain('instance.scrape');
+    expect(js).toContain('instance.transform');
+  });
+
+  it('posts real ops to ingest API (runs, envelope, complete)', () => {
+    const js = generateBundleRunJs([{ platformId: 'x', platformName: 'X' }]);
+    expect(js).toContain('/api/ingest/v1/runs');
+    expect(js).toContain('/envelope');
+    expect(js).toContain('/complete');
+  });
+
+  it('tags ops with studentExternalId from discovered students', () => {
+    const js = generateBundleRunJs([{ platformId: 'x', platformName: 'X' }]);
+    expect(js).toContain('studentExternalId');
+  });
+
+  it('passes studentNameHint through to scraper config credentials', () => {
+    const js = generateBundleRunJs([{ platformId: 'x', platformName: 'X' }]);
+    expect(js).toContain('studentNameHint');
   });
 });
 

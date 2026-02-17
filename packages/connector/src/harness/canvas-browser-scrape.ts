@@ -13,12 +13,17 @@
  *
  * Options:
  *   --skip-downloads    Extract file list but do not download (faster)
+ *   --full              Full sync: re-download all files (ignore incremental state)
  *   CANVAS_SKIP_DOWNLOADS=1   Same as --skip-downloads
+ *   CANVAS_FULL_SYNC=1        Same as --full
+ *
+ * Incremental: By default, skips files already in harness-output/canvas-sync-state.json.
+ * Run early morning on client machine: ./canvas-sync-morning.sh (or via cron)
  */
 
 import { chromium, type Page } from 'playwright';
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -34,6 +39,38 @@ const CANVAS_URL = process.env['CANVAS_URL'] ?? getCliArg('--url') ?? '';
 const GOOGLE_EMAIL = process.env['CANVAS_GOOGLE_EMAIL'] ?? getCliArg('--email') ?? '';
 const GOOGLE_PASSWORD = process.env['CANVAS_GOOGLE_PASSWORD'] ?? getCliArg('--password') ?? '';
 const SKIP_DOWNLOADS = process.env['CANVAS_SKIP_DOWNLOADS'] === '1' || ARGS.includes('--skip-downloads');
+const FULL_SYNC = process.env['CANVAS_FULL_SYNC'] === '1' || ARGS.includes('--full');
+
+const SYNC_STATE_PATH = join('harness-output', 'canvas-sync-state.json');
+
+// ---------------------------------------------------------------------------
+// Incremental sync state (persisted between runs)
+// ---------------------------------------------------------------------------
+
+export interface ICanvasSyncState {
+  lastSync: string; // ISO8601
+  downloadedFiles: Record<string, string>; // url or "courseId:fileId" -> localPath
+}
+
+function loadSyncState(): ICanvasSyncState | null {
+  if (FULL_SYNC || !existsSync(SYNC_STATE_PATH)) return null;
+  try {
+    const raw = readFileSync(SYNC_STATE_PATH, 'utf8');
+    return JSON.parse(raw) as ICanvasSyncState;
+  } catch {
+    return null;
+  }
+}
+
+function saveSyncState(state: ICanvasSyncState): void {
+  mkdirSync(dirname(SYNC_STATE_PATH), { recursive: true });
+  writeFileSync(SYNC_STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+}
+
+function fileKey(file: ICanvasBrowserFile): string {
+  const id = file.id ?? (file.url.match(/\/files\/(\d+)/)?.[1] ?? file.url);
+  return id;
+}
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -64,6 +101,7 @@ export interface ICanvasBrowserCourse {
 export interface ICanvasBrowserFile {
   name: string;
   url: string;
+  id?: string; // Canvas file ID for incremental tracking
   size?: string;
   contentType?: string;
   localPath?: string;
@@ -286,10 +324,10 @@ async function extractCourseFiles(page: Page, course: ICanvasBrowserCourse, base
         if (!res.ok) return [];
         const json = await res.json();
         const list = Array.isArray(json) ? json : (json as { files?: unknown[] })?.files ?? [];
-        return list.map((f: { display_name?: string; filename?: string; url?: string; size?: number }) => {
+        return list.map((f: { id?: number; display_name?: string; filename?: string; url?: string; size?: number }) => {
           let url = f.url ?? '';
           if (url && !url.includes('download')) url = url.replace(/\?.*$/, '') + '/download';
-          return { name: f.display_name || f.filename || 'file', url, size: f.size ? String(f.size) : undefined };
+          return { id: f.id != null ? String(f.id) : undefined, name: f.display_name || f.filename || 'file', url, size: f.size ? String(f.size) : undefined };
         }).filter((x: { url: string }) => x.url);
       }, course.id);
       files = apiFiles;
@@ -307,37 +345,24 @@ async function extractCourseFiles(page: Page, course: ICanvasBrowserCourse, base
         await page.waitForTimeout(1500);
       }
       files = await page.evaluate((origin) => {
-      const result: Array<{ name: string; url: string; size?: string; contentType?: string }> = [];
+      const result: Array<{ id?: string; name: string; url: string; size?: string }> = [];
       const seen = new Set<string>();
-
-      function addFile(a: Element, fallbackName?: string) {
-        const href = a.getAttribute('href');
-        if (!href || href.includes('folder')) return;
-        const fullUrl = href.startsWith('http') ? href : origin + (href.startsWith('/') ? '' : '/') + href;
-        const name = (a.textContent?.trim() || a.getAttribute('aria-label') || fallbackName || '').replace(/\s+/g, ' ').trim();
-        if (!name || name.length < 2) return;
-        let downloadUrl = fullUrl;
-        if (!fullUrl.includes('download')) {
-          const m = fullUrl.match(/\/files\/(\d+)/);
-          downloadUrl = m ? fullUrl.replace(/\?.*$/, '').replace(/\/?$/, '') + '/download' : fullUrl;
-        }
-        const key = downloadUrl + name;
-        if (seen.has(key)) return;
-        seen.add(key);
-        const row = a.closest('tr, .ef-item-row, .ig-row, [role="row"]');
-        const sizeEl = row?.querySelector('[class*="size"], .ef-size');
-        result.push({ name, url: downloadUrl, size: sizeEl?.textContent?.trim() });
-      }
-
-      // Canvas file manager: various selectors
       document.querySelectorAll('a[href*="/files/"]').forEach((a) => {
         const href = a.getAttribute('href') ?? '';
         if (href.includes('folder')) return;
         const m = href.match(/\/files\/(\d+)/);
         if (!m) return;
-        addFile(a, href.split('/').pop() || `file-${m[1]}`);
+        const fileId = m[1];
+        const name = (a.textContent?.trim() || a.getAttribute('aria-label') || href.split('/').pop() || `file-${fileId}`).replace(/\s+/g, ' ').trim();
+        if (!name || name.length < 2) return;
+        const fullUrl = href.startsWith('http') ? href : origin + (href.startsWith('/') ? '' : '/') + href;
+        const url = fullUrl.includes('download') ? fullUrl : fullUrl.replace(/\?.*$/, '').replace(/\/?$/, '') + '/download';
+        const key = url + name;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const row = a.closest('tr, .ef-item-row, .ig-row, [role="row"]');
+        result.push({ id: fileId, name, url, size: row?.querySelector('[class*="size"], .ef-size')?.textContent?.trim() });
       });
-
       return result;
     }, baseUrl.replace(/\/$/, ''));
     }
@@ -359,9 +384,18 @@ function sanitizeFilename(name: string): string {
 async function downloadFiles(
   page: Page,
   files: ICanvasBrowserFile[],
-  outputDir: string
-): Promise<void> {
+  outputDir: string,
+  state: ICanvasSyncState | null
+): Promise<{ downloaded: number; skipped: number }> {
+  let downloaded = 0;
+  let skipped = 0;
   for (const file of files) {
+    const key = fileKey(file);
+    if (state?.downloadedFiles[key] && existsSync(state.downloadedFiles[key])) {
+      file.localPath = state.downloadedFiles[key];
+      skipped++;
+      continue;
+    }
     try {
       const response = await page.request.get(file.url, { timeout: 30000 });
       if (!response.ok) continue;
@@ -372,17 +406,20 @@ async function downloadFiles(
       mkdirSync(outputDir, { recursive: true });
       writeFileSync(path, buffer);
       file.localPath = path;
+      if (state) state.downloadedFiles[key] = path;
+      downloaded++;
     } catch {
       // Skip failed downloads
     }
   }
+  return { downloaded, skipped };
 }
 
 // ---------------------------------------------------------------------------
 // Extract Course Detail (assignments, modules, files)
 // ---------------------------------------------------------------------------
 
-async function extractCourseDetail(page: Page, course: ICanvasBrowserCourse, baseUrl: string): Promise<ICanvasBrowserCourse> {
+async function extractCourseDetail(page: Page, course: ICanvasBrowserCourse, baseUrl: string, state: ICanvasSyncState | null): Promise<ICanvasBrowserCourse> {
   try {
     await page.goto(course.url, { waitUntil: 'networkidle', timeout: 15000 });
     await page.waitForTimeout(1500);
@@ -428,16 +465,16 @@ async function extractCourseDetail(page: Page, course: ICanvasBrowserCourse, bas
         await page.goto(a.url, { waitUntil: 'networkidle', timeout: 10000 });
         await page.waitForTimeout(800);
         const attachmentLinks = await page.evaluate((origin) => {
-          const links: Array<{ name: string; url: string }> = [];
+          const links: Array<{ id?: string; name: string; url: string }> = [];
           document.querySelectorAll('a[href*="/files/"], a[href*="download"], .attachment a').forEach((el) => {
             const href = el.getAttribute('href');
             if (!href || href.includes('folder')) return;
+            const m = href.match(/\/files\/(\d+)/);
+            if (!m) return;
             const fullUrl = href.startsWith('http') ? href : origin + (href.startsWith('/') ? '' : '/') + href;
             const name = el.textContent?.trim() || el.getAttribute('aria-label') || 'attachment';
-            if (href.match(/\/files\/\d+/) && name) {
-              const dl = fullUrl.includes('download') ? fullUrl : fullUrl.replace(/\?.*$/, '').replace(/\/?$/, '') + '/download';
-              links.push({ name, url: dl });
-            }
+            const dl = fullUrl.includes('download') ? fullUrl : fullUrl.replace(/\?.*$/, '').replace(/\/?$/, '') + '/download';
+            links.push({ id: m[1], name, url: dl });
           });
           return links;
         }, baseUrl.replace(/\/$/, ''));
@@ -445,7 +482,7 @@ async function extractCourseDetail(page: Page, course: ICanvasBrowserCourse, bas
           assignments[i]!.attachments = attachmentLinks;
           if (!SKIP_DOWNLOADS) {
             const attachDir = join('harness-output', 'canvas-files', `${course.id}-${sanitizeFilename(course.name)}`, 'attachments', sanitizeFilename(a.name));
-            await downloadFiles(page, attachmentLinks, attachDir);
+            await downloadFiles(page, attachmentLinks, attachDir, state);
           }
         }
       } catch {
@@ -482,10 +519,10 @@ async function extractCourseDetail(page: Page, course: ICanvasBrowserCourse, bas
     // Extract files from Files page
     const files = await extractCourseFiles(page, course, baseUrl);
 
-    // Download files if enabled
+    // Download files if enabled (incremental: skip already-downloaded)
     if (!SKIP_DOWNLOADS && files.length > 0) {
       const filesDir = join('harness-output', 'canvas-files', `${course.id}-${sanitizeFilename(course.name)}`);
-      await downloadFiles(page, files, filesDir);
+      await downloadFiles(page, files, filesDir, state);
     }
 
     return {
@@ -512,9 +549,19 @@ export async function scrapeCanvasViaBrowser(
   const browser = await chromium.launch({ headless: true });
   mkdirSync('harness-output', { recursive: true });
 
+  let state = loadSyncState();
+  if (!state) {
+    state = { lastSync: '', downloadedFiles: {} };
+  }
+  if (FULL_SYNC) state = { lastSync: '', downloadedFiles: {} };
+
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(20000);
+
+    if (!FULL_SYNC && state.lastSync) {
+      console.log(`   Incremental sync (last: ${state.lastSync.slice(0, 10)}...), ${Object.keys(state.downloadedFiles).length} files already cached`);
+    }
 
     console.log('\n1. NAVIGATING TO CANVAS');
     await page.goto(canvasUrl, { waitUntil: 'networkidle', timeout: 20000 });
@@ -554,14 +601,17 @@ export async function scrapeCanvasViaBrowser(
 
     const baseUrl = canvasUrl.replace(/\/$/, '');
     console.log('6. EXTRACTING EVERY COURSE (assignments, modules, files, grades)');
-    if (!SKIP_DOWNLOADS) console.log('   (downloading files to harness-output/canvas-files/)');
+    if (!SKIP_DOWNLOADS) console.log('   (incremental downloads to harness-output/canvas-files/)');
     for (let i = 0; i < courses.length; i++) {
-      courses[i] = await extractCourseDetail(page, courses[i]!, baseUrl);
+      courses[i] = await extractCourseDetail(page, courses[i]!, baseUrl, state);
       const c = courses[i]!;
       const meta = [c.period, c.teacher].filter(Boolean).join(' — ');
       const filesInfo = c.files.length > 0 ? `, ${c.files.length} files` : '';
       console.log(`   [${i + 1}/${courses.length}] ${c.name}${meta ? ` (${meta})` : ''}: ${c.assignments.length} assignments, ${c.modules.length} modules${filesInfo}`);
     }
+
+    state.lastSync = new Date().toISOString();
+    saveSyncState(state);
 
     const result: ICanvasBrowserExtract = {
       user,
@@ -569,7 +619,7 @@ export async function scrapeCanvasViaBrowser(
       toDoItems,
       upcomingEvents,
       announcements,
-      timestamp: new Date().toISOString(),
+      timestamp: state.lastSync,
     };
 
     return result;
@@ -645,7 +695,8 @@ if (require.main === module) {
   if (!CANVAS_URL || !GOOGLE_EMAIL || !GOOGLE_PASSWORD) {
     console.error('Usage: CANVAS_URL=... CANVAS_GOOGLE_EMAIL=... CANVAS_GOOGLE_PASSWORD=... npx ts-node src/harness/canvas-browser-scrape.ts');
     console.error('  or:  npx ts-node src/harness/canvas-browser-scrape.ts --url https://ldisd.instructure.com --email user@ldisd.net --password pass');
-    console.error('  Add --skip-downloads to extract file list without downloading.');
+    console.error('  Add --skip-downloads to extract without downloading.');
+    console.error('  Add --full to re-download all files (ignore incremental state).');
     process.exit(1);
   }
 

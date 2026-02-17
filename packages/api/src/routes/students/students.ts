@@ -229,16 +229,22 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const studentExternalId = student.studentId ?? '';
+      const studentDbIdStr = student._id?.toString() ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
 
-      const assignmentDocs = await assignmentsColl
-        .find({
-          userId,
-          studentExternalId,
-          deletedAt: null,
-        })
-        .toArray();
+      const assignmentFilter =
+        studentDbIdStr
+          ? {
+              userId,
+              deletedAt: null,
+              $or: [
+                { studentId: studentDbIdStr },
+                ...(studentExternalId ? [{ studentExternalId }] : []),
+              ],
+            }
+          : { userId, studentExternalId, deletedAt: null };
+      const assignmentDocs = await assignmentsColl.find(assignmentFilter).toArray();
 
       const courseIds = [
         ...new Set(

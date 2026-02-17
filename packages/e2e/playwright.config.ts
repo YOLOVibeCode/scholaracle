@@ -48,7 +48,7 @@ export default defineConfig({
   use: {
     // Support production URLs via environment variable
     // Local: http://localhost:2800 (FIXED PORT)
-    // Production: https://app.scholarmancy.com (or set BASE_URL)
+    // Production: https://scholarmancy.com (or set BASE_URL)
     baseURL: process.env.BASE_URL ?? 'http://localhost:2800',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

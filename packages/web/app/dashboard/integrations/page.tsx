@@ -7,8 +7,9 @@ import { integrationsApi } from '@/lib/api/integrations';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay } from '@/components/common';
 import { IntegrationCard } from '@/components/dashboard/integrations/IntegrationCard';
-import { AddProviderWizard } from '@/components/dashboard/integrations/AddProviderWizard';
+import { ConnectProviderWizard } from '@/components/dashboard/integrations/ConnectProviderWizard';
 import { SelfHostedScraperCard } from '@/components/dashboard/integrations/SelfHostedScraperCard';
+import { ReconciliationCard } from '@/components/dashboard/integrations/ReconciliationCard';
 
 export default function IntegrationsPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -39,6 +40,7 @@ export default function IntegrationsPage() {
         </Button>
       </div>
 
+      <ReconciliationCard />
       <SelfHostedScraperCard />
 
       {isLoading && (
@@ -83,7 +85,7 @@ export default function IntegrationsPage() {
         </Card>
       )}
 
-      <AddProviderWizard
+      <ConnectProviderWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onAdded={handleAdded}

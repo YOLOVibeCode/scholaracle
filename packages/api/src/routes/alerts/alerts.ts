@@ -6,6 +6,8 @@ export interface ICreateAlertRequest {
   readonly studentId: string;
   readonly type: string;
   readonly severity: string;
+  /** Optional parent email for delivery (otherwise falls back to studentId). */
+  readonly userId?: string;
   readonly relatedData?: Record<string, unknown>;
 }
 
@@ -48,7 +50,7 @@ function formatNotificationResponse(result: IProcessAlertResult): Record<string,
       subject: result.parentNotification.subject,
       priority: result.parentNotification.priority,
     },
-    deliveryResults: (result.deliveryResults ?? []).map((r) => ({
+    deliveryResults: (Array.isArray(result.deliveryResults) ? result.deliveryResults : []).map((r) => ({
       success: r.success,
       channel: r.channel,
       messageId: r.messageId,
@@ -84,12 +86,13 @@ async function handleCreateAlert(
       studentId: alertData.studentId,
       type: alertData.type as AlertType,
       severity: alertData.severity,
+      userId: alertData.userId,
       relatedData: alertData.relatedData ?? {},
     });
 
     const result = await notificationService.processAlert(alert);
 
-    if (!result || !result.deliveryResults) {
+    if (!result) {
       throw new Error('Invalid result from notification service');
     }
 

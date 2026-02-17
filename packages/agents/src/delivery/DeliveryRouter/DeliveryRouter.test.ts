@@ -148,7 +148,7 @@ describe('DeliveryRouter', () => {
       expect(mockPushDelivery.deliver).not.toHaveBeenCalled();
     });
 
-    it('should throw DeliveryError when no service supports the channel', async () => {
+    it('should return skipped result when no service supports the channel', async () => {
       // Arrange
       const notification = new Notification({
         agentType: AgentType.STUDENT,
@@ -164,13 +164,13 @@ describe('DeliveryRouter', () => {
       mockPushDelivery.supports.mockReturnValue(false);
       mockSmsDelivery.supports.mockReturnValue(false);
 
-      // Act & Assert
-      await expect(deliveryRouter.route(notification, NotificationChannel.IN_APP)).rejects.toThrow(
-        DeliveryError
-      );
-      await expect(deliveryRouter.route(notification, NotificationChannel.IN_APP)).rejects.toThrow(
-        'No delivery service found for channel: in_app'
-      );
+      // Act
+      const result = await deliveryRouter.route(notification, NotificationChannel.IN_APP);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.channel).toBe(NotificationChannel.IN_APP);
+      expect(result.error).toContain('No delivery service found for channel');
     });
 
     it('should propagate delivery errors from service', async () => {

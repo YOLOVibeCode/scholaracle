@@ -30,7 +30,7 @@ function fakeResponse(body: unknown, status = 200): Response {
 // Test suite
 // ---------------------------------------------------------------------------
 
-const BASE = 'http://localhost:3000/api';
+const BASE = 'http://localhost:2801/api';
 
 describe('studentsApi', () => {
   let fetchSpy: jest.SpyInstance;

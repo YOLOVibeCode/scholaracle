@@ -12,21 +12,30 @@ test.describe('Admin Auth', () => {
     const adminLoginPage = new AdminLoginPage(page);
     await adminLoginPage.goto();
 
+    const loginResponse = page.waitForResponse(
+      (r) => r.url().includes('/admin') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
     await adminLoginPage.login(TEST_USERS.admin.email, 'WrongPassword999!');
+    await loginResponse;
 
-    // Should show error and stay on admin login page
-    await adminLoginPage.expectError();
     await expect(page).toHaveURL(/\/admin\/login/);
+    await adminLoginPage.expectError(undefined, 15000);
   });
 
   test('ADMIN-AUTH-002: Non-existent admin email is rejected', async ({ page }) => {
     const adminLoginPage = new AdminLoginPage(page);
     await adminLoginPage.goto();
 
+    const loginResponse = page.waitForResponse(
+      (r) => r.url().includes('/admin') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
     await adminLoginPage.login('nonexistent@scholarmancy.com', 'SomePass123!');
+    await loginResponse;
 
-    await adminLoginPage.expectError();
     await expect(page).toHaveURL(/\/admin\/login/);
+    await adminLoginPage.expectError(undefined, 15000);
   });
 
   test('ADMIN-AUTH-003: Account lockout after repeated failed attempts', async ({ page }) => {
@@ -40,16 +49,18 @@ test.describe('Admin Auth', () => {
     // Attempt login 6 times with wrong password (lockout threshold is 5)
     for (let i = 0; i < 6; i++) {
       await adminLoginPage.goto();
+      const loginResponse = page.waitForResponse(
+        (r) => r.url().includes('/admin') && r.request().method() === 'POST',
+        { timeout: 15000 }
+      );
       await adminLoginPage.login(lockoutEmail, wrongPassword);
-      // Wait for the error to appear before retrying
-      await page
-        .locator('[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50')
-        .first()
-        .waitFor({ state: 'visible', timeout: 5000 });
+      await loginResponse;
+      // Wait for error to appear before retrying
+      await adminLoginPage.expectError(undefined, 10000);
     }
 
-    // The 6th attempt (or a 7th attempt) should show a lockout message
-    await adminLoginPage.expectError(/locked|too many failed/i);
+    // The 6th attempt should show a lockout message (API: "Account temporarily locked due to too many failed attempts")
+    await adminLoginPage.expectError(/locked|too many failed/i, 5000);
     await expect(page).toHaveURL(/\/admin\/login/);
   });
 });

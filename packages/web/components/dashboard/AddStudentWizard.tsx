@@ -14,22 +14,20 @@ import {
   Plug,
   GraduationCap,
   ArrowLeft,
+  Trash2,
 } from 'lucide-react';
 import { studentsApi } from '@/lib/api/students';
 import {
   integrationsApi,
   type IIntegration,
-  type ICreateIntegrationRequest,
   type IAssignStudentCredentials,
   type ITestConnectionResult,
 } from '@/lib/api/integrations';
+import { apiClient } from '@/lib/api/client';
 import { useAsyncData } from '@/lib/hooks';
-import {
-  getAvailableProviders,
-  detectProviderFromUrl,
-  findProviderById,
-  type IProviderDescriptor,
-} from '@/lib/providers';
+import { findProviderById, type IProviderDescriptor } from '@/lib/providers';
+import { ConnectProviderWizard } from '@/components/dashboard/integrations/ConnectProviderWizard';
+import type { IBundleConnection, IBundleConnectionPayload } from '@/components/dashboard/integrations/bundle-types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +65,8 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   // Service connections accumulated during this wizard session
   const [connections, setConnections] = useState<ServiceConnection[]>([]);
+  // Bundle: platform connections to be downloaded as one script (connection-centric flow)
+  const [bundle, setBundle] = useState<IBundleConnection[]>([]);
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
   // Credentials for the current connection
@@ -75,16 +75,11 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  // New provider inline flow
-  const [newProviderStep, setNewProviderStep] = useState(1);
-  const [selectedProvider, setSelectedProvider] = useState<IProviderDescriptor | null>(null);
-  const [providerDisplayName, setProviderDisplayName] = useState('');
-  const [providerUrl, setProviderUrl] = useState('');
-  const [detectedProvider, setDetectedProvider] = useState<IProviderDescriptor | undefined>();
+  // New provider: open ConnectProviderWizard; after download or add-to-bundle we update state
+  const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
+  const [bundleDownloading, setBundleDownloading] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
-
-  const availableProviders = getAvailableProviders();
 
   // Created student tracking
   const [createdStudentId, setCreatedStudentId] = useState<string | null>(null);
@@ -117,11 +112,9 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setTestingConnection(true);
     setTestResult(null);
 
-    const credPayload: { authType: 'api' | 'login' | 'oauth2' | 'api-key'; accessToken?: string; username?: string; password?: string; clientId?: string; clientSecret?: string } = {
-      authType: providerInfo.authMethod === 'bearer-token' ? 'api' : providerInfo.authMethod === 'credentials' ? 'login' : providerInfo.authMethod as 'oauth2' | 'api-key',
+    const credPayload: { authType: 'login'; username?: string; password?: string } = {
+      authType: 'login',
     };
-
-    if (accessToken.trim()) credPayload.accessToken = accessToken.trim();
     if (username.trim()) credPayload.username = username.trim();
     if (password) credPayload.password = password;
 
@@ -146,10 +139,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setConnections([]);
     setCurrentIntegration(null);
     resetCredentials();
-    setNewProviderStep(1);
-    setSelectedProvider(null);
-    setProviderDisplayName('');
-    setProviderUrl('');
+    setConnectProviderWizardOpen(false);
     setCreatedStudentId(null);
     setCreatedStudentName('');
   };
@@ -198,46 +188,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   };
 
   const handleAddNewProvider = () => {
-    setNewProviderStep(1);
-    setSelectedProvider(null);
-    setProviderDisplayName('');
-    setProviderUrl('');
     setStep('add-provider');
-  };
-
-  // ---------------------------------------------------------------------------
-  // Step 2b – Add Provider Inline
-  // ---------------------------------------------------------------------------
-
-  const handleProviderSelect = (p: IProviderDescriptor) => {
-    if (!p.available) return;
-    setSelectedProvider(p);
-    setNewProviderStep(2);
-  };
-
-  const handleProviderCreate = async () => {
-    if (!selectedProvider) return;
-    setSubmitting(true);
-    setError(null);
-
-    const payload: ICreateIntegrationRequest = {
-      provider: selectedProvider.id,
-      adapterId: selectedProvider.adapterId,
-      displayName: providerDisplayName || `${selectedProvider.name}${providerUrl ? ` - ${providerUrl}` : ''}`,
-      portalBaseUrl: providerUrl || undefined,
-    };
-
-    const result = await integrationsApi.create(payload);
-    setSubmitting(false);
-
-    if (result) {
-      refreshIntegrations();
-      setCurrentIntegration(result);
-      resetCredentials();
-      setStep('credentials');
-    } else {
-      setError('Failed to create provider. Please try again.');
-    }
   };
 
   // ---------------------------------------------------------------------------
@@ -250,12 +201,8 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setSubmitting(true);
 
     let credentials: IAssignStudentCredentials | undefined;
-    if (!skipCredentials) {
-      if (authType === 'api' && accessToken.trim()) {
-        credentials = { authType: 'api', accessToken: accessToken.trim() };
-      } else if (authType === 'login' && username.trim() && password) {
-        credentials = { authType: 'login', username: username.trim(), password };
-      }
+    if (!skipCredentials && username.trim() && password) {
+      credentials = { authType: 'login', username: username.trim(), password };
     }
 
     const result = await integrationsApi.assignStudent(
@@ -306,10 +253,72 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setStep('student-info');
     setError(null);
     setConnections([]);
+    setBundle([]);
     setCurrentIntegration(null);
     resetCredentials();
     setCreatedStudentId(null);
     setCreatedStudentName('');
+  };
+
+  const handleRemoveFromBundle = (id: string) => {
+    setBundle((b) => b.filter((c) => c.id !== id));
+  };
+
+  const handleDownloadBundle = async () => {
+    if (bundle.length === 0) return;
+    const allReady = bundle.every((c) => c.generationStatus === 'ready');
+    if (!allReady) return;
+
+    const baseUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
+    const token = apiClient.getToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
+    const detectedOS = typeof navigator !== 'undefined' && navigator.userAgent.includes('Win') ? 'windows' : 'mac';
+    const payload: IBundleConnectionPayload[] = bundle.map((c) => ({
+      platformId: c.platformId,
+      platformName: c.platformName,
+      loginUrl: c.loginUrl,
+      scraperId: c.scraperId,
+      credentials: {
+        username: c.username,
+        password: c.password,
+        studentNameHint: c.studentNameHint,
+      },
+    }));
+
+    setBundleDownloading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${baseUrl}/integrations/scraper-download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ os: detectedOS, connections: payload }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? 'Download failed');
+      }
+      const blob = await response.blob();
+      const ext = detectedOS === 'windows' ? '.bat' : '.command';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scholaracle-bundle${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setConnections((c) => [
+        ...c,
+        { integrationId: 'bundle', integrationName: 'Downloaded bundle', hasCredentials: true },
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    } finally {
+      setBundleDownloading(false);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -455,6 +464,40 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 </span>
               </div>
 
+              {/* Bundle: platforms to download as one script */}
+              {bundle.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Platforms in bundle:</p>
+                  {bundle.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium">{c.platformName}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{c.loginUrl}</span>
+                      </div>
+                      <Badge
+                        variant={c.generationStatus === 'ready' ? 'default' : c.generationStatus === 'failed' ? 'destructive' : 'secondary'}
+                        className="text-[10px] shrink-0"
+                      >
+                        {c.generationStatus === 'ready' ? 'Ready' : c.generationStatus === 'failed' ? 'Failed' : 'Generating'}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => handleRemoveFromBundle(c.id)}
+                        aria-label="Remove from bundle"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Already-connected list */}
               {connections.length > 0 && (
                 <div className="space-y-1">
@@ -522,9 +565,26 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   data-testid="wizard-add-new-provider"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Set up a new provider
+                  Add another platform
                 </Button>
               </div>
+
+              {bundle.length > 0 && (
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={
+                    bundleDownloading ||
+                    !bundle.every((c) => c.generationStatus === 'ready')
+                  }
+                  onClick={handleDownloadBundle}
+                  data-testid="wizard-download-bundle"
+                >
+                  {bundleDownloading ? 'Downloading...' : 'Download Bundle'}
+                </Button>
+              )}
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="flex gap-2 pt-2">
                 <Button
@@ -534,7 +594,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   onClick={() => setStep('done')}
                   data-testid="wizard-skip-services"
                 >
-                  {connections.length > 0 ? 'Done connecting' : 'Skip for now'}
+                  {connections.length > 0 || bundle.length > 0 ? 'Done connecting' : 'Skip for now'}
                 </Button>
               </div>
             </>
@@ -556,148 +616,27 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 Back to services
               </Button>
 
-              {newProviderStep === 1 && (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Paste your school portal URL and we&apos;ll detect the platform, or choose from the list.
-                  </p>
+              <p className="text-sm text-muted-foreground">
+                Connect a new school platform by downloading a script. You&apos;ll pick your platform, enter your school login, and run the script on your computer to sync grades — same flow as the standalone setup wizard.
+              </p>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="wizard-detect-url">School portal URL</Label>
-                    <Input
-                      id="wizard-detect-url"
-                      type="url"
-                      placeholder="https://yourschool.instructure.com"
-                      value={providerUrl}
-                      onChange={(e) => {
-                        setProviderUrl(e.target.value);
-                        setDetectedProvider(detectProviderFromUrl(e.target.value));
-                      }}
-                      disabled={submitting}
-                      data-testid="wizard-provider-url"
-                      autoFocus
-                    />
-                  </div>
+              <Button
+                type="button"
+                onClick={() => setConnectProviderWizardOpen(true)}
+                data-testid="wizard-open-connect-provider"
+              >
+                Open setup wizard
+              </Button>
 
-                  {providerUrl && detectedProvider && (
-                    <button
-                      type="button"
-                      onClick={() => handleProviderSelect(detectedProvider)}
-                      className="flex items-center gap-2 w-full rounded-lg border border-green-200 bg-green-50/50 p-3 text-left hover:bg-green-50 transition-colors dark:border-green-800 dark:bg-green-900/20"
-                      data-testid={`wizard-provider-${detectedProvider.id}`}
-                    >
-                      <Check className="h-4 w-4 text-green-600 shrink-0" />
-                      <div>
-                        <span className="font-medium text-sm">Detected: {detectedProvider.name}</span>
-                        <span className="block text-xs text-muted-foreground">{detectedProvider.description}</span>
-                      </div>
-                    </button>
-                  )}
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">or choose</span>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    {availableProviders.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleProviderSelect(p)}
-                        className="flex items-start justify-between rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors"
-                        data-testid={`wizard-provider-${p.id}`}
-                      >
-                        <div>
-                          <span className="text-sm font-medium">{p.name}</span>
-                          <span className="block text-xs text-muted-foreground">{p.description}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {newProviderStep === 2 && selectedProvider && (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Set up <strong>{selectedProvider.name}</strong> for your school.
-                  </p>
-
-                  {/* Credential help box */}
-                  <div className="rounded-md bg-blue-50/50 border border-blue-200 p-3 dark:bg-blue-900/20 dark:border-blue-800">
-                    <p className="font-medium text-sm mb-1.5">{selectedProvider.credentialHelp.title}</p>
-                    <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
-                      {selectedProvider.credentialHelp.steps.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ol>
-                    {selectedProvider.credentialHelp.docsUrl && (
-                      <a
-                        href={selectedProvider.credentialHelp.docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1.5"
-                      >
-                        Official documentation &rarr;
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    {!providerUrl && (
-                      <div className="space-y-2">
-                        <Label htmlFor="wizard-provider-url-2">School portal URL</Label>
-                        <Input
-                          id="wizard-provider-url-2"
-                          type="url"
-                          placeholder={selectedProvider.urlPlaceholder}
-                          value={providerUrl}
-                          onChange={(e) => setProviderUrl(e.target.value)}
-                          disabled={submitting}
-                          data-testid="wizard-provider-url"
-                        />
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="wizard-provider-name">Display name</Label>
-                      <Input
-                        id="wizard-provider-name"
-                        type="text"
-                        placeholder={`${selectedProvider.name} - My School`}
-                        value={providerDisplayName}
-                        onChange={(e) => setProviderDisplayName(e.target.value)}
-                        disabled={submitting}
-                        data-testid="wizard-provider-display-name"
-                      />
-                    </div>
-                  </div>
-
-                  {selectedProvider.credentialHelp.note && (
-                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
-                      {selectedProvider.credentialHelp.note}
-                    </p>
-                  )}
-
-                  <div className="flex gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setNewProviderStep(1)}>
-                      Back
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleProviderCreate}
-                      disabled={submitting}
-                      data-testid="wizard-create-provider"
-                    >
-                      {submitting ? 'Creating...' : 'Create & continue'}
-                    </Button>
-                  </div>
-                </>
-              )}
+              <ConnectProviderWizard
+                open={connectProviderWizardOpen}
+                onClose={() => setConnectProviderWizardOpen(false)}
+                onConnectionReady={(connection) => {
+                  setBundle((b) => [...b, connection]);
+                  setConnectProviderWizardOpen(false);
+                  setStep('connect-services');
+                }}
+              />
             </>
           )}
 
@@ -706,10 +645,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               ================================================================ */}
           {step === 'credentials' && currentIntegration && (() => {
             const providerInfo = findProviderById(currentIntegration.provider);
-            const fields = providerInfo?.credentialHelp.fields ?? ['accessToken'];
-            const needsToken = fields.includes('accessToken');
-            const needsLogin = fields.includes('username') || fields.includes('password');
-            const needsOAuth = fields.length === 0;
 
             return (
               <>
@@ -758,67 +693,36 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 )}
 
                 <div className="space-y-3">
-                  {/* OAuth-based: no credential fields needed, just a note */}
-                  {needsOAuth && (
-                    <p className="text-sm text-muted-foreground">
-                      This provider uses secure sign-in. No credentials to enter here — click Connect to link the student.
-                    </p>
-                  )}
-
-                  {/* Token-based (Canvas) */}
-                  {needsToken && (
-                    <div className="space-y-2">
-                      <Label htmlFor="wizard-token">Access token</Label>
-                      <Input
-                        id="wizard-token"
-                        type="password"
-                        placeholder="Paste the student's API access token"
-                        value={accessToken}
-                        onChange={(e) => {
-                          setAccessToken(e.target.value);
-                          setAuthType('api');
-                        }}
-                        disabled={submitting}
-                        data-testid="wizard-credentials-token"
-                      />
-                    </div>
-                  )}
-
-                  {/* Login-based (Skyward, ParentVUE) */}
-                  {needsLogin && (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="wizard-username">Username</Label>
-                        <Input
-                          id="wizard-username"
-                          type="text"
-                          placeholder="Student's portal username"
-                          value={username}
-                          onChange={(e) => {
-                            setUsername(e.target.value);
-                            setAuthType('login');
-                          }}
-                          disabled={submitting}
-                          data-testid="wizard-credentials-username"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="wizard-password">Password</Label>
-                        <Input
-                          id="wizard-password"
-                          type="password"
-                          placeholder="Student's portal password"
-                          value={password}
-                          onChange={(e) => {
-                            setPassword(e.target.value);
-                            setAuthType('login');
-                          }}
-                          disabled={submitting}
-                          data-testid="wizard-credentials-password"
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="wizard-username">Username</Label>
+                    <Input
+                      id="wizard-username"
+                      type="text"
+                      placeholder="Student's portal username"
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setAuthType('login');
+                      }}
+                      disabled={submitting}
+                      data-testid="wizard-credentials-username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="wizard-password">Password</Label>
+                    <Input
+                      id="wizard-password"
+                      type="password"
+                      placeholder="Student's portal password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setAuthType('login');
+                      }}
+                      disabled={submitting}
+                      data-testid="wizard-credentials-password"
+                    />
+                  </div>
                 </div>
 
                 {providerInfo?.credentialHelp.note && (
