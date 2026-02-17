@@ -76,10 +76,6 @@ export function auditLogsRouter(config: IAuditLogsRouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       try {
         const authReq = req as IAdminAuthenticatedRequest;
-        if (authReq.adminRole !== 'super_admin') {
-          res.status(403).json({ success: false, error: 'Only super_admin can export audit logs' });
-          return;
-        }
 
         const action = req.query['action'] as string | undefined;
         const entityType = req.query['entityType'] as string | undefined;
@@ -155,12 +151,6 @@ export function auditLogsRouter(config: IAuditLogsRouterConfig): Router {
     '/',
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (authReq.adminRole !== 'super_admin') {
-          res.status(403).json({ success: false, error: 'Only super_admin can view audit logs' });
-          return;
-        }
-
         const page = parseInt((req.query['page'] as string) || '1') || 1;
         const limit = Math.min(parseInt((req.query['limit'] as string) || '25') || 25, 100);
 

@@ -48,7 +48,7 @@ describe('AdminUserRepository', () => {
         email: 'admin2@test.com',
         passwordHash,
         name: 'Test Admin 2',
-        role: 'support',
+        role: 'admin',
       };
 
       const admin = await repository.create(adminData);
@@ -177,7 +177,7 @@ describe('AdminUserRepository', () => {
         email: 'admin2@test.com',
         passwordHash,
         name: 'Admin 2',
-        role: 'support',
+        role: 'admin',
       });
 
       const admins = await repository.findAll();

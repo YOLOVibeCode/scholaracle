@@ -429,7 +429,7 @@ export default function AdminCommunicationsPage() {
       <Card data-testid="bulk-send-card">
         <CardHeader>
           <CardTitle>Bulk Send</CardTitle>
-          <CardDescription>Send a message to a segment (admin/super_admin only).</CardDescription>
+          <CardDescription>Send a message to a segment.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">

@@ -63,7 +63,7 @@ This document is the authoritative source for “what Scholaracle should do” *
 
 ---
 
-### 1.2 Admin Dashboard (Super Admin System)
+### 1.2 Admin Dashboard
 
 **Routes**
 - Public:
@@ -82,36 +82,31 @@ This document is the authoritative source for “what Scholaracle should do” *
   - `/admin/audit-logs`
 
 **Roles**
-- `super_admin`, `admin`, `support`, `billing`, `analyst`
-
-**Admin vs Super Admin**
-- The admin dashboard is a **single application** at `/admin/*`; there is no separate "super admin dashboard" vs "admin dashboard."
-- **super_admin** is a role with full access to all admin routes (Settings, Audit Logs, Customers, etc.).
-- Other roles (`admin`, `support`, `billing`, `analyst`) see a subset of pages; RBAC restricts which routes each role can access.
-- The UI shows the current role (e.g. "Super Admin", "Admin", "Support") so admins know which permissions they have.
+- The system has one admin role: `admin`. All admins have full access to all admin routes and features.
+- The three user types are: `admin`, `parent`, and `student`.
 
 **Core behaviors (acceptance criteria)**
 - **Admin auth**
   - Admins can login via `/admin/login` and land on `/admin/dashboard`.
-  - RBAC restricts access to pages based on role.
+  - All authenticated admins have full access to every admin page.
 - **Customers**
   - Customer list renders and supports search + pagination.
   - Customer detail page renders and shows basic tabs navigation.
-  - Super admin can suspend/unsuspend customers.
+  - Admins can suspend/unsuspend customers.
   - Admin notes can be created/updated/deleted.
-  - Support/admin can send a communication to a customer (logs recorded server-side).
+  - Admins can send a communication to a customer (logs recorded server-side).
 - **Subscriptions & payments**
-  - Billing roles can view and take actions (plan change, cancel, refund) where supported.
+  - Admins can view and take actions (plan change, cancel, refund) where supported.
 - **Analytics & reports**
-  - Analyst roles can access analytics/reports pages (may be placeholder UI but route must render).
+  - Admins can access analytics/reports pages (may be placeholder UI but route must render).
 - **System pages**
-  - Settings and audit logs are super-admin-only routes.
+  - Settings and audit logs are accessible to all admins.
 
 **E2E coverage**
-- Admin dashboard rendering/RBAC: `DASH-A-001` … `DASH-A-020`
+- Admin dashboard rendering: `DASH-A-001` … `DASH-A-010`
 - Admin navigation: `NAV-A-001` … `NAV-A-015`
 - Admin features: `FEAT-A-001` … `FEAT-A-015`
-- Cross-role workflow: `INT-002`
+- Admin-parent workflow: `INT-002`
 - Subscription lifecycle workflow: `INT-003`
 
 ---

@@ -2,15 +2,16 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { communicationsRouter } from './communications';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, UserRepository } from '@scholaracle/database';
+import { UserRepository, AdminStepUpChallengeRepository } from '@scholaracle/database';
+import { adminAuthRouter } from '../auth/auth';
+import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Communications Routes', () => {
   let app: Express;
   let client: MongoClient;
   let database: Db;
   let superAdminToken: string;
-  let billingToken: string;
+  let superAdminMfaSecret: string;
   let supportToken: string;
   let testUserId: string;
 
@@ -25,25 +26,22 @@ describe('Admin Communications Routes', () => {
     await database.collection('communication_logs').deleteMany({});
     await database.collection('communication_templates').deleteMany({});
 
-    const pwHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const superResult = await createTestAdmin(database, 'test-secret', {
       email: 'comms-super@test.com',
-      passwordHash: pwHash,
+      password: 'AdminPass123!',
       name: 'Comms Super',
-      role: 'super_admin',
+      role: 'admin',
     });
-    await new AdminUserRepository(database).create({
+    superAdminToken = superResult.token;
+    superAdminMfaSecret = superResult.mfaSecret;
+
+    const supportResult = await createTestAdmin(database, 'test-secret', {
       email: 'comms-support@test.com',
-      passwordHash: pwHash,
+      password: 'AdminPass123!',
       name: 'Comms Support',
-      role: 'support',
+      role: 'admin',
     });
-    await new AdminUserRepository(database).create({
-      email: 'comms-billing@test.com',
-      passwordHash: pwHash,
-      name: 'Comms Billing',
-      role: 'billing',
-    });
+    supportToken = supportResult.token;
 
     const user = await new UserRepository(database).create({
       email: 'test.parent@example.com',
@@ -55,13 +53,16 @@ describe('Admin Communications Routes', () => {
     } as any);
     testUserId = user._id!.toString();
 
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    superAdminToken = (await adminAuthService.login('comms-super@test.com', 'AdminPass123!')).token!;
-    supportToken = (await adminAuthService.login('comms-support@test.com', 'AdminPass123!')).token!;
-    billingToken = (await adminAuthService.login('comms-billing@test.com', 'AdminPass123!')).token!;
-
     app = express();
     app.use(express.json());
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret: 'test-secret',
+        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
+      })
+    );
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -72,11 +73,6 @@ describe('Admin Communications Routes', () => {
   beforeEach(async () => {
     await database.collection('communication_logs').deleteMany({});
     await database.collection('communication_templates').deleteMany({});
-  });
-
-  it('should deny billing role from communications', async () => {
-    const res = await request(app).get('/api/admin/communications/logs').set('Authorization', `Bearer ${billingToken}`);
-    expect(res.status).toBe(403);
   });
 
   it('should allow support to send an email and log it', async () => {
@@ -132,13 +128,6 @@ describe('Admin Communications Routes', () => {
       expect(Array.isArray(listRes.body.data)).toBe(true);
       expect(listRes.body.data.length).toBe(1);
       expect(listRes.body.data[0].name).toBe('Template 1');
-    });
-
-    it('should deny billing from templates', async () => {
-      const res = await request(app)
-        .get('/api/admin/communications/templates')
-        .set('Authorization', `Bearer ${billingToken}`);
-      expect(res.status).toBe(403);
     });
 
     it('should allow updating template', async () => {
@@ -215,9 +204,11 @@ describe('Admin Communications Routes', () => {
       expect(createTemplate.status).toBe(200);
       const templateId = createTemplate.body.data.id as string;
 
+      const stepUpToken = await getStepUpToken(app, superAdminToken, superAdminMfaSecret);
       const res = await request(app)
         .post('/api/admin/communications/bulk-send')
         .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
         .send({
           criteria: { role: 'parent' },
           templateId,
@@ -233,13 +224,6 @@ describe('Admin Communications Routes', () => {
       expect(batches.body.data.length).toBeGreaterThan(0);
     });
 
-    it('should deny billing from bulk sends', async () => {
-      const res = await request(app)
-        .post('/api/admin/communications/bulk-send')
-        .set('Authorization', `Bearer ${billingToken}`)
-        .send({ criteria: { role: 'parent' }, subject: 'S', content: 'C' });
-      expect(res.status).toBe(403);
-    });
   });
 
   describe('Delivery tracking + analytics', () => {

@@ -22,23 +22,11 @@ export function adminUsersRouter(config: IAdminUsersRouterConfig): Router {
 
   router.use(adminAuthMiddleware(adminAuthService));
 
-  const requireSuperAdmin = (req: Request, res: Response): IAdminAuthenticatedRequest | null => {
-    const authReq = req as IAdminAuthenticatedRequest;
-    if (authReq.adminRole !== 'super_admin') {
-      res.status(403).json({ success: false, error: 'Only super_admin can manage admin users' });
-      return null;
-    }
-    return authReq;
-  };
-
   // GET /api/admin/users
   router.get(
     '/',
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (_req: Request, res: Response) => {
       try {
-        const authReq = requireSuperAdmin(req, res);
-        if (!authReq) return;
-
         const admins = await adminUserRepository.findAll();
         res.status(200).json({
           success: true,
@@ -68,8 +56,7 @@ export function adminUsersRouter(config: IAdminUsersRouterConfig): Router {
     requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = requireSuperAdmin(req, res);
-        if (!authReq) return;
+        const authReq = req as IAdminAuthenticatedRequest;
 
         const { email, name, role, password } = req.body as {
           email?: string;
@@ -126,8 +113,7 @@ export function adminUsersRouter(config: IAdminUsersRouterConfig): Router {
     requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = requireSuperAdmin(req, res);
-        if (!authReq) return;
+        const authReq = req as IAdminAuthenticatedRequest;
 
         const { id } = req.params;
         if (!id) {

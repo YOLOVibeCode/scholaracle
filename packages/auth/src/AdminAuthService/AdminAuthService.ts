@@ -107,7 +107,7 @@ export class AdminAuthService implements IAdminAuthService {
    * @param password - Admin password
    * @param name - Admin name
    * @param role - Admin role
-   * @param createdBy - ID of admin creating this user (must be super_admin)
+   * @param createdBy - ID of admin creating this user
    * @returns Auth result with token
    */
   public async register(
@@ -118,12 +118,12 @@ export class AdminAuthService implements IAdminAuthService {
     createdBy: string
   ): Promise<IAdminAuthResult> {
     try {
-      // Verify creator is super_admin
+      // Verify creator exists and is an active admin
       const creator = await this._adminRepository.findById(createdBy);
-      if (!creator || creator.role !== 'super_admin') {
+      if (!creator) {
         return {
           success: false,
-          error: 'Only super_admin can create admin users',
+          error: 'Admin user not found',
         };
       }
 

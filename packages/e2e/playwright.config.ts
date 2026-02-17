@@ -121,6 +121,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
+    // Layer 8: Multi-Parent Sharing (self-contained, exercises sharing/admin flow)
+    {
+      name: 'multi-parent',
+      testMatch: /08-multi-parent\.spec\.ts/,
+      dependencies: ['critical'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 90 * 1000,
+    },
   ],
 
   // Web server configuration

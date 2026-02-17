@@ -11,10 +11,13 @@ import {
   NotificationChannel,
 } from '@scholaracle/contracts';
 
-export interface IResolvedRecipients {
+export interface IResolvedRecipient {
   parentEmail?: string;
   parentPhone?: string;
 }
+
+/** @deprecated Use IResolvedRecipient (singular). Kept for backwards compat. */
+export type IResolvedRecipients = IResolvedRecipient;
 
 export interface IProcessAlertResult {
   readonly studentNotification: Notification;
@@ -43,16 +46,19 @@ export class NotificationService {
 
   /**
    * Process an alert by generating and delivering notifications.
-   * When resolvedRecipients is provided, parent notification is delivered to parentEmail (EMAIL) and parentPhone (SMS) instead of alert.userId.
+   *
+   * Supports multiple parents: pass an array of resolvedRecipients to
+   * broadcast the same parent notification to all parents/guardians.
    *
    * @param alert - The alert to process
-   * @param resolvedRecipients - Optional resolved parent email/phone for delivery (e.g. from UserRepository in worker)
+   * @param resolvedRecipients - Optional resolved parent email/phone(s) for delivery.
+   *   Pass a single object for one parent, or an array for multi-parent broadcast.
    * @returns Result containing notifications and delivery results
    * @throws {DeliveryError} If delivery fails for any channel
    */
   public async processAlert(
     alert: Alert,
-    resolvedRecipients?: IResolvedRecipients
+    resolvedRecipients?: IResolvedRecipient | readonly IResolvedRecipient[]
   ): Promise<IProcessAlertResult> {
     const studentNotification = this._studentGenerator.generate(alert);
     const parentNotification = this._parentGenerator.generate(alert);
@@ -68,30 +74,37 @@ export class NotificationService {
     }
 
     if (shouldNotifyParent(alert.type)) {
-      for (const channel of parentNotification.channels) {
-        const to =
-          channel === NotificationChannel.EMAIL
-            ? (resolvedRecipients?.parentEmail ?? parentNotification.userId)
-            : channel === NotificationChannel.SMS
-              ? (resolvedRecipients?.parentPhone ?? parentNotification.userId)
-              : parentNotification.userId;
-        const notifToSend =
-          to !== parentNotification.userId
-            ? new Notification({
-                agentType: parentNotification.agentType,
-                studentId: parentNotification.studentId,
-                userId: to,
-                subject: parentNotification.subject,
-                body: parentNotification.body,
-                priority: parentNotification.priority,
-                triggerType: parentNotification.triggerType,
-                triggerData: parentNotification.triggerData,
-                channels: parentNotification.channels,
-                actions: parentNotification.actions,
-              })
-            : parentNotification;
-        const result = await this._deliveryRouter.route(notifToSend, channel);
-        deliveryResults.push(result);
+      // Normalize to array for multi-parent broadcast
+      const recipients: readonly IResolvedRecipient[] = resolvedRecipients
+        ? (Array.isArray(resolvedRecipients) ? resolvedRecipients : [resolvedRecipients])
+        : [{}]; // empty = use parentNotification.userId as-is
+
+      for (const recipient of recipients) {
+        for (const channel of parentNotification.channels) {
+          const to =
+            channel === NotificationChannel.EMAIL
+              ? (recipient.parentEmail ?? parentNotification.userId)
+              : channel === NotificationChannel.SMS
+                ? (recipient.parentPhone ?? parentNotification.userId)
+                : parentNotification.userId;
+          const notifToSend =
+            to !== parentNotification.userId
+              ? new Notification({
+                  agentType: parentNotification.agentType,
+                  studentId: parentNotification.studentId,
+                  userId: to,
+                  subject: parentNotification.subject,
+                  body: parentNotification.body,
+                  priority: parentNotification.priority,
+                  triggerType: parentNotification.triggerType,
+                  triggerData: parentNotification.triggerData,
+                  channels: parentNotification.channels,
+                  actions: parentNotification.actions,
+                })
+              : parentNotification;
+          const result = await this._deliveryRouter.route(notifToSend, channel);
+          deliveryResults.push(result);
+        }
       }
       parentNotification.markSent();
     }

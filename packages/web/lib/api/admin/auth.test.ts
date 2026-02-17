@@ -80,7 +80,7 @@ describe('adminAuthApi', () => {
 
   describe('login', () => {
     it('POSTs to /admin/auth/login and saves token + admin to localStorage on success', async () => {
-      const admin = { id: 'a1', email: 'admin@test.com', name: 'Admin', role: 'super_admin' };
+      const admin = { id: 'a1', email: 'admin@test.com', name: 'Admin', role: 'admin' };
       fetchSpy.mockResolvedValue(
         fakeResponse({ success: true, token: 'admin-tok-123', admin }),
       );

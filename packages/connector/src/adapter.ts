@@ -64,11 +64,43 @@ export interface ILmsEnvelopeReader {
 }
 
 /**
+ * Result of a connection test.
+ */
+export interface IConnectionTestResult {
+  readonly success: boolean;
+  /** Human-readable status message (e.g. "Connected — found 4 courses"). */
+  readonly message: string;
+  /** How long the test took in milliseconds. */
+  readonly durationMs: number;
+  /** Optional details about what was found (course count, user name, etc.). */
+  readonly details?: {
+    readonly courseCount?: number;
+    readonly userName?: string;
+    readonly institutionName?: string;
+  };
+}
+
+/**
+ * ISP: Connection testing concerns only.
+ * Adapters that implement this can verify credentials are valid
+ * before a full sync — gives immediate feedback to the user.
+ */
+export interface ILmsConnectionTester {
+  testConnection(): Promise<IConnectionTestResult>;
+}
+
+/**
  * Combined adapter interface.
  */
 export interface ILmsAdapter extends ILmsAuthenticator, ILmsEnvelopeReader {
   readonly meta: ILmsAdapterMeta;
 }
+
+/**
+ * Adapter with connection testing capability.
+ * Use a type guard: `if ('testConnection' in adapter)`.
+ */
+export interface ILmsAdapterWithTest extends ILmsAdapter, ILmsConnectionTester {}
 
 /**
  * Factory function that creates an adapter given credentials.

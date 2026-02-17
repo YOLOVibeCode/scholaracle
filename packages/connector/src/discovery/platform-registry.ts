@@ -54,7 +54,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
     apiBaseUrlTemplate: 'https://classroom.googleapis.com/v1',
     docsUrl: 'https://developers.google.com/classroom',
     marketShareNote: '~50%+ of K-12 (largest by adoption)',
-    status: 'planned',
+    status: 'implemented',
   },
 
   {
@@ -101,7 +101,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
     docsUrl:
       'https://support.aeries.com/support/solutions/articles/14000077926-aeries-api-full-documentation',
     marketShareNote: 'Significant in California',
-    status: 'planned',
+    status: 'implemented',
   },
 
   {
@@ -150,7 +150,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
     apiBaseUrlTemplate: '{baseUrl}/ims/oneroster/v1p2',
     docsUrl: 'https://www.imsglobal.org/spec/oneroster/v1p2',
     marketShareNote: 'Standard supported by many SIS platforms',
-    status: 'planned',
+    status: 'implemented',
   },
 
   {

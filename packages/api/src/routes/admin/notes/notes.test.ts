@@ -2,8 +2,8 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { notesRouter } from './notes';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, UserRepository } from '@scholaracle/database';
+import { UserRepository } from '@scholaracle/database';
+import { createTestAdmin } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Notes Routes', () => {
   let app: Express;
@@ -18,18 +18,13 @@ describe('Admin Notes Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    // Create admin user
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const { token } = await createTestAdmin(database, 'test-secret', {
       email: 'notes-admin@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Notes Admin',
-      role: 'support',
+      role: 'admin',
     });
-
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    const loginResult = await adminAuthService.login('notes-admin@test.com', 'AdminPass123!');
-    adminToken = loginResult.token!;
+    adminToken = token;
 
     // Create test customer
     const customerPasswordHash = await UserRepository.hashPassword('TestPass123!');

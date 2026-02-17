@@ -23,14 +23,6 @@ export interface ICommunicationsRouterConfig {
   readonly jwtSecret?: string;
 }
 
-function hasCommsAccess(role?: string): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'support';
-}
-
-function hasBulkAccess(role?: string): boolean {
-  return role === 'super_admin' || role === 'admin';
-}
-
 export function communicationsRouter(config: ICommunicationsRouterConfig): Router {
   const router = Router();
   const adminAuthService = new AdminAuthService(config.database, config.jwtSecret);
@@ -45,14 +37,8 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
   // GET /api/admin/communications/batches
   router.get(
     '/batches',
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (_req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasBulkAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
-
         const batches = await batchRepository.findAll(50);
         res.status(200).json({
           success: true,
@@ -86,12 +72,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     '/batches/:id',
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasBulkAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
-
         const { id } = req.params;
         if (!id) {
           res.status(400).json({ success: false, error: 'id is required' });
@@ -141,10 +121,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     asyncHandler(async (req: Request, res: Response) => {
       try {
         const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasBulkAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
 
         const { criteria, subject, content, templateId } = req.body as {
           criteria?: { role?: string; emails?: readonly string[] };
@@ -287,14 +263,8 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
   // GET /api/admin/communications/templates
   router.get(
     '/templates',
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (_req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasCommsAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
-
         const templates = await templateRepository.findAll();
         res.status(200).json({
           success: true,
@@ -327,10 +297,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     asyncHandler(async (req: Request, res: Response) => {
       try {
         const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasCommsAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
 
         const { name, channel, type, subject, content } = req.body as {
           name?: string;
@@ -385,10 +351,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     asyncHandler(async (req: Request, res: Response) => {
       try {
         const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasCommsAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
 
         const { id } = req.params;
         if (!id) {
@@ -438,12 +400,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     '/logs',
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasCommsAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
-
         const userId = req.query['userId'] as string | undefined;
         const recipientEmail = req.query['recipientEmail'] as string | undefined;
         const status = req.query['status'] as string | undefined;
@@ -509,12 +465,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     '/analytics',
     asyncHandler(async (req: Request, res: Response) => {
       try {
-        const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasBulkAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
-
         const days = Math.min(parseInt((req.query['days'] as string) || '30') || 30, 365);
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
         const collection = config.database.collection('communication_logs');
@@ -565,10 +515,6 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
     asyncHandler(async (req: Request, res: Response) => {
       try {
         const authReq = req as IAdminAuthenticatedRequest;
-        if (!hasCommsAccess(authReq.adminRole)) {
-          res.status(403).json({ success: false, error: 'Insufficient permissions' });
-          return;
-        }
 
         const { recipientEmail, subject, content, templateId } = req.body as {
           recipientEmail?: string;

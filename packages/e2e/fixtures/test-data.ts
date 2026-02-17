@@ -2,7 +2,7 @@
  * Test data constants for E2E tests.
  */
 
-export type UserRole = 'parent' | 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst' | 'newUser';
+export type UserRole = 'parent' | 'admin' | 'newUser';
 
 export const TEST_USERS = {
   parent: {
@@ -11,35 +11,11 @@ export const TEST_USERS = {
     name: 'Test Parent',
     role: 'parent' as const,
   },
-  super_admin: {
-    email: 'super@scholarmancy.com',
-    password: 'SuperAdmin123!',
-    name: 'Super Admin',
-    role: 'super_admin' as const,
-  },
   admin: {
     email: 'admin@scholarmancy.com',
     password: 'Admin123!',
     name: 'Admin User',
     role: 'admin' as const,
-  },
-  support: {
-    email: 'support@scholarmancy.com',
-    password: 'Support123!',
-    name: 'Support User',
-    role: 'support' as const,
-  },
-  billing: {
-    email: 'billing@scholarmancy.com',
-    password: 'Billing123!',
-    name: 'Billing User',
-    role: 'billing' as const,
-  },
-  analyst: {
-    email: 'analyst@scholarmancy.com',
-    password: 'Analyst123!',
-    name: 'Analyst User',
-    role: 'analyst' as const,
   },
   newUser: {
     email: `new.user.${Date.now()}@example.com`,

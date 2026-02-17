@@ -2,7 +2,7 @@ import { type Response } from 'express';
 import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from './adminAuth';
 import { AdminAuthService } from '@scholaracle/auth';
 import { MongoClient, type Db } from 'mongodb';
-import { AdminUserRepository } from '@scholaracle/database';
+import { createTestAdmin } from '../test-utils/admin-test-helper';
 
 describe('adminAuthMiddleware', () => {
   let client: MongoClient;
@@ -28,20 +28,16 @@ describe('adminAuthMiddleware', () => {
   });
 
   it('should allow request with valid admin token', async () => {
-    const passwordHash = await AdminUserRepository.hashPassword('TestPass123!');
-    const admin = await new AdminUserRepository(database).create({
+    const { token, admin } = await createTestAdmin(database, 'test-secret', {
       email: 'admin@test.com',
-      passwordHash,
+      password: 'TestPass123!',
       name: 'Test Admin',
       role: 'admin',
     });
 
-    const loginResult = await adminAuthService.login('admin@test.com', 'TestPass123!');
-    expect(loginResult.success).toBe(true);
-
     const req = {
       headers: {
-        authorization: `Bearer ${loginResult.token}`,
+        authorization: `Bearer ${token}`,
       },
     } as IAdminAuthenticatedRequest;
 
@@ -55,7 +51,7 @@ describe('adminAuthMiddleware', () => {
     await middleware(req, res, next);
 
     expect(next).toHaveBeenCalled();
-    expect(req.adminId).toBe(admin._id?.toString());
+    expect(req.adminId).toBe(admin.id);
     expect(req.adminEmail).toBe('admin@test.com');
     expect(req.adminRole).toBe('admin');
   });

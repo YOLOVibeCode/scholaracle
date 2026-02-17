@@ -1,6 +1,6 @@
 import { apiClient, ApiClientError } from '../client';
 
-export type AdminRole = 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst';
+export type AdminRole = 'admin';
 
 export interface IAdminUser {
   readonly id: string;

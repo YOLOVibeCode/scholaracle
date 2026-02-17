@@ -10,17 +10,17 @@ This document maps all specifications from `APP_SPECIFICATION.md` to E2E test co
 
 | Specification Feature (from `APP_SPECIFICATION.md`) | Test Coverage | Test IDs | Status |
 |----------------------|---------------|----------|--------|
-| **Authentication** | ✅ Complete | AUTH-001 to AUTH-008 | ✅ |
+| **Authentication** | ✅ Complete | AUTH-001 to AUTH-004 | ✅ |
 | **Registration Flow** | ✅ Complete | AUTH-* + INT-001 | ✅ |
 | **Dashboard Overview** | ✅ Complete | DASH-P-001 to DASH-P-008 | ✅ |
 | **Student Management** | ✅ Complete | FEAT-P-001 to FEAT-P-010 | ✅ |
 | **Alerts System** | ✅ Complete | FEAT-P-011 to FEAT-P-015, INT-004 | ✅ |
 | **Settings & Preferences** | ✅ Complete | FEAT-P-016 to FEAT-P-020 | ✅ |
-| **Admin Dashboard** | ✅ Complete | DASH-A-001 to DASH-A-020 | ✅ |
+| **Admin Dashboard** | ✅ Complete | DASH-A-001 to DASH-A-010 | ✅ |
 | **Admin Customer Management** | ✅ Complete | FEAT-A-001 to FEAT-A-015 | ✅ |
-| **Navigation** | ✅ Complete | NAV-P-001 to NAV-P-015, NAV-A-001 to NAV-A-025 | ✅ |
+| **Navigation** | ✅ Complete | NAV-P-001 to NAV-P-015, NAV-A-001 to NAV-A-015 | ✅ |
 | **Error Handling** | ✅ Complete | ERR-001 to ERR-006 | ✅ |
-| **Cross-Role Workflows** | ✅ Complete | INT-001 to INT-005 | ✅ |
+| **Cross-Type Workflows** | ✅ Complete | INT-001 to INT-005 | ✅ |
 
 ---
 
@@ -182,7 +182,7 @@ pnpm exec playwright test --project=critical  # Start with critical only
 ### ✅ Fully Covered Specifications
 
 - [x] User Registration
-- [x] User Login/Logout (all roles)
+- [x] User Login/Logout (admin + parent)
 - [x] Dashboard Overview
 - [x] Student CRUD Operations
 - [x] Alert Display & Acknowledgment
@@ -191,7 +191,7 @@ pnpm exec playwright test --project=critical  # Start with critical only
 - [x] Admin Subscription Management
 - [x] Navigation & Routing
 - [x] Error Handling
-- [x] Cross-Role Workflows
+- [x] Cross-Type Workflows (admin + parent)
 - [x] Multi-Student Support
 
 ### ✅ Covered (Current Scope)

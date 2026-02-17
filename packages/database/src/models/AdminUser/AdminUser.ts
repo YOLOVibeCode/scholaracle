@@ -1,9 +1,9 @@
 import type { ObjectId } from 'mongodb';
 
 /**
- * Admin role levels with different permission sets.
+ * Admin role. All admins have full access to the admin portal.
  */
-export type AdminRole = 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst';
+export type AdminRole = 'admin';
 
 /**
  * Admin permission types.
@@ -24,10 +24,10 @@ export type AdminPermission =
   | 'admin:manage';
 
 /**
- * Default permissions by role.
+ * Default permissions by role. All admins have full permissions.
  */
 export const ROLE_PERMISSIONS: Record<AdminRole, readonly AdminPermission[]> = {
-  super_admin: [
+  admin: [
     'customers:view',
     'customers:edit',
     'customers:delete',
@@ -42,26 +42,6 @@ export const ROLE_PERMISSIONS: Record<AdminRole, readonly AdminPermission[]> = {
     'system:config',
     'admin:manage',
   ],
-  admin: [
-    'customers:view',
-    'customers:edit',
-    'payments:view',
-    'subscriptions:view',
-    'subscriptions:modify',
-    'communications:view',
-    'communications:send',
-    'analytics:view',
-  ],
-  support: ['customers:view', 'communications:view', 'communications:send'],
-  billing: [
-    'customers:view',
-    'payments:view',
-    'payments:refund',
-    'subscriptions:view',
-    'subscriptions:modify',
-    'analytics:view',
-  ],
-  analyst: ['customers:view', 'payments:view', 'subscriptions:view', 'analytics:view'],
 } as const;
 
 /**
@@ -147,18 +127,11 @@ export class AdminUser {
   }
 
   /**
-   * Get role level for comparison.
+   * Get role level for comparison. All admins have the same level.
    *
    * @returns Numeric role level
    */
   public getRoleLevel(): number {
-    const levels: Record<AdminRole, number> = {
-      super_admin: 100,
-      admin: 80,
-      support: 60,
-      billing: 50,
-      analyst: 40,
-    };
-    return levels[this.role];
+    return 100;
   }
 }

@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+
+# Harness output (large binary test artifacts)
+**/harness-output/
 .pnp
 .pnp.js
 .pnpm-store/

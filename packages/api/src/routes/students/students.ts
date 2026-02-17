@@ -125,6 +125,44 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   });
 
   /**
+   * GET /api/students/invites/pending
+   * List all pending invites for the current user (by email).
+   * Must be registered BEFORE /:id to avoid matching "invites" as an id.
+   */
+  router.get('/invites/pending', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { email } = req.query as { email?: string };
+      if (!email) {
+        res.status(200).json([]);
+        return;
+      }
+
+      const students = await studentRepository.findPendingInvites(email.toLowerCase().trim());
+      const invites = students.map((s) => ({
+        studentId: s._id?.toString(),
+        studentName: s.name,
+        invitedBy: s.userId.toString(),
+        invite: s.sharedWith.find(
+          (sp) => sp.email === email.toLowerCase().trim() && sp.status === 'pending'
+        ),
+      }));
+
+      res.status(200).json(invites);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
    * GET /api/students/:id
    * Get student by ID.
    */
@@ -145,7 +183,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
-      if (student.userId.toString() !== userId) {
+      if (!student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -185,7 +223,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
       const student = await studentRepository.findById(studentDbId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -546,7 +584,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
       const student = await studentRepository.findById(id);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -583,7 +621,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -658,7 +696,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const body = parsed.data;
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -735,7 +773,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const updates = parsed.data;
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -818,7 +856,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const credentials = parsed.data;
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -875,7 +913,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -916,7 +954,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -975,7 +1013,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -1021,7 +1059,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -1043,6 +1081,296 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         committedAt: run.committedAt?.toISOString(),
         error: run.error ?? null,
       });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // =========================================================================
+  // Parent sharing routes
+  // =========================================================================
+
+  /**
+   * GET /api/students/:id/parents
+   * List all parents (owner + shared) for a student.
+   */
+  router.get('/:id/parents', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const parents = [
+        {
+          userId: student.userId.toString(),
+          role: 'parent' as const,
+          status: 'accepted' as const,
+          isOwner: true,
+          isAdmin: true,
+        },
+        ...student.sharedWith.map((sp) => ({
+          userId: sp.userId,
+          email: sp.email,
+          name: sp.name,
+          role: sp.role,
+          status: sp.status,
+          isAdmin: sp.isAdmin ?? false,
+          invitedAt: sp.invitedAt?.toISOString(),
+          acceptedAt: sp.acceptedAt?.toISOString(),
+          isOwner: false,
+        })),
+      ];
+
+      res.status(200).json(parents);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/parents/invite
+   * Invite another parent/guardian to share access to this student.
+   * Only the primary owner can invite.
+   */
+  router.post('/:id/parents/invite', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      if (!student.canAdmin(userId)) {
+        res.status(403).json({ success: false, error: 'Only an admin parent can invite others' });
+        return;
+      }
+
+      const { email, role } = req.body as { email?: string; role?: string };
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        res.status(400).json({ success: false, error: 'Valid email is required' });
+        return;
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const parentRole = (role === 'guardian' || role === 'caregiver') ? role : 'parent';
+
+      // Check if already invited or shared
+      const existing = student.sharedWith.find(
+        (sp) => sp.email === normalizedEmail && sp.status !== 'declined'
+      );
+      if (existing) {
+        res.status(409).json({ success: false, error: 'This person has already been invited' });
+        return;
+      }
+
+      // Check if inviting yourself
+      // (would need user lookup, but for now just check if userId matches)
+
+      const newShared = [
+        ...student.sharedWith,
+        {
+          email: normalizedEmail,
+          role: parentRole as 'parent' | 'guardian' | 'caregiver',
+          status: 'pending' as const,
+          invitedAt: new Date(),
+        },
+      ];
+
+      await studentRepository.update(student._id!, { sharedWith: newShared });
+
+      // TODO: Send invite email via SendGrid
+
+      res.status(201).json({
+        success: true,
+        message: `Invitation sent to ${normalizedEmail}`,
+        invite: {
+          email: normalizedEmail,
+          role: parentRole,
+          status: 'pending',
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/parents/accept
+   * Accept a pending invite (called by the invited user after login/register).
+   */
+  router.post('/:id/parents/accept', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { email } = req.body as { email?: string };
+      if (!email) {
+        res.status(400).json({ success: false, error: 'Email is required' });
+        return;
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const inviteIdx = student.sharedWith.findIndex(
+        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
+      );
+      if (inviteIdx === -1) {
+        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
+        return;
+      }
+
+      const updatedShared = [...student.sharedWith];
+      updatedShared[inviteIdx] = {
+        ...updatedShared[inviteIdx]!,
+        userId,
+        status: 'accepted',
+        acceptedAt: new Date(),
+      };
+
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+
+      res.status(200).json({ success: true, message: 'Invite accepted' });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * PUT /api/students/:id/parents/:email/admin
+   * Promote or demote a shared parent to/from admin.
+   * Only existing admins (owner or promoted) can do this.
+   */
+  router.put('/:id/parents/:email/admin', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      if (!student.canAdmin(userId)) {
+        res.status(403).json({ success: false, error: 'Only an admin parent can change admin rights' });
+        return;
+      }
+
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '').toLowerCase().trim();
+      const { isAdmin } = req.body as { isAdmin?: boolean };
+
+      if (typeof isAdmin !== 'boolean') {
+        res.status(400).json({ success: false, error: 'isAdmin (boolean) is required' });
+        return;
+      }
+
+      const idx = student.sharedWith.findIndex(
+        (sp) => sp.email === targetEmail && sp.status === 'accepted'
+      );
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Accepted shared parent not found with that email' });
+        return;
+      }
+
+      const updatedShared = [...student.sharedWith];
+      updatedShared[idx] = { ...updatedShared[idx]!, isAdmin };
+
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+
+      res.status(200).json({
+        success: true,
+        message: isAdmin
+          ? `${targetEmail} has been promoted to admin`
+          : `${targetEmail} has been demoted from admin`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/students/:id/parents/:email
+   * Remove a shared parent. Admin can remove anyone; shared parent can remove themselves.
+   */
+  router.delete('/:id/parents/:email', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '').toLowerCase().trim();
+      const isAdmin = student.canAdmin(userId);
+
+      // Non-admin shared parents can only remove themselves
+      if (!isAdmin) {
+        const selfEntry = student.sharedWith.find(
+          (sp) => sp.userId === userId && sp.email === targetEmail
+        );
+        if (!selfEntry) {
+          res.status(403).json({ success: false, error: 'You can only remove yourself' });
+          return;
+        }
+      }
+
+      const updatedShared = student.sharedWith.filter(
+        (sp) => sp.email !== targetEmail
+      );
+
+      if (updatedShared.length === student.sharedWith.length) {
+        res.status(404).json({ success: false, error: 'Shared parent not found' });
+        return;
+      }
+
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+
+      res.status(200).json({ success: true });
     } catch (error) {
       res.status(500).json({
         success: false,

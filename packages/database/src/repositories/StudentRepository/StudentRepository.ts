@@ -67,14 +67,69 @@ export class StudentRepository implements IStudentRepository {
   }
 
   /**
-   * Find students by user ID.
+   * Find students by user ID (as owner OR as a shared parent).
    *
    * @param userId - User ID
-   * @returns Array of students
+   * @returns Array of students the user has access to
    */
   public async findByUserId(userId: string | ObjectId): Promise<readonly Student[]> {
     const userIdObj = typeof userId === 'string' ? new ObjectId(userId) : userId;
+    const userIdStr = userIdObj.toString();
+
+    // Match students where user is the owner OR an accepted shared parent
+    const documents = await this._collection
+      .find({
+        $or: [
+          { userId: userIdObj },
+          {
+            'sharedWith': {
+              $elemMatch: { userId: userIdStr, status: 'accepted' },
+            },
+          },
+        ],
+      })
+      .toArray();
+
+    return documents.map((doc) => {
+      if (!doc._id) {
+        throw new Error('Document missing _id');
+      }
+      return new Student(doc, doc._id);
+    });
+  }
+
+  /**
+   * Find students owned by a user (excludes shared access).
+   *
+   * @param userId - User ID
+   * @returns Array of students owned by the user
+   */
+  public async findOwnedByUserId(userId: string | ObjectId): Promise<readonly Student[]> {
+    const userIdObj = typeof userId === 'string' ? new ObjectId(userId) : userId;
     const documents = await this._collection.find({ userId: userIdObj }).toArray();
+
+    return documents.map((doc) => {
+      if (!doc._id) {
+        throw new Error('Document missing _id');
+      }
+      return new Student(doc, doc._id);
+    });
+  }
+
+  /**
+   * Find students shared with a user via pending invite email.
+   *
+   * @param email - Email address to check
+   * @returns Array of students with pending invites for this email
+   */
+  public async findPendingInvites(email: string): Promise<readonly Student[]> {
+    const documents = await this._collection
+      .find({
+        'sharedWith': {
+          $elemMatch: { email: email.toLowerCase(), status: 'pending' },
+        },
+      })
+      .toArray();
 
     return documents.map((doc) => {
       if (!doc._id) {

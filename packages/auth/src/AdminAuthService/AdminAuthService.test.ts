@@ -1,8 +1,42 @@
 import jwt from 'jsonwebtoken';
+import speakeasy from 'speakeasy';
 import { MongoClient, type Db } from 'mongodb';
 import { AdminAuthService } from './AdminAuthService';
 import { AdminUserRepository } from '@scholaracle/database';
 import { MFAService } from '../MFAService';
+
+/**
+ * Helper: create an admin with MFA enabled, login + verify MFA, return token.
+ */
+async function loginAdmin(
+  authService: AdminAuthService,
+  adminRepository: AdminUserRepository,
+  mfaService: MFAService,
+  email: string,
+  password: string,
+  name: string
+): Promise<{ token: string; adminId: string; mfaSecret: string }> {
+  const { secret } = mfaService.generateSecret(email);
+  const passwordHash = await AdminUserRepository.hashPassword(password);
+  const admin = await adminRepository.create({
+    email,
+    passwordHash,
+    name,
+    role: 'admin',
+    mfaEnabled: true,
+    mfaSecret: secret,
+  });
+  const loginResult = await authService.login(email, password);
+  if (!loginResult.requiresMFA || !loginResult.mfaToken) {
+    throw new Error(`Expected MFA flow, got: ${JSON.stringify(loginResult)}`);
+  }
+  const totp = speakeasy.totp({ secret, encoding: 'base32' });
+  const verifyResult = await authService.verifyMFAToken(loginResult.mfaToken, totp);
+  if (!verifyResult.success || !verifyResult.token) {
+    throw new Error(`MFA verify failed: ${JSON.stringify(verifyResult)}`);
+  }
+  return { token: verifyResult.token, adminId: admin._id!.toString(), mfaSecret: secret };
+}
 
 describe('AdminAuthService', () => {
   let client: MongoClient;
@@ -30,35 +64,12 @@ describe('AdminAuthService', () => {
   });
 
   describe('register', () => {
-    it('should register new admin (super_admin only)', async () => {
-      // Create a super_admin first
-      const passwordHash = await AdminUserRepository.hashPassword('SuperPass123!');
-      const superAdmin = await adminRepository.create({
-        email: 'super@test.com',
-        passwordHash,
-        name: 'Super Admin',
-        role: 'super_admin',
-      });
-
-      const result = await authService.register(
-        'newadmin@test.com',
-        'NewPass123!',
-        'New Admin',
-        'admin',
-        superAdmin._id!.toString()
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.token).toBeDefined();
-      expect(result.admin).toBeDefined();
-    });
-
-    it('should reject registration without super_admin', async () => {
+    it('should register new admin when created by another admin', async () => {
       const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-      const regularAdmin = await adminRepository.create({
-        email: 'admin@test.com',
+      const existingAdmin = await adminRepository.create({
+        email: 'existing@test.com',
         passwordHash,
-        name: 'Regular Admin',
+        name: 'Existing Admin',
         role: 'admin',
       });
 
@@ -67,20 +78,34 @@ describe('AdminAuthService', () => {
         'NewPass123!',
         'New Admin',
         'admin',
-        regularAdmin._id!.toString()
+        existingAdmin._id!.toString()
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBeDefined();
+      expect(result.admin).toBeDefined();
+    });
+
+    it('should reject registration with non-existent creator', async () => {
+      const result = await authService.register(
+        'newadmin@test.com',
+        'NewPass123!',
+        'New Admin',
+        'admin',
+        '000000000000000000000000'
       );
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('super_admin');
+      expect(result.error).toContain('not found');
     });
 
     it('should reject duplicate email', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('SuperPass123!');
-      const superAdmin = await adminRepository.create({
-        email: 'super@test.com',
+      const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
+      const existingAdmin = await adminRepository.create({
+        email: 'creator@test.com',
         passwordHash,
-        name: 'Super Admin',
-        role: 'super_admin',
+        name: 'Creator Admin',
+        role: 'admin',
       });
 
       await authService.register(
@@ -88,7 +113,7 @@ describe('AdminAuthService', () => {
         'Pass123!',
         'Admin',
         'admin',
-        superAdmin._id!.toString()
+        existingAdmin._id!.toString()
       );
 
       const result = await authService.register(
@@ -96,7 +121,7 @@ describe('AdminAuthService', () => {
         'Pass123!',
         'Admin',
         'admin',
-        superAdmin._id!.toString()
+        existingAdmin._id!.toString()
       );
 
       expect(result.success).toBe(false);
@@ -105,7 +130,7 @@ describe('AdminAuthService', () => {
   });
 
   describe('login', () => {
-    it('should login with valid credentials', async () => {
+    it('should require MFA setup when credentials are valid but MFA not configured', async () => {
       const passwordHash = await AdminUserRepository.hashPassword('LoginPass123!');
       await adminRepository.create({
         email: 'login@test.com',
@@ -116,9 +141,9 @@ describe('AdminAuthService', () => {
 
       const result = await authService.login('login@test.com', 'LoginPass123!');
 
-      expect(result.success).toBe(true);
-      expect(result.token).toBeDefined();
-      expect(result.admin).toBeDefined();
+      expect(result.success).toBe(false);
+      expect(result.requiresMFASetup).toBe(true);
+      expect(result.mfaSetupToken).toBeDefined();
     });
 
     it('should reject non-existent email', async () => {
@@ -260,19 +285,14 @@ describe('AdminAuthService', () => {
 
   describe('verifyToken', () => {
     it('should verify valid admin token', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('TokenPass123!');
-      const admin = await adminRepository.create({
-        email: 'token@test.com',
-        passwordHash,
-        name: 'Token Admin',
-        role: 'admin',
-      });
-
-      const loginResult = await authService.login('token@test.com', 'TokenPass123!');
-      const verifyResult = await authService.verifyToken(loginResult.token!);
+      const { token, adminId } = await loginAdmin(
+        authService, adminRepository, mfaService,
+        'token@test.com', 'TokenPass123!', 'Token Admin'
+      );
+      const verifyResult = await authService.verifyToken(token);
 
       expect(verifyResult).not.toBeNull();
-      expect(verifyResult?.adminId).toBe(admin._id!.toString());
+      expect(verifyResult?.adminId).toBe(adminId);
       expect(verifyResult?.role).toBe('admin');
     });
 
@@ -282,21 +302,14 @@ describe('AdminAuthService', () => {
     });
 
     it('should return null for deactivated admin', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('DeactivatePass123!');
-      const admin = await adminRepository.create({
-        email: 'deactivate@test.com',
-        passwordHash,
-        name: 'Deactivate Admin',
-        role: 'admin',
-      });
+      const { token, adminId } = await loginAdmin(
+        authService, adminRepository, mfaService,
+        'deactivate@test.com', 'DeactivatePass123!', 'Deactivate Admin'
+      );
 
-      const loginResult = await authService.login('deactivate@test.com', 'DeactivatePass123!');
-      expect(loginResult.success).toBe(true);
+      await adminRepository.deactivate(adminId);
 
-      // Deactivate admin after login
-      await adminRepository.deactivate(admin._id!.toString());
-
-      const verifyResult = await authService.verifyToken(loginResult.token!);
+      const verifyResult = await authService.verifyToken(token);
       expect(verifyResult).toBeNull();
     });
 
@@ -394,21 +407,15 @@ describe('AdminAuthService', () => {
 
   describe('refreshToken', () => {
     it('should refresh a valid token', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('RefreshPass123!');
-      await adminRepository.create({
-        email: 'refresh@test.com',
-        passwordHash,
-        name: 'Refresh Admin',
-        role: 'admin',
-      });
-
-      const loginResult = await authService.login('refresh@test.com', 'RefreshPass123!');
-      expect(loginResult.success).toBe(true);
+      const { token } = await loginAdmin(
+        authService, adminRepository, mfaService,
+        'refresh@test.com', 'RefreshPass123!', 'Refresh Admin'
+      );
 
       // Wait briefly so the new token has a different iat
       await new Promise((resolve) => setTimeout(resolve, 1100));
 
-      const refreshResult = await authService.refreshToken(loginResult.token!);
+      const refreshResult = await authService.refreshToken(token);
       expect(refreshResult.success).toBe(true);
       expect(refreshResult.token).toBeDefined();
     });
@@ -422,16 +429,11 @@ describe('AdminAuthService', () => {
 
   describe('logout', () => {
     it('should return true for valid token', async () => {
-      const passwordHash = await AdminUserRepository.hashPassword('LogoutPass123!');
-      await adminRepository.create({
-        email: 'logout@test.com',
-        passwordHash,
-        name: 'Logout Admin',
-        role: 'admin',
-      });
-
-      const loginResult = await authService.login('logout@test.com', 'LogoutPass123!');
-      const logoutResult = await authService.logout(loginResult.token!);
+      const { token } = await loginAdmin(
+        authService, adminRepository, mfaService,
+        'logout@test.com', 'LogoutPass123!', 'Logout Admin'
+      );
+      const logoutResult = await authService.logout(token);
       expect(logoutResult).toBe(true);
     });
 

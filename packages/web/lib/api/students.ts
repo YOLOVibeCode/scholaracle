@@ -21,6 +21,30 @@ export interface IStudent {
   };
 }
 
+export interface ISharedParent {
+  readonly userId?: string;
+  readonly email?: string;
+  readonly name?: string;
+  readonly role: 'parent' | 'guardian' | 'caregiver';
+  readonly status: 'pending' | 'accepted' | 'declined';
+  readonly isOwner: boolean;
+  readonly isAdmin: boolean;
+  readonly invitedAt?: string;
+  readonly acceptedAt?: string;
+}
+
+export interface IPendingInvite {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly invitedBy: string;
+  readonly invite: {
+    readonly email: string;
+    readonly role: string;
+    readonly status: string;
+    readonly invitedAt: string;
+  };
+}
+
 export interface IStudentAlert {
   readonly id: string;
   readonly studentId: string;
@@ -171,6 +195,80 @@ export const studentsApi = {
     } catch (error) {
       console.error('Failed to load student grades:', error);
       return null;
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Parent sharing
+  // ---------------------------------------------------------------------------
+
+  async getParents(studentId: string): Promise<readonly ISharedParent[]> {
+    try {
+      return await apiClient.get<readonly ISharedParent[]>(`/students/${studentId}/parents`);
+    } catch (error) {
+      console.error('Failed to load parents:', error);
+      return [];
+    }
+  },
+
+  async inviteParent(
+    studentId: string,
+    email: string,
+    role: 'parent' | 'guardian' | 'caregiver' = 'parent'
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      return await apiClient.post<{ success: boolean; message?: string }>(
+        `/students/${studentId}/parents/invite`,
+        { email, role }
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to invite parent';
+      return { success: false, message: msg };
+    }
+  },
+
+  async acceptInvite(studentId: string, email: string): Promise<boolean> {
+    try {
+      const res = await apiClient.post<{ success?: boolean }>(
+        `/students/${studentId}/parents/accept`,
+        { email }
+      );
+      return res.success ?? false;
+    } catch {
+      return false;
+    }
+  },
+
+  async setParentAdmin(studentId: string, email: string, isAdmin: boolean): Promise<boolean> {
+    try {
+      const res = await apiClient.put<{ success?: boolean }>(
+        `/students/${studentId}/parents/${encodeURIComponent(email)}/admin`,
+        { isAdmin }
+      );
+      return res.success ?? false;
+    } catch {
+      return false;
+    }
+  },
+
+  async removeParent(studentId: string, email: string): Promise<boolean> {
+    try {
+      const res = await apiClient.delete<{ success?: boolean }>(
+        `/students/${studentId}/parents/${encodeURIComponent(email)}`
+      );
+      return res.success ?? false;
+    } catch {
+      return false;
+    }
+  },
+
+  async getPendingInvites(email: string): Promise<readonly IPendingInvite[]> {
+    try {
+      return await apiClient.get<readonly IPendingInvite[]>(
+        `/students/invites/pending?email=${encodeURIComponent(email)}`
+      );
+    } catch {
+      return [];
     }
   },
 };

@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
@@ -21,7 +20,7 @@ export default function AdminSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editRole, setEditRole] = useState<AdminRole>('support');
+  const [editRole, setEditRole] = useState<AdminRole>('admin');
 
   const [isStepUpOpen, setIsStepUpOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<
@@ -151,10 +150,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const roleOptions = useMemo(
-    () => ['super_admin', 'admin', 'support', 'billing', 'analyst'] as const,
-    []
-  );
 
   return (
     <div className="space-y-4" data-testid="admin-settings-page">
@@ -171,7 +166,7 @@ export default function AdminSettingsPage() {
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1">
             <CardTitle>Admin Users</CardTitle>
-            <CardDescription>Create and manage admin accounts (super_admin only).</CardDescription>
+            <CardDescription>Create and manage admin accounts.</CardDescription>
           </div>
           <Button onClick={openCreate} data-testid="button-add-admin">
             Add Admin
@@ -233,18 +228,6 @@ export default function AdminSettingsPage() {
           <CardContent className="space-y-3">
             <Input value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} data-testid="input-admin-email" placeholder="email" />
             <Input value={createName} onChange={(e) => setCreateName(e.target.value)} data-testid="input-admin-name" placeholder="name" />
-            <select
-              value={createRole}
-              onChange={(e) => setCreateRole(e.target.value as AdminRole)}
-              data-testid="select-admin-role"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            >
-              {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
             <Input
               value={createPassword}
               onChange={(e) => setCreatePassword(e.target.value)}
@@ -268,21 +251,10 @@ export default function AdminSettingsPage() {
         <Card data-testid="admin-edit-panel">
           <CardHeader>
             <CardTitle>Edit Admin User</CardTitle>
-            <CardDescription>Update role.</CardDescription>
+            <CardDescription>Update admin account.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <select
-              value={editRole}
-              onChange={(e) => setEditRole(e.target.value as AdminRole)}
-              data-testid="select-edit-admin-role"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-            >
-              {roleOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Role: admin</p>
             <div className="flex gap-2">
               <Button onClick={submitEdit} disabled={isSaving} data-testid="button-admin-update">
                 Update

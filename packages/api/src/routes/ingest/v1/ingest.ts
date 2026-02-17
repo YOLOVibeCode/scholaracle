@@ -210,17 +210,34 @@ async function generateAlertsFromIngestedAssignments(params: {
   }
 }
 
+/** Maps entity type to MongoDB collection name. */
+const ENTITY_COLLECTION_MAP: Record<string, string> = {
+  assignment: 'slc_assignments',
+  eventSeries: 'slc_event_series',
+  eventOverride: 'slc_event_overrides',
+  course: 'slc_courses',
+  gradeSnapshot: 'slc_grade_snapshots',
+  attendanceEvent: 'slc_attendance_events',
+  academicTerm: 'slc_academic_terms',
+  institution: 'slc_institutions',
+  teacher: 'slc_teachers',
+  courseMaterial: 'slc_course_materials',
+  message: 'slc_messages',
+  studentProfile: 'slc_student_profiles',
+};
+
 async function applyOps(params: {
   readonly database: Db;
   readonly userId: string;
   readonly ops: readonly ISlcDeltaOp[];
 }): Promise<void> {
-  const assignments = params.database.collection('slc_assignments');
-  const eventSeries = params.database.collection('slc_event_series');
-  const eventOverrides = params.database.collection('slc_event_overrides');
-
   for (const op of params.ops) {
+    const collectionName = ENTITY_COLLECTION_MAP[op.entity];
+    if (!collectionName) continue;
+
+    const collection = params.database.collection(collectionName);
     const key = op.key;
+
     const baseFilter = {
       userId: params.userId,
       provider: key.provider,
@@ -237,52 +254,18 @@ async function applyOps(params: {
       updatedAt: new Date(),
     };
 
-    if (op.entity === 'assignment') {
-      if (op.op === 'delete') {
-        await assignments.updateOne(
-          baseFilter,
-          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
-          { upsert: true }
-        );
-      } else {
-        await assignments.updateOne(
-          baseFilter,
-          { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
-          { upsert: true }
-        );
-      }
-    }
-
-    if (op.entity === 'eventSeries') {
-      if (op.op === 'delete') {
-        await eventSeries.updateOne(
-          baseFilter,
-          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
-          { upsert: true }
-        );
-      } else {
-        await eventSeries.updateOne(
-          baseFilter,
-          { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
-          { upsert: true }
-        );
-      }
-    }
-
-    if (op.entity === 'eventOverride') {
-      if (op.op === 'delete') {
-        await eventOverrides.updateOne(
-          baseFilter,
-          { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
-          { upsert: true }
-        );
-      } else {
-        await eventOverrides.updateOne(
-          baseFilter,
-          { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
-          { upsert: true }
-        );
-      }
+    if (op.op === 'delete') {
+      await collection.updateOne(
+        baseFilter,
+        { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
+        { upsert: true },
+      );
+    } else {
+      await collection.updateOne(
+        baseFilter,
+        { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
+        { upsert: true },
+      );
     }
   }
 }
@@ -292,6 +275,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   const authService = new AuthService(config.database, config.jwtSecret);
   const connectorTokenService = new ConnectorTokenService(config.jwtSecret);
+  const connectorAuth = connectorAuthMiddleware(connectorTokenService, { database: config.database });
 
   const deviceRepo = new IngestDeviceAuthRepository(config.database);
   const sourceRepo = new IngestSourceRepository(config.database);
@@ -372,7 +356,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.get(
     '/sources',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const sources = await sourceRepo.listByUserId(userId);
@@ -382,7 +366,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.get(
     '/sources/:sourceId/credentials',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const sourceId = req.params['sourceId'];
@@ -435,7 +419,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.post(
     '/sources',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const { sourceId, provider, adapterId, displayName, portalBaseUrl } = req.body ?? {};
@@ -459,7 +443,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.post(
     '/runs',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const { sourceId } = req.body ?? {};
@@ -478,7 +462,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.post(
     '/runs/:runId/envelope',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
@@ -506,7 +490,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.post(
     '/runs/:runId/complete',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
@@ -529,7 +513,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   router.post(
     '/validate',
-    connectorAuthMiddleware(connectorTokenService),
+    connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const envelope = req.body as ISlcIngestEnvelopeV1;
       const v = validateEnvelope(envelope);
