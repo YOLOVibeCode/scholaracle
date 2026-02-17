@@ -16,8 +16,13 @@ module.exports = {
   forceExit: true,
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/build/'],
   transform: {
-    '^.+\\.ts$': 'ts-jest'
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: {
+        isolatedModules: true
+      }
+    }]
   },
   collectCoverageFrom: [
     'src/**/*.ts',

@@ -62,6 +62,9 @@ importers:
       mongodb:
         specifier: ^6.3.0
         version: 6.21.0
+      nodemailer:
+        specifier: ^6.9.0
+        version: 6.10.1
       twilio:
         specifier: ^5.0.0
         version: 5.10.7
@@ -72,6 +75,9 @@ importers:
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.26
+      '@types/nodemailer':
+        specifier: ^6.4.14
+        version: 6.4.22
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.26)(ts-node@10.9.2)
@@ -132,6 +138,9 @@ importers:
       mongodb:
         specifier: ^6.3.0
         version: 6.21.0
+      nodemailer:
+        specifier: ^6.9.0
+        version: 6.10.1
       playwright:
         specifier: ^1.58.2
         version: 1.58.2
@@ -172,6 +181,9 @@ importers:
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.26
+      '@types/nodemailer':
+        specifier: ^6.4.14
+        version: 6.4.22
       '@types/speakeasy':
         specifier: ^2.0.10
         version: 2.0.10
@@ -347,6 +359,12 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.26
+      '@types/speakeasy':
+        specifier: ^2.0.10
+        version: 2.0.10
+      speakeasy:
+        specifier: ^2.0.0
+        version: 2.0.0
       typescript:
         specifier: ^5.3.0
         version: 5.9.3
@@ -462,6 +480,9 @@ importers:
       '@scholaracle/agents':
         specifier: workspace:*
         version: link:../agents
+      '@scholaracle/connector':
+        specifier: workspace:*
+        version: link:../connector
       '@scholaracle/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -3476,6 +3497,12 @@ packages:
     dependencies:
       undici-types: 6.21.0
     dev: false
+
+  /@types/nodemailer@6.4.22:
+    resolution: {integrity: sha512-HV16KRsW7UyZBITE07B62k8PRAKFqRSFXn1T7vslurVjN761tMDBhk5Lbt17ehyTzK6XcyJnAgUpevrvkcVOzw==}
+    dependencies:
+      '@types/node': 20.19.26
+    dev: true
 
   /@types/qrcode@1.5.6:
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
@@ -8822,6 +8849,11 @@ packages:
 
   /node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
+
+  /nodemailer@6.10.1:
+    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
+    dev: false
 
   /normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
