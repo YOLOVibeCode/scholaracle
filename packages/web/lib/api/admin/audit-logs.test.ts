@@ -170,7 +170,7 @@ describe('adminAuditLogsApi', () => {
       await adminAuditLogsApi.exportCsv({ action: 'LOGIN' });
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/audit-logs/export?action=LOGIN',
+        'http://localhost:2801/api/admin/audit-logs/export?action=LOGIN',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -187,7 +187,7 @@ describe('adminAuditLogsApi', () => {
       await adminAuditLogsApi.exportCsv({}, 'step-up-tok-456');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/audit-logs/export',
+        'http://localhost:2801/api/admin/audit-logs/export',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
