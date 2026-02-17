@@ -1,0 +1,35 @@
+export { AeriesAdapter, type AeriesScraperFn, type AeriesAdapterMode, type IAeriesScrapeResult } from './aeries-adapter';
+export { AeriesClient } from './aeries-client';
+export type {
+  IAeriesClientConfig,
+  IAeriesSchool,
+  IAeriesStudent,
+  IAeriesReportCard,
+  IAeriesReportCardCourse,
+  IAeriesMarkingPeriodGrade,
+  IAeriesMarkingPeriod,
+  IAeriesGpa,
+  IAeriesClassScheduleEntry,
+  IAeriesCourse,
+  IAeriesSection,
+  IAeriesSectionStaff,
+  IAeriesGradebook,
+  IAeriesGradebookTerm,
+  IAeriesAssignmentCategory,
+  IAeriesAssignment,
+  IAeriesAssignmentScore,
+  IAeriesGradebookStudent,
+} from './aeries-client';
+export {
+  mapAeriesAssignmentStatus,
+  transformAssignmentToOp,
+  transformAssignmentsToOps,
+  transformReportCardToGradeOps,
+  transformReportCardAttendanceToOps,
+  transformCourseToOp,
+  transformSectionToTeacherOp,
+  transformMarkingPeriodToOp,
+  transformSchoolToInstitutionOp,
+  transformScheduleToCourseOp,
+  reconcileAeriesCourse,
+} from './aeries-transformer';

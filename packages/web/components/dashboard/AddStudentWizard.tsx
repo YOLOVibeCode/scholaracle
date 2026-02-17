@@ -21,18 +21,15 @@ import {
   type IIntegration,
   type ICreateIntegrationRequest,
   type IAssignStudentCredentials,
+  type ITestConnectionResult,
 } from '@/lib/api/integrations';
 import { useAsyncData } from '@/lib/hooks';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PROVIDERS = [
-  { id: 'canvas', name: 'Canvas LMS', adapterId: 'com.instructure.canvas', available: true },
-  { id: 'skyward', name: 'Skyward', adapterId: 'com.skyward', available: false },
-  { id: 'google-classroom', name: 'Google Classroom', adapterId: 'com.google.classroom', available: false },
-] as const;
+import {
+  getAvailableProviders,
+  detectProviderFromUrl,
+  findProviderById,
+  type IProviderDescriptor,
+} from '@/lib/providers';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -80,9 +77,14 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   // New provider inline flow
   const [newProviderStep, setNewProviderStep] = useState(1);
-  const [selectedProvider, setSelectedProvider] = useState<(typeof PROVIDERS)[number] | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<IProviderDescriptor | null>(null);
   const [providerDisplayName, setProviderDisplayName] = useState('');
   const [providerUrl, setProviderUrl] = useState('');
+  const [detectedProvider, setDetectedProvider] = useState<IProviderDescriptor | undefined>();
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
+
+  const availableProviders = getAvailableProviders();
 
   // Created student tracking
   const [createdStudentId, setCreatedStudentId] = useState<string | null>(null);
@@ -103,6 +105,35 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setAccessToken('');
     setUsername('');
     setPassword('');
+    setTestResult(null);
+    setTestingConnection(false);
+  };
+
+  const handleTestConnection = async () => {
+    if (!currentIntegration) return;
+    const providerInfo = findProviderById(currentIntegration.provider);
+    if (!providerInfo) return;
+
+    setTestingConnection(true);
+    setTestResult(null);
+
+    const credPayload: { authType: 'api' | 'login' | 'oauth2' | 'api-key'; accessToken?: string; username?: string; password?: string; clientId?: string; clientSecret?: string } = {
+      authType: providerInfo.authMethod === 'bearer-token' ? 'api' : providerInfo.authMethod === 'credentials' ? 'login' : providerInfo.authMethod as 'oauth2' | 'api-key',
+    };
+
+    if (accessToken.trim()) credPayload.accessToken = accessToken.trim();
+    if (username.trim()) credPayload.username = username.trim();
+    if (password) credPayload.password = password;
+
+    const result = await integrationsApi.testConnection({
+      provider: currentIntegration.provider,
+      adapterId: currentIntegration.adapterId,
+      baseUrl: currentIntegration.portalBaseUrl,
+      credentials: credPayload,
+    });
+
+    setTestResult(result);
+    setTestingConnection(false);
   };
 
   const resetAll = () => {
@@ -178,7 +209,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   // Step 2b – Add Provider Inline
   // ---------------------------------------------------------------------------
 
-  const handleProviderSelect = (p: (typeof PROVIDERS)[number]) => {
+  const handleProviderSelect = (p: IProviderDescriptor) => {
     if (!p.available) return;
     setSelectedProvider(p);
     setNewProviderStep(2);
@@ -192,7 +223,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     const payload: ICreateIntegrationRequest = {
       provider: selectedProvider.id,
       adapterId: selectedProvider.adapterId,
-      displayName: providerDisplayName || `${selectedProvider.name} - ${providerUrl || 'Source'}`,
+      displayName: providerDisplayName || `${selectedProvider.name}${providerUrl ? ` - ${providerUrl}` : ''}`,
       portalBaseUrl: providerUrl || undefined,
     };
 
@@ -528,22 +559,63 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               {newProviderStep === 1 && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Choose the LMS or grade portal your school uses.
+                    Paste your school portal URL and we&apos;ll detect the platform, or choose from the list.
                   </p>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wizard-detect-url">School portal URL</Label>
+                    <Input
+                      id="wizard-detect-url"
+                      type="url"
+                      placeholder="https://yourschool.instructure.com"
+                      value={providerUrl}
+                      onChange={(e) => {
+                        setProviderUrl(e.target.value);
+                        setDetectedProvider(detectProviderFromUrl(e.target.value));
+                      }}
+                      disabled={submitting}
+                      data-testid="wizard-provider-url"
+                      autoFocus
+                    />
+                  </div>
+
+                  {providerUrl && detectedProvider && (
+                    <button
+                      type="button"
+                      onClick={() => handleProviderSelect(detectedProvider)}
+                      className="flex items-center gap-2 w-full rounded-lg border border-green-200 bg-green-50/50 p-3 text-left hover:bg-green-50 transition-colors dark:border-green-800 dark:bg-green-900/20"
+                      data-testid={`wizard-provider-${detectedProvider.id}`}
+                    >
+                      <Check className="h-4 w-4 text-green-600 shrink-0" />
+                      <div>
+                        <span className="font-medium text-sm">Detected: {detectedProvider.name}</span>
+                        <span className="block text-xs text-muted-foreground">{detectedProvider.description}</span>
+                      </div>
+                    </button>
+                  )}
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">or choose</span>
+                    </div>
+                  </div>
+
                   <div className="grid gap-2">
-                    {PROVIDERS.map((p) => (
+                    {availableProviders.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => handleProviderSelect(p)}
-                        disabled={!p.available}
-                        className="flex items-center justify-between rounded-lg border p-3 text-left hover:bg-muted/50 disabled:opacity-50 transition-colors"
+                        className="flex items-start justify-between rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors"
                         data-testid={`wizard-provider-${p.id}`}
                       >
-                        <span className="text-sm font-medium">{p.name}</span>
-                        {!p.available && (
-                          <span className="text-xs text-muted-foreground">Coming soon</span>
-                        )}
+                        <div>
+                          <span className="text-sm font-medium">{p.name}</span>
+                          <span className="block text-xs text-muted-foreground">{p.description}</span>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -553,21 +625,44 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               {newProviderStep === 2 && selectedProvider && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Enter details for <strong>{selectedProvider.name}</strong>.
+                    Set up <strong>{selectedProvider.name}</strong> for your school.
                   </p>
+
+                  {/* Credential help box */}
+                  <div className="rounded-md bg-blue-50/50 border border-blue-200 p-3 dark:bg-blue-900/20 dark:border-blue-800">
+                    <p className="font-medium text-sm mb-1.5">{selectedProvider.credentialHelp.title}</p>
+                    <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
+                      {selectedProvider.credentialHelp.steps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
+                    {selectedProvider.credentialHelp.docsUrl && (
+                      <a
+                        href={selectedProvider.credentialHelp.docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1.5"
+                      >
+                        Official documentation &rarr;
+                      </a>
+                    )}
+                  </div>
+
                   <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="wizard-provider-url">Institution URL</Label>
-                      <Input
-                        id="wizard-provider-url"
-                        type="url"
-                        placeholder="https://yourschool.instructure.com"
-                        value={providerUrl}
-                        onChange={(e) => setProviderUrl(e.target.value)}
-                        disabled={submitting}
-                        data-testid="wizard-provider-url"
-                      />
-                    </div>
+                    {!providerUrl && (
+                      <div className="space-y-2">
+                        <Label htmlFor="wizard-provider-url-2">School portal URL</Label>
+                        <Input
+                          id="wizard-provider-url-2"
+                          type="url"
+                          placeholder={selectedProvider.urlPlaceholder}
+                          value={providerUrl}
+                          onChange={(e) => setProviderUrl(e.target.value)}
+                          disabled={submitting}
+                          data-testid="wizard-provider-url"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="wizard-provider-name">Display name</Label>
                       <Input
@@ -581,6 +676,13 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                       />
                     </div>
                   </div>
+
+                  {selectedProvider.credentialHelp.note && (
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                      {selectedProvider.credentialHelp.note}
+                    </p>
+                  )}
+
                   <div className="flex gap-2 pt-2">
                     <Button type="button" variant="outline" onClick={() => setNewProviderStep(1)}>
                       Back
@@ -602,117 +704,190 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           {/* ================================================================
               STEP 3 – Credentials
               ================================================================ */}
-          {step === 'credentials' && currentIntegration && (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-muted-foreground -ml-2"
-                onClick={() => {
-                  setCurrentIntegration(null);
-                  resetCredentials();
-                  setStep('connect-services');
-                }}
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back to services
-              </Button>
+          {step === 'credentials' && currentIntegration && (() => {
+            const providerInfo = findProviderById(currentIntegration.provider);
+            const fields = providerInfo?.credentialHelp.fields ?? ['accessToken'];
+            const needsToken = fields.includes('accessToken');
+            const needsLogin = fields.includes('username') || fields.includes('password');
+            const needsOAuth = fields.length === 0;
 
-              <div className="text-sm">
-                <p>
-                  Enter <strong>{createdStudentName}</strong>&apos;s login for{' '}
-                  <strong>{currentIntegration.displayName}</strong>.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  This is the student&apos;s own portal credential &mdash; not yours.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={authType === 'api' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAuthType('api')}
-                  >
-                    API token
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={authType === 'login' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAuthType('login')}
-                  >
-                    Portal login
-                  </Button>
-                </div>
-                {authType === 'api' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="wizard-token">Access token</Label>
-                    <Input
-                      id="wizard-token"
-                      type="password"
-                      placeholder="Paste the student's API token"
-                      value={accessToken}
-                      onChange={(e) => setAccessToken(e.target.value)}
-                      disabled={submitting}
-                      data-testid="wizard-credentials-token"
-                    />
-                  </div>
-                )}
-                {authType === 'login' && (
-                  <div className="space-y-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="wizard-username">Username</Label>
-                      <Input
-                        id="wizard-username"
-                        type="text"
-                        placeholder="Student's username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        disabled={submitting}
-                        data-testid="wizard-credentials-username"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="wizard-password">Password</Label>
-                      <Input
-                        id="wizard-password"
-                        type="password"
-                        placeholder="Student's password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        disabled={submitting}
-                        data-testid="wizard-credentials-password"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2 pt-2">
+            return (
+              <>
                 <Button
                   type="button"
                   variant="ghost"
-                  className="text-muted-foreground"
-                  onClick={handleSkipCredentials}
-                  disabled={submitting}
+                  size="sm"
+                  className="gap-1 text-muted-foreground -ml-2"
+                  onClick={() => {
+                    setCurrentIntegration(null);
+                    resetCredentials();
+                    setStep('connect-services');
+                  }}
                 >
-                  Skip credentials
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to services
                 </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleConnect(false)}
-                  disabled={submitting}
-                  data-testid="wizard-connect-submit"
-                >
-                  {submitting ? 'Connecting...' : 'Connect'}
-                </Button>
-              </div>
-            </>
-          )}
+
+                <div className="text-sm">
+                  <p>
+                    Enter <strong>{createdStudentName}</strong>&apos;s credentials for{' '}
+                    <strong>{currentIntegration.displayName}</strong>.
+                  </p>
+                </div>
+
+                {/* Provider-specific help box */}
+                {providerInfo && (
+                  <div className="rounded-md bg-blue-50/50 border border-blue-200 p-3 dark:bg-blue-900/20 dark:border-blue-800">
+                    <p className="font-medium text-sm mb-1.5">{providerInfo.credentialHelp.title}</p>
+                    <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
+                      {providerInfo.credentialHelp.steps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
+                    {providerInfo.credentialHelp.docsUrl && (
+                      <a
+                        href={providerInfo.credentialHelp.docsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1.5"
+                      >
+                        Official documentation &rarr;
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {/* OAuth-based: no credential fields needed, just a note */}
+                  {needsOAuth && (
+                    <p className="text-sm text-muted-foreground">
+                      This provider uses secure sign-in. No credentials to enter here — click Connect to link the student.
+                    </p>
+                  )}
+
+                  {/* Token-based (Canvas) */}
+                  {needsToken && (
+                    <div className="space-y-2">
+                      <Label htmlFor="wizard-token">Access token</Label>
+                      <Input
+                        id="wizard-token"
+                        type="password"
+                        placeholder="Paste the student's API access token"
+                        value={accessToken}
+                        onChange={(e) => {
+                          setAccessToken(e.target.value);
+                          setAuthType('api');
+                        }}
+                        disabled={submitting}
+                        data-testid="wizard-credentials-token"
+                      />
+                    </div>
+                  )}
+
+                  {/* Login-based (Skyward, ParentVUE) */}
+                  {needsLogin && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="wizard-username">Username</Label>
+                        <Input
+                          id="wizard-username"
+                          type="text"
+                          placeholder="Student's portal username"
+                          value={username}
+                          onChange={(e) => {
+                            setUsername(e.target.value);
+                            setAuthType('login');
+                          }}
+                          disabled={submitting}
+                          data-testid="wizard-credentials-username"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="wizard-password">Password</Label>
+                        <Input
+                          id="wizard-password"
+                          type="password"
+                          placeholder="Student's portal password"
+                          value={password}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            setAuthType('login');
+                          }}
+                          disabled={submitting}
+                          data-testid="wizard-credentials-password"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {providerInfo?.credentialHelp.note && (
+                  <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                    {providerInfo.credentialHelp.note}
+                  </p>
+                )}
+
+                {/* Test Connection result */}
+                {testResult && (
+                  <div
+                    className={`flex items-start gap-2 rounded-md p-3 text-sm ${
+                      testResult.success
+                        ? 'border border-green-200 bg-green-50/50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200'
+                        : 'border border-red-200 bg-red-50/50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200'
+                    }`}
+                    data-testid="test-connection-result"
+                  >
+                    {testResult.success ? (
+                      <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <span className="text-red-600 shrink-0 mt-0.5">✗</span>
+                    )}
+                    <div>
+                      <p className="font-medium">{testResult.success ? 'Connection successful!' : 'Connection failed'}</p>
+                      <p className="text-xs mt-0.5 opacity-80">{testResult.message}</p>
+                      {testResult.durationMs > 0 && (
+                        <p className="text-[10px] mt-0.5 opacity-60">{testResult.durationMs}ms</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestConnection}
+                    disabled={testingConnection || submitting}
+                    data-testid="wizard-test-connection"
+                  >
+                    {testingConnection ? 'Testing...' : 'Test Connection'}
+                  </Button>
+                  <div className="flex gap-2 ml-auto">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      onClick={handleSkipCredentials}
+                      disabled={submitting}
+                    >
+                      Skip credentials
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleConnect(false)}
+                      disabled={submitting}
+                      data-testid="wizard-connect-submit"
+                    >
+                      {submitting ? 'Connecting...' : 'Connect'}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           {/* ================================================================
               STEP 4 – Done

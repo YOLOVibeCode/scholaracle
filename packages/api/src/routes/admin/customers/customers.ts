@@ -22,7 +22,8 @@ export interface ICustomersRouterConfig {
 async function handleGetCustomers(
   req: Request,
   res: Response,
-  userRepository: UserRepository
+  userRepository: UserRepository,
+  database: Db
 ): Promise<void> {
   try {
     const page = parseInt((req.query['page'] as string) || '1') || 1;
@@ -43,32 +44,28 @@ async function handleGetCustomers(
       filters['isSuspended'] = { $ne: true };
     }
 
-    let customers;
+    const revokedTokensCollection = database.collection('revoked_connector_tokens');
+    const scraperJobsCollection = database.collection('scraper_generation_jobs');
+
+    let customerList: ReadonlyArray<{
+      _id?: { toString: () => string };
+      email: string;
+      name: string;
+      subscription: unknown;
+      isSuspended: boolean;
+      createdAt: Date;
+    }>;
+    let total: number;
+    let resultPage: number;
+    let resultLimit: number;
+    let totalPages: number | undefined;
+
     if (search) {
-      customers = await userRepository.searchUsers(search);
-      res.status(200).json({
-        success: true,
-        data: customers.map(
-          (c: {
-            _id?: { toString: () => string };
-            email: string;
-            name: string;
-            subscription: unknown;
-            isSuspended: boolean;
-            createdAt: Date;
-          }) => ({
-            id: c._id?.toString(),
-            email: c.email,
-            name: c.name,
-            subscription: c.subscription,
-            isSuspended: c.isSuspended,
-            createdAt: c.createdAt.toISOString(),
-          })
-        ),
-        total: customers.length,
-        page: 1,
-        limit: customers.length,
-      });
+      customerList = await userRepository.searchUsers(search);
+      total = customerList.length;
+      resultPage = 1;
+      resultLimit = customerList.length;
+      totalPages = 1;
     } else {
       const result = await userRepository.findWithPagination({
         page,
@@ -76,30 +73,92 @@ async function handleGetCustomers(
         filters,
         sort: { createdAt: -1 },
       });
+      customerList = result.data;
+      total = result.total;
+      resultPage = result.page;
+      resultLimit = result.limit;
+      totalPages = result.totalPages;
+    }
 
+    const userIds = customerList.map((c) => c._id?.toString()).filter(Boolean) as string[];
+
+    const [tokenDocs, jobCounts, lastSyncDocs] = await Promise.all([
+      userIds.length > 0
+        ? revokedTokensCollection
+            .find({ userId: { $in: userIds }, tokenPurpose: 'scraper' })
+            .toArray()
+        : Promise.resolve([]),
+      userIds.length > 0
+        ? (scraperJobsCollection.aggregate([
+            { $match: { userId: { $in: userIds } } },
+            { $group: { _id: '$userId', count: { $sum: 1 } } },
+          ]).toArray() as Promise<Array<{ _id: string; count: number }>>)
+        : Promise.resolve([]),
+      userIds.length > 0
+        ? (scraperJobsCollection.aggregate([
+            { $match: { userId: { $in: userIds }, status: 'ready' } },
+            { $sort: { updatedAt: -1 } },
+            { $group: { _id: '$userId', lastSync: { $first: '$updatedAt' } } },
+          ]).toArray() as Promise<Array<{ _id: string; lastSync: Date }>>)
+        : Promise.resolve([]),
+    ]);
+
+    const tokenStatusByUser: Record<string, 'active' | 'none' | 'revoked'> = {};
+    for (const uid of userIds) tokenStatusByUser[uid] = 'none';
+    for (const doc of tokenDocs as unknown as Array<{ userId: string; revokedAt: Date | null }>) {
+      if (doc.revokedAt == null) tokenStatusByUser[doc.userId] = 'active';
+      else if (tokenStatusByUser[doc.userId] !== 'active') tokenStatusByUser[doc.userId] = 'revoked';
+    }
+
+    const jobCountByUser: Record<string, number> = {};
+    for (const g of jobCounts as Array<{ _id: string; count: number }>) jobCountByUser[g._id] = g.count;
+
+    const lastSyncByUser: Record<string, string> = {};
+    for (const s of lastSyncDocs) {
+      if (s.lastSync) lastSyncByUser[s._id] = (s.lastSync as Date).toISOString();
+    }
+
+    const mapCustomer = (
+      c: {
+        _id?: { toString: () => string };
+        email: string;
+        name: string;
+        subscription: unknown;
+        isSuspended: boolean;
+        createdAt: Date;
+      }
+    ) => {
+      const id = c._id?.toString();
+      return {
+        id,
+        email: c.email,
+        name: c.name,
+        subscription: c.subscription,
+        isSuspended: c.isSuspended,
+        createdAt: c.createdAt.toISOString(),
+        scraperTokenStatus: id ? tokenStatusByUser[id] ?? 'none' : 'none',
+        scraperJobCount: id ? jobCountByUser[id] ?? 0 : 0,
+        lastScraperSync: id ? lastSyncByUser[id] ?? null : null,
+      };
+    };
+
+    if (search) {
       res.status(200).json({
         success: true,
-        data: result.data.map(
-          (c: {
-            _id?: { toString: () => string };
-            email: string;
-            name: string;
-            subscription: unknown;
-            isSuspended: boolean;
-            createdAt: Date;
-          }) => ({
-            id: c._id?.toString(),
-            email: c.email,
-            name: c.name,
-            subscription: c.subscription,
-            isSuspended: c.isSuspended,
-            createdAt: c.createdAt.toISOString(),
-          })
-        ),
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
+        data: customerList.map(mapCustomer),
+        total,
+        page: resultPage,
+        limit: resultLimit,
+        totalPages,
+      });
+    } else {
+      res.status(200).json({
+        success: true,
+        data: customerList.map(mapCustomer),
+        total,
+        page: resultPage,
+        limit: resultLimit,
+        totalPages,
       });
     }
   } catch (error) {
@@ -113,7 +172,8 @@ async function handleGetCustomers(
 async function handleGetCustomer(
   req: Request,
   res: Response,
-  userRepository: UserRepository
+  userRepository: UserRepository,
+  database: Db
 ): Promise<void> {
   try {
     const { id } = req.params;
@@ -131,6 +191,25 @@ async function handleGetCustomer(
       return;
     }
 
+    const revokedTokensCollection = database.collection('revoked_connector_tokens');
+    const scraperJobsCollection = database.collection('scraper_generation_jobs');
+
+    const [tokenDocs, jobCount, lastSyncDoc] = await Promise.all([
+      revokedTokensCollection.find({ userId: id, tokenPurpose: 'scraper' }).toArray(),
+      scraperJobsCollection.countDocuments({ userId: id }),
+      scraperJobsCollection
+        .findOne(
+          { userId: id, status: 'ready' },
+          { sort: { updatedAt: -1 }, projection: { updatedAt: 1 } }
+        ),
+    ]);
+
+    let scraperTokenStatus: 'active' | 'none' | 'revoked' = 'none';
+    for (const doc of tokenDocs as unknown as Array<{ userId: string; revokedAt: Date | null }>) {
+      if (doc.revokedAt == null) scraperTokenStatus = 'active';
+      else if (scraperTokenStatus !== 'active') scraperTokenStatus = 'revoked';
+    }
+
     res.status(200).json({
       success: true,
       data: {
@@ -145,6 +224,11 @@ async function handleGetCustomer(
         suspendedAt: customer.suspendedAt?.toISOString(),
         createdAt: customer.createdAt.toISOString(),
         updatedAt: customer.updatedAt.toISOString(),
+        scraperTokenStatus,
+        scraperJobCount: jobCount,
+        lastScraperSync: lastSyncDoc?.['updatedAt']
+          ? (lastSyncDoc['updatedAt'] as Date).toISOString()
+          : null,
       },
     });
   } catch (error) {
@@ -241,17 +325,6 @@ async function handleDeleteCustomer(
       res.status(400).json({ success: false, error: 'Customer ID is required' });
       return;
     }
-    const authReq = req as IAdminAuthenticatedRequest;
-
-    // Only super_admin can delete
-    if (authReq.adminRole !== 'super_admin') {
-      res.status(403).json({
-        success: false,
-        error: 'Only super_admin can delete customers',
-      });
-      return;
-    }
-
     const customer = await userRepository.findById(id);
     if (!customer) {
       res.status(404).json({
@@ -508,7 +581,7 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
   router.use(adminAuthMiddleware(adminAuthService));
 
   router.get('/', (req: Request, res: Response) => {
-    void handleGetCustomers(req, res, userRepository);
+    void handleGetCustomers(req, res, userRepository, config.database);
   });
 
   router.post('/bulk-action', (req: Request, res: Response) => {
@@ -524,7 +597,7 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
   });
 
   router.get('/:id', (req: Request, res: Response) => {
-    void handleGetCustomer(req, res, userRepository);
+    void handleGetCustomer(req, res, userRepository, config.database);
   });
 
   // GET /api/admin/customers/:id/students
@@ -734,13 +807,6 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
         }
 
         const authReq = req as IAdminAuthenticatedRequest;
-        const role = authReq.adminRole ?? '';
-        if (role === 'billing' || role === 'analyst') {
-          res
-            .status(403)
-            .json({ success: false, error: 'Insufficient permissions to impersonate customer' });
-          return;
-        }
 
         const customer = await userRepository.findById(id);
         if (!customer) {

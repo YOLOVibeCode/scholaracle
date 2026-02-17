@@ -18,24 +18,28 @@
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
     "@scholaracle/agents": "workspace:*",
     "@scholaracle/auth": "workspace:^",
     "@scholaracle/contracts": "workspace:*",
     "@scholaracle/database": "workspace:^",
     "@scholaracle/interfaces": "workspace:*",
     "@sendgrid/mail": "^8.1.0",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "firebase-admin": "^12.0.0",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.3.0",
+    "playwright": "^1.58.2",
     "rrule": "^2.7.2",
     "square": "^44.0.0",
     "twilio": "^5.0.0",
     "ua-parser-js": "^2.0.9",
-    "zod": "^4.1.13",
-    "jsonwebtoken": "^9.0.2"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.6",
@@ -51,6 +55,8 @@
     "supertest": "^6.3.3",
     "ts-jest": "^29.1.1",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "speakeasy": "^2.0.0",
+    "@types/speakeasy": "^2.0.10"
   }
 }

@@ -2,16 +2,24 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { customersRouter } from './customers';
-import { AdminAuthService, AuthService } from '@scholaracle/auth';
+import { AuthService } from '@scholaracle/auth';
 import { adminAuthRouter } from '../auth/auth';
-import { AdminUserRepository, UserRepository, StudentRepository, PaymentRepository } from '@scholaracle/database';
+import {
+  AdminStepUpChallengeRepository,
+  UserRepository,
+  StudentRepository,
+  PaymentRepository,
+} from '@scholaracle/database';
+import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Customer Routes', () => {
   let app: Express;
   let client: MongoClient;
   let database: Db;
   let adminToken: string;
+  let adminMfaSecret: string;
   let superAdminToken: string;
+  let superAdminMfaSecret: string;
 
   beforeAll(async () => {
     const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -19,35 +27,34 @@ describe('Admin Customer Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    // Create admin users
-    const adminRepo = new AdminUserRepository(database);
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    
-    await adminRepo.create({
+    const adminResult = await createTestAdmin(database, 'test-secret', {
       email: 'admin@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Regular Admin',
       role: 'admin',
     });
+    adminToken = adminResult.token;
+    adminMfaSecret = adminResult.mfaSecret;
 
-    await adminRepo.create({
+    const superResult = await createTestAdmin(database, 'test-secret', {
       email: 'super@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Super Admin',
-      role: 'super_admin',
+      role: 'admin',
     });
-
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    
-    const adminLogin = await adminAuthService.login('admin@test.com', 'AdminPass123!');
-    adminToken = adminLogin.token!;
-    
-    const superLogin = await adminAuthService.login('super@test.com', 'AdminPass123!');
-    superAdminToken = superLogin.token!;
+    superAdminToken = superResult.token;
+    superAdminMfaSecret = superResult.mfaSecret;
 
     app = express();
     app.use(express.json());
-    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret: 'test-secret',
+        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
+      })
+    );
     app.use('/api/admin/customers', customersRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -201,9 +208,6 @@ describe('Admin Customer Routes', () => {
 
   describe('POST /api/admin/customers/:id/impersonate (step-up MFA)', () => {
     it('should require step-up when MFA is enabled', async () => {
-      const speakeasy = require('speakeasy');
-
-      // Create customer
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
       const customer = await new UserRepository(database).create({
         email: 'impersonate@test.com',
@@ -211,55 +215,21 @@ describe('Admin Customer Routes', () => {
         name: 'Impersonate Target',
       });
 
-      // Enable MFA for super admin user
-      const adminRepo = new AdminUserRepository(database);
-      const superAdminUser = await adminRepo.findByEmail('super@test.com');
-      expect(superAdminUser).not.toBeNull();
-
-      const { secret } = new (require('@scholaracle/auth').MFAService)().generateSecret('super@test.com');
-      await adminRepo.update(superAdminUser!._id!.toString(), { mfaEnabled: true, mfaSecret: secret });
-
-      // Login: should require MFA
-      const loginRes = await request(app).post('/api/admin/auth/login').send({ email: 'super@test.com', password: 'AdminPass123!' });
-      expect(loginRes.status).toBe(401);
-      expect(loginRes.body.requiresMFA).toBe(true);
-      const mfaToken = loginRes.body.mfaToken as string;
-
-      const totp = speakeasy.totp({ secret, encoding: 'base32' });
-      const verifyRes = await request(app).post('/api/admin/auth/mfa/verify').send({ mfaToken, token: totp });
-      expect(verifyRes.status).toBe(200);
-      const adminToken = verifyRes.body.token as string;
-      expect(adminToken).toBeTruthy();
+      // Super admin already has MFA from createTestAdmin
+      const tokenWithMFA = superAdminToken;
 
       // Without step-up header: denied
       const denied = await request(app)
         .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${tokenWithMFA}`)
         .send({ reason: 'Support check' });
       expect(denied.status).toBe(401);
       expect(String(denied.body.code ?? '')).toContain('MFA_STEP_UP');
 
-      // Mint step-up token
-      const startRes = await request(app)
-        .post('/api/admin/auth/step-up/start')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({});
-      expect(startRes.status).toBe(200);
-      const stepUpId = startRes.body.data.stepUpId as string;
-
-      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
-      const stepUpRes = await request(app)
-        .post('/api/admin/auth/step-up/verify')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ stepUpId, token: totp2 });
-      expect(stepUpRes.status).toBe(200);
-      const stepUpToken = stepUpRes.body.data.stepUpToken as string;
-      expect(stepUpToken).toBeTruthy();
-
-      // With step-up header: allowed
+      const stepUpToken = await getStepUpToken(app, tokenWithMFA, superAdminMfaSecret);
       const ok = await request(app)
         .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
-        .set('Authorization', `Bearer ${adminToken}`)
+        .set('Authorization', `Bearer ${tokenWithMFA}`)
         .set('x-admin-stepup', stepUpToken)
         .send({ reason: 'Support check' });
       expect(ok.status).toBe(200);
@@ -270,6 +240,7 @@ describe('Admin Customer Routes', () => {
 
   describe('POST /api/admin/customers/:id/impersonate', () => {
     it('should return a user token for an admin', async () => {
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
       const customer = await new UserRepository(database).create({
         email: 'impersonate@test.com',
@@ -280,6 +251,7 @@ describe('Admin Customer Routes', () => {
       const res = await request(app)
         .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
         .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
         .send({ reason: 'Support troubleshooting' });
 
       expect(res.status).toBe(200);
@@ -295,35 +267,6 @@ describe('Admin Customer Routes', () => {
       expect(auditLogs.length).toBeGreaterThan(0);
     });
 
-    it('should reject impersonation for billing role', async () => {
-      // Create billing admin
-      const adminRepo = new AdminUserRepository(database);
-      const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-      await adminRepo.create({
-        email: 'billing@test.com',
-        passwordHash,
-        name: 'Billing Admin',
-        role: 'billing',
-      });
-
-      const adminAuthService = new AdminAuthService(database, 'test-secret');
-      const billingLogin = await adminAuthService.login('billing@test.com', 'AdminPass123!');
-      const billingToken = billingLogin.token!;
-
-      const userHash = await UserRepository.hashPassword('TestPass123!');
-      const customer = await new UserRepository(database).create({
-        email: 'impersonate2@test.com',
-        passwordHash: userHash,
-        name: 'Impersonate User 2',
-      });
-
-      const res = await request(app)
-        .post(`/api/admin/customers/${customer._id!.toString()}/impersonate`)
-        .set('Authorization', `Bearer ${billingToken}`)
-        .send({ reason: 'Billing should not impersonate' });
-
-      expect(res.status).toBe(403);
-    });
   });
 
   describe('GET /api/admin/customers', () => {
@@ -490,7 +433,7 @@ describe('Admin Customer Routes', () => {
   });
 
   describe('DELETE /api/admin/customers/:id', () => {
-    it('should delete customer as super_admin', async () => {
+    it('should delete customer', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
       const customer = await new UserRepository(database).create({
         email: 'delete@test.com',
@@ -505,23 +448,6 @@ describe('Admin Customer Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-    });
-
-    it('should reject deletion from non-super_admin', async () => {
-      const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      const customer = await new UserRepository(database).create({
-        email: 'delete2@test.com',
-        passwordHash,
-        name: 'Delete User 2',
-      });
-
-      const response = await request(app)
-        .delete(`/api/admin/customers/${customer._id!.toString()}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ reason: 'Test deletion' });
-
-      expect(response.status).toBe(403);
-      expect(response.body.error).toContain('super_admin');
     });
 
     it('should create audit log for deletion', async () => {

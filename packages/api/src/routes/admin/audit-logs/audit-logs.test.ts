@@ -2,16 +2,16 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { auditLogsRouter } from './audit-logs';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, AuditLogRepository } from '@scholaracle/database';
+import { AdminStepUpChallengeRepository, AuditLogRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
+import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Audit Logs Routes', () => {
   let app: Express;
   let client: MongoClient;
   let database: Db;
   let superAdminToken: string;
-  let adminToken: string;
+  let superAdminMfaSecret: string;
 
   beforeAll(async () => {
     const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -19,27 +19,25 @@ describe('Admin Audit Logs Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const superResult = await createTestAdmin(database, 'test-secret', {
       email: 'audit-super@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Audit Super',
-      role: 'super_admin',
-    });
-    await new AdminUserRepository(database).create({
-      email: 'audit-admin@test.com',
-      passwordHash,
-      name: 'Audit Admin',
       role: 'admin',
     });
-
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    superAdminToken = (await adminAuthService.login('audit-super@test.com', 'AdminPass123!')).token!;
-    adminToken = (await adminAuthService.login('audit-admin@test.com', 'AdminPass123!')).token!;
+    superAdminToken = superResult.token;
+    superAdminMfaSecret = superResult.mfaSecret;
 
     app = express();
     app.use(express.json());
-    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret: 'test-secret',
+        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
+      })
+    );
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -51,12 +49,7 @@ describe('Admin Audit Logs Routes', () => {
     await database.collection('audit_logs').deleteMany({});
   });
 
-  it('should deny non-super_admin access', async () => {
-    const res = await request(app).get('/api/admin/audit-logs').set('Authorization', `Bearer ${adminToken}`);
-    expect(res.status).toBe(403);
-  });
-
-  it('should list audit logs for super_admin', async () => {
+  it('should list audit logs', async () => {
     const repo = new AuditLogRepository(database);
     await repo.create({
       adminUserId: 'x',
@@ -142,6 +135,7 @@ describe('Admin Audit Logs Routes', () => {
 
   describe('GET /api/admin/audit-logs/export', () => {
     it('should export CSV and create a system:export audit log', async () => {
+      const stepUpToken = await getStepUpToken(app, superAdminToken, superAdminMfaSecret);
       const repo = new AuditLogRepository(database);
       await repo.create({
         adminUserId: 'x',
@@ -156,7 +150,8 @@ describe('Admin Audit Logs Routes', () => {
 
       const res = await request(app)
         .get('/api/admin/audit-logs/export?action=customer:suspend')
-        .set('Authorization', `Bearer ${superAdminToken}`);
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-admin-stepup', stepUpToken);
 
       expect(res.status).toBe(200);
       expect(String(res.headers['content-type'] ?? '')).toContain('text/csv');
@@ -168,28 +163,8 @@ describe('Admin Audit Logs Routes', () => {
     });
 
     it('should require step-up when MFA is enabled', async () => {
-      const speakeasy = require('speakeasy');
-      const mfaService = new (require('@scholaracle/auth').MFAService)();
-
-      const repo = new AdminUserRepository(database);
-      const superAdmin = await repo.findByEmail('audit-super@test.com');
-      expect(superAdmin).not.toBeNull();
-      const { secret } = mfaService.generateSecret('audit-super@test.com');
-      await repo.update(superAdmin!._id!.toString(), { mfaEnabled: true, mfaSecret: secret });
-
-      // Login now requires MFA
-      const loginRes = await request(app).post('/api/admin/auth/login').send({
-        email: 'audit-super@test.com',
-        password: 'AdminPass123!',
-      });
-      expect(loginRes.status).toBe(401);
-      expect(loginRes.body.requiresMFA).toBe(true);
-      const mfaToken = loginRes.body.mfaToken as string;
-
-      const totp = speakeasy.totp({ secret, encoding: 'base32' });
-      const verifyRes = await request(app).post('/api/admin/auth/mfa/verify').send({ mfaToken, token: totp });
-      expect(verifyRes.status).toBe(200);
-      const tokenWithMFA = verifyRes.body.token as string;
+      // Super admin already has MFA from createTestAdmin
+      const tokenWithMFA = superAdminToken;
 
       // Export without step-up must be denied
       const denied = await request(app)
@@ -198,23 +173,7 @@ describe('Admin Audit Logs Routes', () => {
       expect(denied.status).toBe(401);
       expect(String(denied.body.code ?? '')).toContain('MFA_STEP_UP');
 
-      // Step-up mint
-      const startRes = await request(app)
-        .post('/api/admin/auth/step-up/start')
-        .set('Authorization', `Bearer ${tokenWithMFA}`)
-        .send({});
-      expect(startRes.status).toBe(200);
-      const stepUpId = startRes.body.data.stepUpId as string;
-
-      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
-      const stepUpRes = await request(app)
-        .post('/api/admin/auth/step-up/verify')
-        .set('Authorization', `Bearer ${tokenWithMFA}`)
-        .send({ stepUpId, token: totp2 });
-      expect(stepUpRes.status).toBe(200);
-      const stepUpToken = stepUpRes.body.data.stepUpToken as string;
-      expect(stepUpToken).toBeTruthy();
-
+      const stepUpToken = await getStepUpToken(app, tokenWithMFA, superAdminMfaSecret);
       const ok = await request(app)
         .get('/api/admin/audit-logs/export')
         .set('Authorization', `Bearer ${tokenWithMFA}`)

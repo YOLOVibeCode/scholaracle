@@ -26,7 +26,7 @@
 2. **Layer Dependencies** — Each layer assumes previous layers work
 3. **Clear Feedback** — Developers know exactly what's broken and at which level
 4. **Efficient Resource Usage** — Skip downstream tests when upstream fails
-5. **Role Coverage** — All user roles are tested at appropriate layers
+5. **User Type Coverage** — All user types (admin, parent, student) are tested at appropriate layers
 
 ### Success Metrics
 
@@ -49,27 +49,27 @@
                                │ depends on
                     ┌──────────▼──────────┐
                     │ Layer 5: @integration│  5 tests
-                    │  Cross-Role Workflows│
+                    │  Cross-Type Workflows│
                     └──────────┬──────────┘
                                │ depends on
               ┌────────────────▼────────────────┐
-              │      Layer 4: @feature          │  ~30 tests
-              │   CRUD Operations per Role      │
+              │      Layer 4: @feature          │  25 tests
+              │   CRUD Operations (admin+parent)│
               └────────────────┬────────────────┘
                                │ depends on
          ┌─────────────────────▼─────────────────────┐
-         │           Layer 3: @navigation            │  ~40 tests
+         │           Layer 3: @navigation            │  30 tests
          │        Sidebar & Routing Works            │
          └─────────────────────┬─────────────────────┘
                                │ depends on
     ┌──────────────────────────▼──────────────────────────┐
-    │              Layer 2: @dashboard                    │  ~37 tests
+    │              Layer 2: @dashboard                    │  18 tests
     │          All Pages Render Without Errors            │
     └──────────────────────────┬──────────────────────────┘
                                │ depends on
 ┌──────────────────────────────▼──────────────────────────────┐
-│                     Layer 1: @auth                          │  8 tests
-│                All Roles Can Authenticate                   │
+│                     Layer 1: @auth                          │  4 tests
+│              All User Types Can Authenticate                │
 └──────────────────────────────┬──────────────────────────────┘
                                │ depends on
 ┌──────────────────────────────▼──────────────────────────────┐
@@ -84,8 +84,8 @@
 | Layer | Tag | Tests | Timeout | Mode | Purpose |
 |-------|-----|-------|---------|------|---------|
 | 0 | `@critical` | 3 | 30s | Serial, failfast | App loads, login accessible |
-| 1 | `@auth` | 8 | 60s | Parallel | All roles authenticate |
-| 2 | `@dashboard` | 37 | 60s | Parallel | All pages render |
+| 1 | `@auth` | 4 | 60s | Parallel | All user types authenticate |
+| 2 | `@dashboard` | 18 | 60s | Parallel | All pages render |
 | 3 | `@navigation` | ~40 | 60s | Parallel | Sidebar navigation works |
 | 4 | `@feature` | ~30 | 90s | Parallel | CRUD per role |
 | 5 | `@integration` | 5 | 120s | Serial | Cross-role workflows |
@@ -130,32 +130,24 @@ test.beforeEach(({ page }) => {
 
 ### Layer 1: Authentication (@auth)
 
-**Purpose:** Verify all user roles can log in/out
+**Purpose:** Verify all user types can log in/out
 
 **File:** `tests/01-auth.spec.ts`
 
 **Depends on:** Layer 0 passing
 
-| Test ID | Test Name | Role | Description |
-|---------|-----------|------|-------------|
+| Test ID | Test Name | User Type | Description |
+|---------|-----------|-----------|-------------|
 | AUTH-001 | Parent can login | parent | Valid parent credentials → dashboard |
 | AUTH-002 | Parent can logout | parent | Logout → redirected to login |
-| AUTH-003 | Super Admin can login | super_admin | Valid admin credentials → /admin |
-| AUTH-004 | Admin can login | admin | Valid admin credentials → /admin |
-| AUTH-005 | Support can login | support | Valid support credentials → /admin |
-| AUTH-006 | Billing can login | billing | Valid billing credentials → /admin |
-| AUTH-007 | Analyst can login | analyst | Valid analyst credentials → /admin |
-| AUTH-008 | Invalid credentials rejected | - | Wrong password → error message |
+| AUTH-003 | Admin can login | admin | Valid admin credentials → /admin |
+| AUTH-004 | Invalid credentials rejected | - | Wrong password → error message |
 
 **Test Data Required:**
 ```typescript
 const TEST_USERS = {
   parent: { email: 'test.parent@example.com', password: 'ParentPass123!' },
-  super_admin: { email: 'super@scholarmancy.com', password: 'SuperAdmin123!' },
   admin: { email: 'admin@scholarmancy.com', password: 'Admin123!' },
-  support: { email: 'support@scholarmancy.com', password: 'Support123!' },
-  billing: { email: 'billing@scholarmancy.com', password: 'Billing123!' },
-  analyst: { email: 'analyst@scholarmancy.com', password: 'Analyst123!' },
 };
 ```
 
@@ -184,26 +176,22 @@ const TEST_USERS = {
 | DASH-P-007 | Notification Settings | `/dashboard/settings#notifications` | Toggles visible |
 | DASH-P-008 | Grade Thresholds | `/dashboard/settings#thresholds` | Threshold inputs |
 
-#### Admin Dashboard Pages (20 tests)
+#### Admin Dashboard Pages (10 tests)
 
-| Test ID | Page | Route | Required Roles | Expected Elements |
-|---------|------|-------|----------------|-------------------|
-| DASH-A-001 | Admin Home | `/admin/dashboard` | all | KPI cards, activity feed |
-| DASH-A-002 | Customers List | `/admin/customers` | all | Customer table |
-| DASH-A-003 | Customer Detail | `/admin/customers/[id]` | super_admin, admin | Customer info |
-| DASH-A-004 | Payments | `/admin/payments` | super_admin, admin, billing, analyst | Payment table |
-| DASH-A-005 | Subscriptions | `/admin/subscriptions` | super_admin, admin, billing | Subscription list |
-| DASH-A-006 | Communications | `/admin/communications` | super_admin, admin, support | Comm log |
-| DASH-A-007 | Reports | `/admin/reports` | super_admin, admin, billing, analyst | Report UI |
-| DASH-A-008 | System Settings | `/admin/settings` | super_admin only | Admin user list |
-| DASH-A-009 | Audit Logs | `/admin/audit-logs` | super_admin only | Log entries |
-| DASH-A-010 | Analytics Overview | `/admin/analytics` | super_admin, admin, analyst | Charts |
+All admin pages are accessible to any authenticated admin.
 
-**Role-Access Matrix Test:**
-```typescript
-// Each admin page tested with each role
-// Ensure proper 403 for unauthorized roles
-```
+| Test ID | Page | Route | Expected Elements |
+|---------|------|-------|-------------------|
+| DASH-A-001 | Admin Home | `/admin/dashboard` | KPI cards, activity feed |
+| DASH-A-002 | Customers List | `/admin/customers` | Customer table |
+| DASH-A-003 | Customer Detail | `/admin/customers/[id]` | Customer info |
+| DASH-A-004 | Payments | `/admin/payments` | Payment table |
+| DASH-A-005 | Subscriptions | `/admin/subscriptions` | Subscription list |
+| DASH-A-006 | Communications | `/admin/communications` | Comm log |
+| DASH-A-007 | Reports | `/admin/reports` | Report UI |
+| DASH-A-008 | System Settings | `/admin/settings` | Admin user list |
+| DASH-A-009 | Audit Logs | `/admin/audit-logs` | Log entries |
+| DASH-A-010 | Analytics Overview | `/admin/analytics` | Charts |
 
 ---
 
@@ -237,26 +225,27 @@ const TEST_USERS = {
 | NAV-P-014 | Mobile nav links | Click mobile nav | Routes work |
 | NAV-P-015 | Deep link direct access | Direct URL | Correct page |
 
-#### Admin Navigation (25 tests)
+#### Admin Navigation (15 tests)
 
-| Test ID | Test Name | Role | Action | Expected |
-|---------|-----------|------|--------|----------|
-| NAV-A-001 | Dashboard link | all | Click Dashboard | `/admin/dashboard` |
-| NAV-A-002 | Customers link | all | Click Customers | `/admin/customers` |
-| NAV-A-003 | Payments link | billing+ | Click Payments | `/admin/payments` |
-| NAV-A-004 | Subscriptions link | billing+ | Click Subscriptions | `/admin/subscriptions` |
-| NAV-A-005 | Communications link | support+ | Click Comms | `/admin/communications` |
-| NAV-A-006 | Reports link | analyst+ | Click Reports | `/admin/reports` |
-| NAV-A-007 | Settings link | super_admin | Click Settings | `/admin/settings` |
-| NAV-A-008 | Audit Logs link | super_admin | Click Audit | `/admin/audit-logs` |
-| NAV-A-009 | Customer detail nav | admin+ | Click customer row | `/admin/customers/[id]` |
-| NAV-A-010 | Customer tabs | admin+ | Click tabs | Tab content shows |
-| NAV-A-011 | Back to list | all | Click back | `/admin/customers` |
-| NAV-A-012 | Quick actions | varies | Click action buttons | Modal/dropdown |
-| NAV-A-013 | Unauthorized redirect | support | Visit /admin/settings | 403 or redirect |
-| NAV-A-014 | Search navigation | all | Search → select | Customer detail |
-| NAV-A-015 | Pagination | all | Click page 2 | Updates list |
-| NAV-A-016-025 | More navigation... | | | |
+All navigation tests use a single admin user with full access.
+
+| Test ID | Test Name | Action | Expected |
+|---------|-----------|--------|----------|
+| NAV-A-001 | Dashboard link | Click Dashboard | `/admin/dashboard` |
+| NAV-A-002 | Customers link | Click Customers | `/admin/customers` |
+| NAV-A-003 | Payments link | Click Payments | `/admin/payments` |
+| NAV-A-004 | Subscriptions link | Click Subscriptions | `/admin/subscriptions` |
+| NAV-A-005 | Communications link | Click Comms | `/admin/communications` |
+| NAV-A-006 | Reports link | Click Reports | `/admin/reports` |
+| NAV-A-007 | Settings link | Click Settings | `/admin/settings` |
+| NAV-A-008 | Audit Logs link | Click Audit | `/admin/audit-logs` |
+| NAV-A-009 | Customer detail nav | Click customer row | `/admin/customers/[id]` |
+| NAV-A-010 | Customer tabs | Click tabs | Tab content shows |
+| NAV-A-011 | Back to list | Click back | `/admin/customers` |
+| NAV-A-012 | Quick actions | Click action buttons | Modal/dropdown |
+| NAV-A-013 | Non-admin redirect | Visit /admin/* unauthenticated | Redirect to /admin/login |
+| NAV-A-014 | Search navigation | Search → select | Customer detail |
+| NAV-A-015 | Pagination | Click page 2 | Updates list |
 
 ---
 
@@ -288,23 +277,25 @@ const TEST_USERS = {
 
 #### Admin Features (15 tests)
 
-| Test ID | Feature | Operation | Role | Steps |
-|---------|---------|-----------|------|-------|
-| FEAT-A-001 | Customer | READ | all | View customer list |
-| FEAT-A-002 | Customer | SEARCH | all | Search by email |
-| FEAT-A-003 | Customer | FILTER | all | Filter by plan |
-| FEAT-A-004 | Customer | VIEW | admin+ | View customer detail |
-| FEAT-A-005 | Customer | SUSPEND | super_admin | Suspend → Verify status |
-| FEAT-A-006 | Customer | UNSUSPEND | super_admin | Unsuspend → Verify |
-| FEAT-A-007 | Subscription | UPDATE | admin+ | Change plan |
-| FEAT-A-008 | Subscription | CANCEL | super_admin | Cancel → Verify |
-| FEAT-A-009 | Payment | REFUND | billing+ | Issue refund |
-| FEAT-A-010 | Note | CREATE | admin+ | Add customer note |
-| FEAT-A-011 | Note | UPDATE | admin+ | Edit note |
-| FEAT-A-012 | Note | DELETE | super_admin | Delete note |
-| FEAT-A-013 | Communication | SEND | support+ | Send email to customer |
-| FEAT-A-014 | Admin User | CREATE | super_admin | Create new admin |
-| FEAT-A-015 | Admin User | UPDATE | super_admin | Update admin role |
+All admin feature tests use a single admin user with full access.
+
+| Test ID | Feature | Operation | Steps |
+|---------|---------|-----------|-------|
+| FEAT-A-001 | Customer | READ | View customer list |
+| FEAT-A-002 | Customer | SEARCH | Search by email |
+| FEAT-A-003 | Customer | FILTER | Filter by plan |
+| FEAT-A-004 | Customer | VIEW | View customer detail |
+| FEAT-A-005 | Customer | SUSPEND | Suspend → Verify status |
+| FEAT-A-006 | Customer | UNSUSPEND | Unsuspend → Verify |
+| FEAT-A-007 | Subscription | UPDATE | Change plan |
+| FEAT-A-008 | Subscription | CANCEL | Cancel → Verify |
+| FEAT-A-009 | Payment | REFUND | Issue refund |
+| FEAT-A-010 | Note | CREATE | Add customer note |
+| FEAT-A-011 | Note | UPDATE | Edit note |
+| FEAT-A-012 | Note | DELETE | Delete note |
+| FEAT-A-013 | Communication | SEND | Send email to customer |
+| FEAT-A-014 | Admin User | CREATE | Create new admin |
+| FEAT-A-015 | Admin User | UPDATE | Update admin user |
 
 ---
 
@@ -339,7 +330,7 @@ const TEST_USERS = {
 | ERR-001 | 404 Page | Navigate to `/nonexistent` → Custom 404 page |
 | ERR-002 | API Error Display | Trigger API error → Error toast/message shown |
 | ERR-003 | Session Expired | Expire token → Redirect to login |
-| ERR-004 | Permission Denied | Support visits /admin/settings → 403 or graceful redirect |
+| ERR-004 | Permission Denied | Unauthenticated user visits /admin/settings → redirect to login |
 | ERR-005 | Form Validation | Submit invalid form → Inline errors |
 | ERR-006 | Network Offline | Simulate offline → Graceful degradation |
 
@@ -360,34 +351,29 @@ const TEST_USERS = {
 - [ ] CRIT-003: API health check
 - [ ] Configure serial mode, failfast
 
-### Phase 3: Layer 1 (@auth) — 8 tests
+### Phase 3: Layer 1 (@auth) — 4 tests
 - [ ] AUTH-001: Parent login
 - [ ] AUTH-002: Parent logout
-- [ ] AUTH-003: Super Admin login
-- [ ] AUTH-004: Admin login
-- [ ] AUTH-005: Support login
-- [ ] AUTH-006: Billing login
-- [ ] AUTH-007: Analyst login
-- [ ] AUTH-008: Invalid credentials
+- [ ] AUTH-003: Admin login
+- [ ] AUTH-004: Invalid credentials
 
-### Phase 4: Layer 2 (@dashboard) — 37 tests
+### Phase 4: Layer 2 (@dashboard) — 18 tests
 - [ ] Parent dashboard pages (8 tests)
   - [ ] DASH-P-001 through DASH-P-008
-- [ ] Admin dashboard pages (20 tests)
+- [ ] Admin dashboard pages (10 tests)
   - [ ] DASH-A-001 through DASH-A-010
-  - [ ] Role-access matrix tests (10)
 - [ ] Cross-browser rendering checks
 
-### Phase 5: Layer 3 (@navigation) — ~40 tests
+### Phase 5: Layer 3 (@navigation) — 30 tests
 - [ ] Parent navigation (15 tests)
   - [ ] NAV-P-001 through NAV-P-015
-- [ ] Admin navigation (25 tests)
-  - [ ] NAV-A-001 through NAV-A-025
+- [ ] Admin navigation (15 tests)
+  - [ ] NAV-A-001 through NAV-A-015
 - [ ] Mobile responsive navigation
 
-### Phase 6: Layer 4 (@feature) — ~30 tests
-- [ ] Parent features (15 tests)
-  - [ ] FEAT-P-001 through FEAT-P-015
+### Phase 6: Layer 4 (@feature) — 25 tests
+- [ ] Parent features (10 tests)
+  - [ ] FEAT-P-001 through FEAT-P-010
 - [ ] Admin features (15 tests)
   - [ ] FEAT-A-001 through FEAT-A-015
 
@@ -862,13 +848,13 @@ pnpm test --grep-invert "@slow"
 | Layer | Tests | Time | Mode | Dependency |
 |-------|-------|------|------|------------|
 | 0: Critical | 3 | 30s | Serial | None |
-| 1: Auth | 8 | 60s | Parallel | Layer 0 |
-| 2: Dashboard | 37 | 2m | Parallel | Layer 1 |
-| 3: Navigation | 40 | 2m | Parallel | Layer 2 |
-| 4: Feature | 30 | 3m | Parallel | Layer 3 |
+| 1: Auth | 4 | 60s | Parallel | Layer 0 |
+| 2: Dashboard | 18 | 2m | Parallel | Layer 1 |
+| 3: Navigation | 30 | 2m | Parallel | Layer 2 |
+| 4: Feature | 25 | 3m | Parallel | Layer 3 |
 | 5: Integration | 5 | 2m | Serial | Layer 4 |
 | 6: Error | 6 | 1m | Parallel | Layer 5 |
-| **TOTAL** | **~129** | **~10m** | | |
+| **TOTAL** | **~91** | **~10m** | | |
 
 ---
 

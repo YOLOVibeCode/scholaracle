@@ -2,9 +2,9 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { paymentsRouter } from './payments';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository, PaymentRepository } from '@scholaracle/database';
+import { AdminStepUpChallengeRepository, PaymentRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
+import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Payment Routes', () => {
   let app: Express;
@@ -12,6 +12,7 @@ describe('Admin Payment Routes', () => {
   let database: Db;
   let adminToken: string;
   let billingAdminToken: string;
+  let billingAdminMfaSecret: string;
 
   beforeAll(async () => {
     const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -19,31 +20,33 @@ describe('Admin Payment Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    // Create admin users
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const adminResult = await createTestAdmin(database, 'test-secret', {
       email: 'payment-admin@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Payment Admin',
       role: 'admin',
     });
-    await new AdminUserRepository(database).create({
-      email: 'billing-admin@test.com',
-      passwordHash,
-      name: 'Billing Admin',
-      role: 'billing',
-    });
+    adminToken = adminResult.token;
 
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    const adminLogin = await adminAuthService.login('payment-admin@test.com', 'AdminPass123!');
-    adminToken = adminLogin.token!;
-    
-    const billingLogin = await adminAuthService.login('billing-admin@test.com', 'AdminPass123!');
-    billingAdminToken = billingLogin.token!;
+    const billingResult = await createTestAdmin(database, 'test-secret', {
+      email: 'billing-admin@test.com',
+      password: 'AdminPass123!',
+      name: 'Billing Admin',
+      role: 'admin',
+    });
+    billingAdminToken = billingResult.token;
+    billingAdminMfaSecret = billingResult.mfaSecret;
 
     app = express();
     app.use(express.json());
-    app.use('/api/admin/auth', adminAuthRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/auth',
+      adminAuthRouter({
+        database,
+        jwtSecret: 'test-secret',
+        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
+      })
+    );
     app.use('/api/admin/payments', paymentsRouter({ database, jwtSecret: 'test-secret' }));
   });
 
@@ -121,6 +124,7 @@ describe('Admin Payment Routes', () => {
 
   describe('POST /api/admin/payments/:id/refund', () => {
     it('should process full refund', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
       const payment = await new PaymentRepository(database).create({
         userId: '507f1f77bcf86cd799439011',
         amount: 1900,
@@ -132,6 +136,7 @@ describe('Admin Payment Routes', () => {
       const response = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
         .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
         .send({
           amount: 19, // Full refund in dollars
           reason: 'Customer request',
@@ -142,6 +147,7 @@ describe('Admin Payment Routes', () => {
     });
 
     it('should process partial refund', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
       const payment = await new PaymentRepository(database).create({
         userId: '507f1f77bcf86cd799439011',
         amount: 1900,
@@ -153,6 +159,7 @@ describe('Admin Payment Routes', () => {
       const response = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
         .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
         .send({
           amount: 10, // Partial refund
           reason: 'Partial refund',
@@ -163,6 +170,7 @@ describe('Admin Payment Routes', () => {
     });
 
     it('should require refund reason', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
       const payment = await new PaymentRepository(database).create({
         userId: '507f1f77bcf86cd799439011',
         amount: 1900,
@@ -174,6 +182,7 @@ describe('Admin Payment Routes', () => {
       const response = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
         .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
         .send({
           amount: 19,
         });
@@ -191,28 +200,8 @@ describe('Admin Payment Routes', () => {
         paymentMethod: 'card',
       });
 
-      const speakeasy = require('speakeasy');
-      const mfaService = new (require('@scholaracle/auth').MFAService)();
-
-      // Enable MFA on billing admin
-      const billing = await new AdminUserRepository(database).findByEmail('billing-admin@test.com');
-      expect(billing).not.toBeNull();
-      const { secret } = mfaService.generateSecret('billing-admin@test.com');
-      await new AdminUserRepository(database).update(billing!._id!.toString(), { mfaEnabled: true, mfaSecret: secret });
-
-      // Login should require MFA now
-      const loginRes = await request(app).post('/api/admin/auth/login').send({
-        email: 'billing-admin@test.com',
-        password: 'AdminPass123!',
-      });
-      expect(loginRes.status).toBe(401);
-      expect(loginRes.body.requiresMFA).toBe(true);
-      const mfaToken = loginRes.body.mfaToken as string;
-
-      const totp = speakeasy.totp({ secret, encoding: 'base32' });
-      const verifyRes = await request(app).post('/api/admin/auth/mfa/verify').send({ mfaToken, token: totp });
-      expect(verifyRes.status).toBe(200);
-      const billingTokenWithMFA = verifyRes.body.token as string;
+      // Billing admin already has MFA from createTestAdmin
+      const billingTokenWithMFA = billingAdminToken;
 
       // Refund without step-up must be denied
       const denied = await request(app)
@@ -222,24 +211,7 @@ describe('Admin Payment Routes', () => {
       expect(denied.status).toBe(401);
       expect(String(denied.body.code ?? '')).toContain('MFA_STEP_UP');
 
-      // Step-up mint
-      const startRes = await request(app)
-        .post('/api/admin/auth/step-up/start')
-        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
-        .send({});
-      expect(startRes.status).toBe(200);
-      const stepUpId = startRes.body.data.stepUpId as string;
-
-      const totp2 = speakeasy.totp({ secret, encoding: 'base32' });
-      const stepUpRes = await request(app)
-        .post('/api/admin/auth/step-up/verify')
-        .set('Authorization', `Bearer ${billingTokenWithMFA}`)
-        .send({ stepUpId, token: totp2 });
-      expect(stepUpRes.status).toBe(200);
-      const stepUpToken = stepUpRes.body.data.stepUpToken as string;
-      expect(stepUpToken).toBeTruthy();
-
-      // Refund with step-up should succeed
+      const stepUpToken = await getStepUpToken(app, billingTokenWithMFA, billingAdminMfaSecret);
       const ok = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
         .set('Authorization', `Bearer ${billingTokenWithMFA}`)

@@ -1,38 +1,35 @@
-# Super Admin Dashboard Specification
+# Admin Dashboard Specification
 
 ## Executive Summary
 
-The Super Admin Dashboard is a secure, comprehensive management interface for Scholaracle administrators to monitor, manage, and support all customers (parents/guardians) using the platform. It provides complete visibility into customer activity, subscription status, payment history, and communication logs.
+The Admin Dashboard is a secure, comprehensive management interface for Scholaracle administrators to monitor, manage, and support all customers (parents/guardians) using the platform. It provides complete visibility into customer activity, subscription status, payment history, and communication logs.
 
 ---
 
-## 1. Roles & Permissions
+## 1. Roles & Access
 
-### 1.1 Role Hierarchy
+### 1.1 User Types
 
-| Role | Level | Description |
-|------|-------|-------------|
-| `super_admin` | 100 | Full system access, all permissions |
-| `admin` | 80 | Customer management, limited system config |
-| `support` | 60 | View-only customer data, communication logs |
-| `billing` | 50 | Payment and subscription management only |
-| `analyst` | 40 | Analytics and reporting only |
+The system has three user types:
 
-### 1.2 Permission Matrix
+| User Type | Description |
+|-----------|-------------|
+| `admin` | Full system access — customer management, billing, analytics, system configuration, and all other admin features |
+| `parent` | Customer-facing account — manages students, views alerts, configures settings |
+| `student` | Student profile managed by a parent |
 
-| Permission | Super Admin | Admin | Support | Billing | Analyst |
-|------------|-------------|-------|---------|---------|---------|
-| View all customers | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Edit customer data | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Delete customer | ✅ | ❌ | ❌ | ❌ | ❌ |
-| View payments | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Issue refunds | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Modify subscriptions | ✅ | ✅ | ❌ | ✅ | ❌ |
-| View communication logs | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Send communications | ✅ | ✅ | ✅ | ❌ | ❌ |
-| View analytics | ✅ | ✅ | ❌ | ✅ | ✅ |
-| System configuration | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Manage admin users | ✅ | ❌ | ❌ | ❌ | ❌ |
+### 1.2 Admin Access
+
+All admins have full access to every feature in the admin dashboard. There is no role hierarchy or permission matrix — any authenticated admin can perform all administrative actions including:
+
+- View and edit all customers
+- Manage subscriptions and payments
+- Issue refunds
+- View and send communications
+- Access analytics and reports
+- Configure system settings
+- Manage other admin users
+- View audit logs
 
 ---
 
@@ -43,14 +40,13 @@ The Super Admin Dashboard is a secure, comprehensive management interface for Sc
 ```typescript
 // packages/database/src/models/AdminUser/AdminUser.ts
 
-export type AdminRole = 'super_admin' | 'admin' | 'support' | 'billing' | 'analyst';
+export type AdminRole = 'admin';
 
 export interface IAdminUserData {
   readonly email: string;
   readonly passwordHash: string;
   readonly name: string;
   readonly role: AdminRole;
-  readonly permissions?: readonly string[];
   readonly isActive: boolean;
   readonly lastLogin?: Date;
   readonly mfaEnabled?: boolean;
@@ -66,7 +62,6 @@ export class AdminUser {
   public readonly passwordHash: string;
   public readonly name: string;
   public readonly role: AdminRole;
-  public readonly permissions: readonly string[];
   public readonly isActive: boolean;
   public readonly lastLogin?: Date;
   public readonly mfaEnabled: boolean;
@@ -76,10 +71,6 @@ export class AdminUser {
 
   constructor(data: IAdminUserData, id?: ObjectId) {
     // Implementation
-  }
-
-  hasPermission(permission: string): boolean {
-    // Check role-based and explicit permissions
   }
 }
 ```
@@ -485,7 +476,7 @@ export interface IAdminNoteData {
 
 ### 3.8 System Settings (`/admin/settings`)
 
-**Purpose:** Platform configuration (Super Admin only)
+**Purpose:** Platform configuration
 
 **Sections:**
 - Admin user management
@@ -594,10 +585,10 @@ export interface IAdminNoteData {
 - IP allowlisting option for admin access
 
 ### 5.2 Authorization
-- Role-based access control (RBAC)
+- All authenticated admins have full access to all admin features
 - Audit logging for all admin actions
 - Separate admin JWT with elevated permissions
-- Permission checks on every API call
+- Authentication checks on every API call
 
 ### 5.3 Data Protection
 - Mask sensitive data (full email, phone, card numbers)
@@ -629,7 +620,6 @@ interface IAuditLog {
 ### Phase 1: Foundation (Week 1-2)
 - [ ] Admin user model and repository
 - [ ] Admin authentication with MFA
-- [ ] Role-based permission system
 - [ ] Audit logging infrastructure
 - [ ] Basic admin layout and navigation
 

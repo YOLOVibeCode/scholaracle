@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Settings,
   ClipboardList,
+  Code2,
   LogOut,
   Menu,
   X,
@@ -27,34 +28,6 @@ function getInitialAdminUser(): { id: string; email: string; name: string; role:
   }
 }
 
-/** Human-readable label for admin role (for display in UI). */
-function getRoleLabel(role: string): string {
-  const labels: Record<string, string> = {
-    super_admin: 'Super Admin',
-    admin: 'Admin',
-    support: 'Support',
-    billing: 'Billing',
-    analyst: 'Analyst',
-  };
-  return labels[role] ?? role;
-}
-
-function isForbiddenByRole(role: string, pathname: string): boolean {
-  const forbiddenByRole: Record<string, readonly RegExp[]> = {
-    // Support: no billing or system settings
-    support: [/^\/admin\/settings/, /^\/admin\/payments/, /^\/admin\/subscriptions/, /^\/admin\/audit-logs/],
-    // Billing: no communications or system settings
-    billing: [/^\/admin\/communications/, /^\/admin\/settings/, /^\/admin\/audit-logs/],
-    // Analyst: no system settings / audit logs / communications / subscriptions management
-    analyst: [/^\/admin\/settings/, /^\/admin\/audit-logs/, /^\/admin\/communications/, /^\/admin\/subscriptions/],
-    // Admin: no system settings / audit logs
-    admin: [/^\/admin\/settings/, /^\/admin\/audit-logs/],
-    // Super admin: everything allowed
-    super_admin: [],
-  };
-
-  return (forbiddenByRole[role] ?? []).some((re) => re.test(pathname));
-}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -71,30 +44,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (user) setAdminUser(user);
   }, [router]);
 
-  const forbidden = useMemo(() => {
-    if (!adminUser) return false;
-    return isForbiddenByRole(adminUser.role, pathname);
-  }, [adminUser, pathname]);
-
-  // Enforce auth + RBAC as early as possible for best UX (and stable E2E).
+  // Enforce auth as early as possible for best UX (and stable E2E).
   useLayoutEffect(() => {
     if (isLoginRoute) return;
     if (!adminUser) {
       router.replace('/admin/login');
-      return;
     }
-    if (forbidden) {
-      router.replace('/admin/dashboard');
-    }
-  }, [adminUser, forbidden, isLoginRoute, router]);
+  }, [adminUser, isLoginRoute, router]);
 
   const handleLogout = async () => {
     await adminAuthApi.logout();
     router.push('/admin/login');
   };
 
-  // Avoid rendering forbidden routes (prevents flicker and makes denial deterministic).
-  if (!isLoginRoute && (!adminUser || forbidden)) {
+  // Avoid rendering before auth check completes (prevents flicker).
+  if (!isLoginRoute && !adminUser) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
         <p className="text-sm text-gray-600 dark:text-gray-400">Redirecting…</p>
@@ -109,6 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/payments', icon: FileText, label: 'Payments' },
     { href: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
     { href: '/admin/reports', icon: ClipboardList, label: 'Reports' },
+    { href: '/admin/scrapers', icon: Code2, label: 'Scrapers' },
     { href: '/admin/communications', icon: MessageSquare, label: 'Communications' },
     { href: '/admin/settings', icon: Settings, label: 'Settings' },
     { href: '/admin/audit-logs', icon: ClipboardList, label: 'Audit Logs' },
@@ -127,7 +92,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Scholaracle Admin</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1" data-testid="admin-role-label">
-              {adminUser ? getRoleLabel(adminUser.role) : ''}
+              {adminUser ? 'Admin' : ''}
             </p>
           </div>
 

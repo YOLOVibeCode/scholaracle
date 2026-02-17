@@ -2,8 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { analyticsRouter } from './analytics';
-import { AdminAuthService } from '@scholaracle/auth';
-import { AdminUserRepository } from '@scholaracle/database';
+import { createTestAdmin } from '../../../test-utils/admin-test-helper';
 
 describe('Admin Analytics Routes', () => {
   let app: Express;
@@ -17,23 +16,13 @@ describe('Admin Analytics Routes', () => {
     await client.connect();
     database = client.db('scholaracle_test');
 
-    // Create admin user and get token
-    const passwordHash = await AdminUserRepository.hashPassword('AdminPass123!');
-    await new AdminUserRepository(database).create({
+    const { token } = await createTestAdmin(database, 'test-secret', {
       email: 'analytics-admin@test.com',
-      passwordHash,
+      password: 'AdminPass123!',
       name: 'Analytics Admin',
-      role: 'analyst',
+      role: 'admin',
     });
-
-    const adminAuthService = new AdminAuthService(database, 'test-secret');
-    const loginResult = await adminAuthService.login('analytics-admin@test.com', 'AdminPass123!');
-    
-    if (!loginResult.success || !loginResult.token) {
-      throw new Error('Failed to login admin user');
-    }
-    
-    adminToken = loginResult.token;
+    adminToken = token;
 
     app = express();
     app.use(express.json());

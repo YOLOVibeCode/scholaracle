@@ -6,9 +6,18 @@ import {
   type IDataSource,
   type IDataSourceCredentials,
 } from '@scholaracle/database';
+import { ConnectorTokenService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
-import { encryptCredentials } from '../../utils/credentialsCipher';
-import { createIntegrationSchema, updateIntegrationSchema, assignStudentSchema } from './schemas';
+import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
+import { packageSingleFile, packageMultiStudent, type TargetOS } from '../../services/scraper-generator/packager';
+import { processScraperGenerationJob, isKnownPlatform } from '../../services/scraper-generator/job-processor';
+import { createHash } from 'node:crypto';
+import {
+  createIntegrationSchema,
+  updateIntegrationSchema,
+  assignStudentSchema,
+  testConnectionSchema,
+} from './schemas';
 
 export interface IIntegrationsRouterConfig {
   readonly database: import('mongodb').Db;
@@ -16,6 +25,137 @@ export interface IIntegrationsRouterConfig {
 
 function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
+}
+
+interface ITestResult {
+  success: boolean;
+  message: string;
+  durationMs: number;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Lightweight connection test — makes a single API call to verify credentials.
+ * Implemented inline (no dependency on @scholaracle/connector) to keep the API server lean.
+ */
+async function testConnectionForProvider(
+  provider: string,
+  baseUrl: string,
+  credentials: {
+    accessToken?: string;
+    username?: string;
+    password?: string;
+    clientId?: string;
+    clientSecret?: string;
+    apiKey?: string;
+  }
+): Promise<ITestResult> {
+  const start = Date.now();
+
+  try {
+    switch (provider) {
+      case 'canvas': {
+        if (!credentials.accessToken) {
+          return { success: false, message: 'Canvas requires an access token', durationMs: Date.now() - start };
+        }
+        const res = await fetch(`${baseUrl}/api/v1/users/self`, {
+          headers: { authorization: `Bearer ${credentials.accessToken}` },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { success: false, message: `Canvas returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+        }
+        const user = (await res.json()) as { id: number; name: string };
+        const coursesRes = await fetch(`${baseUrl}/api/v1/courses?enrollment_state=active&per_page=5`, {
+          headers: { authorization: `Bearer ${credentials.accessToken}` },
+        });
+        const courses = coursesRes.ok ? ((await coursesRes.json()) as unknown[]) : [];
+        return {
+          success: true,
+          message: `Connected as ${user.name} — found ${courses.length}${courses.length === 5 ? '+' : ''} courses`,
+          durationMs: Date.now() - start,
+          details: { userName: user.name, courseCount: courses.length },
+        };
+      }
+
+      case 'google-classroom': {
+        if (!credentials.accessToken) {
+          return { success: false, message: 'Google Classroom requires an OAuth access token', durationMs: Date.now() - start };
+        }
+        const res = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=5', {
+          headers: { authorization: `Bearer ${credentials.accessToken}` },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { success: false, message: `Google Classroom returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+        }
+        const data = (await res.json()) as { courses?: unknown[] };
+        const count = data.courses?.length ?? 0;
+        return {
+          success: true,
+          message: `Connected — found ${count} course${count !== 1 ? 's' : ''}`,
+          durationMs: Date.now() - start,
+          details: { courseCount: count },
+        };
+      }
+
+      case 'oneroster': {
+        if (!credentials.accessToken && !(credentials.clientId && credentials.clientSecret)) {
+          return { success: false, message: 'OneRoster requires an access token or client credentials', durationMs: Date.now() - start };
+        }
+        let token = credentials.accessToken;
+        if (!token && credentials.clientId && credentials.clientSecret) {
+          const tokenRes = await fetch(`${baseUrl}/token`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'client_credentials',
+              client_id: credentials.clientId,
+              client_secret: credentials.clientSecret,
+            }).toString(),
+          });
+          if (!tokenRes.ok) {
+            return { success: false, message: `OAuth token exchange failed: HTTP ${tokenRes.status}`, durationMs: Date.now() - start };
+          }
+          const tokenData = (await tokenRes.json()) as { access_token: string };
+          token = tokenData.access_token;
+        }
+        const res = await fetch(`${baseUrl}/orgs?limit=1`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { success: false, message: `OneRoster returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+        }
+        const data = (await res.json()) as { orgs?: Array<{ name?: string }> };
+        const orgName = data.orgs?.[0]?.name;
+        return {
+          success: true,
+          message: `Connected${orgName ? ` to ${orgName}` : ''}`,
+          durationMs: Date.now() - start,
+          details: { institutionName: orgName },
+        };
+      }
+
+      case 'skyward': {
+        return {
+          success: false,
+          message: 'Skyward test connection requires browser-based scraping and is not available via the API. Credentials will be verified during the first sync.',
+          durationMs: Date.now() - start,
+        };
+      }
+
+      default:
+        return {
+          success: false,
+          message: `Test connection not supported for provider "${provider}" yet`,
+          durationMs: Date.now() - start,
+        };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
+  }
 }
 
 /**
@@ -62,6 +202,38 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       });
 
       res.status(200).json(list);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/test-connection
+   * Test credentials against an LMS without persisting anything.
+   * Returns success/failure with a human-readable message.
+   */
+  router.post('/test-connection', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const parsed = testConnectionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
+        res.status(400).json({ success: false, error: msg });
+        return;
+      }
+      const { provider, baseUrl, credentials } = parsed.data;
+
+      const testResult = await testConnectionForProvider(provider, baseUrl ?? '', credentials);
+
+      res.status(200).json(testResult);
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -350,7 +522,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -431,7 +603,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       }
 
       const student = await studentRepository.findById(studentId);
-      if (!student || student.userId.toString() !== userId) {
+      if (!student || !student.hasAccess(userId)) {
         res.status(404).json({ success: false, error: 'Student not found' });
         return;
       }
@@ -447,6 +619,591 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       await studentRepository.update(studentId, { dataSources: newDataSources });
 
       res.status(200).json({ success: true });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Scraper Token Management
+  // -------------------------------------------------------------------------
+
+  const connectorTokenService = new ConnectorTokenService(undefined, '365d');
+  const revokedTokensCollection = config.database.collection('revoked_connector_tokens');
+
+  /**
+   * POST /api/integrations/scraper-token
+   * Generate a new scraper connector token (1yr expiry).
+   * Revokes any previous scraper token for this user.
+   */
+  router.post('/scraper-token', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      // Revoke previous scraper token(s) for this user
+      await revokedTokensCollection.updateMany(
+        { userId, tokenPurpose: 'scraper' },
+        { $set: { revokedAt: new Date() } },
+      );
+
+      // Generate new token
+      const jti = randomUUID();
+      const token = connectorTokenService.createToken(userId, jti);
+
+      // Record the token for future revocation tracking
+      await revokedTokensCollection.insertOne({
+        userId,
+        jti,
+        tokenPurpose: 'scraper',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+
+      res.status(200).json({
+        success: true,
+        token,
+        jti,
+        expiresIn: '365 days',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/integrations/scraper-token
+   * Get current scraper token status (active/expiring/expired/none).
+   */
+  router.get('/scraper-token', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const tokenDoc = await revokedTokensCollection.findOne(
+        { userId, tokenPurpose: 'scraper', revokedAt: null },
+        { sort: { createdAt: -1 } },
+      );
+
+      if (!tokenDoc) {
+        res.status(200).json({ success: true, status: 'none' });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        status: 'active',
+        createdAt: tokenDoc['createdAt'],
+        jti: tokenDoc['jti'],
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/integrations/scraper-token
+   * Revoke the current scraper token.
+   */
+  router.delete('/scraper-token', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const result = await revokedTokensCollection.updateMany(
+        { userId, tokenPurpose: 'scraper', revokedAt: null },
+        { $set: { revokedAt: new Date() } },
+      );
+
+      res.status(200).json({
+        success: true,
+        revoked: result.modifiedCount,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/integrations/scraper-script
+   * Download a personalized setup script with the user's token baked in.
+   */
+  router.get('/scraper-script', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      // Generate a fresh token for the script
+      const jti = randomUUID();
+      const token = connectorTokenService.createToken(userId, jti);
+
+      // Revoke previous + record new
+      await revokedTokensCollection.updateMany(
+        { userId, tokenPurpose: 'scraper' },
+        { $set: { revokedAt: new Date() } },
+      );
+      await revokedTokensCollection.insertOne({
+        userId,
+        jti,
+        tokenPurpose: 'scraper',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+
+      const apiBaseUrl = process.env['API_BASE_URL'] ?? 'https://api.scholarmancy.com';
+
+      const script = `#!/bin/bash
+# Scholaracle Scraper Setup Script
+# Generated for your account — do not share this file.
+# Token expires in 365 days.
+
+set -e
+
+echo ""
+echo "  Scholaracle Scraper Setup"
+echo "  ─────────────────────────"
+echo ""
+
+# Check Node.js
+if ! command -v node &> /dev/null; then
+  echo "  ✗ Node.js is not installed."
+  echo "  Install it from https://nodejs.org/ (v18 or later)"
+  exit 1
+fi
+echo "  ✓ Node.js $(node -v) detected"
+
+# Install scholaracle-scraper
+echo "  Installing scholaracle-scraper..."
+npm install -g scholaracle-scraper 2>/dev/null || npm install scholaracle-scraper
+echo "  ✓ Installed"
+
+# Write config
+CONFIG_DIR="$HOME/.scholaracle-scraper"
+mkdir -p "$CONFIG_DIR"
+cat > "$CONFIG_DIR/config.json" << 'CONFIGEOF'
+{
+  "apiBaseUrl": "${apiBaseUrl}",
+  "connectorToken": "${token}"
+}
+CONFIGEOF
+echo "  ✓ Configuration saved to $CONFIG_DIR/config.json"
+
+echo ""
+echo "  You're all set! Next steps:"
+echo "    npx scholaracle-scraper run         → Run a scraper"
+echo "    npx scholaracle-scraper generate    → Create a custom scraper with AI"
+echo "    npx scholaracle-scraper schedule    → Set up automatic runs"
+echo ""
+`;
+
+      res.setHeader('Content-Type', 'application/x-sh');
+      res.setHeader('Content-Disposition', 'attachment; filename="scholaracle-setup.sh"');
+      res.status(200).send(script);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Server-Side Scraper Generation
+  // -------------------------------------------------------------------------
+
+  const generatedScrapersCollection = config.database.collection('generated_scrapers');
+  const scraperGenerationJobsCollection = config.database.collection('scraper_generation_jobs');
+
+  const defaultSteps = [
+    { name: 'connect', status: 'pending' as const, details: null },
+    { name: 'crawl', status: 'pending' as const, details: null },
+    { name: 'authenticate_check', status: 'pending' as const, details: null },
+    { name: 'generate', status: 'pending' as const, details: null },
+    { name: 'validate', status: 'pending' as const, details: null },
+  ];
+
+  /**
+   * POST /api/integrations/generate-scraper
+   * Queue a generation job for unknown platforms; return cached/reference for known/cached.
+   */
+  router.post('/generate-scraper', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { platformName, loginUrl, loginMethod } = req.body ?? {};
+      if (!platformName || !loginUrl || !loginMethod) {
+        res.status(400).json({ success: false, error: 'Missing required fields: platformName, loginUrl, loginMethod' });
+        return;
+      }
+
+      const cacheKey = createHash('sha256').update(`${platformName}|${loginUrl}`).digest('hex');
+
+      if (isKnownPlatform(platformName)) {
+        res.status(200).json({
+          success: true,
+          scraperId: null,
+          jobId: null,
+          platformName,
+          fromCache: true,
+          knownPlatform: true,
+          code: {
+            scraper: `// Reference scraper for ${platformName}`,
+            transformer: `// Reference transformer for ${platformName}`,
+            metadata: JSON.stringify({ id: `${platformName}-browser`, name: platformName, version: '1.0.0' }, null, 2),
+          },
+        });
+        return;
+      }
+
+      const cached = await generatedScrapersCollection.findOne({
+        cacheKey,
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60_000) },
+      });
+
+      if (cached) {
+        res.status(200).json({
+          success: true,
+          scraperId: cached['_id'].toString(),
+          jobId: null,
+          platformName,
+          fromCache: true,
+          code: {
+            scraper: cached['scraperCode'],
+            transformer: cached['transformerCode'],
+            metadata: cached['metadata'],
+          },
+        });
+        return;
+      }
+
+      const jobId = randomUUID();
+      const now = new Date();
+      await scraperGenerationJobsCollection.insertOne({
+        jobId,
+        userId,
+        platformName,
+        loginUrl,
+        cacheKey,
+        status: 'queued',
+        createdAt: now,
+        updatedAt: now,
+        steps: defaultSteps,
+        result: null,
+        error: null,
+        retryCount: 0,
+      });
+
+      setImmediate(() => {
+        processScraperGenerationJob(config.database, jobId).catch((err) => {
+          console.error('[scraper-generation] job failed:', jobId, err);
+        });
+      });
+
+      res.status(200).json({
+        success: true,
+        scraperId: null,
+        jobId,
+        platformName,
+        fromCache: false,
+        status: 'queued',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/integrations/generate-status?jobId=...
+   * Poll job status for dashboard real-time progress.
+   */
+  router.get('/generate-status', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const jobId = req.query['jobId'] as string | undefined;
+      if (!jobId) {
+        res.status(400).json({ success: false, error: 'Missing jobId' });
+        return;
+      }
+      const job = await scraperGenerationJobsCollection.findOne({ jobId, userId });
+      if (!job) {
+        res.status(404).json({ success: false, error: 'Job not found' });
+        return;
+      }
+      res.status(200).json({
+        success: job['status'] === 'ready' || job['status'] === 'failed',
+        jobId: job['jobId'],
+        status: job['status'],
+        steps: job['steps'],
+        result: job['result'] ?? undefined,
+        error: job['error'] ?? undefined,
+        platformName: job['platformName'],
+        loginUrl: job['loginUrl'],
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/scraper-report
+   * Script phones home on failure for auto-regeneration tracking.
+   */
+  const scraperReportsCollection = config.database.collection('scraper_reports');
+
+  router.post('/scraper-report', async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const { cacheKey, status, error: reportError, generatedAt } = body as {
+        cacheKey?: string;
+        status?: string;
+        error?: string;
+        generatedAt?: string;
+      };
+      if (!cacheKey || status !== 'failed') {
+        res.status(200).json({ success: true });
+        return;
+      }
+      await scraperReportsCollection.insertOne({
+        cacheKey,
+        status: 'failed',
+        error: (reportError ?? '').slice(0, 500),
+        generatedAt: generatedAt ? new Date(generatedAt) : new Date(),
+        reportedAt: new Date(),
+      });
+      res.status(200).json({ success: true });
+    } catch {
+      res.status(200).json({ success: true });
+    }
+  });
+
+  /**
+   * POST /api/integrations/scraper-download
+   * Download a single-file scraper (.command for Mac, .bat for Windows).
+   * Body: { os, scraperId?, platform?, url?, credentials? } for single-platform.
+   * Body: { os, students?: [{ studentId, studentName, platforms: [{ platform, loginUrl, scraperId?, credentials }] }] } for multi.
+   * If students is omitted, server builds from all user's students and their dataSources (self-hosted).
+   */
+  router.post('/scraper-download', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const body = req.body ?? {};
+      const os = body.os === 'windows' ? 'windows' : 'mac' as TargetOS;
+      const apiBaseUrl = process.env['API_BASE_URL'] ?? 'https://api.scholarmancy.com';
+
+      const jti = randomUUID();
+      const token = connectorTokenService.createToken(userId, jti);
+      await revokedTokensCollection.updateMany(
+        { userId, tokenPurpose: 'scraper' },
+        { $set: { revokedAt: new Date() } },
+      );
+      await revokedTokensCollection.insertOne({
+        userId, jti, tokenPurpose: 'scraper', createdAt: new Date(), revokedAt: null,
+      });
+
+      // Multi-student: body.students array or build from DB (useAllStudents / no platform)
+      const bodyStudents = body.students as Array<{
+        studentId: string;
+        studentName: string;
+        platforms: Array<{
+          platform: string;
+          loginUrl: string;
+          scraperId?: string;
+          credentials: { studentName?: string; username?: string; password?: string };
+        }>;
+      }> | undefined;
+      const useAllStudents = body.useAllStudents === true;
+
+      if (useAllStudents || (Array.isArray(bodyStudents) && bodyStudents.length > 0)) {
+        let studentsForMulti: Array<{
+          studentId: string;
+          studentName: string;
+          platforms: Array<{
+            studentId: string;
+            studentName: string;
+            platform: string;
+            loginUrl: string;
+            credentials: { studentName: string; username: string; password: string };
+          }>;
+        }>;
+
+        if (Array.isArray(bodyStudents) && bodyStudents.length > 0) {
+          studentsForMulti = bodyStudents.map((s) => ({
+            studentId: s.studentId,
+            studentName: s.studentName,
+            platforms: s.platforms.map((p) => ({
+              studentId: s.studentId,
+              studentName: s.studentName,
+              platform: p.platform,
+              loginUrl: p.loginUrl,
+              credentials: {
+                studentName: p.credentials?.studentName ?? s.studentName,
+                username: p.credentials?.username ?? '',
+                password: p.credentials?.password ?? '',
+              },
+            })),
+          }));
+        } else {
+          const students = await studentRepository.findByUserId(userId);
+          studentsForMulti = [];
+          for (const student of students) {
+            const platforms: Array<{ studentId: string; studentName: string; platform: string; loginUrl: string; credentials: { studentName: string; username: string; password: string } }> = [];
+            for (const ds of student.dataSources) {
+              const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, ds.id);
+              if (!ingestSource?.portalBaseUrl) continue;
+              let username = '';
+              let password = '';
+              if (ds.credentials?.encrypted && ds.credentials?.iv) {
+                const plain = decryptCredentials({ encrypted: ds.credentials.encrypted, iv: ds.credentials.iv });
+                if (plain) {
+                  try {
+                    const creds = JSON.parse(plain) as { username?: string; password?: string };
+                    username = creds.username ?? '';
+                    password = creds.password ?? '';
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+              platforms.push({
+                studentId: student._id?.toString() ?? '',
+                studentName: student.name,
+                platform: ingestSource.provider,
+                loginUrl: ingestSource.portalBaseUrl,
+                credentials: { studentName: student.name, username, password },
+              });
+            }
+            if (platforms.length > 0) {
+              studentsForMulti.push({
+                studentId: student._id?.toString() ?? '',
+                studentName: student.name,
+                platforms,
+              });
+            }
+          }
+        }
+
+        if (studentsForMulti.length === 0) {
+          res.status(400).json({ success: false, error: 'No students or platforms configured. Add data sources on student pages first.' });
+          return;
+        }
+
+        const script = packageMultiStudent({
+          connectorToken: token,
+          apiBaseUrl,
+          os,
+          students: studentsForMulti,
+        });
+        const ext = os === 'windows' ? '.bat' : '.command';
+        res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
+        res.setHeader('Content-Disposition', `attachment; filename="scholaracle-sync${ext}"`);
+        res.status(200).send(script);
+        return;
+      }
+
+      // Single-platform (existing flow)
+      const platformName = body.platform as string | undefined;
+      const scraperId = body.scraperId as string | undefined;
+      const credentials = body.credentials as { studentName?: string; username?: string; password?: string } | undefined;
+
+      let scraperCode: { scraperCode: string; transformerCode: string; metadata: string } | null = null;
+      let resolvedPlatformName = platformName ?? 'custom';
+      let resolvedLoginUrl = '';
+
+      if (scraperId) {
+        const { ObjectId } = await import('mongodb');
+        const doc = await generatedScrapersCollection.findOne({ _id: new ObjectId(scraperId) });
+        if (!doc) {
+          res.status(404).json({ success: false, error: 'Scraper not found' });
+          return;
+        }
+        scraperCode = {
+          scraperCode: doc['scraperCode'] as string,
+          transformerCode: doc['transformerCode'] as string,
+          metadata: doc['metadata'] as string,
+        };
+        resolvedPlatformName = doc['platformName'] as string;
+        resolvedLoginUrl = doc['loginUrl'] as string;
+      } else if (platformName) {
+        resolvedLoginUrl = (req.query['url'] as string) ?? (body.url as string) ?? '';
+        scraperCode = {
+          scraperCode: `// Reference scraper for ${platformName}\n// This uses the built-in ${platformName} scraper from the Scholaracle library.`,
+          transformerCode: `// Reference transformer for ${platformName}`,
+          metadata: JSON.stringify({
+            id: `${platformName.toLowerCase()}-browser`,
+            name: platformName,
+            version: '1.0.0',
+            description: `Scrapes student data from ${platformName}`,
+          }, null, 2),
+        };
+      }
+
+      if (!scraperCode) {
+        res.status(400).json({ success: false, error: 'Either scraperId, platformName, or students array is required' });
+        return;
+      }
+
+      const script = packageSingleFile({
+        connectorToken: token,
+        apiBaseUrl,
+        platformName: resolvedPlatformName,
+        loginUrl: resolvedLoginUrl || '',
+        scraper: scraperCode,
+        os,
+        credentials: credentials ? {
+          studentName: credentials.studentName ?? '',
+          username: credentials.username ?? '',
+          password: credentials.password ?? '',
+        } : undefined,
+      });
+
+      const ext = os === 'windows' ? '.bat' : '.command';
+      const fileName = `scholaracle-${resolvedPlatformName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}${ext}`;
+      res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.status(200).send(script);
     } catch (error) {
       res.status(500).json({
         success: false,

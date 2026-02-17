@@ -13,7 +13,7 @@
     "composite": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"],
+  "exclude": ["node_modules", "dist", "src/harness/skyward-browser-scrape.ts", "src/harness/canvas-full-extract.ts", "src/harness/aeries-browser-scrape.ts", "src/harness/canvas-browser-scrape.ts"],
   "references": [{ "path": "../contracts" }]
 }
 

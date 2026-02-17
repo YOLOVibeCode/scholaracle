@@ -78,7 +78,7 @@ describe('adminUsersApi', () => {
       const usersData = {
         success: true,
         data: [
-          { id: '1', email: 'admin@test.com', name: 'Admin', role: 'super_admin', isActive: true, mfaEnabled: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+          { id: '1', email: 'admin@test.com', name: 'Admin', role: 'admin', isActive: true, mfaEnabled: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
         ],
       };
       fetchSpy.mockResolvedValue(fakeResponse(usersData));
@@ -156,7 +156,7 @@ describe('adminUsersApi', () => {
 
   describe('update', () => {
     const userId = 'user-42';
-    const payload = { name: 'Updated Name', role: 'support' as const };
+    const payload = { name: 'Updated Name', role: 'admin' as const };
 
     it('PUTs to /admin/users/:id with payload and optional stepUpToken', async () => {
       fetchSpy.mockResolvedValue(fakeResponse({ success: true }));

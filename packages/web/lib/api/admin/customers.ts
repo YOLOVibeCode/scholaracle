@@ -125,7 +125,7 @@ export const adminCustomersApi = {
   },
 
   /**
-   * Delete customer (super_admin only).
+   * Delete customer (admin only).
    */
   async delete(id: string, reason: string): Promise<{ success: boolean }> {
     return apiClient.delete<{ success: boolean }>(`/admin/customers/${id}`, { reason }, true);
