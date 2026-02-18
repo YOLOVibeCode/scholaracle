@@ -143,6 +143,18 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
       for (const s of students) {
         if (s.studentId) studentNameByExternalId.set(s.studentId, s.name);
       }
+      const pendingColl = config.database.collection('slc_pending_student_reconciliation');
+      const linkedPending = await pendingColl
+        .find({ userId, linkedStudentId: { $nin: [null, undefined, ''] } })
+        .toArray();
+      for (const p of linkedPending) {
+        const extId = p['studentExternalId'] as string | undefined;
+        const linkedId = p['linkedStudentId'] as string | undefined;
+        if (extId && linkedId) {
+          const student = await studentRepo.findById(linkedId);
+          if (student) studentNameByExternalId.set(extId, student.name);
+        }
+      }
 
       const courseDocs = await config.database
         .collection('slc_courses')

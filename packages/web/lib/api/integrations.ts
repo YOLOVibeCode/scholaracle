@@ -80,6 +80,14 @@ export interface ITestConnectionResult {
   };
 }
 
+export interface IPendingReconciliation {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly studentExternalId: string;
+  readonly displayName: string;
+  readonly createdAt?: string;
+}
+
 /**
  * Integrations API (account-level providers).
  */
@@ -178,6 +186,46 @@ export const integrationsApi = {
     } catch (error) {
       console.error('Failed to unlink student from integration:', error);
       return false;
+    }
+  },
+
+  async listReconciliationPending(): Promise<readonly IPendingReconciliation[]> {
+    try {
+      const res = await apiClient.get<{ success: boolean; pending: IPendingReconciliation[] }>(
+        '/integrations/reconciliation/pending'
+      );
+      return res.pending ?? [];
+    } catch (error) {
+      console.error('Failed to load pending reconciliations:', error);
+      return [];
+    }
+  },
+
+  async linkReconciliation(pendingId: string, studentId: string): Promise<boolean> {
+    try {
+      const res = await apiClient.post<{ success: boolean }>(
+        `/integrations/reconciliation/${pendingId}/link`,
+        { studentId }
+      );
+      return res.success ?? false;
+    } catch (error) {
+      console.error('Failed to link reconciliation:', error);
+      return false;
+    }
+  },
+
+  async createStudentFromReconciliation(pendingId: string, name: string): Promise<{ studentId: string; name: string } | null> {
+    try {
+      const res = await apiClient.post<{ success: boolean; student?: { id: string; name: string }; linkedStudentId?: string }>(
+        `/integrations/reconciliation/${pendingId}/create`,
+        { name: name.trim() }
+      );
+      const id = res.linkedStudentId ?? res.student?.id;
+      const studentName = res.student?.name ?? name.trim();
+      return id ? { studentId: id, name: studentName } : null;
+    } catch (error) {
+      console.error('Failed to create student from reconciliation:', error);
+      return null;
     }
   },
 };

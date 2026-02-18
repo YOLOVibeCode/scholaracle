@@ -1,4 +1,5 @@
 import type { IGeneratedScraper } from './ai-generator';
+import type { IScraperCode } from './scraper-code-resolver';
 
 export type TargetOS = 'mac' | 'windows';
 
@@ -70,6 +71,402 @@ export function packageMultiStudent(options: IPackageMultiOptions): string {
     return generateWindowsBatMulti(options);
   }
   return generateMacCommandMulti(options);
+}
+
+// ---------------------------------------------------------------------------
+// Bundle: connection-centric, one script, run connections in parallel
+// ---------------------------------------------------------------------------
+
+export interface IFileEntry {
+  readonly filename: string;
+  readonly content: string;
+}
+
+/** Connection slot for bundle (no scraper code yet; resolved by API). */
+export interface IBundleConnectionSlot {
+  readonly platformId: string;
+  readonly platformName: string;
+  readonly loginUrl: string;
+  readonly scraperId?: string | null;
+  readonly credentials: {
+    readonly username: string;
+    readonly password: string;
+    readonly studentNameHint?: string;
+  };
+}
+
+/** Resolved connection with scraper code embedded (used by packager after resolve). */
+export interface IResolvedBundleConnection extends IBundleConnectionSlot {
+  readonly scraper: IScraperCode;
+}
+
+export interface IPackageBundleOptions {
+  readonly connectorToken: string;
+  readonly apiBaseUrl: string;
+  readonly os: TargetOS;
+  readonly connections: ReadonlyArray<IResolvedBundleConnection>;
+}
+
+/**
+ * Pure function: build list of files to embed in the bundle script.
+ * Used by generateMacCommandBundle / generateWindowsBatBundle to emit scraper-{platformId}.ts, etc.
+ */
+export function emitBundleFiles(
+  connections: ReadonlyArray<IResolvedBundleConnection>,
+  opts: { apiBaseUrl: string; connectorToken: string }
+): IFileEntry[] {
+  const files: IFileEntry[] = [];
+  for (const c of connections) {
+    files.push({ filename: `scraper-${c.platformId}.ts`, content: c.scraper.scraperCode });
+    files.push({ filename: `transformer-${c.platformId}.ts`, content: c.scraper.transformerCode });
+    files.push({ filename: `metadata-${c.platformId}.json`, content: c.scraper.metadata });
+  }
+  const payload = {
+    apiBaseUrl: opts.apiBaseUrl,
+    connectorToken: opts.connectorToken,
+    connections: connections.map((c) => ({
+      platformId: c.platformId,
+      platformName: c.platformName,
+      loginUrl: c.loginUrl,
+      credentials: c.credentials,
+    })),
+  };
+  files.push({ filename: 'payload.json', content: JSON.stringify(payload, null, 2) });
+  files.push({
+    filename: 'package.json',
+    content: JSON.stringify(
+      {
+        name: 'scholaracle-scraper',
+        private: true,
+        scripts: { start: 'node run.js' },
+        dependencies: {
+          playwright: '^1.48.0',
+          axios: '^1.7.0',
+          'ts-node': '^10.9.0',
+          typescript: '^5.0.0',
+        },
+      },
+      null,
+      2
+    ),
+  });
+  files.push({
+    filename: 'tsconfig.json',
+    content: JSON.stringify(
+      { compilerOptions: { target: 'ES2020', module: 'commonjs', esModuleInterop: true }, include: ['*.ts', 'run.js'] },
+      null,
+      2
+    ),
+  });
+  return files;
+}
+
+/**
+ * Generates one script that runs all connections in parallel (concurrency 3).
+ * Each connection: login → discover students (future) → scrape → upload envelope.
+ */
+export function packageBundle(options: IPackageBundleOptions): string {
+  if (options.os === 'windows') {
+    return generateWindowsBatBundle(options);
+  }
+  return generateMacCommandBundle(options);
+}
+
+function getBundleRunJs(): string {
+  return `const fs = require('fs');
+const path = require('path');
+const { chromium } = require('playwright');
+const axios = require('axios');
+
+const APP_DIR = __dirname;
+const payloadPath = path.join(APP_DIR, 'payload.json');
+const payload = JSON.parse(fs.readFileSync(payloadPath, 'utf-8'));
+
+const CONCURRENCY = 3;
+
+async function runConnection(conn, client) {
+  const creds = conn.credentials;
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  page.setDefaultTimeout(20000);
+  try {
+    await page.goto(conn.loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const emailSel = 'input[type="email"], input[name="email"], input[name="username"]';
+    const passSel = 'input[type="password"]';
+    const submitSel = 'button[type="submit"], input[type="submit"]';
+    if (await page.$(emailSel)) await page.fill(emailSel, creds.username || '');
+    if (await page.$(passSel)) await page.fill(passSel, creds.password || '');
+    if (await page.$(submitSel)) await page.click(submitSel);
+    await page.waitForTimeout(3000);
+    const sourceId = (conn.platformId || conn.platformName || 'custom').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const runRes = await client.post('/api/ingest/v1/runs', { sourceId });
+    const runId = runRes.data.runId;
+    const envelope = {
+      schemaVersion: 'slc.ingest.v1',
+      run: { runId, startedAt: new Date().toISOString(), provider: sourceId, adapterId: sourceId + '-browser', adapterVersion: '1.0.0', mode: 'delta', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      source: { sourceId: conn.platformId || conn.platformName, displayName: conn.platformName, portalBaseUrl: conn.loginUrl },
+      ops: [],
+    };
+    await client.post('/api/ingest/v1/runs/' + runId + '/envelope', envelope);
+    await client.post('/api/ingest/v1/runs/' + runId + '/complete', {});
+    return { ok: true };
+  } finally {
+    await browser.close();
+  }
+}
+
+async function runInBatches(arr, fn, limit) {
+  const results = [];
+  for (let i = 0; i < arr.length; i += limit) {
+    const batch = arr.slice(i, i + limit);
+    const batchResults = await Promise.all(batch.map((item) => fn(item)));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+async function main() {
+  console.log('\\n  Scholaracle Data Sync (Bundle)\\n');
+  const client = axios.create({
+    baseURL: payload.apiBaseUrl,
+    headers: { Authorization: 'Bearer ' + payload.connectorToken },
+    timeout: 30000,
+  });
+  let total = 0;
+  const results = await runInBatches(payload.connections, async (conn) => {
+    console.log('  ' + conn.platformName + ' (' + conn.loginUrl + ')');
+    try {
+      await runConnection(conn, client);
+      console.log('    ✓');
+      return 1;
+    } catch (err) {
+      console.log('    ✗ ' + (err.message || err));
+      return 0;
+    }
+  }, CONCURRENCY);
+  total = results.reduce((a, b) => a + b, 0);
+  console.log('\\n  Done. ' + total + ' connection(s) synced.\\n');
+}
+
+main().catch(err => { console.error(err); process.exit(1); });
+`;
+}
+
+/** Connection summary for generating bundle run.js (which files to load, lifecycle). */
+export interface IBundleRunnerConnection {
+  readonly platformId: string;
+  readonly platformName: string;
+}
+
+/**
+ * Generates run.js for the bundle flow: ts-node, per-connection scraper load, full BaseScraper lifecycle
+ * (initialize → authenticate → discoverStudents → switchToStudent → scrape → transform), ingest API.
+ */
+export function generateBundleRunJs(
+  connections: ReadonlyArray<IBundleRunnerConnection>
+): string {
+  if (connections.length === 0) {
+    return getBundleRunJs();
+  }
+  const loadComment = connections.map((c) => 'scraper-' + c.platformId + '.ts').join(', ');
+  return `require('ts-node/register');
+// Loads per-connection: ${loadComment}
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+
+const APP_DIR = __dirname;
+const payload = JSON.parse(fs.readFileSync(path.join(APP_DIR, 'payload.json'), 'utf-8'));
+const CONCURRENCY = 3;
+
+function runInBatches(arr, fn, limit) {
+  return (async function () {
+    const results = [];
+    for (let i = 0; i < arr.length; i += limit) {
+      const batch = arr.slice(i, i + limit);
+      const batchResults = await Promise.all(batch.map((item) => fn(item)));
+      results.push(...batchResults);
+    }
+    return results;
+  })();
+}
+
+async function runConnection(conn, client) {
+  const scraperPath = path.join(APP_DIR, 'scraper-' + conn.platformId + '.ts');
+  const mod = require(scraperPath);
+  const ScraperClass = mod.default || Object.values(mod).find(function (v) {
+    return typeof v === 'function' && v.prototype && typeof v.prototype.initialize === 'function';
+  });
+  if (!ScraperClass || typeof ScraperClass.prototype.initialize !== 'function') {
+    throw new Error('Scraper must export a class with initialize/authenticate/scrape/transform');
+  }
+  const instance = new ScraperClass();
+  const scraperConfig = {
+    credentials: {
+      username: conn.credentials.username || '',
+      password: conn.credentials.password || '',
+      studentNameHint: conn.credentials.studentNameHint,
+    },
+    loginUrl: conn.loginUrl,
+    platformName: conn.platformName,
+    headless: true,
+  };
+  await instance.initialize(scraperConfig);
+  await instance.authenticate();
+  let students = [{ externalId: 'default', name: 'Default' }];
+  if (typeof instance.discoverStudents === 'function') {
+    const discovered = await instance.discoverStudents();
+    if (Array.isArray(discovered) && discovered.length > 0) students = discovered;
+  }
+  const allOps = [];
+  for (const student of students) {
+    if (typeof instance.switchToStudent === 'function') {
+      await instance.switchToStudent(student);
+    }
+    let rawData;
+    try {
+      rawData = await instance.scrape();
+    } catch (e) {
+      continue;
+    }
+    let ops = [];
+    if (rawData != null && typeof instance.transform === 'function') {
+      ops = instance.transform(rawData) || [];
+    }
+    const studentExternalId = student && (student.externalId || student.id);
+    if (studentExternalId && Array.isArray(ops)) {
+      ops = ops.map(function (op) {
+        const o = Object.assign({}, op);
+        o.studentExternalId = studentExternalId;
+        return o;
+      });
+    }
+    allOps.push(...ops);
+  }
+  if (typeof instance.cleanup === 'function') await instance.cleanup();
+  const sourceId = (conn.platformId || conn.platformName || 'custom').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const runRes = await client.post('/api/ingest/v1/runs', { sourceId });
+  const runId = runRes.data.runId;
+  const envelope = {
+    schemaVersion: 'slc.ingest.v1',
+    run: {
+      runId,
+      startedAt: new Date().toISOString(),
+      provider: sourceId,
+      adapterId: sourceId + '-browser',
+      adapterVersion: '1.0.0',
+      mode: 'delta',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    source: {
+      sourceId: conn.platformId || conn.platformName,
+      displayName: conn.platformName,
+      portalBaseUrl: conn.loginUrl,
+    },
+    ops: Array.isArray(allOps) ? allOps : [],
+  };
+  await client.post('/api/ingest/v1/runs/' + runId + '/envelope', envelope);
+  await client.post('/api/ingest/v1/runs/' + runId + '/complete', {});
+  return { ok: true, count: allOps.length };
+}
+
+async function main() {
+  console.log('\\n  Scholaracle Data Sync (Bundle)\\n');
+  const client = axios.create({
+    baseURL: payload.apiBaseUrl,
+    headers: { Authorization: 'Bearer ' + payload.connectorToken },
+    timeout: 30000,
+  });
+  const results = await runInBatches(payload.connections, async (conn) => {
+    console.log('  ' + conn.platformName + ' (' + conn.loginUrl + ')');
+    try {
+      const r = await runConnection(conn, client);
+      console.log('    ✓');
+      return r;
+    } catch (err) {
+      console.log('    ✗ ' + (err.message || err));
+      return { ok: false };
+    }
+  }, CONCURRENCY);
+  const total = results.filter(function (r) { return r && r.ok; }).length;
+  console.log('\\n  Done. ' + total + ' connection(s) synced.\\n');
+}
+
+main().catch(function (err) { console.error(err); process.exit(1); });
+`;
+}
+
+function generateMacCommandBundle(opts: IPackageBundleOptions): string {
+  const appDir = '$HOME/.scholaracle-scraper';
+  const files = emitBundleFiles(opts.connections, {
+    apiBaseUrl: opts.apiBaseUrl,
+    connectorToken: opts.connectorToken,
+  });
+  const runJsContent = generateBundleRunJs(
+    opts.connections.map((c) => ({ platformId: c.platformId, platformName: c.platformName }))
+  );
+  const allFiles: IFileEntry[] = [...files, { filename: 'run.js', content: runJsContent }];
+  const fileWrites = allFiles
+    .map((f) => {
+      const filePath = `$APP_DIR/${f.filename}`;
+      return writeEmbeddedFile(filePath, f.content);
+    })
+    .join('\n');
+  const chmodPayload =
+    files.some((f) => f.filename === 'payload.json') &&
+    'chmod 600 "$APP_DIR/payload.json"';
+  return `#!/bin/bash
+set -e
+APP_DIR="${appDir}"
+mkdir -p "$APP_DIR"
+${fileWrites}
+${chmodPayload ? chmodPayload + '\n' : ''}if [ ! -d "$APP_DIR/node_modules" ]; then
+  echo "  Setting up (first time only)..."
+  cd "$APP_DIR" && npm install --silent 2>/dev/null && npx playwright install chromium 2>/dev/null
+  echo "  ✓ Ready"
+fi
+cd "$APP_DIR"
+node run.js
+echo ""
+echo "  Press Enter to close."
+read -r
+`;
+}
+
+function generateWindowsBatBundle(opts: IPackageBundleOptions): string {
+  const appDir = '%USERPROFILE%\\.scholaracle-scraper';
+  const files = emitBundleFiles(opts.connections, {
+    apiBaseUrl: opts.apiBaseUrl,
+    connectorToken: opts.connectorToken,
+  });
+  const runJsContent = generateBundleRunJs(
+    opts.connections.map((c) => ({ platformId: c.platformId, platformName: c.platformName }))
+  );
+  const allFiles: IFileEntry[] = [...files, { filename: 'run.js', content: runJsContent }];
+  const filesData = allFiles.map((f) => ({
+    n: f.filename,
+    c: Buffer.from(f.content, 'utf-8').toString('base64'),
+  }));
+  const nodeScript = `const fs=require('fs');const p=require('path');const d=process.env.APP_DIR;if(d){const files=${JSON.stringify(filesData)};files.forEach(function(f){fs.writeFileSync(p.join(d,f.n),Buffer.from(f.c,'base64').toString('utf8'));});}`;
+  const nodeScriptEscaped = nodeScript.replace(/"/g, '\\"');
+  return `@echo off
+chcp 65001 >nul
+set "APP_DIR=${appDir}"
+if not exist "%APP_DIR%" mkdir "%APP_DIR%"
+node -e "${nodeScriptEscaped}"
+if not exist "%APP_DIR%\\node_modules" (
+  echo   Setting up first time only...
+  cd /d "%APP_DIR%"
+  call npm install --silent 2>nul
+  call npx playwright install chromium 2>nul
+  echo   Ready
+)
+cd /d "%APP_DIR%"
+node run.js
+echo.
+pause
+`;
 }
 
 function getMultiRunJs(): string {
@@ -469,7 +866,7 @@ async function main() {
     const dateStr = generatedAt.toLocaleDateString();
     if (daysOld > 180) {
       console.log('  \\u26A0 WARNING: Scraper is ' + daysOld + ' days old (generated ' + dateStr + ')');
-      console.log('    Visit https://app.scholarmancy.com/dashboard to regenerate.');
+      console.log('    Visit https://scholarmancy.com/dashboard to regenerate.');
       console.log('');
     } else if (daysOld > 90) {
       console.log('  \\u26A0 Scraper: Generated ' + dateStr + ' (' + daysOld + ' days ago) — may be outdated');
@@ -645,7 +1042,7 @@ async function main() {
     if (!IS_SCHEDULED) {
       console.log('  Syncing to Scholaracle...     \\u2713');
       console.log('  Data synced for ' + creds.studentName + '!');
-      console.log('  Check your dashboard: https://app.scholarmancy.com/dashboard');
+      console.log('  Check your dashboard: https://scholarmancy.com/dashboard');
     } else {
       log('Upload complete');
     }
