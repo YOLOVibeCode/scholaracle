@@ -305,6 +305,7 @@ CONFIGEOF
 CREDSEOF
 
   # Write scraper files
+${opts.scraper.typesCode != null ? writeEmbeddedFile(`$APP_DIR/types.ts`, opts.scraper.typesCode, 'TYPESEOF') + '\n\n  ' : ''}${opts.scraper.baseScraperCode != null ? writeEmbeddedFile(`$APP_DIR/base-scraper.ts`, opts.scraper.baseScraperCode, 'BASESCRAPEREOF') + '\n\n  ' : ''}
 ${writeEmbeddedFile(`$APP_DIR/scraper.ts`, opts.scraper.scraperCode)}
 
 ${writeEmbeddedFile(`$APP_DIR/transformer.ts`, opts.scraper.transformerCode)}
@@ -389,7 +390,7 @@ if not exist "%APP_DIR%\\package.json" (
 
   powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\tsconfig.json', '{\"compilerOptions\":{\"module\":\"commonjs\",\"target\":\"ES2020\",\"esModuleInterop\":true,\"resolveJsonModule\":true},\"include\":[\"*.ts\"]}', [System.Text.Encoding]::UTF8)"
 
-  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\scraper.ts', '${escapeForPowerShell(opts.scraper.scraperCode)}', [System.Text.Encoding]::UTF8)"
+${opts.scraper.typesCode != null ? `  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\\\types.ts', '${escapeForPowerShell(opts.scraper.typesCode)}', [System.Text.Encoding]::UTF8)"\n\n` : ''}${opts.scraper.baseScraperCode != null ? `  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\\\base-scraper.ts', '${escapeForPowerShell(opts.scraper.baseScraperCode)}', [System.Text.Encoding]::UTF8)"\n\n` : ''}  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\scraper.ts', '${escapeForPowerShell(opts.scraper.scraperCode)}', [System.Text.Encoding]::UTF8)"
 
   powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\transformer.ts', '${escapeForPowerShell(opts.scraper.transformerCode)}', [System.Text.Encoding]::UTF8)"
 
@@ -503,11 +504,19 @@ async function main() {
   }
 
   const isFirstRun = !fs.existsSync(path.join(__dirname, '.last-run'));
+  const studentSlug = (creds.studentName || 'student').toLowerCase().replace(/\\s+/g, '-');
+  const institutionId = (function() {
+    try { return new URL(CONFIG.loginUrl || 'https://unknown').hostname; } catch (e) { return 'unknown'; }
+  })();
   const scraperConfig = {
-    credentials: creds,
-    loginUrl: CONFIG.loginUrl,
-    platformName: CONFIG.platformName,
-    headless: IS_SCHEDULED,
+    credentials: { ...creds, baseUrl: CONFIG.loginUrl || '' },
+    studentName: creds.studentName || 'Student',
+    studentExternalId: studentSlug,
+    institutionExternalId: institutionId,
+    sourceId: SOURCE_ID + '-' + studentSlug,
+    provider: CONFIG.platformName,
+    adapterId: ADAPTER_ID,
+    options: { headless: IS_SCHEDULED },
   };
 
   if (!IS_SCHEDULED) {
@@ -723,10 +732,10 @@ export function getRunJsContent(opts: IPackageOptions): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function writeEmbeddedFile(filePath: string, content: string): string {
-  return `  cat > "${filePath}" << 'EMBEDEOF'
+function writeEmbeddedFile(filePath: string, content: string, delimiter = 'EMBEDEOF'): string {
+  return `  cat > "${filePath}" << '${delimiter}'
 ${content}
-EMBEDEOF`;
+${delimiter}`;
 }
 
 function escapeForPowerShell(content: string): string {

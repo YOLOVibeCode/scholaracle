@@ -11,6 +11,7 @@ import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
 import { packageSingleFile, packageMultiStudent, type TargetOS } from '../../services/scraper-generator/packager';
 import { processScraperGenerationJob, isKnownPlatform } from '../../services/scraper-generator/job-processor';
+import { getReferenceScraper, normalizeToReferencePlatform } from '../../services/scraper-generator/reference-scrapers';
 import { createHash } from 'node:crypto';
 import {
   createIntegrationSchema,
@@ -1168,16 +1169,28 @@ echo ""
         resolvedLoginUrl = doc['loginUrl'] as string;
       } else if (platformName) {
         resolvedLoginUrl = (req.query['url'] as string) ?? (body.url as string) ?? '';
-        scraperCode = {
-          scraperCode: `// Reference scraper for ${platformName}\n// This uses the built-in ${platformName} scraper from the Scholaracle library.`,
-          transformerCode: `// Reference transformer for ${platformName}`,
-          metadata: JSON.stringify({
-            id: `${platformName.toLowerCase()}-browser`,
-            name: platformName,
-            version: '1.0.0',
-            description: `Scrapes student data from ${platformName}`,
-          }, null, 2),
-        };
+        const refId = normalizeToReferencePlatform(platformName);
+        const refBundle = refId ? getReferenceScraper(refId) : null;
+        if (refBundle) {
+          scraperCode = {
+            scraperCode: refBundle.scraperCode,
+            transformerCode: refBundle.transformerCode,
+            metadata: refBundle.metadata,
+            baseScraperCode: refBundle.baseScraperCode,
+            typesCode: refBundle.typesCode,
+          };
+        } else {
+          scraperCode = {
+            scraperCode: `// Reference scraper for ${platformName}\n// Set SCHOLARACLE_SCRAPERS_SRC or install scholaracle-scraper for real code.`,
+            transformerCode: `// Reference transformer for ${platformName}`,
+            metadata: JSON.stringify({
+              id: `${platformName.toLowerCase()}-browser`,
+              name: platformName,
+              version: '1.0.0',
+              description: `Scrapes student data from ${platformName}`,
+            }, null, 2),
+          };
+        }
       }
 
       if (!scraperCode) {

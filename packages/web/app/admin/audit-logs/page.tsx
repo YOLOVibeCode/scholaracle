@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -96,12 +97,56 @@ export default function AdminAuditLogsPage() {
       }
       downloadCsv(res.data ?? '');
       setToast('Export started.');
-      // Refresh so the new system:export entry appears.
       refresh();
     } finally {
       setIsExporting(false);
     }
   };
+
+  const paginationState = useMemo(() => ({ pageIndex: (result?.page ?? 1) - 1, pageSize: limit }), [result?.page, limit]);
+  const onPaginationChange = useCallback(
+    (updater: (prev: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) => {
+      const next = updater(paginationState);
+      setPage(next.pageIndex + 1);
+    },
+    [paginationState]
+  );
+
+  const auditColumns: ColumnDef<IAdminAuditLogItem, unknown>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'timestamp',
+        header: 'Time',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            {new Date(row.original.timestamp).toLocaleString()}
+          </span>
+        ),
+      },
+      { accessorKey: 'adminEmail', header: 'Admin', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.adminEmail}</span> },
+      {
+        accessorKey: 'action',
+        header: 'Action',
+        cell: ({ row }) => (
+          <Badge variant={row.original.severity === 'critical' ? 'destructive' : 'secondary'}>
+            {row.original.action}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'entityType',
+        header: 'Entity',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            {row.original.entityType}
+            {row.original.entityId ? `:${row.original.entityId}` : ''}
+          </span>
+        ),
+      },
+      { accessorKey: 'reason', header: 'Reason', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.reason ?? ''}</span> },
+    ],
+    []
+  );
 
   return (
     <div className="space-y-4" data-testid="audit-logs-page">
@@ -186,85 +231,36 @@ export default function AdminAuditLogsPage() {
 
           {(hasLoadedOnce || (!showFullLoading && !error)) && (
             <>
-              <Table data-testid="audit-logs-table">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Admin</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>Reason</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((x) => (
-                    <TableRow
-                      key={x.id}
-                      data-testid="audit-log-row"
-                      className="cursor-pointer"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        setSelected(x);
-                        setIsDetailOpen(true);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          setSelected(x);
-                          setIsDetailOpen(true);
-                        }
-                      }}
-                    >
-                      <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                        {new Date(x.timestamp).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-xs text-gray-600 dark:text-gray-400">{x.adminEmail}</TableCell>
-                      <TableCell>
-                        <Badge variant={x.severity === 'critical' ? 'destructive' : 'secondary'}>{x.action}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                        {x.entityType}
-                        {x.entityId ? `:${x.entityId}` : ''}
-                      </TableCell>
-                      <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                        {x.reason ?? ''}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {items.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-sm text-gray-600 dark:text-gray-400" data-testid="audit-empty">
-                        No audit logs found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-
-              <div className="mt-4 flex items-center justify-between">
-                <div className="text-xs text-gray-600 dark:text-gray-400" data-testid="audit-pagination-meta">
-                  Page {result?.page ?? 1} of {result?.totalPages ?? 1} • Total {result?.total ?? items.length}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={(result?.page ?? 1) <= 1}
-                    data-testid="audit-prev"
-                  >
-                    Prev
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.min(result?.totalPages ?? p + 1, p + 1))}
-                    disabled={(result?.page ?? 1) >= (result?.totalPages ?? 1)}
-                    data-testid="audit-next"
-                  >
-                    Next
-                  </Button>
-                </div>
+              <div data-testid="audit-pagination-meta" className="sr-only">
+                Page {result?.page ?? 1} of {result?.totalPages ?? 1} • Total {result?.total ?? items.length}
+              </div>
+              <div data-testid="audit-logs-table">
+              <DataTable
+                columns={auditColumns}
+                data={items}
+                pagination
+                manualPagination
+                pageCount={result?.totalPages ?? 1}
+                pageSize={limit}
+                state={{ pagination: paginationState }}
+                onPaginationChange={onPaginationChange}
+                getRowProps={(row) => ({
+                  'data-testid': 'audit-log-row',
+                  className: 'cursor-pointer',
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () => {
+                    setSelected(row.original);
+                    setIsDetailOpen(true);
+                  },
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setSelected(row.original);
+                      setIsDetailOpen(true);
+                    }
+                  },
+                })}
+              />
               </div>
             </>
           )}
