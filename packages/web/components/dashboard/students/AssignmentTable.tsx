@@ -1,6 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import type { ICourseAssignment, AssignmentStatus } from '@/lib/api/students';
+import { DataTable } from '@/components/ui/data-table';
 
 export interface AssignmentTableProps {
   assignments: readonly ICourseAssignment[];
@@ -45,6 +48,33 @@ function percentText(a: ICourseAssignment): string {
 }
 
 export function AssignmentTable({ assignments, courseName }: AssignmentTableProps) {
+  const columns: ColumnDef<ICourseAssignment, unknown>[] = useMemo(
+    () => [
+      { accessorKey: 'title', header: 'Title', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
+      { accessorKey: 'dueAt', header: 'Due date', cell: ({ row }) => <span className="text-muted-foreground">{formatDueDate(row.original.dueAt)}</span> },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.original.status)}`}>
+            {row.original.status}
+          </span>
+        ),
+      },
+      {
+        id: 'score',
+        header: () => <div className="text-right">Score</div>,
+        cell: ({ row }) => <div className="text-right tabular-nums">{scoreText(row.original)}</div>,
+      },
+      {
+        id: 'percent',
+        header: () => <div className="text-right">%</div>,
+        cell: ({ row }) => <div className="text-right tabular-nums">{percentText(row.original)}</div>,
+      },
+    ],
+    []
+  );
+
   if (assignments.length === 0) {
     return (
       <div className="rounded-lg border bg-muted/20 p-6 text-center text-muted-foreground" data-testid="assignment-table-empty">
@@ -54,38 +84,15 @@ export function AssignmentTable({ assignments, courseName }: AssignmentTableProp
   }
 
   return (
-    <div className="rounded-lg border bg-card" data-testid="assignment-table">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="px-4 py-3 text-left font-medium">Title</th>
-              <th className="px-4 py-3 text-left font-medium">Due date</th>
-              <th className="px-4 py-3 text-left font-medium">Status</th>
-              <th className="px-4 py-3 text-right font-medium">Score</th>
-              <th className="px-4 py-3 text-right font-medium">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assignments.map((a) => (
-              <tr
-                key={a.externalId}
-                className={`border-b last:border-b-0 ${a.status === 'missing' || a.isOverdue ? 'bg-red-50/50 dark:bg-red-950/20' : ''}`}
-              >
-                <td className="px-4 py-2 font-medium">{a.title}</td>
-                <td className="px-4 py-2 text-muted-foreground">{formatDueDate(a.dueAt)}</td>
-                <td className="px-4 py-2">
-                  <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(a.status)}`}>
-                    {a.status}
-                  </span>
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums">{scoreText(a)}</td>
-                <td className="px-4 py-2 text-right tabular-nums">{percentText(a)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div data-testid="assignment-table">
+      <DataTable
+        columns={columns}
+        data={assignments}
+        sorting
+        getRowProps={(row) => ({
+          className: row.original.status === 'missing' || row.original.isOverdue ? 'bg-red-50/50 dark:bg-red-950/20' : undefined,
+        })}
+      />
     </div>
   );
 }

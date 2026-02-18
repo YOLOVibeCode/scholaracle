@@ -370,6 +370,177 @@ describe('generateBundleRunJs', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Integration: AI-generated scraper code compiles and runs the full lifecycle
+// ---------------------------------------------------------------------------
+
+describe('AI-generated scraper lifecycle', () => {
+  const tmpDir = require('os').tmpdir();
+  const path = require('path');
+  const fs = require('fs');
+  let workDir: string;
+
+  beforeEach(() => {
+    workDir = path.join(tmpDir, `packager-ai-${Date.now()}`);
+    fs.mkdirSync(workDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('realistic AI-generated scraper loads via ts-node and exposes the expected interface', () => {
+    const scraperTs = `
+import { chromium, type Browser, type Page } from 'playwright';
+
+export default class TestPlatformScraper {
+  private browser: Browser | null = null;
+  private page: Page | null = null;
+  private config: Record<string, unknown> = {};
+
+  async initialize(config: Record<string, unknown>) {
+    this.config = config;
+  }
+  async authenticate(): Promise<{ success: boolean; message?: string }> {
+    return { success: true };
+  }
+  async scrape(): Promise<Record<string, unknown>> {
+    return {
+      courses: [
+        { id: 'c1', title: 'Algebra II', teacher: 'Ms. Johnson', grade: 'A-' },
+        { id: 'c2', title: 'US History', teacher: 'Mr. Smith', grade: 'B+' },
+      ],
+      timestamp: new Date().toISOString(),
+    };
+  }
+  transform(rawData: Record<string, unknown>): Array<{
+    op: string; entity: string;
+    key: { provider: string; adapterId: string; externalId: string };
+    observedAt: string; record: Record<string, unknown>;
+  }> {
+    const courses = (rawData.courses ?? []) as Array<{ id: string; title: string; teacher?: string; grade?: string }>;
+    const now = new Date().toISOString();
+    return courses.map((c) => ({
+      op: 'upsert',
+      entity: 'course',
+      key: { provider: 'test-platform', adapterId: 'test-platform-browser', externalId: c.id },
+      observedAt: now,
+      record: { title: c.title, teacherName: c.teacher },
+    }));
+  }
+  async cleanup() {
+    if (this.browser) await this.browser.close();
+    this.browser = null;
+    this.page = null;
+  }
+}
+`;
+
+    const transformerTs = `
+export interface ISlcDeltaOp {
+  op: string;
+  entity: string;
+  key: { provider: string; adapterId: string; externalId: string };
+  observedAt: string;
+  record: Record<string, unknown>;
+}
+export function transformTestPlatformExtract(raw: Record<string, unknown>): ISlcDeltaOp[] {
+  return [];
+}
+`;
+
+    const metadataJson = JSON.stringify({
+      id: 'test-platform-browser',
+      name: 'Test Platform',
+      version: '1.0.0',
+    });
+
+    const tsconfig = JSON.stringify({
+      compilerOptions: {
+        module: 'commonjs',
+        target: 'ES2020',
+        esModuleInterop: true,
+        resolveJsonModule: true,
+        strict: false,
+      },
+      include: ['*.ts'],
+    });
+
+    fs.writeFileSync(path.join(workDir, 'scraper.ts'), scraperTs);
+    fs.writeFileSync(path.join(workDir, 'transformer.ts'), transformerTs);
+    fs.writeFileSync(path.join(workDir, 'metadata.json'), metadataJson);
+    fs.writeFileSync(path.join(workDir, 'tsconfig.json'), tsconfig);
+
+    require('ts-node').register({ transpileOnly: true, project: path.join(workDir, 'tsconfig.json') });
+    const scraperModule = require(path.join(workDir, 'scraper.ts'));
+    const ScraperClass = scraperModule.default ?? scraperModule.TestPlatformScraper;
+
+    expect(ScraperClass).toBeDefined();
+    expect(typeof ScraperClass).toBe('function');
+
+    const instance = new ScraperClass();
+    expect(typeof instance.initialize).toBe('function');
+    expect(typeof instance.authenticate).toBe('function');
+    expect(typeof instance.scrape).toBe('function');
+    expect(typeof instance.transform).toBe('function');
+    expect(typeof instance.cleanup).toBe('function');
+  });
+
+  it('full lifecycle: initialize -> authenticate -> scrape -> transform produces valid ops', async () => {
+    const scraperTs = `
+export default class LifecycleScraper {
+  private config: any = {};
+  async initialize(config: any) { this.config = config; }
+  async authenticate() { return { success: true }; }
+  async scrape() {
+    return { courses: [{ id: 'math-101', title: 'Calculus', teacher: 'Dr. Lee' }] };
+  }
+  transform(raw: any) {
+    const courses = raw.courses || [];
+    const now = new Date().toISOString();
+    return courses.map((c: any) => ({
+      op: 'upsert', entity: 'course',
+      key: { provider: 'lifecycle', adapterId: 'lifecycle-browser', externalId: c.id },
+      observedAt: now,
+      record: { title: c.title, teacherName: c.teacher },
+    }));
+  }
+  async cleanup() {}
+}
+`;
+
+    const tsconfig = JSON.stringify({
+      compilerOptions: { module: 'commonjs', target: 'ES2020', esModuleInterop: true, strict: false },
+      include: ['*.ts'],
+    });
+
+    fs.writeFileSync(path.join(workDir, 'scraper.ts'), scraperTs);
+    fs.writeFileSync(path.join(workDir, 'tsconfig.json'), tsconfig);
+
+    require('ts-node').register({ transpileOnly: true, project: path.join(workDir, 'tsconfig.json') });
+    const mod = require(path.join(workDir, 'scraper.ts'));
+    const ScraperClass = mod.default;
+    const instance = new ScraperClass();
+
+    await instance.initialize({ credentials: { username: 'u', password: 'p' } });
+    const auth = await instance.authenticate();
+    expect(auth.success).toBe(true);
+
+    const raw = await instance.scrape();
+    expect(raw.courses).toHaveLength(1);
+
+    const ops = instance.transform(raw);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].op).toBe('upsert');
+    expect(ops[0].entity).toBe('course');
+    expect(ops[0].key.externalId).toBe('math-101');
+    expect(ops[0].record.title).toBe('Calculus');
+    expect(ops[0].record.teacherName).toBe('Dr. Lee');
+
+    await instance.cleanup();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // E2E: run generated run.js against real ingest API
 // ---------------------------------------------------------------------------
 

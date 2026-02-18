@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { adminUsersApi, type AdminRole, type IAdminUser } from '@/lib/api/admin/users';
@@ -150,6 +151,35 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const adminColumns: ColumnDef<IAdminUser, unknown>[] = useMemo(
+    () => [
+      { accessorKey: 'email', header: 'Email', cell: ({ row }) => <span className="text-sm">{row.original.email}</span> },
+      { accessorKey: 'name', header: 'Name', cell: ({ row }) => <span className="text-sm">{row.original.name}</span> },
+      { accessorKey: 'role', header: 'Role', cell: ({ row }) => <span className="text-sm">{row.original.role}</span> },
+      {
+        accessorKey: 'isActive',
+        header: 'Status',
+        cell: ({ row }) => <span className="text-sm">{row.original.isActive ? 'active' : 'inactive'}</span>,
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => (
+          <div className="text-right">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => startEdit(row.original.id, row.original.role)}
+              data-testid="button-edit-admin"
+            >
+              Edit
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [startEdit]
+  );
 
   return (
     <div className="space-y-4" data-testid="admin-settings-page">
@@ -177,44 +207,12 @@ export default function AdminSettingsPage() {
           {error && !showFullLoading && <ErrorDisplay error={error} title="Failed to load admin users" onRetry={retry} />}
 
           {!showFullLoading && !error && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {admins.map((a) => (
-                  <TableRow key={a.id} data-testid="admin-user-row">
-                    <TableCell className="text-sm">{a.email}</TableCell>
-                    <TableCell className="text-sm">{a.name}</TableCell>
-                    <TableCell className="text-sm">{a.role}</TableCell>
-                    <TableCell className="text-sm">{a.isActive ? 'active' : 'inactive'}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => startEdit(a.id, a.role)}
-                        data-testid="button-edit-admin"
-                      >
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {admins.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-gray-600 dark:text-gray-400">
-                      No admin users found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={adminColumns}
+              data={admins}
+              sorting
+              getRowProps={() => ({ 'data-testid': 'admin-user-row' })}
+            />
           )}
         </CardContent>
       </Card>

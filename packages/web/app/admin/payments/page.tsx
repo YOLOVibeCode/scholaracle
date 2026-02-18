@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { adminPaymentsApi, type IPayment } from '@/lib/api/admin/payments';
@@ -95,6 +96,72 @@ export default function AdminPaymentsPage() {
     }
   };
 
+  const paymentColumns: ColumnDef<IPayment, unknown>[] = useMemo(
+    () => [
+      {
+        id: 'payment',
+        header: 'Payment',
+        cell: ({ row }) => (
+          <div>
+            <div className="font-medium">
+              {row.original.currency.toUpperCase()} {row.original.amount.toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">{row.original.paymentMethod}</div>
+          </div>
+        ),
+      },
+      { accessorKey: 'userId', header: 'User', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.userId}</span> },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <Badge
+            variant={
+              row.original.status === 'succeeded'
+                ? 'default'
+                : row.original.status === 'failed'
+                  ? 'destructive'
+                  : 'secondary'
+            }
+          >
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            {row.original.createdAt ? new Date(row.original.createdAt).toLocaleString() : ''}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => {
+          const p = row.original;
+          return (
+            <div className="flex gap-2">
+              {(p.status === 'succeeded' || p.status === 'partially_refunded') && (
+                <Button variant="outline" size="sm" onClick={() => openRefund(p)} data-testid="button-refund">
+                  Refund
+                </Button>
+              )}
+              {p.status === 'failed' && (
+                <Button variant="outline" size="sm" onClick={() => retryPayment(p.id)} data-testid="button-retry">
+                  Retry
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [openRefund, retryPayment]
+  );
+
   return (
     <div className="space-y-4" data-testid="admin-payments-page">
       <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
@@ -128,79 +195,17 @@ export default function AdminPaymentsPage() {
             </div>
           )}
 
-          {/* Keep table mounted even while refreshing to avoid DOM detaches during user clicks. */}
           {(hasLoadedOnce || (!showFullLoading && !error)) && (
-            <Table data-testid="payments-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>User</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.map((p) => (
-                  <TableRow key={p.id} data-testid="payment-row">
-                    <TableCell>
-                      <div className="font-medium">
-                        {p.currency.toUpperCase()} {p.amount.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">{p.paymentMethod}</div>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">{p.userId}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          p.status === 'succeeded'
-                            ? 'default'
-                            : p.status === 'failed'
-                              ? 'destructive'
-                              : 'secondary'
-                        }
-                      >
-                        {p.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                      {p.createdAt ? new Date(p.createdAt).toLocaleString() : ''}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {(p.status === 'succeeded' || p.status === 'partially_refunded') && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openRefund(p)}
-                            data-testid="button-refund"
-                          >
-                            Refund
-                          </Button>
-                        )}
-                        {p.status === 'failed' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => retryPayment(p.id)}
-                            data-testid="button-retry"
-                          >
-                            Retry
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {payments.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-gray-600 dark:text-gray-400">
-                      No payments found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div data-testid="payments-table">
+              <DataTable
+                columns={paymentColumns}
+                data={payments}
+                pagination
+                sorting
+                pageSize={25}
+                getRowProps={() => ({ 'data-testid': 'payment-row' })}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

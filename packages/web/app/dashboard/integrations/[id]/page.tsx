@@ -1,21 +1,15 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { integrationsApi } from '@/lib/api/integrations';
+import { DataTable } from '@/components/ui/data-table';
+import { integrationsApi, type IIntegrationLinkedStudent } from '@/lib/api/integrations';
 import { sourcesApi } from '@/lib/api/sources';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay } from '@/components/common';
@@ -116,6 +110,72 @@ export default function IntegrationDetailPage() {
   const linked = linkedStudents ?? [];
   const linkedIds = linked.map((s) => s.studentId);
 
+  const linkedColumns: ColumnDef<IIntegrationLinkedStudent, unknown>[] = useMemo(
+    () => [
+      {
+        id: 'student',
+        header: 'Student',
+        cell: ({ row }) => (
+          <Link href={`/dashboard/students/${row.original.studentId}`} className="font-medium hover:underline">
+            {row.original.studentName}
+          </Link>
+        ),
+      },
+      {
+        id: 'credentials',
+        header: 'Credentials',
+        cell: ({ row }) =>
+          row.original.hasCredentials ? (
+            <Badge variant="secondary">Set</Badge>
+          ) : (
+            <span className="text-muted-foreground">Not set</span>
+          ),
+      },
+      { accessorKey: 'status', header: 'Status' },
+      {
+        accessorKey: 'lastSuccess',
+        header: 'Last sync',
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {row.original.lastSuccess ? new Date(row.original.lastSuccess).toLocaleDateString() : '-'}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => (
+          <div className="text-right space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCredentialsStudentId(row.original.studentId)}
+              data-testid={`credentials-${row.original.studentId}`}
+            >
+              {row.original.hasCredentials ? 'Update credentials' : 'Add credentials'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleTriggerSync(row.original.studentId)} data-testid={`sync-${row.original.studentId}`}>
+              Sync
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setRunsStudentId(row.original.studentId)} data-testid={`runs-${row.original.studentId}`}>
+              View runs
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => handleUnlink(row.original.studentId)}
+              data-testid={`unlink-${row.original.studentId}`}
+            >
+              Unlink
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [setCredentialsStudentId, setRunsStudentId, handleTriggerSync, handleUnlink]
+  );
+
   return (
     <div className="space-y-6" data-testid="integration-detail-page">
       <div className="flex items-center gap-4">
@@ -156,77 +216,7 @@ export default function IntegrationDetailPage() {
           {linked.length === 0 ? (
             <p className="text-sm text-muted-foreground">No students linked yet. Assign a student to add their credentials.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Credentials</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last sync</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {linked.map((row) => (
-                  <TableRow key={row.studentId}>
-                    <TableCell>
-                      <Link
-                        href={`/dashboard/students/${row.studentId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {row.studentName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {row.hasCredentials ? (
-                        <Badge variant="secondary">Set</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">Not set</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.lastSuccess ? new Date(row.lastSuccess).toLocaleDateString() : '-'}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCredentialsStudentId(row.studentId)}
-                        data-testid={`credentials-${row.studentId}`}
-                      >
-                        {row.hasCredentials ? 'Update credentials' : 'Add credentials'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTriggerSync(row.studentId)}
-                        data-testid={`sync-${row.studentId}`}
-                      >
-                        Sync
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setRunsStudentId(row.studentId)}
-                        data-testid={`runs-${row.studentId}`}
-                      >
-                        View runs
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleUnlink(row.studentId)}
-                        data-testid={`unlink-${row.studentId}`}
-                      >
-                        Unlink
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable columns={linkedColumns} data={linked} sorting />
           )}
         </CardContent>
       </Card>

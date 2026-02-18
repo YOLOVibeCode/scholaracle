@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { adminSubscriptionsApi, type ISubscription } from '@/lib/api/admin/subscriptions';
@@ -67,6 +68,89 @@ export default function AdminSubscriptionsPage() {
     };
   }, []);
 
+  const subscriptionColumns: ColumnDef<ISubscription, unknown>[] = useMemo(
+    () => [
+      { accessorKey: 'userId', header: 'User', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.userId}</span> },
+      {
+        accessorKey: 'plan',
+        header: 'Plan',
+        cell: ({ row }) => (
+          <Badge variant="outline" data-testid="subscription-plan-badge">
+            {row.original.plan}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <Badge variant={statusBadgeVariant(row.original.status)} data-testid="subscription-status-badge">
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'currentPeriodEnd',
+        header: 'Period End',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            {new Date(row.original.currentPeriodEnd).toLocaleDateString()}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => {
+          const s = row.original;
+          return (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => openPlan(s)} data-testid="button-change-plan">
+                Change Plan
+              </Button>
+              {s.status === 'trialing' && (
+                <Button variant="outline" size="sm" onClick={() => openExtend(s)} data-testid="button-extend-trial">
+                  Extend Trial
+                </Button>
+              )}
+              {(s.status === 'active' || s.status === 'trialing') && (
+                <Button variant="destructive" size="sm" onClick={() => openCancel(s)} data-testid="button-cancel-subscription">
+                  Cancel
+                </Button>
+              )}
+              {s.status === 'cancelled' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    setToast(null);
+                    try {
+                      const res = await adminSubscriptionsApi.reactivate(s.userId);
+                      if (res.success) {
+                        setToast('Subscription reactivated');
+                        refresh();
+                      } else {
+                        setToast(res.error ?? 'Failed to reactivate');
+                      }
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  data-testid="button-reactivate-subscription"
+                >
+                  Reactivate
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [statusBadgeVariant, openPlan, openExtend, openCancel, isSubmitting, refresh]
+  );
+
   return (
     <div className="space-y-4" data-testid="admin-subscriptions-page">
       <h1 className="text-3xl font-bold tracking-tight">Subscriptions</h1>
@@ -99,104 +183,16 @@ export default function AdminSubscriptionsPage() {
           )}
 
           {(hasLoadedOnce || (!showFullLoading && !error)) && (
-            <Table data-testid="subscriptions-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Period End</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subs.map((s) => (
-                  <TableRow key={s.id} data-testid="subscription-row">
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">{s.userId}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" data-testid="subscription-plan-badge">
-                        {s.plan}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadgeVariant(s.status)} data-testid="subscription-status-badge">
-                        {s.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                      {new Date(s.currentPeriodEnd).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openPlan(s)}
-                          data-testid="button-change-plan"
-                        >
-                          Change Plan
-                        </Button>
-
-                        {s.status === 'trialing' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openExtend(s)}
-                            data-testid="button-extend-trial"
-                          >
-                            Extend Trial
-                          </Button>
-                        )}
-
-                        {(s.status === 'active' || s.status === 'trialing') && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => openCancel(s)}
-                            data-testid="button-cancel-subscription"
-                          >
-                            Cancel
-                          </Button>
-                        )}
-
-                        {s.status === 'cancelled' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              setIsSubmitting(true);
-                              setToast(null);
-                              try {
-                                const res = await adminSubscriptionsApi.reactivate(s.userId);
-                                if (res.success) {
-                                  setToast('Subscription reactivated');
-                                  refresh();
-                                } else {
-                                  setToast(res.error ?? 'Failed to reactivate');
-                                }
-                              } finally {
-                                setIsSubmitting(false);
-                              }
-                            }}
-                            disabled={isSubmitting}
-                            data-testid="button-reactivate-subscription"
-                          >
-                            Reactivate
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {subs.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-gray-600 dark:text-gray-400">
-                      No subscriptions found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div data-testid="subscriptions-table">
+              <DataTable
+                columns={subscriptionColumns}
+                data={subs}
+                pagination
+                sorting
+                pageSize={25}
+                getRowProps={() => ({ 'data-testid': 'subscription-row' })}
+              />
+            </div>
           )}
         </CardContent>
       </Card>
