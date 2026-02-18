@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { DataTable } from '@/components/ui/data-table';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { AdminStepUpSheet } from '@/components/admin';
@@ -213,6 +215,34 @@ export default function AdminCommunicationsPage() {
       setIsBulkSending(false);
     }
   };
+
+  const communicationLogColumns: ColumnDef<IAdminCommunicationLogItem, unknown>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'createdAt',
+        header: 'Time',
+        cell: ({ row }) => (
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            {new Date(row.original.createdAt).toLocaleString()}
+          </span>
+        ),
+      },
+      { accessorKey: 'recipientEmail', header: 'Recipient', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.recipientEmail ?? ''}</span> },
+      { accessorKey: 'subject', header: 'Subject', cell: ({ row }) => <span className="text-sm">{row.original.subject ?? ''}</span> },
+      { accessorKey: 'templateName', header: 'Template', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.templateName ?? ''}</span> },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <Badge variant={row.original.status === 'failed' ? 'destructive' : 'secondary'}>
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      { accessorKey: 'channel', header: 'Channel', cell: ({ row }) => <span className="text-xs text-gray-600 dark:text-gray-400">{row.original.channel}</span> },
+    ],
+    []
+  );
 
   return (
     <div className="space-y-4" data-testid="admin-communications-page">
@@ -608,41 +638,15 @@ export default function AdminCommunicationsPage() {
           {error && stableLogs.length === 0 && <ErrorDisplay error={error} title="Failed to load communication logs" onRetry={retry} />}
 
           {(stableLogs.length > 0 || (!showLogsSkeleton && !error)) && (
-            <Table data-testid="communications-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Template</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Channel</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {logs.map((x) => (
-                  <TableRow key={x.id} data-testid="communication-log-row">
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">
-                      {new Date(x.createdAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">{x.recipientEmail ?? ''}</TableCell>
-                    <TableCell className="text-sm">{x.subject ?? ''}</TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">{x.templateName ?? ''}</TableCell>
-                    <TableCell>
-                      <Badge variant={x.status === 'failed' ? 'destructive' : 'secondary'}>{x.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600 dark:text-gray-400">{x.channel}</TableCell>
-                  </TableRow>
-                ))}
-                {logs.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-sm text-gray-600 dark:text-gray-400">
-                      No logs found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div data-testid="communications-table">
+              <DataTable
+                columns={communicationLogColumns}
+                data={logs}
+                pagination
+                pageSize={25}
+                getRowProps={() => ({ 'data-testid': 'communication-log-row' })}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

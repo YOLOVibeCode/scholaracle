@@ -1,21 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DataTable } from '@/components/ui/data-table';
+import { Search } from 'lucide-react';
 import { adminCustomersApi, type ICustomer } from '@/lib/api/admin/customers';
 
 export default function AdminCustomersPage() {
@@ -78,6 +72,72 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const paginationState = useMemo(() => ({ pageIndex: page - 1, pageSize: 25 }), [page]);
+  const onPaginationChange = useCallback(
+    (updater: (prev: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) => {
+      const next = updater(paginationState);
+      const nextPage = next.pageIndex + 1;
+      setPage(nextPage);
+      const qs = new URLSearchParams();
+      if (search.trim()) qs.set('search', search.trim());
+      qs.set('page', String(nextPage));
+      router.push(`/admin/customers?${qs.toString()}`);
+      void loadCustomers(nextPage, search);
+    },
+    [page, search, router, loadCustomers, paginationState]
+  );
+
+  const customerColumns: ColumnDef<ICustomer, unknown>[] = useMemo(
+    () => [
+      {
+        id: 'customer',
+        header: 'Customer',
+        cell: ({ row }) => (
+          <div>
+            <div className="font-medium">{row.original.name}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">{row.original.email}</div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'subscription',
+        header: 'Plan',
+        cell: ({ row }) => (
+          <Badge className={getPlanBadgeColor(row.original.subscription?.plan)}>
+            {row.original.subscription?.plan ?? 'free'}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: 'isSuspended',
+        header: 'Status',
+        cell: ({ row }) =>
+          row.original.isSuspended ? (
+            <Badge variant="destructive">Suspended</Badge>
+          ) : (
+            <Badge variant="default">Active</Badge>
+          ),
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <Button variant="outline" size="sm" asChild onClick={(e) => e.stopPropagation()}>
+            <Link href={`/admin/customers/${row.original.id}`} data-testid="customer-link">
+              View
+            </Link>
+          </Button>
+        ),
+      },
+    ],
+    [getPlanBadgeColor]
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -110,110 +170,21 @@ export default function AdminCustomersPage() {
               Loading customers...
             </div>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {customers.map((customer) => (
-                    <TableRow
-                      key={customer.id}
-                      data-testid="customer-row"
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/admin/customers/${customer.id}`)}
-                    >
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{customer.name}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {customer.email}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getPlanBadgeColor(customer.subscription?.plan)}>
-                          {customer.subscription?.plan ?? 'free'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {customer.isSuspended ? (
-                          <Badge variant="destructive">Suspended</Badge>
-                        ) : (
-                          <Badge variant="default">Active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(customer.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link href={`/admin/customers/${customer.id}`} data-testid="customer-link">
-                            View
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {/* Pagination */}
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Page {page} of {totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const nextPage = page - 1;
-                      setPage(nextPage);
-                      const qs = new URLSearchParams();
-                      if (search.trim()) qs.set('search', search.trim());
-                      qs.set('page', String(nextPage));
-                      router.push(`/admin/customers?${qs.toString()}`);
-                      void loadCustomers(nextPage, search);
-                    }}
-                    disabled={page === 1}
-                    data-testid="previous-page"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    data-testid="next-page"
-                    onClick={() => {
-                      const nextPage = page + 1;
-                      setPage(nextPage);
-                      const qs = new URLSearchParams();
-                      if (search.trim()) qs.set('search', search.trim());
-                      qs.set('page', String(nextPage));
-                      router.push(`/admin/customers?${qs.toString()}`);
-                      void loadCustomers(nextPage, search);
-                    }}
-                    disabled={page >= totalPages}
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
+            <DataTable
+              columns={customerColumns}
+              data={customers}
+              pagination
+              manualPagination
+              pageCount={totalPages}
+              pageSize={25}
+              state={{ pagination: paginationState }}
+              onPaginationChange={onPaginationChange}
+              getRowProps={(row) => ({
+                'data-testid': 'customer-row',
+                className: 'cursor-pointer',
+                onClick: () => router.push(`/admin/customers/${row.original.id}`),
+              })}
+            />
           )}
         </CardContent>
       </Card>
