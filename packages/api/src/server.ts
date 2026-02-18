@@ -9,7 +9,6 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { studentsRouter } from './routes/students/students';
 import { integrationsRouter } from './routes/integrations/integrations';
-import { createSyncRouter } from './routes/sync/sync';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
@@ -321,11 +320,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
 
-    // Sync API — trigger and monitor data-source sync jobs
-    const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
-    const syncQueue = new MongoQueue(database);
-    const syncScheduler = new SyncScheduler(syncQueue, database);
-    app.use('/api/sync', authMiddleware(authService), createSyncRouter({ database, syncScheduler }));
+    // Sync API — trigger and monitor data-source sync jobs (optional; mount if module exists)
+    try {
+      const { createSyncRouter } = require('./routes/sync/sync');
+      const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
+      const syncQueue = new MongoQueue(database);
+      const syncScheduler = new SyncScheduler(syncQueue, database);
+      app.use('/api/sync', authMiddleware(authService), createSyncRouter({ database, syncScheduler }));
+    } catch {
+      // Sync route or agents not available — skip /api/sync
+    }
 
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
