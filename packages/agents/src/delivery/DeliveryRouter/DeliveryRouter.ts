@@ -3,7 +3,6 @@ import {
   Notification,
   DeliveryResult,
   NotificationChannel,
-  DeliveryError,
 } from '@scholaracle/contracts';
 
 /**
@@ -18,11 +17,13 @@ export class DeliveryRouter {
 
   /**
    * Route a notification to the appropriate delivery service.
+   * If no service supports the channel, returns a skipped result instead of throwing,
+   * so deployments with only email (e.g. dev/Mailpit) can still deliver.
    *
    * @param notification - The notification to deliver
    * @param channel - The channel to deliver via
-   * @returns Delivery result
-   * @throws {DeliveryError} If no service supports the channel or delivery fails
+   * @returns Delivery result (or skipped result when no service is configured)
+   * @throws {DeliveryError} If delivery fails for a supported channel
    */
   public async route(
     notification: Notification,
@@ -31,9 +32,11 @@ export class DeliveryRouter {
     const service = this._services.find((s) => s.supports(channel));
 
     if (!service) {
-      throw new DeliveryError(`No delivery service found for channel: ${channel}`, channel, {
-        notificationId: notification.id,
-      });
+      return {
+        success: false,
+        channel,
+        error: `No delivery service found for channel: ${channel}`,
+      };
     }
 
     return service.deliver(notification);

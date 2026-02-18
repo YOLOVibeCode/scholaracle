@@ -88,7 +88,7 @@ describe('adminAuthApi', () => {
       const result = await adminAuthApi.login('admin@test.com', 'secret');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/login',
+        'http://localhost:2801/api/admin/auth/login',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ email: 'admin@test.com', password: 'secret' }),
@@ -128,7 +128,7 @@ describe('adminAuthApi', () => {
       const result = await adminAuthApi.verifyMFA('mfa-tok-abc', '123456');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/mfa/verify',
+        'http://localhost:2801/api/admin/auth/mfa/verify',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ mfaToken: 'mfa-tok-abc', token: '123456' }),
@@ -153,7 +153,7 @@ describe('adminAuthApi', () => {
       const result = await adminAuthApi.setupMFA();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/mfa/setup',
+        'http://localhost:2801/api/admin/auth/mfa/setup',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -179,7 +179,7 @@ describe('adminAuthApi', () => {
       const result = await adminAuthApi.stepUpStart();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/step-up/start',
+        'http://localhost:2801/api/admin/auth/step-up/start',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),
@@ -206,7 +206,7 @@ describe('adminAuthApi', () => {
       const result = await adminAuthApi.stepUpVerify('su-1', '654321');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/step-up/verify',
+        'http://localhost:2801/api/admin/auth/step-up/verify',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ stepUpId: 'su-1', token: '654321' }),
@@ -244,7 +244,7 @@ describe('adminAuthApi', () => {
       await adminAuthApi.logout();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/auth/logout',
+        'http://localhost:2801/api/admin/auth/logout',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),

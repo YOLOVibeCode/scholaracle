@@ -1,34 +1,23 @@
 /**
  * Shared provider registry for the web UI.
  *
- * Single source of truth consumed by AddStudentWizard, AddProviderWizard,
- * and any other component that needs to display or configure providers.
+ * All providers use browser-based web scraping with the parent's school portal
+ * credentials (username + password). No API tokens or OAuth.
  *
  * Each entry contains:
  *  - Identification (id, adapterId, display name)
- *  - Auth method and what credentials the parent needs
- *  - Help text guiding the parent to find their credentials
+ *  - Help text for credential entry
  *  - URL patterns for auto-detection
  *  - Capability flags for which data types are available
- *  - UI metadata (icon hint, placeholder URL)
+ *  - UI metadata (brandColor, placeholder URL)
  */
-
-// ---------------------------------------------------------------------------
-// Auth method type
-// ---------------------------------------------------------------------------
-
-export type ProviderAuthMethod =
-  | 'bearer-token'
-  | 'oauth2'
-  | 'credentials'
-  | 'api-key';
 
 // ---------------------------------------------------------------------------
 // Provider descriptor
 // ---------------------------------------------------------------------------
 
 export interface IProviderDescriptor {
-  /** Short ID: 'canvas', 'google-classroom', etc. */
+  /** Short ID: 'canvas', 'skyward', 'aeries', etc. */
   readonly id: string;
   /** Reverse-domain adapter ID. */
   readonly adapterId: string;
@@ -36,10 +25,10 @@ export interface IProviderDescriptor {
   readonly name: string;
   /** Short description for the provider card. */
   readonly description: string;
-  /** Whether the adapter is implemented and available. */
+  /** Whether we have a reference scraper (ready to use) or need AI generation. */
   readonly available: boolean;
-  /** Required authentication method. */
-  readonly authMethod: ProviderAuthMethod;
+  /** Hex color for the provider icon (e.g. #E8471B). */
+  readonly brandColor: string;
   /** Placeholder for the school URL input. */
   readonly urlPlaceholder: string;
   /** Regex patterns to auto-detect this provider from a URL. */
@@ -53,26 +42,16 @@ export interface IProviderDescriptor {
 export interface IProviderCredentialHelp {
   /** Title for the credentials section. */
   readonly title: string;
-  /** Step-by-step instructions to obtain credentials. */
+  /** Step-by-step instructions (e.g. "Enter the URL where you log in to see grades"). */
   readonly steps: readonly string[];
-  /** Which fields to show in the credential form. */
-  readonly fields: readonly ProviderCredentialField[];
   /** Optional link to official documentation. */
   readonly docsUrl?: string;
   /** Optional note displayed below the form. */
   readonly note?: string;
 }
 
-export type ProviderCredentialField =
-  | 'accessToken'
-  | 'username'
-  | 'password'
-  | 'clientId'
-  | 'clientSecret'
-  | 'apiKey';
-
 // ---------------------------------------------------------------------------
-// Registry
+// Registry — credentials-only web portal scrapers
 // ---------------------------------------------------------------------------
 
 export const PROVIDERS: readonly IProviderDescriptor[] = [
@@ -82,45 +61,39 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
     name: 'Canvas LMS',
     description: 'By Instructure — used by many schools and universities',
     available: true,
-    authMethod: 'bearer-token',
+    brandColor: '#E8471B',
     urlPlaceholder: 'https://yourschool.instructure.com',
     urlPatterns: [/instructure\.com/i, /\/api\/v1\/courses/i, /\/login\/canvas/i],
     dataTypes: ['grades', 'assignments', 'calendar'],
     credentialHelp: {
-      title: 'Canvas API Token',
+      title: 'Canvas Portal Login',
       steps: [
-        'Log in to Canvas as the student (or parent/observer)',
-        'Click the profile icon → Settings',
-        'Scroll to "Approved Integrations" and click "+ New Access Token"',
-        'Enter a purpose (e.g., "Scholaracle") and click "Generate Token"',
-        'Copy the token — you won\'t be able to see it again!',
+        'Enter your school\'s Canvas URL above (where you log in to see grades)',
+        'Enter the username and password you use to check your child\'s grades',
+        'Credentials are baked into the downloaded script and never stored on our servers',
       ],
-      fields: ['accessToken'],
-      docsUrl: 'https://community.canvaslms.com/t5/Canvas-Basics-Guide/How-do-I-manage-API-access-tokens/ta-p/47',
-      note: 'The token gives read-only access to the student\'s courses, grades, and assignments.',
+      docsUrl: 'https://community.canvaslms.com/',
+      note: 'Use the same login you use in a browser to view Canvas.',
     },
   },
   {
-    id: 'google-classroom',
-    adapterId: 'com.google.classroom',
-    name: 'Google Classroom',
-    description: 'By Google — the most widely used LMS in K-12',
+    id: 'aeries',
+    adapterId: 'com.aeries',
+    name: 'Aeries',
+    description: 'Student information system — used by many California districts',
     available: true,
-    authMethod: 'oauth2',
-    urlPlaceholder: 'https://classroom.google.com',
-    urlPatterns: [/classroom\.google\.com/i],
-    dataTypes: ['grades', 'assignments'],
+    brandColor: '#1565C0',
+    urlPlaceholder: 'https://yourdistrict.aeries.net/student/LoginParent.aspx',
+    urlPatterns: [/aeries\.net/i, /aeries\.com/i],
+    dataTypes: ['grades', 'assignments', 'attendance'],
     credentialHelp: {
-      title: 'Google Account Sign-In',
+      title: 'Aeries Parent Portal Login',
       steps: [
-        'Click "Connect with Google" below',
-        'Sign in with the student\'s Google account (or the parent\'s if linked as a guardian)',
-        'Grant Scholaracle permission to read courses and grades',
-        'You\'ll be redirected back here automatically',
+        'Enter your district\'s Aeries parent portal URL above',
+        'Enter the username and password you use to log in',
+        'Credentials are baked into the downloaded script and never stored on our servers',
       ],
-      fields: [],
-      docsUrl: 'https://support.google.com/edu/classroom/answer/6388136',
-      note: 'We only request read-only access. We never modify grades or assignments.',
+      note: 'Use the same login you use in a browser to view Aeries.',
     },
   },
   {
@@ -129,85 +102,18 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
     name: 'Skyward',
     description: 'Family Access / Student portal — used by many districts',
     available: true,
-    authMethod: 'credentials',
+    brandColor: '#0D47A1',
     urlPlaceholder: 'https://skyward.yourdistrict.net/...',
     urlPatterns: [/skyward\.com/i, /\/skyward\//i, /wsisa\.dll/i],
     dataTypes: ['grades', 'assignments'],
     credentialHelp: {
       title: 'Skyward Portal Login',
       steps: [
-        'Enter your student\'s Skyward Family Access login URL above',
-        'This is the URL where you normally sign in to see grades',
-        'Enter the student\'s username and password below',
-        'These are the same credentials the student uses to log in',
+        'Enter your Skyward Family Access login URL above',
+        'Enter the username and password you use to see grades',
+        'Credentials are baked into the downloaded script and never stored on our servers',
       ],
-      fields: ['username', 'password'],
-      note: 'Credentials are encrypted before storage. We use them only to fetch grade data.',
-    },
-  },
-  {
-    id: 'oneroster',
-    adapterId: 'org.imsglobal.oneroster.1.2',
-    name: 'OneRoster (Infinite Campus, etc.)',
-    description: 'Universal standard — works with Infinite Campus, Skyward Qmlativ, Blackbaud, and more',
-    available: true,
-    authMethod: 'oauth2',
-    urlPlaceholder: 'https://sis.yourdistrict.edu/ims/oneroster/v1p2',
-    urlPatterns: [/\/ims\/oneroster/i, /infinitecampus\.com/i, /\/campus\//i],
-    dataTypes: ['grades', 'assignments', 'attendance'],
-    credentialHelp: {
-      title: 'OneRoster API Credentials',
-      steps: [
-        'Ask your school\'s IT administrator for OneRoster API access',
-        'They will provide a Client ID and Client Secret',
-        'Enter the OneRoster endpoint URL above (your school will provide this)',
-        'Enter the credentials below',
-      ],
-      fields: ['clientId', 'clientSecret'],
-      docsUrl: 'https://www.1edtech.org/standards/oneroster',
-      note: 'OneRoster is an industry standard supported by most modern school systems. Your school\'s IT department can enable this.',
-    },
-  },
-  {
-    id: 'schoology',
-    adapterId: 'com.schoology.lms',
-    name: 'Schoology',
-    description: 'By PowerSchool — popular LMS in K-12',
-    available: false,
-    authMethod: 'oauth2',
-    urlPlaceholder: 'https://yourschool.schoology.com',
-    urlPatterns: [/schoology\.com/i],
-    dataTypes: ['grades', 'assignments', 'attendance', 'calendar'],
-    credentialHelp: {
-      title: 'Schoology API Keys',
-      steps: [
-        'Log in to Schoology',
-        'Go to your account settings → API',
-        'Generate a new consumer key and secret',
-      ],
-      fields: ['apiKey'],
-      docsUrl: 'https://developers.schoology.com/',
-    },
-  },
-  {
-    id: 'powerschool',
-    adapterId: 'com.powerschool.sis',
-    name: 'PowerSchool SIS',
-    description: 'The largest SIS in the US — requires district partnership',
-    available: false,
-    authMethod: 'oauth2',
-    urlPlaceholder: 'https://powerschool.yourdistrict.edu',
-    urlPatterns: [/powerschool\.com/i, /\/guardian\//i, /\/public\/home\.html/i],
-    dataTypes: ['grades', 'assignments', 'attendance'],
-    credentialHelp: {
-      title: 'PowerSchool API Access',
-      steps: [
-        'PowerSchool requires district-level API partnership',
-        'Contact your school district to request API access',
-      ],
-      fields: ['clientId', 'clientSecret'],
-      docsUrl: 'https://support.powerschool.com/developer',
-      note: 'We are working to establish direct partnerships with PowerSchool districts.',
+      note: 'Use the same login you use in a browser to view Skyward.',
     },
   },
   {
@@ -216,7 +122,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
     name: 'ParentVUE / StudentVUE',
     description: 'Synergy SIS — used by many districts',
     available: false,
-    authMethod: 'credentials',
+    brandColor: '#5E35B1',
     urlPlaceholder: 'https://portal.yourdistrict.edu/PXP2_Login.aspx',
     urlPatterns: [/PXP2_Login/i, /parentvue/i, /studentvue/i],
     dataTypes: ['grades', 'assignments', 'attendance', 'calendar'],
@@ -224,10 +130,52 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       title: 'ParentVUE / StudentVUE Login',
       steps: [
         'Enter the login URL for your district\'s ParentVUE or StudentVUE portal',
-        'Enter the student\'s username and password',
+        'Enter the username and password you use to see grades',
+        'Credentials are baked into the downloaded script and never stored on our servers',
       ],
-      fields: ['username', 'password'],
       note: 'Coming soon — we are building browser automation for ParentVUE/StudentVUE portals.',
+    },
+  },
+  {
+    id: 'powerschool',
+    adapterId: 'com.powerschool.sis',
+    name: 'PowerSchool',
+    description: 'The largest SIS in the US — parent portal login',
+    available: false,
+    brandColor: '#C62828',
+    urlPlaceholder: 'https://powerschool.yourdistrict.edu',
+    urlPatterns: [/powerschool\.com/i, /\/guardian\//i, /\/public\/home\.html/i],
+    dataTypes: ['grades', 'assignments', 'attendance'],
+    credentialHelp: {
+      title: 'PowerSchool Parent Portal Login',
+      steps: [
+        'Enter your district\'s PowerSchool parent portal URL above',
+        'Enter the username and password you use to see grades',
+        'Credentials are baked into the downloaded script and never stored on our servers',
+      ],
+      docsUrl: 'https://support.powerschool.com/',
+      note: 'Coming soon — we are building browser automation for PowerSchool portals.',
+    },
+  },
+  {
+    id: 'schoology',
+    adapterId: 'com.schoology.lms',
+    name: 'Schoology',
+    description: 'By PowerSchool — popular LMS in K-12',
+    available: false,
+    brandColor: '#00897B',
+    urlPlaceholder: 'https://yourschool.schoology.com',
+    urlPatterns: [/schoology\.com/i],
+    dataTypes: ['grades', 'assignments', 'attendance', 'calendar'],
+    credentialHelp: {
+      title: 'Schoology Login',
+      steps: [
+        'Enter your school\'s Schoology URL above',
+        'Enter the username and password you use to see grades',
+        'Credentials are baked into the downloaded script and never stored on our servers',
+      ],
+      docsUrl: 'https://support.schoology.com/',
+      note: 'Coming soon — we are building browser automation for Schoology.',
     },
   },
 ];
@@ -236,12 +184,12 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Get all available (implemented) providers. */
+/** Get all available (reference scraper ready) providers. */
 export function getAvailableProviders(): readonly IProviderDescriptor[] {
   return PROVIDERS.filter((p) => p.available);
 }
 
-/** Get all providers (including unavailable / coming soon). */
+/** Get all providers (including coming soon). */
 export function getAllProviders(): readonly IProviderDescriptor[] {
   return PROVIDERS;
 }

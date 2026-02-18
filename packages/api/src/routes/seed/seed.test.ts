@@ -48,7 +48,7 @@ describe('Seed API Routes', () => {
         }),
         database.collection('admin_users').deleteMany({
           email: {
-            $in: ['admin@scholarmancy.com'],
+            $in: ['admin@scholarmancy.com', 'analyst@scholarmancy.com'],
           },
         }),
         database.collection('students').deleteMany({
@@ -169,9 +169,12 @@ describe('Seed API Routes', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.results.admins.created).toEqual(
-          expect.arrayContaining([expect.stringContaining('admin@scholarmancy.com')])
+          expect.arrayContaining([
+            expect.stringContaining('admin@scholarmancy.com'),
+            expect.stringContaining('analyst@scholarmancy.com'),
+          ])
         );
-        expect(response.body.totals.adminsCreated).toBe(1);
+        expect(response.body.totals.adminsCreated).toBe(2);
         expect(response.body.totals.adminsErrors).toBe(0);
       });
 
@@ -179,10 +182,14 @@ describe('Seed API Routes', () => {
         await request(app).post('/api/seed');
 
         const admin = await database.collection('admin_users').findOne({ email: 'admin@scholarmancy.com' });
-
         expect(admin).not.toBeNull();
         expect(admin!['role']).toBe('admin');
         expect(admin!['isActive']).toBe(true);
+
+        const analyst = await database.collection('admin_users').findOne({ email: 'analyst@scholarmancy.com' });
+        expect(analyst).not.toBeNull();
+        expect(analyst!['role']).toBe('admin');
+        expect(analyst!['isActive']).toBe(true);
       });
     });
 
@@ -429,7 +436,7 @@ describe('Seed API Routes', () => {
         expect(totals.usersCreated).toBe(3);
         expect(totals.usersExisting).toBe(0);
         expect(totals.usersErrors).toBe(0);
-        expect(totals.adminsCreated).toBe(1);
+        expect(totals.adminsCreated).toBe(2);
         expect(totals.adminsExisting).toBe(0);
         expect(totals.adminsErrors).toBe(0);
         expect(totals.studentsCreated).toBe(2);
@@ -466,13 +473,13 @@ describe('Seed API Routes', () => {
         // First seed
         const first = await request(app).post('/api/seed');
         expect(first.status).toBe(200);
-        expect(first.body.totals.adminsCreated).toBe(1);
+        expect(first.body.totals.adminsCreated).toBe(2);
 
         // Second seed without force
         const second = await request(app).post('/api/seed');
         expect(second.status).toBe(200);
         expect(second.body.totals.adminsCreated).toBe(0);
-        expect(second.body.totals.adminsExisting).toBe(1);
+        expect(second.body.totals.adminsExisting).toBe(2);
         expect(second.body.totals.adminsErrors).toBe(0);
       });
 
@@ -557,12 +564,12 @@ describe('Seed API Routes', () => {
         // First seed
         const first = await request(app).post('/api/seed');
         expect(first.status).toBe(200);
-        expect(first.body.totals.adminsCreated).toBe(1);
+        expect(first.body.totals.adminsCreated).toBe(2);
 
         // Force seed
         const forced = await request(app).post('/api/seed?force=true');
         expect(forced.status).toBe(200);
-        expect(forced.body.totals.adminsCreated).toBe(1);
+        expect(forced.body.totals.adminsCreated).toBe(2);
         expect(forced.body.totals.adminsExisting).toBe(0);
         expect(forced.body.totals.adminsErrors).toBe(0);
       });

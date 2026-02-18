@@ -27,6 +27,12 @@ export interface ISeedRouterConfig {
 /**
  * Test users configuration matching E2E test data.
  */
+/**
+ * Known TOTP secret for E2E testing. Admin accounts are seeded with MFA pre-configured
+ * using this secret so E2E tests can generate valid TOTP codes.
+ */
+const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
+
 const TEST_USERS = {
   parent: {
     email: 'test.parent@example.com',
@@ -47,6 +53,12 @@ const TEST_USERS = {
     email: 'admin@scholarmancy.com',
     password: 'Admin123!',
     name: 'Admin User',
+    role: 'admin' as AdminRole,
+  },
+  analyst: {
+    email: 'analyst@scholarmancy.com',
+    password: 'Admin123!',
+    name: 'Analyst',
     role: 'admin' as AdminRole,
   },
 } as const;
@@ -204,6 +216,8 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
             name: userConfig.name,
             role: userConfig.role,
             isActive: true,
+            mfaEnabled: true,
+            mfaSecret: E2E_MFA_SECRET,
           });
           superAdminId = admin._id!.toString();
           results.admins.created.push(`admin: ${userConfig.email}`);
@@ -219,6 +233,8 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
           name: userConfig.name,
           role: userConfig.role,
           isActive: true,
+          mfaEnabled: true,
+          mfaSecret: E2E_MFA_SECRET,
         });
         superAdminId = admin._id!.toString();
         results.admins.created.push(`admin: ${userConfig.email}`);
@@ -226,6 +242,47 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
     } catch (error) {
       results.admins.errors.push(
         `admin: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    // Create analyst admin (for E2E and lockout tests)
+    try {
+      const userConfig = TEST_USERS.analyst;
+      const existingAnalyst = await adminRepository.findByEmail(userConfig.email);
+      if (existingAnalyst) {
+        if (shouldForce) {
+          const objectId = existingAnalyst._id!;
+          await config.database.collection('admin_users').deleteOne({ _id: objectId });
+          const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
+          await adminRepository.create({
+            email: userConfig.email,
+            passwordHash,
+            name: userConfig.name,
+            role: userConfig.role,
+            isActive: true,
+            mfaEnabled: true,
+            mfaSecret: E2E_MFA_SECRET,
+          });
+          results.admins.created.push(`admin: ${userConfig.email}`);
+        } else {
+          results.admins.existing.push(`admin: ${userConfig.email}`);
+        }
+      } else {
+        const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
+        await adminRepository.create({
+          email: userConfig.email,
+          passwordHash,
+          name: userConfig.name,
+          role: userConfig.role,
+          isActive: true,
+          mfaEnabled: true,
+          mfaSecret: E2E_MFA_SECRET,
+        });
+        results.admins.created.push(`admin: ${userConfig.email}`);
+      }
+    } catch (error) {
+      results.admins.errors.push(
+        `analyst: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
 

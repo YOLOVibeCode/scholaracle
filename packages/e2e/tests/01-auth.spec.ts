@@ -57,7 +57,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await adminLoginPage.goto();
     
     const user = TEST_USERS.admin;
-    await adminLoginPage.login(user.email, user.password);
+    await adminLoginPage.loginWithMFA(user.email, user.password);
     
     await assertOnAdminDashboard(page);
   });
@@ -67,7 +67,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await adminLoginPage.goto();
     
     const user = TEST_USERS.support;
-    await adminLoginPage.login(user.email, user.password);
+    await adminLoginPage.loginWithMFA(user.email, user.password);
     
     await assertOnAdminDashboard(page);
   });
@@ -77,7 +77,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await adminLoginPage.goto();
     
     const user = TEST_USERS.billing;
-    await adminLoginPage.login(user.email, user.password);
+    await adminLoginPage.loginWithMFA(user.email, user.password);
     
     await assertOnAdminDashboard(page);
   });
@@ -87,7 +87,7 @@ test.describe('@auth Layer 1: Authentication', () => {
     await adminLoginPage.goto();
     
     const user = TEST_USERS.analyst;
-    await adminLoginPage.login(user.email, user.password);
+    await adminLoginPage.loginWithMFA(user.email, user.password);
     
     await assertOnAdminDashboard(page);
   });
@@ -95,11 +95,15 @@ test.describe('@auth Layer 1: Authentication', () => {
   test('AUTH-008: Invalid credentials rejected', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
-    
+
+    const loginResponse = page.waitForResponse(
+      (r) => r.url().includes('/auth/login') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
     await loginPage.login('invalid@example.com', 'WrongPassword123!', { waitForDashboard: false });
-    
-    // Should show error and stay on login page
-    await loginPage.expectError();
+    await loginResponse;
+
     await expect(page).toHaveURL(/\/login/);
+    await loginPage.expectError(undefined, 15000);
   });
 });

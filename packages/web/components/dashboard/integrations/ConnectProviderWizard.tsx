@@ -12,7 +12,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { ProviderIcon } from '@/components/ui/provider-icon';
 import { apiClient } from '@/lib/api/client';
+import {
+  getAllProviders,
+  detectProviderFromUrl,
+  type IProviderDescriptor,
+} from '@/lib/providers';
+import type { IBundleConnection } from './bundle-types';
 
 interface JobStep {
   name: string;
@@ -33,47 +40,52 @@ interface GenerateStatusResponse {
   loginUrl?: string;
 }
 
-interface ConnectSchoolWizardProps {
+export interface ConnectProviderWizardProps {
   open: boolean;
   onClose: () => void;
+  /** When provided, wizard adds to bundle (no download); final step is "Added to bundle". */
+  onConnectionReady?: (connection: IBundleConnection) => void;
+  /** When provided without onConnectionReady, wizard ends at download step and calls this after download. */
+  onAdded?: () => void;
 }
 
-type Step = 'platform' | 'details' | 'generating' | 'download';
+type Step = 'platform' | 'credentials' | 'generating' | 'download' | 'added';
 
-interface PlatformOption {
-  id: string;
-  name: string;
-  isReference: boolean;
-  loginUrlHint: string;
-}
+/** Synthetic "Other" option for platforms not in the registry. */
+const OTHER_PLATFORM: Pick<IProviderDescriptor, 'id' | 'name' | 'description' | 'available' | 'brandColor' | 'urlPlaceholder'> = {
+  id: 'other',
+  name: 'Other Platform',
+  description: 'We\'ll generate a custom scraper for your school portal',
+  available: false,
+  brandColor: '#6B7280',
+  urlPlaceholder: 'https://...',
+};
 
-const PLATFORMS: PlatformOption[] = [
-  { id: 'canvas', name: 'Canvas LMS', isReference: true, loginUrlHint: 'https://yourschool.instructure.com' },
-  { id: 'aeries', name: 'Aeries', isReference: true, loginUrlHint: 'https://yourdistrict.aeries.net/student/LoginParent.aspx' },
-  { id: 'skyward', name: 'Skyward', isReference: true, loginUrlHint: 'https://skyward.yourdistrict.net/...' },
-  { id: 'powerschool', name: 'PowerSchool', isReference: false, loginUrlHint: 'https://yourschool.powerschool.com' },
-  { id: 'infinite-campus', name: 'Infinite Campus', isReference: false, loginUrlHint: 'https://campus.yourdistrict.org' },
-  { id: 'other', name: 'Other Platform', isReference: false, loginUrlHint: '' },
-];
-
-export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps) {
+export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdded }: ConnectProviderWizardProps) {
   const [step, setStep] = useState<Step>('platform');
-  const [selectedPlatform, setSelectedPlatform] = useState<PlatformOption | null>(null);
-  const [customName, setCustomName] = useState('');
-  const [loginUrl, setLoginUrl] = useState('');
-  const [loginMethod, setLoginMethod] = useState<string>('email_password');
+  const [portalUrl, setPortalUrl] = useState('');
+  const [detectedProvider, setDetectedProvider] = useState<IProviderDescriptor | undefined>();
+  const [selectedProvider, setSelectedProvider] = useState<IProviderDescriptor | typeof OTHER_PLATFORM | null>(null);
+  const [customPlatformName, setCustomPlatformName] = useState('');
+  const [studentNameHint, setStudentNameHint] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [studentName, setStudentName] = useState('');
   const [scraperId, setScraperId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<GenerateStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
+  const [pendingConnection, setPendingConnection] = useState<{ scraperId: string | null; platformName: string; loginUrl: string } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const allProviders = getAllProviders();
   const detectedOS = typeof navigator !== 'undefined' && navigator.userAgent.includes('Win') ? 'windows' : 'mac';
+
+  useEffect(() => {
+    const detected = detectProviderFromUrl(portalUrl);
+    setDetectedProvider(detected);
+  }, [portalUrl]);
 
   useEffect(() => {
     if (!jobId || !open) return;
@@ -90,7 +102,16 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
           }
           setScraperId(res.result?.scraperId ?? null);
           setGeneratedCode(res.result?.scraperCode ?? null);
-          setStep('download');
+          if (onConnectionReady) {
+            setPendingConnection({
+              scraperId: res.result?.scraperId ?? null,
+              platformName: res.platformName ?? '',
+              loginUrl: res.loginUrl ?? '',
+            });
+            setStep('added');
+          } else {
+            setStep('download');
+          }
         } else if (res.status === 'failed') {
           if (pollRef.current) {
             clearInterval(pollRef.current);
@@ -110,45 +131,108 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
         pollRef.current = null;
       }
     };
-  }, [jobId, open]);
+  }, [jobId, open, onConnectionReady]);
 
-  const handlePlatformSelect = (platform: PlatformOption) => {
-    setSelectedPlatform(platform);
-    setLoginUrl(platform.loginUrlHint);
-    if (platform.id === 'other') {
-      setStep('details');
-    } else if (platform.isReference) {
-      setStep('details');
-    } else {
-      setStep('details');
+  // When we land on 'added' after generation, build connection from state + pendingConnection and call onConnectionReady once.
+  useEffect(() => {
+    if (step !== 'added' || !pendingConnection || !onConnectionReady) return;
+    const platformId = selectedProvider?.id === 'other' ? 'other' : (selectedProvider as IProviderDescriptor)?.id ?? 'other';
+    const connection: IBundleConnection = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `conn-${Date.now()}`,
+      platformId,
+      platformName: pendingConnection.platformName,
+      loginUrl: pendingConnection.loginUrl,
+      username,
+      password,
+      studentNameHint: studentNameHint.trim() || undefined,
+      scraperId: pendingConnection.scraperId,
+      generationStatus: 'ready',
+      jobId: null,
+    };
+    onConnectionReady(connection);
+    setPendingConnection(null);
+  }, [step, pendingConnection, onConnectionReady, selectedProvider, username, password, studentNameHint]);
+
+  const handleClose = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
+    setStep('platform');
+    setPortalUrl('');
+    setDetectedProvider(undefined);
+    setSelectedProvider(null);
+    setCustomPlatformName('');
+    setStudentNameHint('');
+    setUsername('');
+    setPassword('');
+    setScraperId(null);
+    setJobId(null);
+    setJobStatus(null);
+    setError(null);
+    setGeneratedCode(null);
+    setShowCode(false);
+    setPendingConnection(null);
+    onClose();
   };
 
-  const handleGenerate = async () => {
-    if (!selectedPlatform) return;
+  const handlePlatformSelect = (provider: IProviderDescriptor | typeof OTHER_PLATFORM) => {
+    setSelectedProvider(provider);
+    if (provider.id !== 'other') {
+      const p = provider as IProviderDescriptor;
+      if (!portalUrl && p.urlPlaceholder) setPortalUrl(p.urlPlaceholder);
+    }
+    setStep('credentials');
+  };
 
-    const platformName = selectedPlatform.id === 'other' ? customName : selectedPlatform.name;
+  const handleCredentialsNext = async () => {
+    const provider = selectedProvider;
+    if (!provider) return;
+
+    const platformName = provider.id === 'other' ? customPlatformName : provider.name;
+    const loginUrl = portalUrl.trim();
     if (!platformName || !loginUrl) {
-      setError('Please fill in the platform URL');
+      setError('Please enter the school portal URL.');
       return;
     }
-    if (!studentName || !username || !password) {
-      setError('Please fill in the student name, email, and password');
+    const requireStudentName = !onConnectionReady;
+    if (requireStudentName && !studentNameHint.trim()) {
+      setError('Please fill in student name, username, and password.');
+      return;
+    }
+    if (!username.trim() || !password) {
+      setError('Please fill in username and password.');
       return;
     }
 
     setError(null);
 
-    if (selectedPlatform.isReference) {
-      // Reference scrapers don't need AI generation
+    const isReference = provider.id !== 'other' && (provider as IProviderDescriptor).available;
+    if (isReference) {
       setScraperId(null);
-      setStep('download');
+      if (onConnectionReady) {
+        const platformId = provider.id;
+        const connection: IBundleConnection = {
+          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `conn-${Date.now()}`,
+          platformId,
+          platformName,
+          loginUrl,
+          username,
+          password,
+          studentNameHint: studentNameHint.trim() || undefined,
+          scraperId: null,
+          generationStatus: 'ready',
+          jobId: null,
+        };
+        onConnectionReady(connection);
+        setStep('added');
+      } else {
+        setStep('download');
+      }
       return;
     }
 
-    // AI generation needed
     setStep('generating');
-
     try {
       const res = await apiClient.post<{
         success: boolean;
@@ -160,7 +244,7 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
       }>('/integrations/generate-scraper', {
         platformName,
         loginUrl,
-        loginMethod,
+        loginMethod: 'email_password',
         dataTypes: ['grades', 'assignments', 'attendance', 'messages', 'documents', 'teachers'],
       });
 
@@ -179,13 +263,15 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to generate scraper');
-      setStep('details');
+      setStep('credentials');
     }
   };
 
   const handleDownload = async () => {
     try {
-      const platformName = selectedPlatform?.id === 'other' ? customName : selectedPlatform?.name ?? '';
+      const provider = selectedProvider;
+      const platformName = provider?.id === 'other' ? customPlatformName : (provider?.name ?? '');
+      const loginUrl = portalUrl.trim();
 
       const baseUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
       const token = apiClient.getToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
@@ -199,7 +285,7 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
         body: JSON.stringify({
           os: detectedOS,
           ...(scraperId ? { scraperId } : { platform: platformName, url: loginUrl }),
-          credentials: { studentName, username, password },
+          credentials: { studentName: studentNameHint.trim() || 'default', username: username.trim(), password, studentNameHint: studentNameHint.trim() || undefined },
         }),
       });
       if (!response.ok) throw new Error('Download failed');
@@ -215,161 +301,161 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      onAdded?.();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Download failed');
     }
   };
 
-  const handleClose = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    setStep('platform');
-    setSelectedPlatform(null);
-    setCustomName('');
-    setLoginUrl('');
-    setScraperId(null);
-    setJobId(null);
-    setJobStatus(null);
-    setError(null);
-    setGeneratedCode(null);
-    setShowCode(false);
-    onClose();
-  };
+  const displayName = selectedProvider?.id === 'other' ? customPlatformName : selectedProvider?.name;
+  const isReference = selectedProvider && selectedProvider.id !== 'other' && (selectedProvider as IProviderDescriptor).available;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-xl">
+    <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-xl" data-testid="connect-provider-wizard">
         <DialogHeader>
           <DialogTitle>
             {step === 'platform' && 'Connect Your School'}
-            {step === 'details' && `Set Up ${selectedPlatform?.id === 'other' ? 'Your Platform' : selectedPlatform?.name}`}
+            {step === 'credentials' && `Set Up ${displayName || 'Your Platform'}`}
             {step === 'generating' && 'Creating Your Scraper'}
             {step === 'download' && 'Ready to Download'}
+            {step === 'added' && 'Added to Bundle'}
           </DialogTitle>
           <DialogDescription>
-            {step === 'platform' && 'Choose your school\'s platform to get started.'}
-            {step === 'details' && 'Enter your school portal URL so we can set up your scraper.'}
+            {step === 'platform' && 'Enter your school portal URL or pick a platform below.'}
+            {step === 'credentials' && 'Enter your school portal URL and the credentials you use to check grades.'}
             {step === 'generating' && 'Using AI to create a custom scraper for your school...'}
             {step === 'download' && 'Download and double-click to run. That\'s it.'}
+            {step === 'added' && 'This platform is in your bundle. Add more or download when ready.'}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Step 1: Platform Selection */}
+        {/* Step 1: Pick Platform — URL + provider cards */}
         {step === 'platform' && (
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            {PLATFORMS.map((platform) => (
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="portal-url">School portal URL</Label>
+              <Input
+                id="portal-url"
+                type="url"
+                placeholder="https://yourschool.instructure.com"
+                value={portalUrl}
+                onChange={(e) => setPortalUrl(e.target.value)}
+                data-testid="input-portal-url"
+                autoFocus
+              />
+              {portalUrl && detectedProvider && (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  Detected: {detectedProvider.name}
+                </p>
+              )}
+            </div>
+
+            <p className="text-sm text-muted-foreground">Or pick your platform:</p>
+            <div className="grid grid-cols-2 gap-3">
+              {allProviders.map((provider) => (
+                <Card
+                  key={provider.id}
+                  className={`cursor-pointer transition-colors hover:bg-accent ${detectedProvider?.id === provider.id ? 'ring-2 ring-primary' : ''}`}
+                  onClick={() => handlePlatformSelect(provider)}
+                  data-testid={`platform-${provider.id}`}
+                >
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <ProviderIcon name={provider.name} brandColor={provider.brandColor} />
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{provider.name}</p>
+                      {provider.available ? (
+                        <p className="text-xs text-green-600 dark:text-green-400">Ready to use</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Coming soon</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
               <Card
-                key={platform.id}
                 className="cursor-pointer transition-colors hover:bg-accent"
-                onClick={() => handlePlatformSelect(platform)}
-                data-testid={`platform-${platform.id}`}
+                onClick={() => handlePlatformSelect(OTHER_PLATFORM)}
+                data-testid="platform-other"
               >
                 <CardContent className="flex items-center gap-3 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-lg font-bold text-primary">
-                    {platform.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-medium text-sm">{platform.name}</p>
-                    {platform.isReference && (
-                      <p className="text-xs text-green-600">Ready to use</p>
-                    )}
-                    {!platform.isReference && platform.id !== 'other' && (
-                      <p className="text-xs text-muted-foreground">AI-generated</p>
-                    )}
+                  <ProviderIcon name={OTHER_PLATFORM.name} brandColor={OTHER_PLATFORM.brandColor} />
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm">{OTHER_PLATFORM.name}</p>
+                    <p className="text-xs text-muted-foreground">AI-generated</p>
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            </div>
           </div>
         )}
 
-        {/* Step 2: Platform Details + Credentials */}
-        {step === 'details' && (
+        {/* Step 2: Enter Credentials */}
+        {step === 'credentials' && selectedProvider && (
           <div className="space-y-4 pt-2">
-            {selectedPlatform?.id === 'other' && (
+            {selectedProvider.id === 'other' && (
               <div className="space-y-2">
-                <Label htmlFor="platformName">Platform Name</Label>
+                <Label htmlFor="platform-name">Platform name</Label>
                 <Input
-                  id="platformName"
+                  id="platform-name"
                   placeholder="e.g., ParentSquare, Schoology"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
+                  value={customPlatformName}
+                  onChange={(e) => setCustomPlatformName(e.target.value)}
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="loginUrl">School Portal URL</Label>
+              <Label htmlFor="login-url">School portal URL</Label>
               <Input
-                id="loginUrl"
-                placeholder={selectedPlatform?.loginUrlHint ?? 'https://...'}
-                value={loginUrl}
-                onChange={(e) => setLoginUrl(e.target.value)}
+                id="login-url"
+                placeholder={selectedProvider.id === 'other' ? 'https://...' : (selectedProvider as IProviderDescriptor).urlPlaceholder}
+                value={portalUrl}
+                onChange={(e) => setPortalUrl(e.target.value)}
+                data-testid="connect-provider-login-url"
               />
               <p className="text-xs text-muted-foreground">
                 The URL where you normally log in to see your child&apos;s grades.
               </p>
             </div>
 
-            {!selectedPlatform?.isReference && (
-              <div className="space-y-2">
-                <Label>Login Method</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'email_password', label: 'Email + Password' },
-                    { id: 'google_sso', label: 'Google Sign-In' },
-                    { id: 'clever_sso', label: 'Clever' },
-                  ].map((method) => (
-                    <Button
-                      key={method.id}
-                      variant={loginMethod === method.id ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setLoginMethod(method.id)}
-                    >
-                      {method.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="border-t pt-4 space-y-3">
               <p className="text-sm font-medium">Your school login</p>
               <p className="text-xs text-muted-foreground">
-                These are saved into the downloaded file so it can log in automatically.
-                They never leave your computer.
+                Credentials are baked into the downloaded script and never stored on our servers.
               </p>
-
               <div className="space-y-2">
-                <Label htmlFor="studentName">Student Name</Label>
+                <Label htmlFor="student-name-hint">
+                  Student name hint {onConnectionReady && '(optional)'}
+                </Label>
                 <Input
-                  id="studentName"
-                  placeholder="e.g., Emma"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
+                  id="student-name-hint"
+                  placeholder="e.g., Emma (optional for multi-student portals)"
+                  value={studentNameHint}
+                  onChange={(e) => setStudentNameHint(e.target.value)}
+                  data-testid="connect-provider-student-name-hint"
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="username">Email / Username</Label>
+                <Label htmlFor="cred-username">Username</Label>
                 <Input
-                  id="username"
+                  id="cred-username"
                   placeholder="e.g., parent@email.com"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  data-testid="connect-provider-username"
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="cred-password">Password</Label>
                 <Input
-                  id="password"
+                  id="cred-password"
                   type="password"
                   placeholder="Your school portal password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  data-testid="connect-provider-password"
                 />
               </div>
             </div>
@@ -378,20 +464,20 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setStep('platform')}>Back</Button>
-              <Button onClick={handleGenerate}>
-                {selectedPlatform?.isReference ? 'Continue' : 'Generate Scraper'}
+              <Button onClick={handleCredentialsNext} data-testid="connect-provider-continue">
+                {isReference ? 'Continue' : 'Generate Scraper'}
               </Button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Generating (progress card with polling) */}
+        {/* Step 3: Generating (AI) */}
         {step === 'generating' && (
           <div className="space-y-4 py-4">
             <Card className="border-2">
               <CardContent className="pt-4">
                 <p className="font-medium mb-3">
-                  {selectedPlatform?.id === 'other' ? customName : selectedPlatform?.name} — {jobStatus?.status ?? 'queued'}
+                  {displayName} — {jobStatus?.status ?? 'queued'}
                 </p>
                 {jobStatus?.error && (
                   <div className="rounded-lg bg-destructive/10 text-destructive p-3 mb-3 text-sm">
@@ -424,8 +510,8 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
             </Card>
             {jobStatus?.status === 'failed' && (
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setError(null); setStep('details'); }}>Edit URL</Button>
-                <Button onClick={() => { setError(null); handleGenerate(); }}>Retry</Button>
+                <Button variant="outline" onClick={() => { setError(null); setStep('credentials'); }}>Edit details</Button>
+                <Button onClick={() => { setError(null); handleCredentialsNext(); }}>Retry</Button>
               </div>
             )}
           </div>
@@ -439,7 +525,7 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
                 Your scraper is ready!
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Download it, double-click to run, and enter your school password.
+                Download it, double-click to run, and your school data will sync to Scholaracle.
               </p>
             </div>
 
@@ -476,6 +562,27 @@ export function ConnectSchoolWizard({ open, onClose }: ConnectSchoolWizardProps)
                 )}
               </div>
             )}
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" onClick={handleClose} data-testid="connect-provider-done">Done</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Added to bundle (when onConnectionReady is used) */}
+        {step === 'added' && (
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg bg-green-50 dark:bg-green-950/20 p-4 text-center">
+              <p className="text-lg font-semibold text-green-700 dark:text-green-400">
+                Added to your bundle
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Add more platforms or go back and download the bundle when all are ready.
+              </p>
+            </div>
+            <Button onClick={handleClose} className="w-full" data-testid="connect-provider-done-added">
+              Done
+            </Button>
           </div>
         )}
       </DialogContent>

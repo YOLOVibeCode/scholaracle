@@ -122,7 +122,7 @@ describe('adminCommunicationsApi', () => {
       await adminCommunicationsApi.listLogs();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/logs',
+        'http://localhost:2801/api/admin/communications/logs',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -142,7 +142,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.sendEmail(payload);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/send',
+        'http://localhost:2801/api/admin/communications/send',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
@@ -168,7 +168,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.listTemplates();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/templates',
+        'http://localhost:2801/api/admin/communications/templates',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -195,7 +195,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.createTemplate(payload);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/templates',
+        'http://localhost:2801/api/admin/communications/templates',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
@@ -221,7 +221,7 @@ describe('adminCommunicationsApi', () => {
       await adminCommunicationsApi.updateTemplate('tpl-1', payload);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/templates/tpl-1',
+        'http://localhost:2801/api/admin/communications/templates/tpl-1',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify(payload),
@@ -247,7 +247,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.bulkSend(payload);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/bulk-send',
+        'http://localhost:2801/api/admin/communications/bulk-send',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
@@ -269,7 +269,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.bulkSend(payload, 'step-up-jwt-xyz');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/bulk-send',
+        'http://localhost:2801/api/admin/communications/bulk-send',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
@@ -306,7 +306,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.listBatches();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/batches',
+        'http://localhost:2801/api/admin/communications/batches',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -341,7 +341,7 @@ describe('adminCommunicationsApi', () => {
       const result = await adminCommunicationsApi.getAnalytics();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/analytics?days=30',
+        'http://localhost:2801/api/admin/communications/analytics?days=30',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -361,7 +361,7 @@ describe('adminCommunicationsApi', () => {
       await adminCommunicationsApi.getAnalytics(7);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/communications/analytics?days=7',
+        'http://localhost:2801/api/admin/communications/analytics?days=7',
         expect.objectContaining({ method: 'GET' }),
       );
     });

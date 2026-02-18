@@ -1,4 +1,4 @@
-import { apiClient } from '../client';
+import { apiClient, ApiClientError } from '../client';
 
 export interface IAdminLoginRequest {
   readonly email: string;
@@ -56,17 +56,39 @@ export const adminAuthApi = {
    * Admin login.
    */
   async login(email: string, password: string): Promise<IAdminLoginResponse> {
-    const response = await apiClient.post<IAdminLoginResponse>('/admin/auth/login', {
-      email,
-      password,
-    });
-    
-    if (response.success && response.token) {
-      localStorage.setItem('adminToken', response.token);
-      localStorage.setItem('adminUser', JSON.stringify(response.admin));
+    try {
+      const response = await apiClient.post<IAdminLoginResponse>('/admin/auth/login', {
+        email,
+        password,
+      });
+
+      if (response.success && response.token) {
+        localStorage.setItem('adminToken', response.token);
+        localStorage.setItem('adminUser', JSON.stringify(response.admin));
+      }
+
+      return response;
+    } catch (err) {
+      // Admin login returns 401 for MFA-required and invalid-credentials alike.
+      // Extract MFA fields from the error body so the login page can show the MFA form.
+      if (err instanceof ApiClientError && err.details) {
+        const body = err.details as Partial<IAdminLoginResponse>;
+        if (body.requiresMFA || body.requiresMFASetup) {
+          return {
+            success: false,
+            requiresMFA: body.requiresMFA,
+            mfaToken: body.mfaToken,
+            requiresMFASetup: body.requiresMFASetup,
+            mfaSetupToken: body.mfaSetupToken,
+            error: body.error,
+          };
+        }
+      }
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Login failed',
+      };
     }
-    
-    return response;
   },
 
   /**

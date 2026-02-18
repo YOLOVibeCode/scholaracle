@@ -267,7 +267,17 @@ export class ApiClient {
       const fetchOpts = { ...options, headers, credentials: 'include' as RequestCredentials };
       let response = await fetch(url, fetchOpts);
 
-      if (response.status === 401 && typeof window !== 'undefined' && !useAdminToken) {
+      // Only try refresh/redirect on 401 when we have a session and the request wasn't a login/register.
+      // Login/register with wrong credentials return 401 and must throw so the form can show the error.
+      const isAuthAttempt = endpoint === '/auth/login' || endpoint === '/auth/register' || endpoint === '/admin/auth/login';
+      const hasSession = !useAdminToken && (!!token || !!this.getRefreshToken());
+      if (
+        response.status === 401 &&
+        typeof window !== 'undefined' &&
+        !useAdminToken &&
+        hasSession &&
+        !isAuthAttempt
+      ) {
         if (!this._refreshPromise) {
           this._refreshPromise = this._tryRefresh().finally(() => {
             this._refreshPromise = null;

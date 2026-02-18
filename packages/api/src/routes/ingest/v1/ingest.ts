@@ -226,6 +226,53 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
   studentProfile: 'slc_student_profiles',
 };
 
+const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
+
+/** Record pending student reconciliations for ops whose studentExternalId does not match an existing student. */
+async function recordPendingStudentReconciliations(params: {
+  readonly database: Db;
+  readonly userId: string;
+  readonly sourceId: string;
+  readonly runId: string;
+  readonly ops: readonly ISlcDeltaOp[];
+}): Promise<void> {
+  const externalIds = new Set<string>();
+  for (const op of params.ops) {
+    const id = op.key?.studentExternalId;
+    if (typeof id === 'string' && id.trim()) externalIds.add(id.trim());
+  }
+  if (externalIds.size === 0) return;
+
+  const studentRepo = new StudentRepository(params.database);
+  const students = await studentRepo.findByUserId(params.userId);
+  const knownIds = new Set(students.map((s) => s.studentId).filter(Boolean) as string[]);
+  const coll = params.database.collection(PENDING_RECONCILIATION_COLLECTION);
+  const now = new Date();
+
+  for (const studentExternalId of externalIds) {
+    if (knownIds.has(studentExternalId)) continue;
+    await coll.updateOne(
+      {
+        userId: params.userId,
+        sourceId: params.sourceId,
+        studentExternalId,
+      },
+      {
+        $set: {
+          userId: params.userId,
+          sourceId: params.sourceId,
+          studentExternalId,
+          displayName: studentExternalId,
+          runId: params.runId,
+          updatedAt: now,
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true }
+    );
+  }
+}
+
 async function applyOps(params: {
   readonly database: Db;
   readonly userId: string;
@@ -483,6 +530,16 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       }
 
       await applyOps({ database: config.database, userId, ops: envelope.ops });
+      const sourceId = envelope.source?.sourceId ?? '';
+      if (sourceId) {
+        await recordPendingStudentReconciliations({
+          database: config.database,
+          userId,
+          sourceId,
+          runId,
+          ops: envelope.ops,
+        });
+      }
       await runRepo.markUploaded(userId, runId);
       res.status(200).json({ success: true, accepted: true });
     })

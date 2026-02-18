@@ -1,5 +1,6 @@
 import { test as base, type Page, expect } from '@playwright/test';
-import { TEST_USERS, generateUniqueEmail, type UserRole } from './test-data';
+import { TEST_USERS, generateUniqueEmail, E2E_MFA_SECRET, type UserRole } from './test-data';
+import speakeasy from 'speakeasy';
 
 /**
  * Extended test fixture with authentication helpers.
@@ -64,7 +65,21 @@ export const test = base.extend<AuthFixtures>({
         await page.waitForURL('/dashboard', { timeout: 15000 });
         await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
       } else {
-        await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+        // Admin login may show MFA verification prompt (seeded admins have MFA enabled)
+        const mfaInput = page.locator('[data-testid="input-mfa-code"]');
+        const adminDashboard = page.locator('text=Admin Dashboard, text=Dashboard, [data-testid="admin-dashboard"]').first();
+        // Wait for either MFA input or dashboard
+        await Promise.race([
+          mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
+          page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 }),
+        ]);
+        // If MFA input visible, fill it
+        if (await mfaInput.isVisible().catch(() => false)) {
+          const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
+          await mfaInput.fill(totp);
+          await page.locator('[data-testid="button-verify-mfa"]').click();
+          await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+        }
       }
     };
     
@@ -142,7 +157,19 @@ export async function loginAdmin(page: Page, email: string, password: string): P
   await page.fill('[data-testid="input-admin-email"]', email);
   await page.fill('[data-testid="input-admin-password"]', password);
   await page.locator('[data-testid="button-login"]').first().click({ force: true });
-  await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 10000 });
+
+  // Handle MFA verification if prompted (seeded admins have MFA enabled)
+  const mfaInput = page.locator('[data-testid="input-mfa-code"]');
+  await Promise.race([
+    mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
+    page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 }),
+  ]);
+  if (await mfaInput.isVisible().catch(() => false)) {
+    const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
+    await mfaInput.fill(totp);
+    await page.locator('[data-testid="button-verify-mfa"]').click();
+    await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+  }
 }
 
 /**

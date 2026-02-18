@@ -1,18 +1,23 @@
 import { createServer } from 'http';
 import { MongoClient, type Db } from 'mongodb';
 import { MongoQueue, NotificationWorker, NotificationService } from '@scholaracle/agents';
+import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
+import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
 import { ParentNotificationGenerator } from '@scholaracle/agents';
 import { DeliveryRouter } from '@scholaracle/agents';
-import { EmailDelivery } from '@scholaracle/agents';
+import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
+import type { IEmailTransport } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
 import { PushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import { UserRepository } from '@scholaracle/database';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
+import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
+import { createAdapterRunner } from './adapter-runner';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -76,13 +81,31 @@ function initializeNotificationService(config: IWorkerConfig): NotificationServi
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
 
-  const sendGrid = sgMail as unknown as MailService;
   const twilioClient =
     twilioConfig.accountSid && twilioConfig.authToken
       ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
       : ({} as unknown as Twilio);
 
-  const emailDelivery = new EmailDelivery(sendGridConfig, sendGrid);
+  // Select email transport based on SMTP_HOST env var (same pattern as server.ts)
+  const smtpHost = process.env['SMTP_HOST'];
+  const transport: IEmailTransport = smtpHost
+    ? new SmtpTransport(
+        {
+          host: smtpHost,
+          port: Number(process.env['SMTP_PORT'] ?? 1025),
+        },
+        nodemailer.createTransport({
+          host: smtpHost,
+          port: Number(process.env['SMTP_PORT'] ?? 1025),
+          secure: false,
+        })
+      )
+    : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
+
+  const emailDelivery = new EmailDelivery(
+    { fromEmail: sendGridConfig.fromEmail, fromName: sendGridConfig.fromName },
+    transport
+  );
   const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
 
   const firebaseProjectId = config.firebaseProjectId ?? 'default';
@@ -147,8 +170,33 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     resolveParentRecipients,
   });
 
-  // Start worker
+  // Start notification worker
   notificationWorker.start();
+
+  // -----------------------------------------------------------------------
+  // Sync worker + scheduler (runs adapters server-side)
+  // -----------------------------------------------------------------------
+  const adapterRunner: AdapterRunnerFn = createAdapterRunner(database);
+
+  const syncWorker = new SyncWorker(mongoQueue, database, {
+    pollIntervalMs: 5000,
+    concurrency: 2,
+    decryptCredentials: (encrypted: { encrypted: string; iv: string }): string => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { decryptCredentials } = require('./credentials-cipher');
+      return decryptCredentials(encrypted);
+    },
+    runAdapter: adapterRunner,
+  });
+  syncWorker.start();
+
+  const syncScheduler = new SyncScheduler(mongoQueue, database, {
+    tickIntervalMs: 60_000,
+  });
+  syncScheduler.start();
+
+  // eslint-disable-next-line no-console
+  console.log('Sync worker + scheduler started');
 
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
@@ -174,6 +222,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     // eslint-disable-next-line no-console
     console.log('Shutting down worker...');
     healthServer.close();
+    await syncScheduler.stop();
+    await syncWorker.stop();
     await notificationWorker.stop();
     await mongoClient.close();
     // eslint-disable-next-line no-console

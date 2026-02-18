@@ -111,7 +111,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.getAll();
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers',
+        'http://localhost:2801/api/admin/customers',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -134,7 +134,7 @@ describe('adminCustomersApi', () => {
       const result = await adminCustomersApi.getById('cust-1');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1',
+        'http://localhost:2801/api/admin/customers/cust-1',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -159,7 +159,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.update('cust-1', updates);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1',
+        'http://localhost:2801/api/admin/customers/cust-1',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify(updates),
@@ -182,7 +182,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.delete('cust-1', 'GDPR request');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1',
+        'http://localhost:2801/api/admin/customers/cust-1',
         expect.objectContaining({
           method: 'DELETE',
           body: JSON.stringify({ reason: 'GDPR request' }),
@@ -205,7 +205,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.suspend('cust-2', 'TOS violation');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-2/suspend',
+        'http://localhost:2801/api/admin/customers/cust-2/suspend',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ reason: 'TOS violation' }),
@@ -228,7 +228,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.unsuspend('cust-2');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-2/unsuspend',
+        'http://localhost:2801/api/admin/customers/cust-2/unsuspend',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),
@@ -252,7 +252,7 @@ describe('adminCustomersApi', () => {
       const result = await adminCustomersApi.getStudents('cust-1');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1/students',
+        'http://localhost:2801/api/admin/customers/cust-1/students',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -278,7 +278,7 @@ describe('adminCustomersApi', () => {
       const result = await adminCustomersApi.impersonate('cust-3', 'Investigating billing issue');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-3/impersonate',
+        'http://localhost:2801/api/admin/customers/cust-3/impersonate',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ reason: 'Investigating billing issue' }),
@@ -303,7 +303,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.getActivity('cust-1');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1/activity?limit=50',
+        'http://localhost:2801/api/admin/customers/cust-1/activity?limit=50',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -319,7 +319,7 @@ describe('adminCustomersApi', () => {
       await adminCustomersApi.getActivity('cust-1', 10);
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1/activity?limit=10',
+        'http://localhost:2801/api/admin/customers/cust-1/activity?limit=10',
         expect.objectContaining({ method: 'GET' }),
       );
     });
@@ -338,7 +338,7 @@ describe('adminCustomersApi', () => {
       const result = await adminCustomersApi.getLtv('cust-1');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        'http://localhost:3000/api/admin/customers/cust-1/ltv',
+        'http://localhost:2801/api/admin/customers/cust-1/ltv',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({

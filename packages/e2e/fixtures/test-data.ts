@@ -2,6 +2,12 @@
  * Test data constants for E2E tests.
  */
 
+/**
+ * Known TOTP secret shared between the seed and E2E tests.
+ * All seeded admin accounts use this secret for MFA.
+ */
+export const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
+
 export type UserRole = 'parent' | 'admin' | 'newUser';
 
 export const TEST_USERS = {
@@ -15,6 +21,27 @@ export const TEST_USERS = {
     email: 'admin@scholarmancy.com',
     password: 'Admin123!',
     name: 'Admin User',
+    role: 'admin' as const,
+  },
+  /** Same credentials as admin (API has single admin role); for E2E Support/Billing login tests. */
+  support: {
+    email: 'admin@scholarmancy.com',
+    password: 'Admin123!',
+    name: 'Support',
+    role: 'admin' as const,
+  },
+  /** Same credentials as admin; for E2E Billing login tests. */
+  billing: {
+    email: 'admin@scholarmancy.com',
+    password: 'Admin123!',
+    name: 'Billing',
+    role: 'admin' as const,
+  },
+  /** Dedicated analyst admin (seeded) for E2E and lockout tests. */
+  analyst: {
+    email: 'analyst@scholarmancy.com',
+    password: 'Admin123!',
+    name: 'Analyst',
     role: 'admin' as const,
   },
   newUser: {

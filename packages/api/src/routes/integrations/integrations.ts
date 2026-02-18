@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'node:crypto';
+import { ObjectId } from 'mongodb';
 import {
   StudentRepository,
   IngestSourceRepository,
@@ -9,7 +10,8 @@ import {
 import { ConnectorTokenService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
-import { packageSingleFile, packageMultiStudent, type TargetOS } from '../../services/scraper-generator/packager';
+import { packageSingleFile, packageMultiStudent, packageBundle, type TargetOS } from '../../services/scraper-generator/packager';
+import { resolveScraperCode } from '../../services/scraper-generator/scraper-code-resolver';
 import { processScraperGenerationJob, isKnownPlatform } from '../../services/scraper-generator/job-processor';
 import { getReferenceScraper, normalizeToReferencePlatform } from '../../services/scraper-generator/reference-scrapers';
 import { createHash } from 'node:crypto';
@@ -293,6 +295,371 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         success: false,
         error: error instanceof Error ? error.message : 'Internal server error',
       });
+    }
+  });
+
+  const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
+
+  /** Collections that store studentExternalId and should get studentId set when linking reconciliation. */
+  const SLC_COLLECTIONS_WITH_STUDENT = [
+    'slc_assignments',
+    'slc_event_series',
+    'slc_event_overrides',
+    'slc_courses',
+    'slc_grade_snapshots',
+    'slc_attendance_events',
+    'slc_academic_terms',
+    'slc_institutions',
+    'slc_teachers',
+    'slc_course_materials',
+    'slc_messages',
+    'slc_student_profiles',
+  ];
+
+  async function backfillStudentIdInIngestedDocs(params: {
+    userId: string;
+    studentExternalId: string;
+    linkedStudentId: string;
+  }): Promise<void> {
+    const { userId, studentExternalId, linkedStudentId } = params;
+    const now = new Date();
+    for (const collName of SLC_COLLECTIONS_WITH_STUDENT) {
+      const coll = config.database.collection(collName);
+      await coll.updateMany(
+        { userId, studentExternalId },
+        { $set: { studentId: linkedStudentId, updatedAt: now } }
+      );
+    }
+    const alertsColl = config.database.collection('alerts');
+    await alertsColl.updateMany(
+      { userId, studentId: studentExternalId },
+      { $set: { studentId: linkedStudentId } }
+    );
+  }
+
+  /**
+   * GET /api/integrations/reconciliation/pending
+   * List pending student reconciliations (students found in sync but not yet linked).
+   */
+  router.get('/reconciliation/pending', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
+      const docs = await coll
+        .find({ userId, linkedStudentId: { $in: [null, undefined, ''] } })
+        .sort({ createdAt: -1 })
+        .toArray();
+      const list = docs.map((d) => ({
+        id: (d._id as ObjectId).toString(),
+        sourceId: d['sourceId'],
+        studentExternalId: d['studentExternalId'],
+        displayName: d['displayName'] ?? d['studentExternalId'],
+        createdAt: (d['createdAt'] as Date)?.toISOString?.(),
+      }));
+      res.status(200).json({ success: true, pending: list });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/reconciliation/:id/link
+   * Link a pending reconciliation to an existing student.
+   */
+  router.post('/reconciliation/:id/link', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const pendingId = req.params['id'];
+      const { studentId } = (req.body ?? {}) as { studentId?: string };
+      if (!pendingId || !studentId) {
+        res.status(400).json({ success: false, error: 'Missing pending id or studentId' });
+        return;
+      }
+      const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
+      const pending = await coll.findOne({
+        _id: new ObjectId(pendingId),
+        userId,
+      });
+      if (!pending) {
+        res.status(404).json({ success: false, error: 'Pending reconciliation not found' });
+        return;
+      }
+      const student = await studentRepository.findById(studentId);
+      if (!student || student.userId?.toString() !== userId) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      await coll.updateOne(
+        { _id: new ObjectId(pendingId), userId },
+        { $set: { linkedStudentId: studentId, updatedAt: new Date() } }
+      );
+      const studentExternalId = pending['studentExternalId'] as string;
+      if (studentExternalId) {
+        await backfillStudentIdInIngestedDocs({
+          userId,
+          studentExternalId,
+          linkedStudentId: studentId,
+        });
+      }
+      res.status(200).json({ success: true, linkedStudentId: studentId });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/reconciliation/:id/create
+   * Create a new student and link to this pending reconciliation.
+   */
+  router.post('/reconciliation/:id/create', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const pendingId = req.params['id'];
+      const { name } = (req.body ?? {}) as { name?: string };
+      if (!pendingId || !name?.trim()) {
+        res.status(400).json({ success: false, error: 'Missing pending id or name' });
+        return;
+      }
+      const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
+      const pending = await coll.findOne({
+        _id: new ObjectId(pendingId),
+        userId,
+      });
+      if (!pending) {
+        res.status(404).json({ success: false, error: 'Pending reconciliation not found' });
+        return;
+      }
+      const studentExternalId = pending['studentExternalId'] as string;
+      const created = await studentRepository.create({
+        userId: new ObjectId(userId),
+        name: name.trim(),
+        studentId: studentExternalId,
+      });
+      const linkedId = created._id?.toString() ?? '';
+      await coll.updateOne(
+        { _id: new ObjectId(pendingId), userId },
+        { $set: { linkedStudentId: linkedId, updatedAt: new Date() } }
+      );
+      await backfillStudentIdInIngestedDocs({
+        userId,
+        studentExternalId,
+        linkedStudentId: linkedId,
+      });
+      res.status(201).json({
+        success: true,
+        student: {
+          id: linkedId,
+          name: created.name,
+          studentId: created.studentId,
+        },
+        linkedStudentId: linkedId,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Server-Side Scraper Generation (registered before /:id so /generate-status is matched)
+  // -------------------------------------------------------------------------
+
+  const generatedScrapersCollection = config.database.collection('generated_scrapers');
+  const scraperGenerationJobsCollection = config.database.collection('scraper_generation_jobs');
+
+  const defaultSteps = [
+    { name: 'connect', status: 'pending' as const, details: null },
+    { name: 'crawl', status: 'pending' as const, details: null },
+    { name: 'authenticate_check', status: 'pending' as const, details: null },
+    { name: 'generate', status: 'pending' as const, details: null },
+    { name: 'validate', status: 'pending' as const, details: null },
+  ];
+
+  /**
+   * POST /api/integrations/generate-scraper
+   * Queue a generation job for unknown platforms; return cached/reference for known/cached.
+   */
+  router.post('/generate-scraper', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { platformName, loginUrl, loginMethod } = req.body ?? {};
+      if (!platformName || !loginUrl || !loginMethod) {
+        res.status(400).json({ success: false, error: 'Missing required fields: platformName, loginUrl, loginMethod' });
+        return;
+      }
+
+      const cacheKey = createHash('sha256').update(`${platformName}|${loginUrl}`).digest('hex');
+
+      if (isKnownPlatform(platformName)) {
+        res.status(200).json({
+          success: true,
+          scraperId: null,
+          jobId: null,
+          platformName,
+          fromCache: true,
+          knownPlatform: true,
+          code: {
+            scraper: `// Reference scraper for ${platformName}`,
+            transformer: `// Reference transformer for ${platformName}`,
+            metadata: JSON.stringify({ id: `${platformName}-browser`, name: platformName, version: '1.0.0' }, null, 2),
+          },
+        });
+        return;
+      }
+
+      const cached = await generatedScrapersCollection.findOne({
+        cacheKey,
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60_000) },
+      });
+
+      if (cached) {
+        res.status(200).json({
+          success: true,
+          scraperId: cached['_id'].toString(),
+          jobId: null,
+          platformName,
+          fromCache: true,
+          code: {
+            scraper: cached['scraperCode'],
+            transformer: cached['transformerCode'],
+            metadata: cached['metadata'],
+          },
+        });
+        return;
+      }
+
+      const jobId = randomUUID();
+      const now = new Date();
+      await scraperGenerationJobsCollection.insertOne({
+        jobId,
+        userId,
+        platformName,
+        loginUrl,
+        cacheKey,
+        status: 'queued',
+        createdAt: now,
+        updatedAt: now,
+        steps: defaultSteps,
+        result: null,
+        error: null,
+        retryCount: 0,
+      });
+
+      setImmediate(() => {
+        processScraperGenerationJob(config.database, jobId).catch((err) => {
+          console.error('[scraper-generation] job failed:', jobId, err);
+        });
+      });
+
+      res.status(200).json({
+        success: true,
+        scraperId: null,
+        jobId,
+        platformName,
+        fromCache: false,
+        status: 'queued',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/integrations/generate-status?jobId=...
+   * Poll job status for dashboard real-time progress.
+   */
+  router.get('/generate-status', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const jobId = req.query['jobId'] as string | undefined;
+      if (!jobId) {
+        res.status(400).json({ success: false, error: 'Missing jobId' });
+        return;
+      }
+      const job = await scraperGenerationJobsCollection.findOne({ jobId, userId });
+      if (!job) {
+        res.status(404).json({ success: false, error: 'Job not found' });
+        return;
+      }
+      res.status(200).json({
+        success: job['status'] === 'ready' || job['status'] === 'failed',
+        jobId: job['jobId'],
+        status: job['status'],
+        steps: job['steps'],
+        result: job['result'] ?? undefined,
+        error: job['error'] ?? undefined,
+        platformName: job['platformName'],
+        loginUrl: job['loginUrl'],
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/scraper-report
+   * Script phones home on failure for auto-regeneration tracking.
+   */
+  const scraperReportsCollection = config.database.collection('scraper_reports');
+
+  router.post('/scraper-report', async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const { cacheKey, status, error: reportError, generatedAt } = body as {
+        cacheKey?: string;
+        status?: string;
+        error?: string;
+        generatedAt?: string;
+      };
+      if (!cacheKey || status !== 'failed') {
+        res.status(200).json({ success: true });
+        return;
+      }
+      await scraperReportsCollection.insertOne({
+        cacheKey,
+        status: 'failed',
+        error: (reportError ?? '').slice(0, 500),
+        generatedAt: generatedAt ? new Date(generatedAt) : new Date(),
+        reportedAt: new Date(),
+      });
+      res.status(200).json({ success: true });
+    } catch {
+      res.status(200).json({ success: true });
     }
   });
 
@@ -832,189 +1199,6 @@ echo ""
     }
   });
 
-  // -------------------------------------------------------------------------
-  // Server-Side Scraper Generation
-  // -------------------------------------------------------------------------
-
-  const generatedScrapersCollection = config.database.collection('generated_scrapers');
-  const scraperGenerationJobsCollection = config.database.collection('scraper_generation_jobs');
-
-  const defaultSteps = [
-    { name: 'connect', status: 'pending' as const, details: null },
-    { name: 'crawl', status: 'pending' as const, details: null },
-    { name: 'authenticate_check', status: 'pending' as const, details: null },
-    { name: 'generate', status: 'pending' as const, details: null },
-    { name: 'validate', status: 'pending' as const, details: null },
-  ];
-
-  /**
-   * POST /api/integrations/generate-scraper
-   * Queue a generation job for unknown platforms; return cached/reference for known/cached.
-   */
-  router.post('/generate-scraper', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
-
-      const { platformName, loginUrl, loginMethod } = req.body ?? {};
-      if (!platformName || !loginUrl || !loginMethod) {
-        res.status(400).json({ success: false, error: 'Missing required fields: platformName, loginUrl, loginMethod' });
-        return;
-      }
-
-      const cacheKey = createHash('sha256').update(`${platformName}|${loginUrl}`).digest('hex');
-
-      if (isKnownPlatform(platformName)) {
-        res.status(200).json({
-          success: true,
-          scraperId: null,
-          jobId: null,
-          platformName,
-          fromCache: true,
-          knownPlatform: true,
-          code: {
-            scraper: `// Reference scraper for ${platformName}`,
-            transformer: `// Reference transformer for ${platformName}`,
-            metadata: JSON.stringify({ id: `${platformName}-browser`, name: platformName, version: '1.0.0' }, null, 2),
-          },
-        });
-        return;
-      }
-
-      const cached = await generatedScrapersCollection.findOne({
-        cacheKey,
-        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60_000) },
-      });
-
-      if (cached) {
-        res.status(200).json({
-          success: true,
-          scraperId: cached['_id'].toString(),
-          jobId: null,
-          platformName,
-          fromCache: true,
-          code: {
-            scraper: cached['scraperCode'],
-            transformer: cached['transformerCode'],
-            metadata: cached['metadata'],
-          },
-        });
-        return;
-      }
-
-      const jobId = randomUUID();
-      const now = new Date();
-      await scraperGenerationJobsCollection.insertOne({
-        jobId,
-        userId,
-        platformName,
-        loginUrl,
-        cacheKey,
-        status: 'queued',
-        createdAt: now,
-        updatedAt: now,
-        steps: defaultSteps,
-        result: null,
-        error: null,
-        retryCount: 0,
-      });
-
-      setImmediate(() => {
-        processScraperGenerationJob(config.database, jobId).catch((err) => {
-          console.error('[scraper-generation] job failed:', jobId, err);
-        });
-      });
-
-      res.status(200).json({
-        success: true,
-        scraperId: null,
-        jobId,
-        platformName,
-        fromCache: false,
-        status: 'queued',
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
-
-  /**
-   * GET /api/integrations/generate-status?jobId=...
-   * Poll job status for dashboard real-time progress.
-   */
-  router.get('/generate-status', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
-      const jobId = req.query['jobId'] as string | undefined;
-      if (!jobId) {
-        res.status(400).json({ success: false, error: 'Missing jobId' });
-        return;
-      }
-      const job = await scraperGenerationJobsCollection.findOne({ jobId, userId });
-      if (!job) {
-        res.status(404).json({ success: false, error: 'Job not found' });
-        return;
-      }
-      res.status(200).json({
-        success: job['status'] === 'ready' || job['status'] === 'failed',
-        jobId: job['jobId'],
-        status: job['status'],
-        steps: job['steps'],
-        result: job['result'] ?? undefined,
-        error: job['error'] ?? undefined,
-        platformName: job['platformName'],
-        loginUrl: job['loginUrl'],
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
-
-  /**
-   * POST /api/integrations/scraper-report
-   * Script phones home on failure for auto-regeneration tracking.
-   */
-  const scraperReportsCollection = config.database.collection('scraper_reports');
-
-  router.post('/scraper-report', async (req: Request, res: Response) => {
-    try {
-      const body = req.body ?? {};
-      const { cacheKey, status, error: reportError, generatedAt } = body as {
-        cacheKey?: string;
-        status?: string;
-        error?: string;
-        generatedAt?: string;
-      };
-      if (!cacheKey || status !== 'failed') {
-        res.status(200).json({ success: true });
-        return;
-      }
-      await scraperReportsCollection.insertOne({
-        cacheKey,
-        status: 'failed',
-        error: (reportError ?? '').slice(0, 500),
-        generatedAt: generatedAt ? new Date(generatedAt) : new Date(),
-        reportedAt: new Date(),
-      });
-      res.status(200).json({ success: true });
-    } catch {
-      res.status(200).json({ success: true });
-    }
-  });
-
   /**
    * POST /api/integrations/scraper-download
    * Download a single-file scraper (.command for Mac, .bat for Windows).
@@ -1036,6 +1220,63 @@ echo ""
 
       const jti = randomUUID();
       const token = connectorTokenService.createToken(userId, jti);
+
+      // Bundle: body.connections array (connection-centric, one script for multiple platforms)
+      const bodyConnections = body.connections as Array<{
+        platformId: string;
+        platformName: string;
+        loginUrl: string;
+        scraperId?: string | null;
+        credentials: { username?: string; password?: string; studentNameHint?: string };
+      }> | undefined;
+      if (Array.isArray(bodyConnections) && bodyConnections.length > 0) {
+        // Revoke only previous bundle-download tokens for this user (not single-platform scraper tokens)
+        await revokedTokensCollection.updateMany(
+          { userId, tokenPurpose: 'scraper-bundle' },
+          { $set: { revokedAt: new Date() } },
+        );
+        await revokedTokensCollection.insertOne({
+          userId, jti, tokenPurpose: 'scraper-bundle', createdAt: new Date(), revokedAt: null,
+        });
+
+        const generatedScrapersCollection = config.database.collection('generated_scrapers');
+        const resolvedConnections = await Promise.all(
+          bodyConnections.map(async (c) => {
+            const platformId = c.platformId ?? c.platformName?.toLowerCase().replace(/[^a-z0-9]+/g, '-') ?? 'custom';
+            const platformName = c.platformName ?? 'Custom';
+            const loginUrl = c.loginUrl ?? '';
+            const scraper = await resolveScraperCode(generatedScrapersCollection, {
+              scraperId: c.scraperId ?? null,
+              platformName,
+              loginUrl,
+            });
+            return {
+              platformId,
+              platformName,
+              loginUrl,
+              credentials: {
+                username: c.credentials?.username ?? '',
+                password: c.credentials?.password ?? '',
+                studentNameHint: c.credentials?.studentNameHint,
+              },
+              scraper,
+            };
+          })
+        );
+        const script = packageBundle({
+          connectorToken: token,
+          apiBaseUrl,
+          os,
+          connections: resolvedConnections,
+        });
+        const ext = os === 'windows' ? '.bat' : '.command';
+        res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
+        res.setHeader('Content-Disposition', `attachment; filename="scholaracle-bundle${ext}"`);
+        res.status(200).send(script);
+        return;
+      }
+
+      // Single-platform and multi-student: revoke previous scraper tokens
       await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper' },
         { $set: { revokedAt: new Date() } },
