@@ -38,15 +38,27 @@ test.describe('User Login', () => {
   });
 
   test('LOG-003: Should show error for invalid credentials', async ({ page }) => {
-    await loginPage.login(testEmail, 'WrongPassword123!');
-    
-    await loginPage.expectError();
+    const loginResponse = page.waitForResponse(
+      (r) => r.url().includes('/auth/login') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
+    await loginPage.login(testEmail, 'WrongPassword123!', { waitForDashboard: false });
+    await loginResponse;
+
+    await expect(page).toHaveURL(/\/login/);
+    await loginPage.expectError(undefined, 15000);
   });
 
   test('LOG-004: Should show error for non-existent user', async ({ page }) => {
-    await loginPage.login('nonexistent@example.com', 'SomePass123!');
-    
-    await loginPage.expectError();
+    const loginResponse = page.waitForResponse(
+      (r) => r.url().includes('/auth/login') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
+    await loginPage.login('nonexistent@example.com', 'SomePass123!', { waitForDashboard: false });
+    await loginResponse;
+
+    await expect(page).toHaveURL(/\/login/);
+    await loginPage.expectError(undefined, 15000);
   });
 
   test('LOG-005: Should login successfully', async ({ page }) => {

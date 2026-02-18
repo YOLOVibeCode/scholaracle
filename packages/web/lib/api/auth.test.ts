@@ -87,7 +87,7 @@ describe('authApi', () => {
         expect.stringContaining('/auth/login'),
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ email: 'a@b.c', password: 'pass' }),
+          body: JSON.stringify({ email: 'a@b.c', password: 'pass', rememberMe: true }),
         }),
       );
     });
@@ -132,7 +132,7 @@ describe('authApi', () => {
         expect.stringContaining('/auth/register'),
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ email: 'b@c.d', password: 'pass', name: 'B' }),
+          body: JSON.stringify({ email: 'b@c.d', password: 'pass', name: 'B', rememberMe: true }),
         }),
       );
     });

@@ -120,7 +120,7 @@ BASE_URL=http://localhost:2800
 API_BASE_URL=http://localhost:2801
 
 # Production
-BASE_URL=https://app.scholarmancy.com
+BASE_URL=https://scholarmancy.com
 API_BASE_URL=https://api.scholarmancy.com
 
 # Staging
@@ -133,12 +133,12 @@ API_BASE_URL=https://staging-api.scholarmancy.com
 ```bash
 # Test against production
 cd packages/e2e
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test
 
 # Test specific layer against production
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test tests/00-critical.spec.ts
 ```
@@ -170,7 +170,7 @@ pnpm exec playwright test
 
 ### Production
 ```bash
-BASE_URL=https://app.scholarmancy.com \
+BASE_URL=https://scholarmancy.com \
 API_BASE_URL=https://api.scholarmancy.com \
 pnpm exec playwright test --project=critical  # Start with critical only
 ```

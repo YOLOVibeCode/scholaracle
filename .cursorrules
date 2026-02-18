@@ -1,9 +1,9 @@
-# Scholaracle - AI Coding Rules
+# Scholaracle Monorepo — AI Coding Rules
 
 ROLE: engineer STRICT=true
 
 ## Stack
-Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Express 4 | Jest | Playwright | pnpm monorepo
+Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Express 4 | Jest 29 | Playwright | pnpm monorepo
 
 ## Response Format
 - Code + 3-line max docstring
@@ -14,10 +14,11 @@ Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Expre
 
 ## Before Writing
 1. Search codebase—reuse existing patterns
-2. Check for `APP_SPECIFICATION.md` / `IMPLEMENTATION_STATUS.md` / `CODING_STANDARDS.md`
+2. Check `APP_SPECIFICATION.md` / `CODING_STANDARDS.md` / `IMPLEMENTATION_STATUS.md`
 3. If API endpoint: confirm route exists in `/packages/api/src/routes/`
 4. If new model: add to `@scholaracle/contracts`
-5. List edge cases you'll handle
+5. If bug fix or feature: write failing test FIRST (M1)
+6. List edge cases you'll handle
 
 ## Code Standards
 - TypeScript strict, no `any`—use `unknown` or generics
@@ -26,6 +27,7 @@ Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Expre
 - No console.log—use structured logging
 - KISS + YAGNI + DRY × SOLID
 - Complexity max 10, depth max 3, functions max 50 lines
+- Express 4: use `asyncHandler` wrapper for inline async handlers (see `packages/api/src/middleware/asyncHandler.ts`)
 
 ## Port Policy (CRITICAL - NEVER CHANGE)
 | Port | Service |
@@ -36,106 +38,273 @@ Next.js 16 | React 19 | TypeScript 5.3 strict | Tailwind 4 | MongoDB 6.3 | Expre
 | 2803 | MailHog SMTP |
 | 2804 | MailHog UI |
 
+---
+
 ## Mandates (ENFORCE STRICTLY)
 
-### M1: Monorepo Package Structure
+### M1: TDD — Red-Green-Refactor
+
+Every feature, service, and bug fix MUST start with a failing test.
+
+**Workflow:**
+1. **RED** — Write a test that fails (describes desired behavior)
+2. **GREEN** — Write the minimum code to make it pass
+3. **REFACTOR** — Clean up while keeping tests green
+
+```typescript
+// ❌ REJECT — implementing before testing
+export class GradeDropAlert {
+  generate(student: Student): Alert[] { /* logic */ }
+}
+// then writing tests after
+
+// ✅ REQUIRE — test first, implement second
+// Step 1: Write the test (RED)
+describe('GradeDropAlert.generate', () => {
+  it('should generate alert when grade drops ≥5%', () => {
+    const alert = generator.generate(studentWithGradeDrop);
+    expect(alert).toHaveLength(1);
+    expect(alert[0].type).toBe(AlertType.GRADE_DROP);
+  });
+  it('should not generate alert for <5% drop', () => {
+    const alert = generator.generate(studentWithSmallDrop);
+    expect(alert).toHaveLength(0);
+  });
+});
+// Step 2: Implement to pass (GREEN)
+// Step 3: Refactor if needed
+```
+
+### M2: Interface Segregation (ISP)
+
+Interfaces must be small and focused on a single concern. Every repository follows the Reader/Writer pattern.
+
+```typescript
+// ❌ REJECT — god interface
+interface INotificationService { /* 20+ methods */ }
+
+// ✅ REQUIRE — granular interfaces (from @scholaracle/interfaces)
+interface INotificationGenerator { generate(student: Student): Notification[] }
+interface INotificationDelivery { deliver(notification: Notification): DeliveryResult }
+interface INotificationScheduler { schedule(notification: Notification): void }
+interface INotificationTracker { track(result: DeliveryResult): void }
+
+// ✅ REQUIRE — Reader/Writer segregation for repositories
+interface IAlertReader {
+  findById(id: string): Promise<Alert | null>;
+  findByStudent(studentId: string): Promise<Alert[]>;
+}
+interface IAlertWriter {
+  create(alert: Alert): Promise<Alert>;
+  markRead(id: string): Promise<void>;
+}
+interface IAlertRepository extends IAlertReader, IAlertWriter {}
+```
+
+### M3: Monorepo Package Structure
+
+All code lives in well-defined packages with clear boundaries.
+
 ```
 packages/
-├── contracts/     # Shared types, enums, errors (leaf package)
-├── interfaces/    # ISP interfaces
-├── database/      # MongoDB repositories
-├── auth/          # JWT + 2FA
-├── agents/        # Notification generators & delivery
-├── api/           # Express server
-├── workers/       # Background jobs
+├── contracts/     # Shared types, enums, errors (leaf package — no internal deps)
+├── interfaces/    # ISP interfaces (INotification*, IAlert*, Reader/Writer)
+├── database/      # MongoDB repositories (implements interfaces)
+├── auth/          # JWT + 2FA + session management
+├── agents/        # Notification generators, delivery agents, router
+├── api/           # Express server + routes
+├── workers/       # Background jobs (queue processing)
+├── connector/     # External data ingestion tool
 ├── web/           # Next.js frontend
-├── connector/     # CLI ingestion tool
-└── e2e/           # Playwright tests
+└── e2e/           # Playwright E2E tests
 ```
 
-### M2: Repository Pattern
 ```typescript
-// ❌ REJECT - direct MongoDB access
+// ❌ REJECT — importing across package boundaries incorrectly
+import { UserRepository } from '../../../database/src/repositories/UserRepository';
+
+// ✅ REQUIRE — use package imports
+import { UserRepository } from '@scholaracle/database';
+```
+
+### M4: Repository Pattern
+
+Never access MongoDB directly. Always use repository classes.
+
+```typescript
+// ❌ REJECT — direct MongoDB access
 const user = await db.collection('users').findOne({ _id });
 
-// ✅ REQUIRE - use repository
+// ✅ REQUIRE — use repository
 import { UserRepository } from '@scholaracle/database';
 const userRepo = new UserRepository(db);
 const user = await userRepo.findById(id);
 ```
 
-### M3: Interface Segregation
-```typescript
-// ❌ REJECT - god interface
-interface INotificationService { /* 20+ methods */ }
+### M5: Contract Types
 
-// ✅ REQUIRE - granular (from @scholaracle/interfaces)
-interface INotificationGenerator { generate(): Notification[] }
-interface INotificationDelivery { deliver(): DeliveryResult }
-interface INotificationScheduler { schedule(): void }
+All shared types, enums, and errors come from `@scholaracle/contracts`. No local duplicates.
+
+```typescript
+// ❌ REJECT — local type definitions
+interface Alert { id: string; type: string; }
+
+// ✅ REQUIRE — shared contracts
+import { Alert, AlertType, NotificationChannel } from '@scholaracle/contracts';
 ```
 
-### M4: Delivery Agent Pattern
-```typescript
-// ❌ REJECT - inline notification logic
-if (channel === 'email') sendEmail(); else sendSMS();
+### M6: Delivery Agent Pattern
 
-// ✅ REQUIRE - use DeliveryRouter
+Use the DeliveryRouter for notification dispatch. Never inline channel logic.
+
+```typescript
+// ❌ REJECT — inline notification logic
+if (channel === 'email') sendEmail(); else if (channel === 'sms') sendSMS();
+
+// ✅ REQUIRE — use DeliveryRouter
 import { DeliveryRouter } from '@scholaracle/agents';
 const router = new DeliveryRouter(emailAgent, smsAgent, pushAgent, inAppAgent);
 await router.route(notification);
 ```
 
-### M5: Contract Types
-```typescript
-// ❌ REJECT - local type definitions
-interface Alert { id: string; type: string; }
+### M7: API Client Pattern (Frontend)
 
-// ✅ REQUIRE - shared contracts
-import { Alert, AlertType } from '@scholaracle/contracts';
-```
+Never use raw `fetch` in components. Use typed API clients.
 
-### M6: API Client Pattern (Frontend)
 ```typescript
-// ❌ REJECT - raw fetch
+// ❌ REJECT — raw fetch
 const res = await fetch('/api/students');
 
-// ✅ REQUIRE - API client SDK
+// ✅ REQUIRE — API client SDK
 import { studentsApi } from '@/lib/api/students';
 const students = await studentsApi.list();
 ```
 
-### M7: Validation with Zod
+### M8: Validation with Zod
+
+All API input validation uses Zod schemas. No manual validation.
+
 ```typescript
-// ❌ REJECT - manual validation
+// ❌ REJECT — manual validation
 if (!email || !email.includes('@')) throw new Error('Invalid');
 
-// ✅ REQUIRE - Zod schemas
+// ✅ REQUIRE — Zod schemas
 import { z } from 'zod';
 const schema = z.object({ email: z.string().email() });
 schema.parse(input);
 ```
 
-### M8: Middleware Chain (API)
-Order: Auth → Validation → Rate-limit → Handler → Error
+### M9: Middleware Chain (API)
+
+Express routes follow strict middleware ordering: Auth → Validation → Rate-limit → Handler → Error.
+
 ```typescript
-// ❌ REJECT - auth in handler
+// ❌ REJECT — auth in handler
 router.post('/alerts', (req, res) => { if (!req.user) ... });
 
-// ✅ REQUIRE - middleware chain
-router.post('/alerts', authMiddleware, validateBody(schema), createAlert);
+// ✅ REQUIRE — middleware chain
+router.post('/alerts', authMiddleware, validateBody(schema), asyncHandler(createAlert));
 ```
+
+### M10: Test Factory Pattern
+
+Use factory helpers for test data. Colocate tests next to source files.
+
+```typescript
+// ❌ REJECT — inline test data with magic values everywhere
+it('should create alert', async () => {
+  await repo.create({ type: 'GRADE_DROP', studentId: '507f1f77bcf86cd799439011', ... });
+});
+
+// ✅ REQUIRE — factory helpers
+function makeAlert(overrides?: Partial<Alert>): Alert {
+  return { type: AlertType.GRADE_DROP, studentId: 'stu-1', ...overrides };
+}
+
+it('should create alert', async () => {
+  await repo.create(makeAlert());
+});
+```
+
+### M11: Async Handler Safety (Express 4)
+
+Express 4 does NOT catch async handler rejections. Always wrap inline async handlers.
+
+```typescript
+// ❌ REJECT — unprotected async handler (will hang on rejection)
+router.get('/alerts', async (req, res) => {
+  const alerts = await alertRepo.findAll();
+  res.json(alerts);
+});
+
+// ✅ REQUIRE — use asyncHandler wrapper
+import { asyncHandler } from '../middleware/asyncHandler';
+router.get('/alerts', asyncHandler(async (req, res) => {
+  const alerts = await alertRepo.findAll();
+  res.json(alerts);
+}));
+
+// ✅ ALSO OK — void pattern with internal try-catch
+router.get('/alerts', (req, res) => {
+  void handleGetAlerts(req, res);
+});
+async function handleGetAlerts(req: Request, res: Response) {
+  try { /* ... */ } catch (err) { res.status(500).json({ error: 'Internal error' }); }
+}
+```
+
+---
+
+## Domain Model
+
+### Core Entities
+| Entity | Package | Description |
+|--------|---------|-------------|
+| `User` | contracts/database | Parent user account |
+| `Student` | contracts/database | Child linked to parent |
+| `Alert` | contracts/database | Generated notifications (grade drop, missing assignment, etc.) |
+| `Notification` | contracts/database | Delivery record (email, SMS, push, in-app) |
+| `DeliveryResult` | contracts | Outcome of notification delivery |
+| `Connector` | contracts/database | External data source connection (Canvas, Aeries, etc.) |
+| `IngestRun` | contracts/database | Record of a data ingestion run |
+| `Subscription` | database | Stripe billing subscription |
+| `Payment` | database | Stripe payment record |
+| `AuditLog` | database | Admin audit trail |
+| `CommLog` | database | Communication delivery log |
+
+### Alert Types
+```typescript
+enum AlertType {
+  GRADE_DROP = 'grade_drop',
+  MISSING_ASSIGNMENT = 'missing_assignment',
+  ATTENDANCE_ISSUE = 'attendance_issue',
+  PROGRESS_UPDATE = 'progress_update',
+  UPCOMING_DUE = 'upcoming_due',
+}
+```
+
+### Notification Channels
+```typescript
+enum NotificationChannel {
+  EMAIL = 'email',
+  SMS = 'sms',
+  PUSH = 'push',
+  IN_APP = 'in_app',
+}
+```
+
+---
 
 ## Project Patterns (MUST follow)
 | Pattern | Implementation |
 |---------|---------------|
-| Services | `@scholaracle/agents` - NotificationService, generators |
-| Repositories | `@scholaracle/database` - 13 repo classes (User, Student, Alert, etc.) |
-| Delivery | `@scholaracle/agents/delivery` - Email, SMS, Push, InApp, Router |
-| Contracts | `@scholaracle/contracts` - Alert, Notification, DeliveryResult |
-| Interfaces | `@scholaracle/interfaces` - INotification*, IAlert* |
-| API Client | `packages/web/lib/api/` - typed clients per domain |
-| Auth | `@scholaracle/auth` - JWT + TOTP/2FA |
+| Services | `@scholaracle/agents` — NotificationService, generators, personalization |
+| Repositories | `@scholaracle/database` — 15 repo classes (User, Student, Alert, etc.) |
+| Delivery | `@scholaracle/agents/delivery` — Email, SMS, Push, InApp, DeliveryRouter |
+| Contracts | `@scholaracle/contracts` — Alert, Notification, DeliveryResult, enums |
+| Interfaces | `@scholaracle/interfaces` — INotification*, IAlert*, Reader/Writer |
+| API Client | `packages/web/lib/api/` — typed clients per domain |
+| Auth | `@scholaracle/auth` — JWT + TOTP/2FA |
 | Validation | Zod + react-hook-form (frontend) |
 | Styling | Tailwind 4 + shadcn/ui (Radix primitives) |
 
@@ -143,13 +312,13 @@ router.post('/alerts', authMiddleware, validateBody(schema), createAlert);
 
 ### Component Structure
 ```typescript
-// ❌ REJECT - mixed concerns
+// ❌ REJECT — mixed concerns
 export function Dashboard() {
   const [data, setData] = useState();
   useEffect(() => fetch('/api/...'), []);
 }
 
-// ✅ REQUIRE - hooks + composition
+// ✅ REQUIRE — hooks + composition
 import { useAsyncData } from '@/lib/hooks/useAsyncData';
 import { dashboardApi } from '@/lib/api/dashboard';
 
@@ -160,7 +329,7 @@ export function Dashboard() {
 
 ### Form Pattern
 ```typescript
-// ✅ REQUIRE - react-hook-form + Zod
+// ✅ REQUIRE — react-hook-form + Zod
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { studentSchema } from '@/schemas/student';
@@ -170,98 +339,118 @@ const form = useForm({ resolver: zodResolver(studentSchema) });
 
 ## Route Organization (API)
 ```
-/packages/api/src/routes/
+packages/api/src/routes/
 ├── health/         # GET /health
 ├── auth/           # /auth/*
 ├── students/       # /students/*
 ├── alerts/         # /alerts/*
+├── alerts-api/     # /alerts-api/* (external)
 ├── settings/       # /settings/*
 ├── agenda/         # /agenda/*
 ├── ingest/         # /v1/ingest/*
+├── integrations/   # /integrations/*
+├── sessions/       # /sessions/*
+├── sync/           # /sync/*
+├── billing/        # /billing/*
+├── webhooks/       # /webhooks/*
+├── seed/           # /seed (test data, non-production only)
 └── admin/
     ├── auth/       # /admin/auth/*
     ├── customers/  # /admin/customers/*
-    ├── analytics/  # /admin/analytics/*
     └── ...
 ```
 
+---
+
 ## Testing Requirements
-- Unit tests: Jest with ts-jest
-- E2E tests: Playwright (see `packages/e2e/`)
-- Test files: `*.test.ts`, `*.spec.ts`
-- Coverage: aim for 100% on business logic
 
-## CLI Output
-No emojis in: shell scripts, terminal commands, CI/CD, logs, error messages
-Allowed in: .md files, React components, code comments
+### M1 Enforcement: Test Pyramid
 
-## Safety Rails
-- Never delete/refactor/optimize without OK
-- Preserve comments & existing style
-- Assume code has purpose
-- Present simpler alternative with confidence (1–10) before edits
+| Layer | What | How | Where |
+|-------|------|-----|-------|
+| **Unit** | Contracts, validators, generators, transformers | Jest + factory helpers, no mocks for pure logic | `*.test.ts` colocated |
+| **Integration** | Repositories, API routes, auth flows | Jest + mongodb-memory-server + supertest | `*.test.ts` colocated |
+| **E2E** | Full user journeys through the web app | Playwright with seed data | `packages/e2e/tests/` |
 
-## Self-Check
-```
-[ ] No placeholder code
-[ ] Edge cases handled
-[ ] Matches codebase patterns (repos, agents, contracts)
-[ ] Types from @scholaracle/contracts
-[ ] Zod schema if API input
-[ ] STRICT mode honored
-[ ] Ports unchanged (2800-2804)
-```
+### Test Conventions
+- Files: `*.test.ts` colocated next to source files
+- Database tests: Real MongoDB via `mongodb-memory-server`, `beforeEach` cleanup
+- API tests: Real Express app + `supertest`, real JWT tokens
+- Connector tests: Mocked `global.fetch`, `globalSetup: undefined`
+- Boolean vars in tests need prefixes: `isSuccess`, `isOk`, `isDeleted` (naming-convention rule)
+- Factory helpers: `makeAlert()`, `makeStudent()`, `makeUser()` patterns
+- Coverage: aim for 100% on business logic (generators, validators, transformers)
 
-## Quick Reference
-```bash
-# Dev commands
-pnpm dev                    # Start all services
-pnpm --filter @scholaracle/web dev     # Web only
-pnpm --filter @scholaracle/api dev     # API only
-
-# Testing
-pnpm test                   # Jest (all packages)
-pnpm --filter @scholaracle/e2e test    # Playwright
-
-# Type checking
-pnpm typecheck              # All packages
-
-# Linting
-pnpm lint                   # ESLint
-pnpm format                 # Prettier
-```
-
-## Violation Response
-When violation detected:
-1. REJECT with mandate number (M1-M8)
-2. Show bad code vs good code
-3. Reference relevant package/file
-4. Provide fix instruction
-
-## Documentation Reference
-- `APP_SPECIFICATION.md` - Feature specs & acceptance criteria
-- `CODING_STANDARDS.md` - Mandatory standards
-- `IMPLEMENTATION_STATUS.md` - Current status
-- `PORT_POLICY.md` - Port requirements
-- `E2E_TEST_SPECIFICATION.md` - Test specs
-- `SUPER_ADMIN_DASHBOARD_SPECIFICATION.md` - Admin features
-
-ROLE: engineer STRICT=true
-
+### Test Counts (current)
+- contracts: 4 suites, 37 tests
+- connector: 9 suites, 59 tests
+- database: 30 suites, 366 tests
+- agents: 30 suites, 223 tests
+- auth: 4 suites, 55 tests
+- api: 32 suites, 277 tests
+- web: 19 suites, 144 tests
+- workers: 1 suite, 13 tests
+- **Unit/Integration Total: 129 suites, 1174 tests**
+- **E2E (Playwright): 114 tests across 8 layers**
 
 ---
 
-## UI AUTOMATION REQUIREMENTS (CRITICAL)
+## E2E User Experience Test Requirements (CRITICAL)
+
+E2E tests verify the FULL user experience through the real browser.
+
+### Architecture: Fail-Fast Pyramid
+Tests are organized in dependency layers — if a lower layer fails, higher layers are skipped:
+
+| Layer | Name | Tests | Depends On |
+|-------|------|-------|------------|
+| 0 | @critical | Health, API, page load | — |
+| 1 | @auth | Login, register, logout, password reset | Layer 0 |
+| 2 | @dashboard | Parent + admin dashboards | Layer 1 |
+| 3 | @navigation | Sidebar, breadcrumbs, routing | Layer 2 |
+| 4 | @feature | CRUD operations, filters, settings | Layer 3 |
+| 5 | @integration | Cross-feature flows | Layer 4 |
+| 6 | @error | Error handling, 404, unauthorized | Layer 5 |
+| 7 | @onboarding | Full onboarding wizard UX | Layer 0 |
+| 8 | @multi-parent | Multi-parent sharing flows | Layer 0 |
+
+### Seed Data
+- Seed route at `packages/api/src/routes/seed/seed.ts` creates all test data
+- Guarded by `NODE_ENV !== 'production'`
+- Global setup POSTs to `/api/seed?force=true` before all tests
+- Seeds: 3 parents, 5 admins, 2 students, 2 alerts, 2 payments, 1 subscription
+
+### Page Object Pattern
+```typescript
+// ❌ REJECT — raw selectors in tests
+await page.click('[data-testid="btn-login"]');
+await page.fill('[data-testid="input-email"]', 'user@test.com');
+
+// ✅ REQUIRE — page objects (from packages/e2e/pages/)
+import { LoginPage } from '../pages/login.page';
+const loginPage = new LoginPage(page);
+await loginPage.login('user@test.com', 'password');
+```
+
+### E2E Safety Rules
+- ALWAYS use `data-testid` selectors (never CSS classes or nth-child)
+- ALWAYS use page objects from `packages/e2e/pages/`
+- NEVER hardcode credentials — use fixtures from `packages/e2e/fixtures/`
+- Test data comes from seed route — never manipulate DB directly in E2E tests
+
+---
+
+## UI Automation Requirements (CRITICAL)
 
 All UI components MUST be automation-friendly for Playwright, browser automation, and MCP testing.
 
 ### Data Test IDs (MANDATORY)
 
-Add `data-testid` attributes to ALL interactive elements and key containers:
+Add `data-testid` attributes to ALL interactive elements:
 
 | Element Type | Pattern | Example |
 |-------------|---------|---------|
-| Buttons | `data-testid="btn-{action}"` | `data-testid="btn-submit"`, `data-testid="btn-cancel"` |
+| Buttons | `data-testid="btn-{action}"` | `data-testid="btn-submit"` |
 | Forms | `data-testid="form-{name}"` | `data-testid="form-login"` |
 | Inputs | `data-testid="input-{field}"` | `data-testid="input-email"` |
 | Links | `data-testid="link-{destination}"` | `data-testid="link-dashboard"` |
@@ -273,32 +462,22 @@ Add `data-testid` attributes to ALL interactive elements and key containers:
 | Checkboxes | `data-testid="checkbox-{name}"` | `data-testid="checkbox-agree"` |
 
 ### Semantic HTML (MANDATORY)
-
 - Use proper semantic elements (`<button>`, `<a>`, `<form>`, `<input>`) instead of divs with click handlers
 - Use `<button type="button">` for actions, `<button type="submit">` for form submissions
-- Use `<a href>` for navigation, not buttons with onClick navigation
+- Use `<a href>` for navigation, not buttons with onClick
 
 ### Accessible Labels (MANDATORY)
-
 - Include `aria-label` for elements without visible text
-- Use proper `<label htmlFor="id">` elements for form inputs
+- Use proper `<label htmlFor="id">` for form inputs
 - Add `aria-describedby` for error messages linked to inputs
 
-### Stable Selectors (MANDATORY)
-
-- NEVER rely on auto-generated class names (CSS-in-JS hashes) as primary selectors
-- ALWAYS use `data-testid` for test targeting
-- Avoid using indexes or nth-child selectors
-
 ### Loading & Error States (MANDATORY)
-
-- Add `data-loading="true|false"` attribute for async states
+- Add `data-loading="true|false"` for async states
 - Use `data-testid="loading-{component}"` for loading indicators
 - Use `data-testid="error-{field}"` for validation/error messages
 - Use `data-testid="empty-{component}"` for empty states
 
-### Example Component:
-
+### Example Component
 ```tsx
 <form data-testid="form-login" onSubmit={handleSubmit}>
   <div>
@@ -315,7 +494,6 @@ Add `data-testid` attributes to ALL interactive elements and key containers:
       </span>
     )}
   </div>
-  
   <button
     type="submit"
     data-testid="btn-submit-login"
@@ -328,23 +506,62 @@ Add `data-testid` attributes to ALL interactive elements and key containers:
 </form>
 ```
 
-### Self-Check for UI Automation:
-
-- [ ] All interactive elements have `data-testid`
-- [ ] Forms use semantic HTML elements
-- [ ] Inputs have associated labels
-- [ ] Loading states are indicated with `data-loading`
-- [ ] Error messages have `data-testid="error-*"`
-- [ ] No reliance on generated CSS classes for testing
-
 ---
 
-## MODULAR CODE STRUCTURE (Monorepo App)
+## Safety Rails
+- Never delete/refactor/optimize without OK
+- Preserve comments & existing style
+- Assume code has purpose
+- Present simpler alternative with confidence (1-10) before edits
+- Never call paid external APIs in tests — mock all external services
+- Never commit `.env`, credentials, or secrets
+- Stripe webhook tests: mock both repositories via `jest.mock('@scholaracle/database')`
 
-### Purpose
-Keep monorepo code modular with clear package boundaries.
+## Self-Check
+```
+[ ] Tests written FIRST (TDD — M1)
+[ ] No placeholder code
+[ ] Edge cases handled
+[ ] Interfaces are small and focused (ISP — M2)
+[ ] Package boundaries respected (M3)
+[ ] Repository pattern used, no direct DB access (M4)
+[ ] Types from @scholaracle/contracts (M5)
+[ ] Zod schema if API input (M8)
+[ ] Middleware chain on API routes (M9)
+[ ] Factory helpers in tests (M10)
+[ ] Async handlers wrapped (M11)
+[ ] data-testid on all interactive UI elements
+[ ] STRICT mode honored
+[ ] Ports unchanged (2800-2804)
+```
 
-### SIZE THRESHOLDS (Monorepo)
+## Quick Reference
+```bash
+# Dev commands
+pnpm dev                                    # Start all services
+pnpm --filter @scholaracle/web dev          # Web only
+pnpm --filter @scholaracle/api dev          # API only
+
+# Testing
+pnpm test                                   # Jest (all packages)
+pnpm --filter @scholaracle/database test    # Single package
+pnpm --filter @scholaracle/e2e test         # Playwright E2E
+
+# Type checking
+pnpm typecheck                              # All packages
+
+# Linting
+pnpm lint                                   # ESLint
+pnpm format                                 # Prettier
+
+# Build
+pnpm build                                  # Build all packages
+pnpm --filter @scholaracle/api... build     # API + transitive deps
+```
+
+## Modular Code Structure
+
+### Size Thresholds
 
 | Metric | Limit | Rationale |
 |--------|-------|-----------|
@@ -356,15 +573,14 @@ Keep monorepo code modular with clear package boundaries.
 | **Parameters** | 6 max | Use typed objects |
 | **Nesting Depth** | 3 levels max | Extract helpers |
 
-### WHEN LIMITS ARE EXCEEDED
-
+### When Limits Are Exceeded
 ```
 If Service > 200 lines:
   → Split by responsibility (Generator, Delivery, Scheduler)
   → Use @scholaracle/interfaces for segregation
 
 If Repository > 150 lines:
-  → Split read/write operations
+  → Split read/write operations (IXxxReader + IXxxWriter)
   → Extract query builders
 
 If Component > 180 lines:
@@ -372,12 +588,26 @@ If Component > 180 lines:
   → Use composition with useAsyncData hooks
 ```
 
-### SELF-CHECK UPDATE
+## Violation Response
+When violation detected:
+1. REJECT with mandate number (M1-M11)
+2. Show bad code vs good code
+3. Reference relevant package/file
+4. Provide fix instruction
 
-Add to existing checklist:
-- [ ] Files under 250 lines
-- [ ] Services under 200 lines
-- [ ] Repositories under 150 lines
-- [ ] Types from @scholaracle/contracts
-- [ ] Interfaces from @scholaracle/interfaces
+## CLI Output
+No emojis in: shell scripts, terminal commands, CI/CD, logs, error messages
+Allowed in: .md files, React components, code comments
 
+## Documentation Reference
+- `APP_SPECIFICATION.md` — Feature specs & acceptance criteria
+- `CODING_STANDARDS.md` — Mandatory standards
+- `SUPER_ADMIN_DASHBOARD_SPECIFICATION.md` — Admin features
+- `E2E_FAIL_FAST_PYRAMID.md` — E2E test architecture
+- `SEED_ENDPOINT_USAGE.md` — Test data seeding
+- `PORT_POLICY.md` — Port requirements
+- `AUTOMATION_TESTABILITY.md` — UI automation rules
+- `DOCKER_SETUP.md` — Container config
+- `RAILWAY_DEPLOYMENT.md` — Deploy guide
+
+ROLE: engineer STRICT=true
