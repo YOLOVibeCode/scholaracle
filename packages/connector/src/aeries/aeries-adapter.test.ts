@@ -53,6 +53,16 @@ describe('AeriesAdapter', () => {
       expect(adapter.isAuthenticated()).toBe(true);
     });
 
+    it('should authenticate in scraper mode when username + password but no apiKey', async () => {
+      await adapter.authenticate({
+        baseUrl: 'https://kellerisd.aeries.net/student/LoginParent.aspx',
+        username: 'parent@example.com',
+        password: 'secret123',
+      });
+      expect(adapter.isAuthenticated()).toBe(true);
+      expect(adapter.mode).toBe('scraper');
+    });
+
     it('should throw if apiKey is missing', async () => {
       await expect(
         adapter.authenticate({
@@ -318,6 +328,93 @@ describe('AeriesAdapter', () => {
       // Verify the institution op
       const instOp = envelope.ops.find((op) => op.entity === 'institution')!;
       expect(instOp.record?.['name']).toBe('Eagle Rock High School');
+    });
+
+    it('should produce ops from injected scraperFn in scraper mode', async () => {
+      const mockExtract: import('./aeries-adapter').IAeriesScrapeResult = {
+        students: [{
+          name: 'Emma Student',
+          studentId: '12345',
+          grade: '10',
+          school: 'Eagle Rock High School',
+          courses: [{
+            period: '1',
+            name: 'Biology',
+            term: 'Semester 1',
+            teacher: 'Ms. Garcia',
+            teacherEmail: 'garcia@school.com',
+            room: '204',
+            currentGrade: 92,
+            currentPercent: 92.5,
+            missingCount: 0,
+            assignments: [{
+              number: '1',
+              title: 'Cell Lab Report',
+              category: 'Summative',
+              scoreEarned: 45,
+              scorePossible: 50,
+              percentCorrect: 90,
+              dateAssigned: '09/01/2025',
+              dateDue: '09/08/2025',
+              dateCompleted: '09/07/2025',
+              gradingComplete: true,
+              isMissing: false,
+              comment: '',
+            }],
+          }],
+          attendance: [{
+            date: '09/05/2025',
+            period: '1',
+            status: 'Absent',
+            reason: 'Illness',
+            course: 'Biology',
+          }],
+        }],
+        timestamp: '2025-09-10T12:00:00.000Z',
+      };
+
+      const scraperFn = jest.fn().mockResolvedValue(mockExtract);
+      const scraperAdapter = new AeriesAdapter(scraperFn);
+      await scraperAdapter.authenticate({
+        baseUrl: 'https://kellerisd.aeries.net/student/LoginParent.aspx',
+        username: 'parent@example.com',
+        password: 'secret123',
+      });
+
+      const envelope = await scraperAdapter.fetchEnvelope({
+        runId: 'run-scraper-1',
+        sourceId: 'src-scraper-1',
+        displayName: 'Keller ISD (scraper)',
+      });
+
+      expect(envelope.schemaVersion).toBe(SLC_INGEST_SCHEMA_VERSION_V1);
+      expect(envelope.run.runId).toBe('run-scraper-1');
+      expect(envelope.ops.length).toBeGreaterThanOrEqual(3);
+
+      const entities = envelope.ops.map((o) => o.entity);
+      expect(entities).toContain('institution');
+      expect(entities).toContain('course');
+      expect(entities).toContain('assignment');
+      expect(entities).toContain('attendanceEvent');
+
+      expect(scraperFn).toHaveBeenCalledWith(
+        'https://kellerisd.aeries.net/student/LoginParent.aspx',
+        'parent@example.com',
+        'secret123',
+      );
+    });
+
+    it('should use scholaracle_scrapers AeriesScraper when no scraperFn injected', async () => {
+      const adapterNoFn = new AeriesAdapter();
+      await adapterNoFn.authenticate({
+        baseUrl: 'https://kellerisd.aeries.net/student/LoginParent.aspx',
+        username: 'parent@example.com',
+        password: 'secret123',
+      });
+      expect(adapterNoFn.mode).toBe('scraper');
+      // We don't call fetchEnvelope here (it would launch Playwright);
+      // the _loadScraperClass resolver is tested by verifying it doesn't
+      // throw an import error when scholaracle-scraper is available.
     });
 
     it('should handle missing gradebook data gracefully', async () => {

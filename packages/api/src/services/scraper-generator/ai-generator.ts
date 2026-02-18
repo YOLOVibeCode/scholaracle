@@ -15,6 +15,9 @@ export interface IGeneratedScraper {
   readonly scraperCode: string;
   readonly transformerCode: string;
   readonly metadata: string;
+  /** When set, packager embeds these so the scraper can extend BaseScraper (reference platforms). */
+  readonly baseScraperCode?: string;
+  readonly typesCode?: string;
 }
 
 /**
