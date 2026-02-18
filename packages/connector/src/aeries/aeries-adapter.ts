@@ -402,12 +402,61 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
       return this._scraperFn(creds.url, creds.email, creds.password);
     }
 
-    // Lazy-import to avoid pulling Playwright into production builds.
+    return AeriesAdapter._runViaScraperLib(creds.url, creds.email, creds.password);
+  }
+
+  /**
+   * Lazy-load AeriesScraper from scholaracle_scrapers and run the lifecycle.
+   * Kept static so the class is easy to test/mock independently.
+   */
+  private static async _runViaScraperLib(
+    url: string, email: string, password: string
+  ): Promise<IAeriesScrapeResult> {
+    const root = process.env['SCHOLARACLE_SCRAPERS_SRC'];
+    let scraperModulePath: string;
+
+    if (root) {
+      scraperModulePath = require('path').join(root, 'src', 'scrapers', 'aeries', 'aeries-scraper');
+    } else {
+      try {
+        const pkgPath = require.resolve('scholaracle-scraper/package.json', { paths: [process.cwd(), __dirname] });
+        scraperModulePath = require('path').join(require('path').dirname(pkgPath), 'src', 'scrapers', 'aeries', 'aeries-scraper');
+      } catch {
+        throw new Error(
+          'scholaracle-scraper package not found. Set SCHOLARACLE_SCRAPERS_SRC or install scholaracle-scraper.'
+        );
+      }
+    }
+
+    require('ts-node/register');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { scrapeAeriesComplete } = require('../harness/aeries-browser-scrape') as {
-      scrapeAeriesComplete: AeriesScraperFn;
-    };
-    return scrapeAeriesComplete(creds.url, creds.email, creds.password);
+    const mod = require(scraperModulePath);
+    const ScraperClass = mod.AeriesScraper ?? mod.default;
+    if (!ScraperClass) {
+      throw new Error('AeriesScraper class not found in scholaracle-scraper');
+    }
+
+    const scraper = new ScraperClass();
+    try {
+      await scraper.initialize({
+        credentials: { baseUrl: url, username: email, password },
+        studentName: '',
+        studentExternalId: 'self',
+        institutionExternalId: 'aeries-instance',
+        sourceId: 'aeries',
+        provider: 'aeries',
+        adapterId: 'com.aeries.sis',
+        options: { headless: true },
+      });
+      const authResult = await scraper.authenticate();
+      if (authResult && !authResult.success) {
+        throw new Error(`Authentication failed: ${authResult.message ?? 'unknown'}`);
+      }
+      const rawData = await scraper.scrape();
+      return rawData as IAeriesScrapeResult;
+    } finally {
+      await scraper.cleanup().catch(() => {});
+    }
   }
 
   private async _fetchAllOpsScraper(): Promise<{
