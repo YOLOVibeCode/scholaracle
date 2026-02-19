@@ -1,0 +1,13 @@
+---
+description: Commit only clean code; never skip pre-commit hooks
+alwaysApply: true
+---
+
+# Commit Clean — No --no-verify
+
+- **Never use `git commit --no-verify`** (or `-n`). All commits must pass the pre-commit hook.
+- Fix lint and formatting before committing:
+  - Run `pnpm exec lint-staged` (or stage files and let the hook run on commit).
+  - Resolve all ESLint errors and Prettier issues in staged files.
+- If the hook fails, fix the reported problems (e.g. in `integrations.ts`: complexity, max-depth, naming). Use targeted `eslint-disable-next-line` with a short justification only when refactoring is deferred; prefer fixing the rule.
+- Ensure TypeScript compiles and tests pass before committing.
