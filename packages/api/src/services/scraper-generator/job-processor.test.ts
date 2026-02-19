@@ -161,15 +161,16 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-happy');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-happy' });
-      expect(job?.status).toBe('ready');
-      expect(job?.result?.scraperCode).toContain('PowerSchoolScraper');
-      expect(job?.result?.transformerCode).toContain('ISlcDeltaOp');
-      expect(job?.error).toBeNull();
+      expect(job?.['status']).toBe('ready');
+      const result = job?.['result'] as { scraperCode?: string; transformerCode?: string } | undefined;
+      expect(result?.scraperCode).toContain('PowerSchoolScraper');
+      expect(result?.transformerCode).toContain('ISlcDeltaOp');
+      expect(job?.['error']).toBeNull();
 
       const cached = await db.collection('generated_scrapers').findOne({ cacheKey: 'abc123' });
       expect(cached).toBeTruthy();
-      expect(cached?.platformName).toBe('PowerSchool');
-      expect(cached?.scraperCode).toContain('chromium');
+      expect(cached?.['platformName']).toBe('PowerSchool');
+      expect(cached?.['scraperCode']).toContain('chromium');
     });
 
     it('calls each pipeline step in order', async () => {
@@ -206,8 +207,8 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-connect-fail');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-connect-fail' });
-      expect(job?.status).toBe('failed');
-      expect(job?.error).toContain('ECONNREFUSED');
+      expect(job?.['status']).toBe('failed');
+      expect(job?.['error']).toContain('ECONNREFUSED');
       expect(mockCrawl).not.toHaveBeenCalled();
     });
 
@@ -219,8 +220,8 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-crawl-fail');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-crawl-fail' });
-      expect(job?.status).toBe('failed');
-      expect(job?.error).toContain('login form');
+      expect(job?.['status']).toBe('failed');
+      expect(job?.['error']).toContain('login form');
       expect(mockAuthCheck).not.toHaveBeenCalled();
     });
 
@@ -233,8 +234,8 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-captcha');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-captcha' });
-      expect(job?.status).toBe('failed');
-      expect(job?.error).toContain('CAPTCHA');
+      expect(job?.['status']).toBe('failed');
+      expect(job?.['error']).toContain('CAPTCHA');
       expect(mockGenerate).not.toHaveBeenCalled();
     });
 
@@ -248,8 +249,8 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-ai-fail');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-ai-fail' });
-      expect(job?.status).toBe('failed');
-      expect(job?.error).toContain('ANTHROPIC_API_KEY');
+      expect(job?.['status']).toBe('failed');
+      expect(job?.['error']).toContain('ANTHROPIC_API_KEY');
     });
 
     it('fails if generated code fails validation', async () => {
@@ -263,8 +264,8 @@ describe('processScraperGenerationJob', () => {
       await processScraperGenerationJob(db, 'job-validate-fail');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-validate-fail' });
-      expect(job?.status).toBe('failed');
-      expect(job?.error).toContain('validation');
+      expect(job?.['status']).toBe('failed');
+      expect(job?.['error']).toContain('validation');
     });
   });
 

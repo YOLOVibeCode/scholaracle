@@ -1390,7 +1390,7 @@ echo ""
       const scraperId = body.scraperId as string | undefined;
       const credentials = body.credentials as { studentName?: string; username?: string; password?: string } | undefined;
 
-      let scraperCode: { scraperCode: string; transformerCode: string; metadata: string } | null = null;
+      let scraperCode: { scraperCode: string; transformerCode: string; metadata: string; baseScraperCode?: string; typesCode?: string } | null = null;
       let resolvedPlatformName = platformName ?? 'custom';
       let resolvedLoginUrl = '';
 
