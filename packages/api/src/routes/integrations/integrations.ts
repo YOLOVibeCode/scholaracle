@@ -10,10 +10,21 @@ import {
 import { ConnectorTokenService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
-import { packageSingleFile, packageMultiStudent, packageBundle, type TargetOS } from '../../services/scraper-generator/packager';
+import {
+  packageSingleFile,
+  packageMultiStudent,
+  packageBundle,
+  type TargetOS,
+} from '../../services/scraper-generator/packager';
 import { resolveScraperCode } from '../../services/scraper-generator/scraper-code-resolver';
-import { processScraperGenerationJob, isKnownPlatform } from '../../services/scraper-generator/job-processor';
-import { getReferenceScraper, normalizeToReferencePlatform } from '../../services/scraper-generator/reference-scrapers';
+import {
+  processScraperGenerationJob,
+  isKnownPlatform,
+} from '../../services/scraper-generator/job-processor';
+import {
+  getReferenceScraper,
+  normalizeToReferencePlatform,
+} from '../../services/scraper-generator/reference-scrapers';
 import { createHash } from 'node:crypto';
 import {
   createIntegrationSchema,
@@ -41,6 +52,7 @@ interface ITestResult {
  * Lightweight connection test — makes a single API call to verify credentials.
  * Implemented inline (no dependency on @scholaracle/connector) to keep the API server lean.
  */
+/* eslint-disable-next-line complexity -- provider branching is inherently complex */
 async function testConnectionForProvider(
   provider: string,
   baseUrl: string,
@@ -59,19 +71,30 @@ async function testConnectionForProvider(
     switch (provider) {
       case 'canvas': {
         if (!credentials.accessToken) {
-          return { success: false, message: 'Canvas requires an access token', durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: 'Canvas requires an access token',
+            durationMs: Date.now() - start,
+          };
         }
         const res = await fetch(`${baseUrl}/api/v1/users/self`, {
           headers: { authorization: `Bearer ${credentials.accessToken}` },
         });
         if (!res.ok) {
           const text = await res.text();
-          return { success: false, message: `Canvas returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: `Canvas returned HTTP ${res.status}: ${text}`,
+            durationMs: Date.now() - start,
+          };
         }
         const user = (await res.json()) as { id: number; name: string };
-        const coursesRes = await fetch(`${baseUrl}/api/v1/courses?enrollment_state=active&per_page=5`, {
-          headers: { authorization: `Bearer ${credentials.accessToken}` },
-        });
+        const coursesRes = await fetch(
+          `${baseUrl}/api/v1/courses?enrollment_state=active&per_page=5`,
+          {
+            headers: { authorization: `Bearer ${credentials.accessToken}` },
+          }
+        );
         const courses = coursesRes.ok ? ((await coursesRes.json()) as unknown[]) : [];
         return {
           success: true,
@@ -83,14 +106,25 @@ async function testConnectionForProvider(
 
       case 'google-classroom': {
         if (!credentials.accessToken) {
-          return { success: false, message: 'Google Classroom requires an OAuth access token', durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: 'Google Classroom requires an OAuth access token',
+            durationMs: Date.now() - start,
+          };
         }
-        const res = await fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=5', {
-          headers: { authorization: `Bearer ${credentials.accessToken}` },
-        });
+        const res = await fetch(
+          'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=5',
+          {
+            headers: { authorization: `Bearer ${credentials.accessToken}` },
+          }
+        );
         if (!res.ok) {
           const text = await res.text();
-          return { success: false, message: `Google Classroom returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: `Google Classroom returned HTTP ${res.status}: ${text}`,
+            durationMs: Date.now() - start,
+          };
         }
         const data = (await res.json()) as { courses?: unknown[] };
         const count = data.courses?.length ?? 0;
@@ -104,7 +138,11 @@ async function testConnectionForProvider(
 
       case 'oneroster': {
         if (!credentials.accessToken && !(credentials.clientId && credentials.clientSecret)) {
-          return { success: false, message: 'OneRoster requires an access token or client credentials', durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: 'OneRoster requires an access token or client credentials',
+            durationMs: Date.now() - start,
+          };
         }
         let token = credentials.accessToken;
         if (!token && credentials.clientId && credentials.clientSecret) {
@@ -118,7 +156,11 @@ async function testConnectionForProvider(
             }).toString(),
           });
           if (!tokenRes.ok) {
-            return { success: false, message: `OAuth token exchange failed: HTTP ${tokenRes.status}`, durationMs: Date.now() - start };
+            return {
+              success: false,
+              message: `OAuth token exchange failed: HTTP ${tokenRes.status}`,
+              durationMs: Date.now() - start,
+            };
           }
           const tokenData = (await tokenRes.json()) as { access_token: string };
           token = tokenData.access_token;
@@ -128,7 +170,11 @@ async function testConnectionForProvider(
         });
         if (!res.ok) {
           const text = await res.text();
-          return { success: false, message: `OneRoster returned HTTP ${res.status}: ${text}`, durationMs: Date.now() - start };
+          return {
+            success: false,
+            message: `OneRoster returned HTTP ${res.status}: ${text}`,
+            durationMs: Date.now() - start,
+          };
         }
         const data = (await res.json()) as { orgs?: Array<{ name?: string }> };
         const orgName = data.orgs?.[0]?.name;
@@ -143,7 +189,8 @@ async function testConnectionForProvider(
       case 'skyward': {
         return {
           success: false,
-          message: 'Skyward test connection requires browser-based scraping and is not available via the API. Credentials will be verified during the first sync.',
+          message:
+            'Skyward test connection requires browser-based scraping and is not available via the API. Credentials will be verified during the first sync.',
           durationMs: Date.now() - start,
         };
       }
@@ -165,10 +212,88 @@ async function testConnectionForProvider(
  * Create integrations router.
  * Account-level integration CRUD and student assignment.
  */
+function parseStoredCredentials(plain: string | null): { username: string; password: string } {
+  if (!plain) return { username: '', password: '' };
+  try {
+    const creds = JSON.parse(plain) as { username?: string; password?: string };
+    return { username: creds.username ?? '', password: creds.password ?? '' };
+  } catch {
+    return { username: '', password: '' };
+  }
+}
+
+/* eslint-disable-next-line max-lines-per-function -- legacy router; refactor in follow-up */
 export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
+
+  type PlatformEntry = {
+    studentId: string;
+    studentName: string;
+    platform: string;
+    loginUrl: string;
+    credentials: { studentName: string; username: string; password: string };
+  };
+  async function buildPlatformEntry(
+    uid: string,
+    student: { _id?: unknown; name: string },
+    ds: { id: string; credentials?: { encrypted?: string; iv?: string } }
+  ): Promise<PlatformEntry | null> {
+    const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(uid, ds.id);
+    if (!ingestSource?.portalBaseUrl) return null;
+    let username = '';
+    let password = '';
+    if (ds.credentials?.encrypted && ds.credentials?.iv) {
+      const plain = decryptCredentials({
+        encrypted: ds.credentials.encrypted,
+        iv: ds.credentials.iv,
+      });
+      const parsed = parseStoredCredentials(plain ?? null);
+      username = parsed.username;
+      password = parsed.password;
+    }
+    return {
+      studentId: (student._id as { toString?: () => string })?.toString?.() ?? '',
+      studentName: student.name,
+      platform: ingestSource.provider,
+      loginUrl: ingestSource.portalBaseUrl,
+      credentials: { studentName: student.name, username, password },
+    };
+  }
+  async function getPlatformsForStudent(
+    uid: string,
+    student: {
+      _id?: unknown;
+      name: string;
+      dataSources: ReadonlyArray<{ id: string; credentials?: { encrypted?: string; iv?: string } }>;
+    }
+  ): Promise<PlatformEntry[]> {
+    const platforms: PlatformEntry[] = [];
+    for (const ds of student.dataSources) {
+      const entry = await buildPlatformEntry(uid, student, ds);
+      if (entry) platforms.push(entry);
+    }
+    return platforms;
+  }
+  async function buildStudentsForMultiFromDb(
+    uid: string
+  ): Promise<Array<{ studentId: string; studentName: string; platforms: PlatformEntry[] }>> {
+    const students = await studentRepository.findByUserId(uid);
+    const result: Array<{ studentId: string; studentName: string; platforms: PlatformEntry[] }> =
+      [];
+    for (const student of students) {
+      const platforms = await getPlatformsForStudent(uid, student);
+      if (platforms.length > 0) {
+        result.push({
+          studentId: student._id?.toString() ?? '',
+          studentName: student.name,
+          platforms,
+        });
+      }
+    }
+    return result;
+  }
 
   /**
    * GET /api/integrations
@@ -509,7 +634,10 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
 
       const { platformName, loginUrl, loginMethod } = req.body ?? {};
       if (!platformName || !loginUrl || !loginMethod) {
-        res.status(400).json({ success: false, error: 'Missing required fields: platformName, loginUrl, loginMethod' });
+        res.status(400).json({
+          success: false,
+          error: 'Missing required fields: platformName, loginUrl, loginMethod',
+        });
         return;
       }
 
@@ -526,7 +654,11 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
           code: {
             scraper: `// Reference scraper for ${platformName}`,
             transformer: `// Reference transformer for ${platformName}`,
-            metadata: JSON.stringify({ id: `${platformName}-browser`, name: platformName, version: '1.0.0' }, null, 2),
+            metadata: JSON.stringify(
+              { id: `${platformName}-browser`, name: platformName, version: '1.0.0' },
+              null,
+              2
+            ),
           },
         });
         return;
@@ -640,7 +772,12 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   router.post('/scraper-report', async (req: Request, res: Response) => {
     try {
       const body = req.body ?? {};
-      const { cacheKey, status, error: reportError, generatedAt } = body as {
+      const {
+        cacheKey,
+        status,
+        error: reportError,
+        generatedAt,
+      } = body as {
         cacheKey?: string;
         status?: string;
         error?: string;
@@ -866,6 +1003,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * POST /api/integrations/:id/students/:studentId
    * Assign integration to a student (optional credentials).
    */
+  /* eslint-disable-next-line complexity -- route handler branches */
   router.post('/:id/students/:studentId', async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -1018,7 +1156,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       // Revoke previous scraper token(s) for this user
       await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } },
+        { $set: { revokedAt: new Date() } }
       );
 
       // Generate new token
@@ -1062,7 +1200,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
 
       const tokenDoc = await revokedTokensCollection.findOne(
         { userId, tokenPurpose: 'scraper', revokedAt: null },
-        { sort: { createdAt: -1 } },
+        { sort: { createdAt: -1 } }
       );
 
       if (!tokenDoc) {
@@ -1098,7 +1236,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
 
       const result = await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper', revokedAt: null },
-        { $set: { revokedAt: new Date() } },
+        { $set: { revokedAt: new Date() } }
       );
 
       res.status(200).json({
@@ -1132,7 +1270,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       // Revoke previous + record new
       await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } },
+        { $set: { revokedAt: new Date() } }
       );
       await revokedTokensCollection.insertOne({
         userId,
@@ -1206,6 +1344,7 @@ echo ""
    * Body: { os, students?: [{ studentId, studentName, platforms: [{ platform, loginUrl, scraperId?, credentials }] }] } for multi.
    * If students is omitted, server builds from all user's students and their dataSources (self-hosted).
    */
+  /* eslint-disable-next-line max-lines-per-function, complexity -- download route; refactor in follow-up */
   router.post('/scraper-download', async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -1215,34 +1354,41 @@ echo ""
       }
 
       const body = req.body ?? {};
-      const os = body.os === 'windows' ? 'windows' : 'mac' as TargetOS;
+      const os = body.os === 'windows' ? 'windows' : ('mac' as TargetOS);
       const apiBaseUrl = process.env['API_BASE_URL'] ?? 'https://api.scholarmancy.com';
 
       const jti = randomUUID();
       const token = connectorTokenService.createToken(userId, jti);
 
       // Bundle: body.connections array (connection-centric, one script for multiple platforms)
-      const bodyConnections = body.connections as Array<{
-        platformId: string;
-        platformName: string;
-        loginUrl: string;
-        scraperId?: string | null;
-        credentials: { username?: string; password?: string; studentNameHint?: string };
-      }> | undefined;
+      const bodyConnections = body.connections as
+        | Array<{
+            platformId: string;
+            platformName: string;
+            loginUrl: string;
+            scraperId?: string | null;
+            credentials: { username?: string; password?: string; studentNameHint?: string };
+          }>
+        | undefined;
       if (Array.isArray(bodyConnections) && bodyConnections.length > 0) {
         // Revoke only previous bundle-download tokens for this user (not single-platform scraper tokens)
         await revokedTokensCollection.updateMany(
           { userId, tokenPurpose: 'scraper-bundle' },
-          { $set: { revokedAt: new Date() } },
+          { $set: { revokedAt: new Date() } }
         );
         await revokedTokensCollection.insertOne({
-          userId, jti, tokenPurpose: 'scraper-bundle', createdAt: new Date(), revokedAt: null,
+          userId,
+          jti,
+          tokenPurpose: 'scraper-bundle',
+          createdAt: new Date(),
+          revokedAt: null,
         });
 
         const generatedScrapersCollection = config.database.collection('generated_scrapers');
         const resolvedConnections = await Promise.all(
           bodyConnections.map(async (c) => {
-            const platformId = c.platformId ?? c.platformName?.toLowerCase().replace(/[^a-z0-9]+/g, '-') ?? 'custom';
+            const platformId =
+              c.platformId ?? c.platformName?.toLowerCase().replace(/[^a-z0-9]+/g, '-') ?? 'custom';
             const platformName = c.platformName ?? 'Custom';
             const loginUrl = c.loginUrl ?? '';
             const scraper = await resolveScraperCode(generatedScrapersCollection, {
@@ -1279,23 +1425,29 @@ echo ""
       // Single-platform and multi-student: revoke previous scraper tokens
       await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } },
+        { $set: { revokedAt: new Date() } }
       );
       await revokedTokensCollection.insertOne({
-        userId, jti, tokenPurpose: 'scraper', createdAt: new Date(), revokedAt: null,
+        userId,
+        jti,
+        tokenPurpose: 'scraper',
+        createdAt: new Date(),
+        revokedAt: null,
       });
 
       // Multi-student: body.students array or build from DB (useAllStudents / no platform)
-      const bodyStudents = body.students as Array<{
-        studentId: string;
-        studentName: string;
-        platforms: Array<{
-          platform: string;
-          loginUrl: string;
-          scraperId?: string;
-          credentials: { studentName?: string; username?: string; password?: string };
-        }>;
-      }> | undefined;
+      const bodyStudents = body.students as
+        | Array<{
+            studentId: string;
+            studentName: string;
+            platforms: Array<{
+              platform: string;
+              loginUrl: string;
+              scraperId?: string;
+              credentials: { studentName?: string; username?: string; password?: string };
+            }>;
+          }>
+        | undefined;
       const useAllStudents = body.useAllStudents === true;
 
       if (useAllStudents || (Array.isArray(bodyStudents) && bodyStudents.length > 0)) {
@@ -1311,64 +1463,40 @@ echo ""
           }>;
         }>;
 
+        const toPlatformEntry = (
+          p: {
+            platform: string;
+            loginUrl: string;
+            credentials?: { studentName?: string; username?: string; password?: string };
+          },
+          s: { studentId: string; studentName: string }
+        ): PlatformEntry => ({
+          studentId: s.studentId,
+          studentName: s.studentName,
+          platform: p.platform,
+          loginUrl: p.loginUrl,
+          credentials: {
+            studentName: p.credentials?.studentName ?? s.studentName,
+            username: p.credentials?.username ?? '',
+            password: p.credentials?.password ?? '',
+          },
+        });
+
         if (Array.isArray(bodyStudents) && bodyStudents.length > 0) {
           studentsForMulti = bodyStudents.map((s) => ({
             studentId: s.studentId,
             studentName: s.studentName,
-            platforms: s.platforms.map((p) => ({
-              studentId: s.studentId,
-              studentName: s.studentName,
-              platform: p.platform,
-              loginUrl: p.loginUrl,
-              credentials: {
-                studentName: p.credentials?.studentName ?? s.studentName,
-                username: p.credentials?.username ?? '',
-                password: p.credentials?.password ?? '',
-              },
-            })),
+            platforms: s.platforms.map((p) => toPlatformEntry(p, s)),
           }));
         } else {
-          const students = await studentRepository.findByUserId(userId);
-          studentsForMulti = [];
-          for (const student of students) {
-            const platforms: Array<{ studentId: string; studentName: string; platform: string; loginUrl: string; credentials: { studentName: string; username: string; password: string } }> = [];
-            for (const ds of student.dataSources) {
-              const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, ds.id);
-              if (!ingestSource?.portalBaseUrl) continue;
-              let username = '';
-              let password = '';
-              if (ds.credentials?.encrypted && ds.credentials?.iv) {
-                const plain = decryptCredentials({ encrypted: ds.credentials.encrypted, iv: ds.credentials.iv });
-                if (plain) {
-                  try {
-                    const creds = JSON.parse(plain) as { username?: string; password?: string };
-                    username = creds.username ?? '';
-                    password = creds.password ?? '';
-                  } catch {
-                    // ignore
-                  }
-                }
-              }
-              platforms.push({
-                studentId: student._id?.toString() ?? '',
-                studentName: student.name,
-                platform: ingestSource.provider,
-                loginUrl: ingestSource.portalBaseUrl,
-                credentials: { studentName: student.name, username, password },
-              });
-            }
-            if (platforms.length > 0) {
-              studentsForMulti.push({
-                studentId: student._id?.toString() ?? '',
-                studentName: student.name,
-                platforms,
-              });
-            }
-          }
+          studentsForMulti = await buildStudentsForMultiFromDb(userId);
         }
 
         if (studentsForMulti.length === 0) {
-          res.status(400).json({ success: false, error: 'No students or platforms configured. Add data sources on student pages first.' });
+          res.status(400).json({
+            success: false,
+            error: 'No students or platforms configured. Add data sources on student pages first.',
+          });
           return;
         }
 
@@ -1388,13 +1516,22 @@ echo ""
       // Single-platform (existing flow)
       const platformName = body.platform as string | undefined;
       const scraperId = body.scraperId as string | undefined;
-      const credentials = body.credentials as { studentName?: string; username?: string; password?: string } | undefined;
+      const credentials = body.credentials as
+        | { studentName?: string; username?: string; password?: string }
+        | undefined;
 
-      let scraperCode: { scraperCode: string; transformerCode: string; metadata: string; baseScraperCode?: string; typesCode?: string } | null = null;
+      let scraperCode: {
+        scraperCode: string;
+        transformerCode: string;
+        metadata: string;
+        baseScraperCode?: string;
+        typesCode?: string;
+      } | null = null;
       let resolvedPlatformName = platformName ?? 'custom';
       let resolvedLoginUrl = '';
 
       if (scraperId) {
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- MongoDB class name
         const { ObjectId } = await import('mongodb');
         const doc = await generatedScrapersCollection.findOne({ _id: new ObjectId(scraperId) });
         if (!doc) {
@@ -1424,18 +1561,25 @@ echo ""
           scraperCode = {
             scraperCode: `// Reference scraper for ${platformName}\n// Set SCHOLARACLE_SCRAPERS_SRC or install scholaracle-scraper for real code.`,
             transformerCode: `// Reference transformer for ${platformName}`,
-            metadata: JSON.stringify({
-              id: `${platformName.toLowerCase()}-browser`,
-              name: platformName,
-              version: '1.0.0',
-              description: `Scrapes student data from ${platformName}`,
-            }, null, 2),
+            metadata: JSON.stringify(
+              {
+                id: `${platformName.toLowerCase()}-browser`,
+                name: platformName,
+                version: '1.0.0',
+                description: `Scrapes student data from ${platformName}`,
+              },
+              null,
+              2
+            ),
           };
         }
       }
 
       if (!scraperCode) {
-        res.status(400).json({ success: false, error: 'Either scraperId, platformName, or students array is required' });
+        res.status(400).json({
+          success: false,
+          error: 'Either scraperId, platformName, or students array is required',
+        });
         return;
       }
 
@@ -1446,11 +1590,13 @@ echo ""
         loginUrl: resolvedLoginUrl || '',
         scraper: scraperCode,
         os,
-        credentials: credentials ? {
-          studentName: credentials.studentName ?? '',
-          username: credentials.username ?? '',
-          password: credentials.password ?? '',
-        } : undefined,
+        credentials: credentials
+          ? {
+              studentName: credentials.studentName ?? '',
+              username: credentials.username ?? '',
+              password: credentials.password ?? '',
+            }
+          : undefined,
       });
 
       const ext = os === 'windows' ? '.bat' : '.command';
