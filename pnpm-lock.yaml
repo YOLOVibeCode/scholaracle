@@ -359,6 +359,12 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.26
+      '@types/speakeasy':
+        specifier: ^2.0.10
+        version: 2.0.10
+      speakeasy:
+        specifier: ^2.0.0
+        version: 2.0.0
       typescript:
         specifier: ^5.3.0
         version: 5.9.3
@@ -477,6 +483,9 @@ importers:
       '@scholaracle/agents':
         specifier: workspace:*
         version: link:../agents
+      '@scholaracle/connector':
+        specifier: workspace:*
+        version: link:../connector
       '@scholaracle/contracts':
         specifier: workspace:*
         version: link:../contracts
