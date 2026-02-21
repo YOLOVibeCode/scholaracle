@@ -143,7 +143,15 @@ export interface ISlcAssignment {
   readonly dueAt?: string; // ISO timestamp
   /** When the assignment was posted/assigned. */
   readonly assignedAt?: string; // ISO timestamp
-  readonly status?: 'missing' | 'submitted' | 'graded' | 'late' | 'not_started' | 'in_progress' | 'excused' | 'unknown';
+  readonly status?:
+    | 'missing'
+    | 'submitted'
+    | 'graded'
+    | 'late'
+    | 'not_started'
+    | 'in_progress'
+    | 'excused'
+    | 'unknown';
   readonly pointsPossible?: number;
   readonly pointsEarned?: number;
   /** Computed or scraped percentage score. */
@@ -238,11 +246,19 @@ export interface ISlcCourse {
   readonly url?: string;
 }
 
+/**
+ * Academic term: school year, semester, quarter, or grading period.
+ * Hierarchy: year → semesters (e.g. 2) → grading periods (e.g. 3–4 per semester).
+ * Use parentTermExternalId to link grading periods to a semester, semesters to a year.
+ */
 export interface ISlcAcademicTerm {
   readonly title: string;
   readonly startDate: string; // ISO date (YYYY-MM-DD)
   readonly endDate: string; // ISO date (YYYY-MM-DD)
-  readonly type?: 'semester' | 'quarter' | 'trimester' | 'year' | 'other';
+  /** year | semester | quarter | trimester | grading_period | other */
+  readonly type?: 'semester' | 'quarter' | 'trimester' | 'year' | 'grading_period' | 'other';
+  /** Parent term's externalId (e.g. grading period → semester, semester → year). */
+  readonly parentTermExternalId?: string;
 }
 
 export interface ISlcGradeSnapshot {
@@ -274,7 +290,14 @@ export interface ISlcGradeSnapshot {
 
 export interface ISlcAttendanceEvent {
   readonly date: string; // ISO date (YYYY-MM-DD)
-  readonly status: 'present' | 'absent' | 'tardy' | 'excused' | 'unexcused' | 'partial' | 'field_trip';
+  readonly status:
+    | 'present'
+    | 'absent'
+    | 'tardy'
+    | 'excused'
+    | 'unexcused'
+    | 'partial'
+    | 'field_trip';
   readonly periodName?: string;
   /** Course name for period-level attendance. */
   readonly courseName?: string;
@@ -320,7 +343,16 @@ export interface ISlcCourseMaterial {
   /** Which course this material belongs to. */
   readonly courseExternalId: string;
   /** Material type. */
-  readonly type: 'document' | 'link' | 'syllabus' | 'handout' | 'rubric' | 'study_guide' | 'presentation' | 'video' | 'other';
+  readonly type:
+    | 'document'
+    | 'link'
+    | 'syllabus'
+    | 'handout'
+    | 'rubric'
+    | 'study_guide'
+    | 'presentation'
+    | 'video'
+    | 'other';
   /** URL to the document/resource (if available). */
   readonly url?: string;
   /** File name (if it's a downloadable file). */
@@ -390,7 +422,7 @@ export interface ISlcStudentProfile {
 // Runtime validation
 // ---------------------------------------------------------------------------
 
-export interface EntityRecordValidationResult {
+export interface IEntityRecordValidationResult {
   readonly valid: boolean;
   readonly errors: readonly string[];
 }
@@ -414,11 +446,10 @@ function requireString(entity: string, field: string, value: unknown): string | 
  * Validates that a record conforms to the required fields for a given entity type.
  * Optional fields are not checked — only required fields are enforced.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function validateEntityRecord(
   entity: SlcEntityType,
-  record: Record<string, any>,
-): EntityRecordValidationResult {
+  record: Record<string, unknown>
+): IEntityRecordValidationResult {
   if (!SLC_ENTITY_TYPES.includes(entity)) {
     return fail(`Unknown entity type: ${entity}`);
   }
