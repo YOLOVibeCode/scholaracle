@@ -97,6 +97,47 @@ export interface IStudentGradesResponse {
   readonly aiOverview?: string;
 }
 
+export interface IActionAsset {
+  readonly assetId: string;
+  readonly fileName: string;
+  readonly materialType: string;
+  readonly mimeType: string;
+  readonly fileSize: number;
+  readonly downloadUrl: string;
+}
+
+export interface IActionItem {
+  readonly assignmentExternalId: string;
+  readonly title: string;
+  readonly dueAt?: string;
+  readonly status: string;
+  readonly pointsPossible?: number;
+  readonly pointsEarned?: number;
+  readonly isOverdue: boolean;
+  readonly course: {
+    readonly externalId: string;
+    readonly name: string;
+    readonly currentGrade?: number;
+    readonly letterGrade?: string;
+    readonly riskLevel: string;
+  };
+  readonly assets: readonly IActionAsset[];
+  readonly materials: readonly IActionAsset[];
+}
+
+export interface IActionBucket {
+  readonly id: 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
+  readonly label: string;
+  readonly count: number;
+  readonly items: readonly IActionItem[];
+}
+
+export interface IActionBoardResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly buckets: readonly IActionBucket[];
+}
+
 export interface ICreateStudentRequest {
   readonly name: string;
   readonly grade?: string;
@@ -194,6 +235,18 @@ export const studentsApi = {
       return await apiClient.get<IStudentGradesResponse>(`/students/${id}/grades`);
     } catch (error) {
       console.error('Failed to load student grades:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get action board (buckets: needs_attention, due_soon, in_progress, recently_graded, caught_up) for a student.
+   */
+  async getActionBoard(id: string): Promise<IActionBoardResponse | null> {
+    try {
+      return await apiClient.get<IActionBoardResponse>(`/students/${id}/action-board`);
+    } catch (error) {
+      console.error('Failed to load action board:', error);
       return null;
     }
   },
