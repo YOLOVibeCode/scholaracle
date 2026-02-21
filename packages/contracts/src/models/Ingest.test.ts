@@ -87,7 +87,16 @@ describe('validateEntityRecord — assignment', () => {
   });
 
   it('should accept all valid status values', () => {
-    const statuses = ['missing', 'submitted', 'graded', 'late', 'not_started', 'in_progress', 'excused', 'unknown'] as const;
+    const statuses = [
+      'missing',
+      'submitted',
+      'graded',
+      'late',
+      'not_started',
+      'in_progress',
+      'excused',
+      'unknown',
+    ] as const;
     for (const status of statuses) {
       const result = validateEntityRecord('assignment', { title: 'Test', status });
       expect(result.valid).toBe(true);
@@ -99,7 +108,13 @@ describe('validateEntityRecord — assignment', () => {
       ...validAssignment,
       rubricScores: [
         { criterion: 'Thesis', score: 9, possiblePoints: 10, rating: 'Excellent' },
-        { criterion: 'Evidence', score: 7, possiblePoints: 10, rating: 'Proficient', comments: 'Need more sources' },
+        {
+          criterion: 'Evidence',
+          score: 7,
+          possiblePoints: 10,
+          rating: 'Proficient',
+          comments: 'Need more sources',
+        },
       ],
     };
     const result = validateEntityRecord('assignment', withRubric);
@@ -110,7 +125,12 @@ describe('validateEntityRecord — assignment', () => {
     const withAttachments: ISlcAssignment = {
       ...validAssignment,
       attachments: [
-        { name: 'worksheet.pdf', url: 'https://canvas.com/files/123', type: 'application/pdf', size: 524288 },
+        {
+          name: 'worksheet.pdf',
+          url: 'https://canvas.com/files/123',
+          type: 'application/pdf',
+          size: 524288,
+        },
       ],
     };
     const result = validateEntityRecord('assignment', withAttachments);
@@ -162,13 +182,17 @@ describe('validateEntityRecord — gradeSnapshot', () => {
   });
 
   it('should fail when courseExternalId is missing', () => {
-    const result = validateEntityRecord('gradeSnapshot', { asOfDate: '2026-02-16' } as ISlcGradeSnapshot);
+    const result = validateEntityRecord('gradeSnapshot', {
+      asOfDate: '2026-02-16',
+    } as ISlcGradeSnapshot);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('gradeSnapshot.courseExternalId is required');
   });
 
   it('should fail when asOfDate is missing', () => {
-    const result = validateEntityRecord('gradeSnapshot', { courseExternalId: 'c1' } as ISlcGradeSnapshot);
+    const result = validateEntityRecord('gradeSnapshot', {
+      courseExternalId: 'c1',
+    } as ISlcGradeSnapshot);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('gradeSnapshot.asOfDate is required');
   });
@@ -302,19 +326,31 @@ describe('validateEntityRecord — attendanceEvent', () => {
   });
 
   it('should fail when date is missing', () => {
-    const result = validateEntityRecord('attendanceEvent', { status: 'present' } as ISlcAttendanceEvent);
+    const result = validateEntityRecord('attendanceEvent', {
+      status: 'present',
+    } as ISlcAttendanceEvent);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('attendanceEvent.date is required');
   });
 
   it('should fail when status is missing', () => {
-    const result = validateEntityRecord('attendanceEvent', { date: '2026-02-14' } as ISlcAttendanceEvent);
+    const result = validateEntityRecord('attendanceEvent', {
+      date: '2026-02-14',
+    } as ISlcAttendanceEvent);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('attendanceEvent.status is required');
   });
 
   it('should accept all valid status values including new ones', () => {
-    const statuses = ['present', 'absent', 'tardy', 'excused', 'unexcused', 'partial', 'field_trip'] as const;
+    const statuses = [
+      'present',
+      'absent',
+      'tardy',
+      'excused',
+      'unexcused',
+      'partial',
+      'field_trip',
+    ] as const;
     for (const status of statuses) {
       const result = validateEntityRecord('attendanceEvent', { date: '2026-02-14', status });
       expect(result.valid).toBe(true);
@@ -372,27 +408,50 @@ describe('validateEntityRecord — courseMaterial', () => {
   });
 
   it('should fail when title is missing', () => {
-    const result = validateEntityRecord('courseMaterial', { courseExternalId: 'c1', type: 'document' } as ISlcCourseMaterial);
+    const result = validateEntityRecord('courseMaterial', {
+      courseExternalId: 'c1',
+      type: 'document',
+    } as ISlcCourseMaterial);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('courseMaterial.title is required');
   });
 
   it('should fail when courseExternalId is missing', () => {
-    const result = validateEntityRecord('courseMaterial', { title: 'Doc', type: 'document' } as ISlcCourseMaterial);
+    const result = validateEntityRecord('courseMaterial', {
+      title: 'Doc',
+      type: 'document',
+    } as ISlcCourseMaterial);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('courseMaterial.courseExternalId is required');
   });
 
   it('should fail when type is missing', () => {
-    const result = validateEntityRecord('courseMaterial', { title: 'Doc', courseExternalId: 'c1' } as ISlcCourseMaterial);
+    const result = validateEntityRecord('courseMaterial', {
+      title: 'Doc',
+      courseExternalId: 'c1',
+    } as ISlcCourseMaterial);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('courseMaterial.type is required');
   });
 
   it('should accept all valid type values including new ones', () => {
-    const types = ['document', 'link', 'syllabus', 'handout', 'rubric', 'study_guide', 'presentation', 'video', 'other'] as const;
+    const types = [
+      'document',
+      'link',
+      'syllabus',
+      'handout',
+      'rubric',
+      'study_guide',
+      'presentation',
+      'video',
+      'other',
+    ] as const;
     for (const type of types) {
-      const result = validateEntityRecord('courseMaterial', { title: 'Doc', courseExternalId: 'c1', type });
+      const result = validateEntityRecord('courseMaterial', {
+        title: 'Doc',
+        courseExternalId: 'c1',
+        type,
+      });
       expect(result.valid).toBe(true);
     }
   });
@@ -412,7 +471,13 @@ describe('validateEntityRecord — message', () => {
       sentAt: '2026-02-15T14:00:00Z',
       read: false,
       courseExternalId: 'course-math-101',
-      attachments: [{ name: 'schedule.pdf', url: 'https://school.com/files/schedule.pdf', type: 'application/pdf' }],
+      attachments: [
+        {
+          name: 'schedule.pdf',
+          url: 'https://school.com/files/schedule.pdf',
+          type: 'application/pdf',
+        },
+      ],
       recipients: 'Period 3 Parents',
       importance: 'important',
       category: 'event',
@@ -422,25 +487,41 @@ describe('validateEntityRecord — message', () => {
   });
 
   it('should fail when subject is missing', () => {
-    const result = validateEntityRecord('message', { body: 'hi', senderName: 'A', sentAt: '2026-01-01T00:00:00Z' } as ISlcMessage);
+    const result = validateEntityRecord('message', {
+      body: 'hi',
+      senderName: 'A',
+      sentAt: '2026-01-01T00:00:00Z',
+    } as ISlcMessage);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('message.subject is required');
   });
 
   it('should fail when body is missing', () => {
-    const result = validateEntityRecord('message', { subject: 'Hi', senderName: 'A', sentAt: '2026-01-01T00:00:00Z' } as ISlcMessage);
+    const result = validateEntityRecord('message', {
+      subject: 'Hi',
+      senderName: 'A',
+      sentAt: '2026-01-01T00:00:00Z',
+    } as ISlcMessage);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('message.body is required');
   });
 
   it('should fail when senderName is missing', () => {
-    const result = validateEntityRecord('message', { subject: 'Hi', body: 'text', sentAt: '2026-01-01T00:00:00Z' } as ISlcMessage);
+    const result = validateEntityRecord('message', {
+      subject: 'Hi',
+      body: 'text',
+      sentAt: '2026-01-01T00:00:00Z',
+    } as ISlcMessage);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('message.senderName is required');
   });
 
   it('should fail when sentAt is missing', () => {
-    const result = validateEntityRecord('message', { subject: 'Hi', body: 'text', senderName: 'A' } as ISlcMessage);
+    const result = validateEntityRecord('message', {
+      subject: 'Hi',
+      body: 'text',
+      senderName: 'A',
+    } as ISlcMessage);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('message.sentAt is required');
   });
@@ -448,7 +529,13 @@ describe('validateEntityRecord — message', () => {
   it('should accept all valid senderRole values including new ones', () => {
     const roles = ['teacher', 'admin', 'counselor', 'system', 'parent', 'student'] as const;
     for (const senderRole of roles) {
-      const result = validateEntityRecord('message', { subject: 'Hi', body: 'x', senderName: 'A', sentAt: '2026-01-01T00:00:00Z', senderRole });
+      const result = validateEntityRecord('message', {
+        subject: 'Hi',
+        body: 'x',
+        senderName: 'A',
+        sentAt: '2026-01-01T00:00:00Z',
+        senderRole,
+      });
       expect(result.valid).toBe(true);
     }
   });
@@ -456,15 +543,34 @@ describe('validateEntityRecord — message', () => {
   it('should accept all valid importance values', () => {
     const levels = ['normal', 'important', 'urgent'] as const;
     for (const importance of levels) {
-      const result = validateEntityRecord('message', { subject: 'Hi', body: 'x', senderName: 'A', sentAt: '2026-01-01T00:00:00Z', importance });
+      const result = validateEntityRecord('message', {
+        subject: 'Hi',
+        body: 'x',
+        senderName: 'A',
+        sentAt: '2026-01-01T00:00:00Z',
+        importance,
+      });
       expect(result.valid).toBe(true);
     }
   });
 
   it('should accept all valid category values', () => {
-    const cats = ['academic', 'administrative', 'event', 'reminder', 'behavioral', 'other'] as const;
+    const cats = [
+      'academic',
+      'administrative',
+      'event',
+      'reminder',
+      'behavioral',
+      'other',
+    ] as const;
     for (const category of cats) {
-      const result = validateEntityRecord('message', { subject: 'Hi', body: 'x', senderName: 'A', sentAt: '2026-01-01T00:00:00Z', category });
+      const result = validateEntityRecord('message', {
+        subject: 'Hi',
+        body: 'x',
+        senderName: 'A',
+        sentAt: '2026-01-01T00:00:00Z',
+        category,
+      });
       expect(result.valid).toBe(true);
     }
   });
@@ -487,19 +593,28 @@ describe('validateEntityRecord — academicTerm', () => {
   });
 
   it('should fail when title is missing', () => {
-    const result = validateEntityRecord('academicTerm', { startDate: '2026-01-13', endDate: '2026-05-22' } as ISlcAcademicTerm);
+    const result = validateEntityRecord('academicTerm', {
+      startDate: '2026-01-13',
+      endDate: '2026-05-22',
+    } as ISlcAcademicTerm);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('academicTerm.title is required');
   });
 
   it('should fail when startDate is missing', () => {
-    const result = validateEntityRecord('academicTerm', { title: 'Spring', endDate: '2026-05-22' } as ISlcAcademicTerm);
+    const result = validateEntityRecord('academicTerm', {
+      title: 'Spring',
+      endDate: '2026-05-22',
+    } as ISlcAcademicTerm);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('academicTerm.startDate is required');
   });
 
   it('should fail when endDate is missing', () => {
-    const result = validateEntityRecord('academicTerm', { title: 'Spring', startDate: '2026-01-13' } as ISlcAcademicTerm);
+    const result = validateEntityRecord('academicTerm', {
+      title: 'Spring',
+      startDate: '2026-01-13',
+    } as ISlcAcademicTerm);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('academicTerm.endDate is required');
   });
@@ -546,7 +661,10 @@ describe('validateEntityRecord — eventSeries', () => {
 
   it('should fail when title is missing', () => {
     const result = validateEntityRecord('eventSeries', {
-      category: 'test', timezone: 'America/Chicago', startsAt: '2026-03-15T09:00:00', recurrence: { rrule: 'FREQ=DAILY;COUNT=1' },
+      category: 'test',
+      timezone: 'America/Chicago',
+      startsAt: '2026-03-15T09:00:00',
+      recurrence: { rrule: 'FREQ=DAILY;COUNT=1' },
     } as ISlcEventSeries);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('eventSeries.title is required');
@@ -570,7 +688,8 @@ describe('validateEntityRecord — eventOverride', () => {
 
   it('should fail when seriesExternalId is missing', () => {
     const result = validateEntityRecord('eventOverride', {
-      occurrenceStartAt: '2026-03-15T09:00:00', op: 'cancel',
+      occurrenceStartAt: '2026-03-15T09:00:00',
+      op: 'cancel',
     } as ISlcEventOverride);
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('eventOverride.seriesExternalId is required');
@@ -612,13 +731,23 @@ describe('type-level checks (compile-time)', () => {
       teacherFeedback: 'Strong thesis, but needs more evidence in paragraph 3.',
       rubricScores: [
         { criterion: 'Thesis', score: 9, possiblePoints: 10, rating: 'Excellent' },
-        { criterion: 'Evidence', score: 7, possiblePoints: 10, comments: 'Needs more primary sources' },
+        {
+          criterion: 'Evidence',
+          score: 7,
+          possiblePoints: 10,
+          comments: 'Needs more primary sources',
+        },
       ],
       isLate: false,
       isMissing: false,
       isExcused: false,
       attachments: [
-        { name: 'rubric.pdf', url: 'https://canvas.com/files/r1', type: 'application/pdf', size: 102400 },
+        {
+          name: 'rubric.pdf',
+          url: 'https://canvas.com/files/r1',
+          type: 'application/pdf',
+          size: 102400,
+        },
       ],
       submissionType: 'online',
       url: 'https://canvas.com/courses/1/assignments/5',
@@ -657,7 +786,14 @@ describe('type-level checks (compile-time)', () => {
       missingCount: 1,
       lateCount: 2,
       categories: [
-        { name: 'Tests', weight: 40, earnedPoints: 185, possiblePoints: 200, percentScore: 92.5, letterGrade: 'A-' },
+        {
+          name: 'Tests',
+          weight: 40,
+          earnedPoints: 185,
+          possiblePoints: 200,
+          percentScore: 92.5,
+          letterGrade: 'A-',
+        },
       ],
       trend: 'improving',
       classAverage: 82.3,
