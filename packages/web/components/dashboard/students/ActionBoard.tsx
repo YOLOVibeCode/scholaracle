@@ -20,7 +20,7 @@ export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
   );
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [studentId, refresh]);
 
   if (isLoading) {
