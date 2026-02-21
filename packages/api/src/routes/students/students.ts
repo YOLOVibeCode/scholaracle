@@ -116,6 +116,70 @@ function riskFromGradeAndMissing(
   return { level: 'none' };
 }
 
+type ActionBoardAssetDoc = {
+  assetId?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  entityType?: string;
+  record?: Record<string, unknown>;
+};
+
+type ActionBoardAssignmentDoc = {
+  externalId?: string;
+  record?: Record<string, unknown>;
+};
+
+type BucketId = 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
+
+function buildActionAsset(doc: ActionBoardAssetDoc, baseUrl: string): IActionAsset {
+  const entityType = (doc.entityType ?? '') as string;
+  const matRecord = doc.record as Record<string, unknown> | undefined;
+  const materialType =
+    entityType === 'courseMaterial' ? ((matRecord?.type as string) ?? 'document') : 'attachment';
+  return {
+    assetId: (doc.assetId as string) ?? '',
+    fileName: (doc.fileName as string) ?? 'file',
+    materialType,
+    mimeType: (doc.mimeType as string) ?? 'application/octet-stream',
+    fileSize: (doc.fileSize as number) ?? 0,
+    downloadUrl: baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/assets/${doc.assetId as string}` : '',
+  };
+}
+
+function determineActionBucket(
+  item: IActionItem,
+  assignmentDocs: ActionBoardAssignmentDoc[],
+  nowMs: number,
+  seventyTwoHoursMs: number,
+  sevenDaysMs: number
+): BucketId {
+  const dueAt = item.dueAt ? new Date(item.dueAt).getTime() : null;
+  const doc = assignmentDocs.find((d) => d.externalId === item.assignmentExternalId) as
+    | ActionBoardAssignmentDoc
+    | undefined;
+  const docGradedAt = (doc?.record as Record<string, unknown> | undefined)?.gradedAt as
+    | string
+    | undefined;
+  const gradedAtMs = docGradedAt ? new Date(docGradedAt).getTime() : 0;
+
+  if (item.status === 'missing') return 'needs_attention';
+  if (item.status === 'late' && item.status !== 'graded') return 'needs_attention';
+  if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
+  if (
+    dueAt != null &&
+    dueAt - nowMs <= seventyTwoHoursMs &&
+    dueAt >= nowMs &&
+    item.status !== 'submitted' &&
+    item.status !== 'graded'
+  )
+    return 'due_soon';
+  if (item.status === 'graded' && gradedAtMs && nowMs - gradedAtMs <= sevenDaysMs)
+    return 'recently_graded';
+  if (item.status === 'in_progress' || item.status === 'submitted') return 'in_progress';
+  return 'caught_up';
+}
+
 /**
  * Create students router.
  *
@@ -275,17 +339,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
 
-      const assignmentFilter =
-        studentDbIdStr
-          ? {
-              userId,
-              deletedAt: null,
-              $or: [
-                { studentId: studentDbIdStr },
-                ...(studentExternalId ? [{ studentExternalId }] : []),
-              ],
-            }
-          : { userId, studentExternalId, deletedAt: null };
+      const assignmentFilter = studentDbIdStr
+        ? {
+            userId,
+            deletedAt: null,
+            $or: [
+              { studentId: studentDbIdStr },
+              ...(studentExternalId ? [{ studentExternalId }] : []),
+            ],
+          }
+        : { userId, studentExternalId, deletedAt: null };
       const assignmentDocs = await assignmentsColl.find(assignmentFilter).toArray();
 
       const courseIds = [
@@ -545,17 +608,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const materialsColl = config.database.collection('slc_course_materials');
       const assetsColl = config.database.collection('slc_assets');
 
-      const assignmentFilter =
-        studentDbIdStr
-          ? {
-              userId,
-              deletedAt: null,
-              $or: [
-                { studentId: studentDbIdStr },
-                ...(studentExternalId ? [{ studentExternalId }] : []),
-              ],
-            }
-          : { userId, studentExternalId, deletedAt: null };
+      const assignmentFilter = studentDbIdStr
+        ? {
+            userId,
+            deletedAt: null,
+            $or: [
+              { studentId: studentDbIdStr },
+              ...(studentExternalId ? [{ studentExternalId }] : []),
+            ],
+          }
+        : { userId, studentExternalId, deletedAt: null };
 
       const [assignmentDocs, courseDocs, gradeDocs, materialDocs, assetDocs] = await Promise.all([
         assignmentsColl.find(assignmentFilter).toArray(),
@@ -580,7 +642,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const latestGradeByCourse = new Map<string, { percent: number; asOf: string }>();
       for (const g of gradeDocs) {
-        const courseExtId = (g['courseExternalId'] ?? g['record']?.courseExternalId) as string | undefined;
+        const courseExtId = (g['courseExternalId'] ?? g['record']?.courseExternalId) as
+          | string
+          | undefined;
         if (!courseExtId) continue;
         const asOf = (g['record']?.asOfDate as string) ?? '';
         const raw = g['record']?.percentGrade ?? g['record']?.grade;
@@ -611,24 +675,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
-      function toActionAsset(doc: (typeof assetDocs)[0]): IActionAsset {
-        const entityType = doc['entityType'] as string;
-        const matRecord = doc['record'] as Record<string, unknown> | undefined;
-        const materialType =
-          entityType === 'courseMaterial'
-            ? (matRecord?.type as string) ?? 'document'
-            : 'attachment';
-        return {
-          assetId: doc['assetId'] as string,
-          fileName: (doc['fileName'] as string) ?? 'file',
-          materialType,
-          mimeType: (doc['mimeType'] as string) ?? 'application/octet-stream',
-          fileSize: (doc['fileSize'] as number) ?? 0,
-          downloadUrl: baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/assets/${doc['assetId'] as string}` : '',
-        };
-      }
-
-      type BucketId = 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
+      type BucketId =
+        | 'needs_attention'
+        | 'due_soon'
+        | 'in_progress'
+        | 'recently_graded'
+        | 'caught_up';
       const bucketLabels: Record<BucketId, string> = {
         needs_attention: 'Needs Attention',
         due_soon: 'Due Soon',
@@ -649,7 +701,6 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           typeof record['pointsPossible'] === 'number' ? record['pointsPossible'] : undefined;
         const pointsEarned =
           typeof record['pointsEarned'] === 'number' ? record['pointsEarned'] : undefined;
-        const gradedAt = record['gradedAt'] as string | undefined;
         const isOverdue = dueAt ? new Date(dueAt).getTime() < nowMs : false;
 
         const courseInfo = courseMap.get(courseExternalId);
@@ -670,13 +721,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               ? 'medium'
               : 'none';
 
-        const assignmentAssets = (assetByEntity.get(`assignment:${externalId}`) ?? []).map(toActionAsset);
+        const assignmentAssets = (assetByEntity.get(`assignment:${externalId}`) ?? []).map((a) =>
+          buildActionAsset(a as ActionBoardAssetDoc, baseUrl)
+        );
         const courseMats = materialsByCourse.get(courseExternalId) ?? [];
         const courseMaterials: IActionAsset[] = [];
         for (const m of courseMats) {
           const mid = m['externalId'] as string;
           const matAssets = assetByEntity.get(`courseMaterial:${mid}`) ?? [];
-          courseMaterials.push(...matAssets.map(toActionAsset));
+          courseMaterials.push(
+            ...matAssets.map((a) => buildActionAsset(a as ActionBoardAssetDoc, baseUrl))
+          );
         }
 
         items.push({
@@ -699,29 +754,6 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         });
       }
 
-      function assignBucket(item: IActionItem): BucketId {
-        const dueAt = item.dueAt ? new Date(item.dueAt).getTime() : null;
-        const doc = assignmentDocs.find((d) => d['externalId'] === item.assignmentExternalId);
-        const gradedAt = (doc?.['record'] as Record<string, unknown> | undefined)?.gradedAt as string | undefined;
-        const gradedAtMs = gradedAt ? new Date(gradedAt).getTime() : 0;
-
-        if (item.status === 'missing') return 'needs_attention';
-        if (item.status === 'late' && item.status !== 'graded') return 'needs_attention';
-        if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
-        if (
-          dueAt != null &&
-          dueAt - nowMs <= seventyTwoHoursMs &&
-          dueAt >= nowMs &&
-          item.status !== 'submitted' &&
-          item.status !== 'graded'
-        )
-          return 'due_soon';
-        if (item.status === 'graded' && gradedAtMs && nowMs - gradedAtMs <= sevenDaysMs)
-          return 'recently_graded';
-        if (item.status === 'in_progress' || item.status === 'submitted') return 'in_progress';
-        return 'caught_up';
-      }
-
       const bucketOrder: BucketId[] = [
         'needs_attention',
         'due_soon',
@@ -732,7 +764,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const byBucket = new Map<BucketId, IActionItem[]>();
       for (const id of bucketOrder) byBucket.set(id, []);
       for (const item of items) {
-        const bucket = assignBucket(item);
+        const bucket = determineActionBucket(
+          item,
+          assignmentDocs as ActionBoardAssignmentDoc[],
+          nowMs,
+          seventyTwoHoursMs,
+          sevenDaysMs
+        );
         byBucket.get(bucket)!.push(item);
       }
 
@@ -1460,7 +1498,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const parentRole = (role === 'guardian' || role === 'caregiver') ? role : 'parent';
+      const parentRole = role === 'guardian' || role === 'caregiver' ? role : 'parent';
 
       // Check if already invited or shared
       const existing = student.sharedWith.find(
@@ -1577,11 +1615,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       if (!student.canAdmin(userId)) {
-        res.status(403).json({ success: false, error: 'Only an admin parent can change admin rights' });
+        res
+          .status(403)
+          .json({ success: false, error: 'Only an admin parent can change admin rights' });
         return;
       }
 
-      const targetEmail = decodeURIComponent(req.params['email'] ?? '').toLowerCase().trim();
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
       const { isAdmin } = req.body as { isAdmin?: boolean };
 
       if (typeof isAdmin !== 'boolean') {
@@ -1593,7 +1635,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         (sp) => sp.email === targetEmail && sp.status === 'accepted'
       );
       if (idx === -1) {
-        res.status(404).json({ success: false, error: 'Accepted shared parent not found with that email' });
+        res
+          .status(404)
+          .json({ success: false, error: 'Accepted shared parent not found with that email' });
         return;
       }
 
@@ -1634,7 +1678,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
 
-      const targetEmail = decodeURIComponent(req.params['email'] ?? '').toLowerCase().trim();
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
       const isAdmin = student.canAdmin(userId);
 
       // Non-admin shared parents can only remove themselves
@@ -1648,9 +1694,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       }
 
-      const updatedShared = student.sharedWith.filter(
-        (sp) => sp.email !== targetEmail
-      );
+      const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
 
       if (updatedShared.length === student.sharedWith.length) {
         res.status(404).json({ success: false, error: 'Shared parent not found' });
