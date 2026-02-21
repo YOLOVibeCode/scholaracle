@@ -1,7 +1,8 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { StudentRepository } from '@scholaracle/database';
 import { ingestV1Router } from './ingest';
 
 describe('Ingest v1 API', () => {
@@ -36,6 +37,7 @@ describe('Ingest v1 API', () => {
     await database.collection('slc_course_materials').deleteMany({});
     await database.collection('slc_messages').deleteMany({});
     await database.collection('slc_student_profiles').deleteMany({});
+    await database.collection('students').deleteMany({});
 
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
@@ -278,6 +280,62 @@ describe('Ingest v1 API', () => {
     );
     expect(found).toBeDefined();
     expect(found.displayName).toBe('List Test Source');
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6b. GET /connector/students requires connector auth
+  // ---------------------------------------------------------------------------
+  it('returns 401 for GET /connector/students without connector auth', async () => {
+    const res = await request(app).get('/api/ingest/v1/connector/students');
+    expect(res.status).toBe(401);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6c. GET /connector/students returns students with dataSources
+  // ---------------------------------------------------------------------------
+  it('returns students with dataSources for authenticated connector', async () => {
+    const userDoc = await database.collection('users').findOne({ email: 'slc-user@test.com' });
+    if (!userDoc?._id) throw new Error('Test user not found');
+    const userId = userDoc._id as ObjectId;
+
+    const studentRepo = new StudentRepository(database);
+    await studentRepo.create({
+      userId,
+      name: 'Emma Lewis',
+      grade: 7,
+      studentId: 'stu-emma-1',
+      dataSources: [
+        { id: 'src-connector-students', pluginId: 'canvas', enabled: true },
+      ],
+    });
+
+    const connectorToken = await getConnectorToken();
+    await request(app)
+      .post('/api/ingest/v1/sources')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId: 'src-connector-students',
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        displayName: 'Canvas LMS',
+        portalBaseUrl: 'https://lincoln.instructure.com',
+      });
+
+    const res = await request(app)
+      .get('/api/ingest/v1/connector/students')
+      .set('Authorization', `Bearer ${connectorToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const emma = res.body.find((s: { name?: string }) => s.name === 'Emma Lewis');
+    expect(emma).toBeDefined();
+    expect(emma.externalId).toBe('stu-emma-1');
+    expect(emma.grade).toBe(7);
+    expect(Array.isArray(emma.dataSources)).toBe(true);
+    const ds = emma.dataSources.find((d: { sourceId?: string }) => d.sourceId === 'src-connector-students');
+    expect(ds).toBeDefined();
+    expect(ds.provider).toBe('canvas');
+    expect(ds.displayName).toBe('Canvas LMS');
+    expect(ds.portalBaseUrl).toBe('https://lincoln.instructure.com');
   });
 
   // ---------------------------------------------------------------------------
