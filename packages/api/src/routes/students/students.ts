@@ -17,6 +17,48 @@ import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schema
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
+  readonly baseUrl?: string;
+}
+
+export interface IActionAsset {
+  readonly assetId: string;
+  readonly fileName: string;
+  readonly materialType: string;
+  readonly mimeType: string;
+  readonly fileSize: number;
+  readonly downloadUrl: string;
+}
+
+export interface IActionItem {
+  readonly assignmentExternalId: string;
+  readonly title: string;
+  readonly dueAt?: string;
+  readonly status: string;
+  readonly pointsPossible?: number;
+  readonly pointsEarned?: number;
+  readonly isOverdue: boolean;
+  readonly course: {
+    readonly externalId: string;
+    readonly name: string;
+    readonly currentGrade?: number;
+    readonly letterGrade?: string;
+    readonly riskLevel: string;
+  };
+  readonly assets: readonly IActionAsset[];
+  readonly materials: readonly IActionAsset[];
+}
+
+export interface IActionBucket {
+  readonly id: 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
+  readonly label: string;
+  readonly count: number;
+  readonly items: readonly IActionItem[];
+}
+
+export interface IActionBoardResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly buckets: readonly IActionBucket[];
 }
 
 function getUserId(req: Request): string | null {
@@ -463,6 +505,247 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         atRiskCourses,
         aiOverview,
       });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/students/:id/action-board
+   * Get action board buckets for a student.
+   */
+  router.get('/:id/action-board', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId } = req.params;
+      if (!studentDbId) {
+        res.status(400).json({ success: false, error: 'Missing student ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const studentExternalId = student.studentId ?? '';
+      const studentDbIdStr = student._id?.toString() ?? '';
+      const baseUrl = config.baseUrl ?? '';
+
+      const assignmentsColl = config.database.collection('slc_assignments');
+      const coursesColl = config.database.collection('slc_courses');
+      const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
+      const materialsColl = config.database.collection('slc_course_materials');
+      const assetsColl = config.database.collection('slc_assets');
+
+      const assignmentFilter =
+        studentDbIdStr
+          ? {
+              userId,
+              deletedAt: null,
+              $or: [
+                { studentId: studentDbIdStr },
+                ...(studentExternalId ? [{ studentExternalId }] : []),
+              ],
+            }
+          : { userId, studentExternalId, deletedAt: null };
+
+      const [assignmentDocs, courseDocs, gradeDocs, materialDocs, assetDocs] = await Promise.all([
+        assignmentsColl.find(assignmentFilter).toArray(),
+        coursesColl.find({ userId, deletedAt: null }).toArray(),
+        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
+        materialsColl.find({ userId, deletedAt: null }).toArray(),
+        assetsColl
+          .find({
+            userId,
+            deletedAt: null,
+            entityType: { $in: ['assignment', 'courseMaterial'] },
+          })
+          .toArray(),
+      ]);
+
+      const courseMap = new Map<string, { name: string }>();
+      for (const c of courseDocs) {
+        const extId = c['externalId'] as string;
+        const name = (c['record']?.name as string) ?? extId;
+        if (extId) courseMap.set(extId, { name });
+      }
+
+      const latestGradeByCourse = new Map<string, { percent: number; asOf: string }>();
+      for (const g of gradeDocs) {
+        const courseExtId = (g['courseExternalId'] ?? g['record']?.courseExternalId) as string | undefined;
+        if (!courseExtId) continue;
+        const asOf = (g['record']?.asOfDate as string) ?? '';
+        const raw = g['record']?.percentGrade ?? g['record']?.grade;
+        const percent = typeof raw === 'number' ? raw : NaN;
+        if (isNaN(percent)) continue;
+        const prev = latestGradeByCourse.get(courseExtId);
+        if (!prev || asOf >= prev.asOf) {
+          latestGradeByCourse.set(courseExtId, { percent, asOf });
+        }
+      }
+
+      const assetByEntity = new Map<string, (typeof assetDocs)[0][]>();
+      for (const a of assetDocs) {
+        const key = `${a['entityType'] as string}:${a['entityExternalId'] as string}`;
+        if (!assetByEntity.has(key)) assetByEntity.set(key, []);
+        assetByEntity.get(key)!.push(a);
+      }
+      const materialsByCourse = new Map<string, (typeof materialDocs)[0][]>();
+      for (const m of materialDocs) {
+        const cid = (m['courseExternalId'] ?? m['record']?.courseExternalId) as string | undefined;
+        if (!cid) continue;
+        if (!materialsByCourse.has(cid)) materialsByCourse.set(cid, []);
+        materialsByCourse.get(cid)!.push(m);
+      }
+
+      const now = new Date();
+      const nowMs = now.getTime();
+      const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+      function toActionAsset(doc: (typeof assetDocs)[0]): IActionAsset {
+        const entityType = doc['entityType'] as string;
+        const matRecord = doc['record'] as Record<string, unknown> | undefined;
+        const materialType =
+          entityType === 'courseMaterial'
+            ? (matRecord?.type as string) ?? 'document'
+            : 'attachment';
+        return {
+          assetId: doc['assetId'] as string,
+          fileName: (doc['fileName'] as string) ?? 'file',
+          materialType,
+          mimeType: (doc['mimeType'] as string) ?? 'application/octet-stream',
+          fileSize: (doc['fileSize'] as number) ?? 0,
+          downloadUrl: baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/assets/${doc['assetId'] as string}` : '',
+        };
+      }
+
+      type BucketId = 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
+      const bucketLabels: Record<BucketId, string> = {
+        needs_attention: 'Needs Attention',
+        due_soon: 'Due Soon',
+        in_progress: 'In Progress',
+        recently_graded: 'Recently Graded',
+        caught_up: 'Caught Up',
+      };
+
+      const items: IActionItem[] = [];
+      for (const doc of assignmentDocs) {
+        const record = (doc['record'] ?? {}) as Record<string, unknown>;
+        const externalId = (doc['externalId'] as string) ?? '';
+        const courseExternalId = (doc['courseExternalId'] as string) ?? '';
+        const title = (record['title'] as string) ?? 'Assignment';
+        const dueAt = record['dueAt'] as string | undefined;
+        const status = (record['status'] as string) ?? 'unknown';
+        const pointsPossible =
+          typeof record['pointsPossible'] === 'number' ? record['pointsPossible'] : undefined;
+        const pointsEarned =
+          typeof record['pointsEarned'] === 'number' ? record['pointsEarned'] : undefined;
+        const gradedAt = record['gradedAt'] as string | undefined;
+        const isOverdue = dueAt ? new Date(dueAt).getTime() < nowMs : false;
+
+        const courseInfo = courseMap.get(courseExternalId);
+        const courseName = courseInfo?.name ?? courseExternalId;
+        const gradeInfo = latestGradeByCourse.get(courseExternalId);
+        const currentGrade = gradeInfo?.percent;
+        const letterGrade =
+          gradeInfo &&
+          (gradeDocs.find(
+            (gd) =>
+              (gd['courseExternalId'] ?? gd['record']?.courseExternalId) === courseExternalId &&
+              (gd['record']?.asOfDate as string) === gradeInfo.asOf
+          )?.['record']?.letterGrade as string | undefined);
+        const riskLevel =
+          currentGrade != null && currentGrade < 70
+            ? 'high'
+            : currentGrade != null && currentGrade < 80
+              ? 'medium'
+              : 'none';
+
+        const assignmentAssets = (assetByEntity.get(`assignment:${externalId}`) ?? []).map(toActionAsset);
+        const courseMats = materialsByCourse.get(courseExternalId) ?? [];
+        const courseMaterials: IActionAsset[] = [];
+        for (const m of courseMats) {
+          const mid = m['externalId'] as string;
+          const matAssets = assetByEntity.get(`courseMaterial:${mid}`) ?? [];
+          courseMaterials.push(...matAssets.map(toActionAsset));
+        }
+
+        items.push({
+          assignmentExternalId: externalId,
+          title,
+          dueAt,
+          status,
+          pointsPossible,
+          pointsEarned,
+          isOverdue,
+          course: {
+            externalId: courseExternalId,
+            name: courseName,
+            currentGrade,
+            letterGrade,
+            riskLevel,
+          },
+          assets: assignmentAssets,
+          materials: courseMaterials,
+        });
+      }
+
+      function assignBucket(item: IActionItem): BucketId {
+        const dueAt = item.dueAt ? new Date(item.dueAt).getTime() : null;
+        const doc = assignmentDocs.find((d) => d['externalId'] === item.assignmentExternalId);
+        const gradedAt = (doc?.['record'] as Record<string, unknown> | undefined)?.gradedAt as string | undefined;
+        const gradedAtMs = gradedAt ? new Date(gradedAt).getTime() : 0;
+
+        if (item.status === 'missing') return 'needs_attention';
+        if (item.status === 'late' && item.status !== 'graded') return 'needs_attention';
+        if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
+        if (
+          dueAt != null &&
+          dueAt - nowMs <= seventyTwoHoursMs &&
+          dueAt >= nowMs &&
+          item.status !== 'submitted' &&
+          item.status !== 'graded'
+        )
+          return 'due_soon';
+        if (item.status === 'graded' && gradedAtMs && nowMs - gradedAtMs <= sevenDaysMs)
+          return 'recently_graded';
+        if (item.status === 'in_progress' || item.status === 'submitted') return 'in_progress';
+        return 'caught_up';
+      }
+
+      const bucketOrder: BucketId[] = [
+        'needs_attention',
+        'due_soon',
+        'in_progress',
+        'recently_graded',
+        'caught_up',
+      ];
+      const byBucket = new Map<BucketId, IActionItem[]>();
+      for (const id of bucketOrder) byBucket.set(id, []);
+      for (const item of items) {
+        const bucket = assignBucket(item);
+        byBucket.get(bucket)!.push(item);
+      }
+
+      const buckets: IActionBucket[] = bucketOrder.map((id) => {
+        const list = byBucket.get(id) ?? [];
+        return { id, label: bucketLabels[id], count: list.length, items: list };
+      });
+
+      res.status(200).json({
+        studentId: studentDbId,
+        studentName: student.name,
+        buckets,
+      } as IActionBoardResponse);
     } catch (error) {
       res.status(500).json({
         success: false,

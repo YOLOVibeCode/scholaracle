@@ -10,6 +10,7 @@ import { settingsApi } from '@/lib/api/settings';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { StudentGradeStripRow } from '@/components/dashboard/StudentGradeStripRow';
+import { ActionBoard } from '@/components/dashboard/students/ActionBoard';
 import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
 import type { GradeDisplayMode } from '@/components/dashboard/StudentGradePanel';
 
@@ -194,23 +195,21 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Upcoming Deadlines</CardTitle>
-                <CardDescription>Assignments due soon</CardDescription>
+                <CardTitle>Action Board</CardTitle>
+                <CardDescription>Needs attention & due soon</CardDescription>
               </CardHeader>
               <CardContent data-testid="dashboard-upcoming-deadlines">
-                {stats?.upcomingDeadlines && stats.upcomingDeadlines.length > 0 ? (
-                  <div className="space-y-2" data-testid="dashboard-deadlines-list">
-                    {stats.upcomingDeadlines.map((deadline) => (
-                      <div key={deadline.id} className="text-sm" data-testid={`dashboard-deadline-${deadline.id}`}>
-                        <p className="font-medium">{deadline.title}</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          {deadline.course} • Due {new Date(deadline.dueDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                {studentsSectionLoading || !studentsAndGrades ? (
+                  <LoadingSkeleton variant="list" count={2} />
+                ) : studentsAndGrades.students.length > 0 ? (
+                  <ActionBoard
+                    studentId={studentsAndGrades.students[0].id}
+                    compact
+                  />
                 ) : (
-                  <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="dashboard-deadlines-empty">No upcoming deadlines</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="dashboard-deadlines-empty">
+                    Add a student to see their action board here.
+                  </p>
                 )}
               </CardContent>
             </Card>
