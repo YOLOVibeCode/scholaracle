@@ -33,11 +33,7 @@ describe('Students API Routes', () => {
     app = express();
     app.use(express.json());
     const baseUrl = 'http://test.example';
-    app.use(
-      '/api/students',
-      authMiddleware(authService),
-      studentsRouter({ database, baseUrl })
-    );
+    app.use('/api/students', authMiddleware(authService), studentsRouter({ database, baseUrl }));
   });
 
   afterAll(async () => {
@@ -257,8 +253,9 @@ describe('Students API Routes', () => {
         .send({ name: 'Board Student', grade: 9 });
       const studentId = createRes.body.id as string;
       const userId =
-        (await database.collection('users').findOne({ email: 'students@example.com' }))?._id?.toString() ??
-        '';
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
 
       const now = new Date();
       const dueIn24h = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -313,7 +310,16 @@ describe('Students API Routes', () => {
       expect(res.body).toHaveProperty('studentId', studentId);
       expect(res.body).toHaveProperty('studentName', 'Board Student');
       expect(res.body).toHaveProperty('buckets');
-      const buckets = res.body.buckets as Array<{ id: string; label: string; count: number; items: unknown[] }>;
+      interface IBucketItem {
+        assignmentExternalId: string;
+        assets: Array<{ assetId: string; downloadUrl: string }>;
+      }
+      const buckets = res.body.buckets as Array<{
+        id: string;
+        label: string;
+        count: number;
+        items: IBucketItem[];
+      }>;
       const bucketIds = buckets.map((b) => b.id);
       expect(bucketIds).toContain('needs_attention');
       expect(bucketIds).toContain('due_soon');
@@ -323,13 +329,13 @@ describe('Students API Routes', () => {
 
       const needsAttention = buckets.find((b) => b.id === 'needs_attention');
       expect(needsAttention).toBeDefined();
-      expect(needsAttention!.items.some((i: { assignmentExternalId: string }) => i.assignmentExternalId === 'a-missing')).toBe(true);
+      expect(needsAttention!.items.some((i) => i.assignmentExternalId === 'a-missing')).toBe(true);
       const dueSoon = buckets.find((b) => b.id === 'due_soon');
       expect(dueSoon).toBeDefined();
-      expect(dueSoon!.items.some((i: { assignmentExternalId: string }) => i.assignmentExternalId === 'a-due-soon')).toBe(true);
+      expect(dueSoon!.items.some((i) => i.assignmentExternalId === 'a-due-soon')).toBe(true);
       const recentlyGraded = buckets.find((b) => b.id === 'recently_graded');
       expect(recentlyGraded).toBeDefined();
-      expect(recentlyGraded!.items.some((i: { assignmentExternalId: string }) => i.assignmentExternalId === 'a-graded')).toBe(true);
+      expect(recentlyGraded!.items.some((i) => i.assignmentExternalId === 'a-graded')).toBe(true);
     });
 
     it('should join assets to items and include downloadUrl', async () => {
@@ -339,8 +345,9 @@ describe('Students API Routes', () => {
         .send({ name: 'Asset Student', grade: 10 });
       const studentId = createRes.body.id as string;
       const userId =
-        (await database.collection('users').findOne({ email: 'students@example.com' }))?._id?.toString() ??
-        '';
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
 
       await database.collection('slc_courses').insertOne({
         userId,
@@ -381,16 +388,19 @@ describe('Students API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`);
 
       expect(res.status).toBe(200);
-      const buckets = res.body.buckets as Array<{ items: Array<{ assets: Array<{ assetId: string; downloadUrl: string }> }> }>;
+      interface IAssetBucketItem {
+        assignmentExternalId: string;
+        assets: Array<{ assetId: string; downloadUrl: string }>;
+      }
+      const buckets = res.body.buckets as Array<{ items: IAssetBucketItem[] }>;
       const allItems = buckets.flatMap((b) => b.items);
-      const item = allItems.find((i: { assignmentExternalId: string }) => i.assignmentExternalId === 'a-with-asset');
+      const item = allItems.find((i) => i.assignmentExternalId === 'a-with-asset');
       expect(item).toBeDefined();
-      expect(item.assets).toBeDefined();
-      expect(item.assets.length).toBeGreaterThanOrEqual(1);
+      expect(item!.assets).toBeDefined();
+      expect(item!.assets.length).toBeGreaterThanOrEqual(1);
       expect(
-        item.assets.some(
-          (a: { assetId: string; downloadUrl: string }) =>
-            a.assetId === assetId && a.downloadUrl.includes(`/api/assets/${assetId}`)
+        item!.assets.some(
+          (a) => a.assetId === assetId && a.downloadUrl.includes(`/api/assets/${assetId}`)
         )
       ).toBe(true);
     });
@@ -410,7 +420,9 @@ describe('Students API Routes', () => {
       expect(res.body.studentId).toBe(studentId);
       expect(res.body.buckets).toBeDefined();
       const buckets = res.body.buckets as Array<{ count: number; items: unknown[] }>;
-      expect(buckets.every((b) => b.count === 0 && Array.isArray(b.items) && b.items.length === 0)).toBe(true);
+      expect(
+        buckets.every((b) => b.count === 0 && Array.isArray(b.items) && b.items.length === 0)
+      ).toBe(true);
     });
   });
 });
