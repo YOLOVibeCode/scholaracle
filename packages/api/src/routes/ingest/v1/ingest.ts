@@ -26,6 +26,7 @@ import {
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 import { decryptCredentials } from '../../../utils/credentialsCipher';
+import { AssetRepository } from '../../../services/assets/AssetRepository';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -273,11 +274,16 @@ async function recordPendingStudentReconciliations(params: {
   }
 }
 
+const ENTITIES_WITH_ASSETS = ['course', 'courseMaterial', 'assignment', 'message'] as const;
+
 async function applyOps(params: {
   readonly database: Db;
   readonly userId: string;
+  readonly sourceId?: string;
   readonly ops: readonly ISlcDeltaOp[];
 }): Promise<void> {
+  const assetRepo = params.sourceId ? new AssetRepository(params.database) : null;
+
   for (const op of params.ops) {
     const collectionName = ENTITY_COLLECTION_MAP[op.entity];
     if (!collectionName) continue;
@@ -307,6 +313,13 @@ async function applyOps(params: {
         { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
         { upsert: true },
       );
+      if (assetRepo && params.sourceId && ENTITIES_WITH_ASSETS.includes(op.entity as (typeof ENTITIES_WITH_ASSETS)[number])) {
+        if (op.entity === 'course') {
+          await assetRepo.softDeleteByCourse(params.userId, params.sourceId, key.externalId);
+        } else {
+          await assetRepo.softDeleteByEntity(params.userId, params.sourceId, op.entity, key.externalId);
+        }
+      }
     } else {
       await collection.updateOne(
         baseFilter,
@@ -400,6 +413,45 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   );
 
   // --- Connector-authenticated ingestion endpoints ---
+
+  router.get(
+    '/connector/students',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      const students = await studentRepo.findByUserId(userId);
+      const result = await Promise.all(
+        students.map(async (student) => {
+          const idStr = student._id?.toString() ?? '';
+          const dataSources: Array<{
+            sourceId: string;
+            provider: string;
+            displayName: string;
+            portalBaseUrl?: string;
+          }> = [];
+          for (const ds of student.dataSources) {
+            const ingestSource = await sourceRepo.findByUserIdAndSourceId(userId, ds.id);
+            if (ingestSource) {
+              dataSources.push({
+                sourceId: ds.id,
+                provider: ingestSource.provider,
+                displayName: ingestSource.displayName,
+                portalBaseUrl: ingestSource.portalBaseUrl,
+              });
+            }
+          }
+          return {
+            id: idStr,
+            name: student.name,
+            externalId: student.studentId ?? idStr,
+            grade: student.grade,
+            dataSources,
+          };
+        })
+      );
+      res.status(200).json(result);
+    })
+  );
 
   router.get(
     '/sources',
@@ -529,7 +581,12 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         return;
       }
 
-      await applyOps({ database: config.database, userId, ops: envelope.ops });
+      await applyOps({
+        database: config.database,
+        userId,
+        sourceId: envelope.source?.sourceId,
+        ops: envelope.ops,
+      });
       const sourceId = envelope.source?.sourceId ?? '';
       if (sourceId) {
         await recordPendingStudentReconciliations({
