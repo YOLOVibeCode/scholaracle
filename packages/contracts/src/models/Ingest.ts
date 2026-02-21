@@ -427,11 +427,11 @@ export interface IEntityRecordValidationResult {
   readonly errors: readonly string[];
 }
 
-function ok(): EntityRecordValidationResult {
+function ok(): IEntityRecordValidationResult {
   return { valid: true, errors: [] };
 }
 
-function fail(...errors: string[]): EntityRecordValidationResult {
+function fail(...errors: string[]): IEntityRecordValidationResult {
   return { valid: false, errors };
 }
 
@@ -448,7 +448,8 @@ function requireString(entity: string, field: string, value: unknown): string | 
  */
 export function validateEntityRecord(
   entity: SlcEntityType,
-  record: Record<string, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  record: Record<string, any>
 ): IEntityRecordValidationResult {
   if (!SLC_ENTITY_TYPES.includes(entity)) {
     return fail(`Unknown entity type: ${entity}`);
