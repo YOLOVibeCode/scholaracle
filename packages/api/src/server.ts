@@ -43,6 +43,11 @@ import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
+import {
+  createAssetUploadRouter,
+  createAssetServeRouter,
+} from './routes/assets/assets';
+import { createAssetStore } from './services/assets/createAssetStore';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -317,7 +322,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       })
     );
     app.use('/api/sessions', sessionsRouter({ database, authService }));
-    app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
+    app.use(
+      '/api/students',
+      authMiddleware(authService),
+      studentsRouter({ database, baseUrl: baseUrl ?? '' })
+    );
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
 
     // Sync API — trigger and monitor data-source sync jobs (optional; mount if module exists)
@@ -343,6 +352,18 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
+
+    // Asset upload (connector auth) — mount under ingest path. ASSET_STORE=local|s3; S3 uses Railway Buckets or R2/B2.
+    const assetStore = createAssetStore();
+    const assetsConfig = {
+      database,
+      jwtSecret: jwtSecret ?? '',
+      assetStore,
+      baseUrl,
+      authService,
+    };
+    app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
+    app.use('/api/assets', createAssetServeRouter(assetsConfig));
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
