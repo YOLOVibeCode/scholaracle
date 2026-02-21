@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, Calendar, BookOpen, GraduationCap } from 'lucide-react';
+import { Bell, Calendar, GraduationCap } from 'lucide-react';
+import { ActionBoard } from '@/components/dashboard/students/ActionBoard';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import { agendaApi, type IAgendaItem } from '@/lib/api/agenda';
 import { alertsApi, type IAlert } from '@/lib/api/alerts';
@@ -57,18 +58,6 @@ export default function StudentViewDashboardPage() {
     if (!studentExternalId) return list;
     return list.filter((a: IAlert) => a.studentId === studentExternalId);
   }, [allAlerts, studentExternalId]);
-
-  const todayPlan = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-    const overdue = studentItems.filter((i) => new Date(i.timeAt) < now && (i.isOverdue || i.assignmentStatus === 'missing'));
-    const dueToday = studentItems.filter(
-      (i) => new Date(i.timeAt) >= todayStart && new Date(i.timeAt) < todayEnd
-    );
-    const upcoming = studentItems.filter((i) => new Date(i.timeAt) >= todayEnd).slice(0, 5);
-    return { overdue, dueToday, upcoming };
-  }, [studentItems]);
 
   const isLoading = agendaLoading || alertsLoading;
   const error = agendaError ?? alertsError;
@@ -145,46 +134,14 @@ export default function StudentViewDashboardPage() {
       )}
       {!isLoading && !error && (
         <>
-          {/* Today's plan */}
-          <Card data-testid="student-view-todays-plan">
+          {/* Action Board */}
+          <Card data-testid="student-view-action-board">
             <CardHeader>
-              <CardTitle>Today&apos;s plan</CardTitle>
-              <CardDescription>Priorities from your agenda</CardDescription>
+              <CardTitle>Action Board</CardTitle>
+              <CardDescription>What to focus on: needs attention, due soon, in progress</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {todayPlan.overdue.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Overdue</p>
-                  <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
-                    {todayPlan.overdue.slice(0, 5).map((i) => (
-                      <li key={i.id}>{i.title}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {todayPlan.dueToday.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Due today</p>
-                  <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
-                    {todayPlan.dueToday.map((i) => (
-                      <li key={i.id}>{i.title}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {todayPlan.upcoming.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Upcoming</p>
-                  <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">
-                    {todayPlan.upcoming.map((i) => (
-                      <li key={i.id}>{i.title}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {todayPlan.overdue.length === 0 && todayPlan.dueToday.length === 0 && todayPlan.upcoming.length === 0 && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">Nothing scheduled for now.</p>
-              )}
+            <CardContent>
+              <ActionBoard studentId={studentId} />
             </CardContent>
           </Card>
 
