@@ -1,16 +1,30 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api/auth';
 
 export default function ConnectorActivatePage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md py-8 text-center text-muted-foreground">Loading…</div>}>
+      <ConnectorActivateContent />
+    </Suspense>
+  );
+}
+
+function ConnectorActivateContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userCode, setUserCode] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = searchParams.get('code')?.trim().toUpperCase();
+    if (code) setUserCode(code);
+  }, [searchParams]);
 
   const handleApprove = async () => {
     setStatus('submitting');

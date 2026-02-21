@@ -136,7 +136,9 @@ function buildActionAsset(doc: ActionBoardAssetDoc, baseUrl: string): IActionAss
   const entityType = (doc.entityType ?? '') as string;
   const matRecord = doc.record as Record<string, unknown> | undefined;
   const materialType =
-    entityType === 'courseMaterial' ? ((matRecord?.type as string) ?? 'document') : 'attachment';
+    entityType === 'courseMaterial'
+      ? ((matRecord?.['type'] as string) ?? 'document')
+      : 'attachment';
   return {
     assetId: (doc.assetId as string) ?? '',
     fileName: (doc.fileName as string) ?? 'file',
@@ -158,13 +160,13 @@ function determineActionBucket(
   const doc = assignmentDocs.find((d) => d.externalId === item.assignmentExternalId) as
     | ActionBoardAssignmentDoc
     | undefined;
-  const docGradedAt = (doc?.record as Record<string, unknown> | undefined)?.gradedAt as
+  const docGradedAt = (doc?.record as Record<string, unknown> | undefined)?.['gradedAt'] as
     | string
     | undefined;
   const gradedAtMs = docGradedAt ? new Date(docGradedAt).getTime() : 0;
 
   if (item.status === 'missing') return 'needs_attention';
-  if (item.status === 'late' && item.status !== 'graded') return 'needs_attention';
+  if (item.status === 'late') return 'needs_attention';
   if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
   if (
     dueAt != null &&
