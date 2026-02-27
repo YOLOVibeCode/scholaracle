@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,17 @@ import { StudentAlertsTab } from '@/components/dashboard/students/StudentAlertsT
 import { StudentGradesTab } from '@/components/dashboard/students/StudentGradesTab';
 import { ConnectSourceWizard } from '@/components/dashboard/students/ConnectSourceWizard';
 import { ManageParentsCard } from '@/components/dashboard/students/ManageParentsCard';
+import { StudentDocumentsTab } from '@/components/dashboard/students/StudentDocumentsTab';
+import { StudentTrendsTab } from '@/components/dashboard/students/StudentTrendsTab';
 
-type TabId = 'overview' | 'sources' | 'alerts' | 'grades' | 'parents';
+type TabId = 'overview' | 'sources' | 'alerts' | 'grades' | 'documents' | 'parents' | 'trends';
+
+const VALID_TABS: TabId[] = ['overview', 'sources', 'alerts', 'grades', 'documents', 'parents', 'trends'];
 
 export default function EditStudentPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const studentId = params.id as string;
 
   const [student, setStudent] = useState<IStudent | null>(null);
@@ -33,6 +38,20 @@ export default function EditStudentPage() {
   useEffect(() => {
     void loadStudent();
   }, [studentId]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && (VALID_TABS as readonly string[]).includes(tab)) {
+      setActiveTab(tab as TabId);
+    }
+  }, [searchParams]);
+
+  const setActiveTabWithUrl = (tab: TabId) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', tab);
+    router.replace(`/dashboard/students/${studentId}?${next.toString()}`, { scroll: false });
+  };
 
   const loadStudent = async () => {
     if (!studentId) return;
@@ -138,60 +157,44 @@ export default function EditStudentPage() {
       </div>
 
       <div role="tablist" aria-label="Student sections" className="flex gap-2" data-testid="student-tabs">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'overview'}
-          data-testid="tab-overview"
-          className="px-3 py-2 rounded border"
-          onClick={() => setActiveTab('overview')}
-        >
-          Overview
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'sources'}
-          data-testid="tab-sources"
-          className="px-3 py-2 rounded border"
-          onClick={() => setActiveTab('sources')}
-        >
-          Data Sources
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'alerts'}
-          data-testid="tab-alerts"
-          className="px-3 py-2 rounded border"
-          onClick={() => setActiveTab('alerts')}
-        >
-          Alerts
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'grades'}
-          data-testid="tab-grades"
-          className="px-3 py-2 rounded border"
-          onClick={() => setActiveTab('grades')}
-        >
-          Grades
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'parents'}
-          data-testid="tab-parents"
-          className="px-3 py-2 rounded border"
-          onClick={() => setActiveTab('parents')}
-        >
-          Parents
-        </button>
+        {(['overview', 'sources', 'alerts', 'grades', 'documents', 'parents', 'trends'] as const).map((tabId) => {
+          const isActive = activeTab === tabId;
+          const labels: Record<TabId, string> = {
+            overview: 'Overview',
+            sources: 'Data Sources',
+            alerts: 'Alerts',
+            grades: 'Grades',
+            documents: 'Documents',
+            parents: 'Parents',
+            trends: 'Trends',
+          };
+          const panelId = `tabpanel-${tabId}`;
+          const tabIdAttr = `tab-${tabId}`;
+          return (
+            <button
+              key={tabId}
+              id={tabIdAttr}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={panelId}
+              data-testid={`tab-${tabId}`}
+              className={`px-3 py-2 rounded border transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background hover:bg-muted/50'
+              }`}
+              onClick={() => setActiveTabWithUrl(tabId)}
+            >
+              {labels[tabId]}
+            </button>
+          );
+        })}
       </div>
 
       {activeTab === 'overview' && (
-        <StudentOverviewTab
+        <div id="tabpanel-overview" role="tabpanel" aria-labelledby="tab-overview">
+          <StudentOverviewTab
           studentId={studentId}
           student={student}
           name={name}
@@ -205,31 +208,54 @@ export default function EditStudentPage() {
           onSubmit={handleSubmit}
           onCancel={() => router.push('/dashboard/students')}
         />
+        </div>
       )}
 
       {activeTab === 'sources' && (
+        <div id="tabpanel-sources" role="tabpanel" aria-labelledby="tab-sources">
         <StudentDataSourcesTab
           studentId={studentId}
           onConnectSource={() => setConnectWizardOpen(true)}
         />
+        </div>
       )}
 
       {activeTab === 'alerts' && (
-        <StudentAlertsTab
-          studentId={studentId}
-          student={student}
-          onSaveOverrides={handleSaveOverrides}
-        />
+        <div id="tabpanel-alerts" role="tabpanel" aria-labelledby="tab-alerts">
+          <StudentAlertsTab
+            studentId={studentId}
+            student={student}
+            onSaveOverrides={handleSaveOverrides}
+          />
+        </div>
       )}
 
-      {activeTab === 'grades' && <StudentGradesTab studentId={studentId} />}
+      {activeTab === 'grades' && (
+        <div id="tabpanel-grades" role="tabpanel" aria-labelledby="tab-grades">
+          <StudentGradesTab studentId={studentId} />
+        </div>
+      )}
+
+      {activeTab === 'documents' && (
+        <div id="tabpanel-documents" role="tabpanel" aria-labelledby="tab-documents">
+          <StudentDocumentsTab studentId={studentId} />
+        </div>
+      )}
 
       {activeTab === 'parents' && student && (
-        <ManageParentsCard
-          studentId={studentId}
-          studentName={student.name}
-          isOwner={true}
-        />
+        <div id="tabpanel-parents" role="tabpanel" aria-labelledby="tab-parents">
+          <ManageParentsCard
+            studentId={studentId}
+            studentName={student.name}
+            isOwner={true}
+          />
+        </div>
+      )}
+
+      {activeTab === 'trends' && (
+        <div id="tabpanel-trends" role="tabpanel" aria-labelledby="tab-trends">
+          <StudentTrendsTab studentId={studentId} />
+        </div>
       )}
 
       <ConnectSourceWizard
