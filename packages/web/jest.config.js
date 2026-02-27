@@ -3,8 +3,11 @@ module.exports = {
   testEnvironment: 'node',
   displayName: 'web',
   rootDir: '.',
-  roots: ['<rootDir>/lib'],
+  roots: ['<rootDir>/lib', '<rootDir>/app', '<rootDir>/components'],
   testMatch: ['**/?(*.)+(spec|test).ts', '**/?(*.)+(spec|test).tsx'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

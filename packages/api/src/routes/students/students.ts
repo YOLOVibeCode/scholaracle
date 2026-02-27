@@ -12,8 +12,66 @@ import {
 } from '@scholaracle/database';
 import { GradeRiskService } from '@scholaracle/agents';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { createHash } from 'node:crypto';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
+import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
+
+// ---------------------------------------------------------------------------
+// Lightweight cross-source course reconciliation (inline to avoid connector dep)
+// ---------------------------------------------------------------------------
+
+interface ISourceCourse {
+  readonly externalId: string;
+  readonly sourceId: string;
+  readonly provider: string;
+  readonly title: string;
+  readonly teacherName?: string;
+  readonly period?: string;
+  readonly grade?: number;
+}
+
+interface IMergedCourse {
+  readonly mergedId: string;
+  readonly normalizedTitle: string;
+  readonly sources: readonly ISourceCourse[];
+}
+
+function normalizeTitle(raw: string): string {
+  return raw
+    .replace(/\bap\b|advanced\s+placement/gi, '')
+    .replace(/\bhonors?\b|\bhn?rs?\b/gi, '')
+    .replace(/(?:per(?:iod)?|pd?)[\s.:]*\d+/gi, '')
+    .replace(/\([^)]*\)\s*$/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function mergeCoursesInline(courses: readonly ISourceCourse[]): readonly IMergedCourse[] {
+  const groups = new Map<string, ISourceCourse[]>();
+  for (const c of courses) {
+    const key = normalizeTitle(c.title);
+    const list = groups.get(key) ?? [];
+    list.push(c);
+    groups.set(key, list);
+  }
+  const result: IMergedCourse[] = [];
+  for (const [key, members] of groups) {
+    const mergedId = createHash('sha256').update(key).digest('hex').slice(0, 12);
+    const bestTitle = members.reduce(
+      (best, m) => (m.title.length > best.length ? m.title : best),
+      members[0]!.title
+    );
+    result.push({
+      mergedId,
+      normalizedTitle: bestTitle.replace(/\s+/g, ' ').trim(),
+      sources: members,
+    });
+  }
+  return result;
+}
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -353,20 +411,64 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         : { userId, studentExternalId, deletedAt: null };
       const assignmentDocs = await assignmentsColl.find(assignmentFilter).toArray();
 
+      const materialsColl = config.database.collection('slc_course_materials');
+      const materialDocs = await materialsColl.find(assignmentFilter).toArray();
+      const materialCountByCourse = new Map<string, number>();
+      for (const doc of materialDocs) {
+        const courseId = (doc['courseExternalId'] as string) ?? '';
+        if (courseId)
+          materialCountByCourse.set(courseId, (materialCountByCourse.get(courseId) ?? 0) + 1);
+      }
+
       const courseIds = [
         ...new Set(
           assignmentDocs.map((d) => d['courseExternalId'] as string).filter(Boolean) as string[]
         ),
       ];
       const courseMap = new Map<string, string>();
+      const courseSourceInfo = new Map<
+        string,
+        { provider: string; sourceId: string; teacherName?: string; period?: string }
+      >();
       if (courseIds.length > 0) {
         const courseDocs = await coursesColl
           .find({ userId, externalId: { $in: courseIds } })
           .toArray();
         for (const c of courseDocs) {
           const extId = c['externalId'] as string;
-          const name = c['record']?.name as string | undefined;
+          const rec = c['record'] as Record<string, unknown> | undefined;
+          const name = (rec?.['title'] as string) ?? (rec?.['name'] as string) ?? undefined;
           if (extId && name) courseMap.set(extId, name);
+          courseSourceInfo.set(extId, {
+            provider: (c['provider'] as string) ?? '',
+            sourceId: (c['sourceId'] as string) ?? '',
+            teacherName: (rec?.['teacherName'] as string) ?? undefined,
+            period: (rec?.['period'] as string) ?? undefined,
+          });
+        }
+      }
+
+      // Cross-source reconciliation: merge courses with the same normalized title
+      const sourceCourses: ISourceCourse[] = courseIds.map((id) => {
+        const info = courseSourceInfo.get(id);
+        return {
+          externalId: id,
+          sourceId: info?.sourceId ?? '',
+          provider: info?.provider ?? '',
+          title: courseMap.get(id) ?? id,
+          teacherName: info?.teacherName,
+          period: info?.period,
+        };
+      });
+      const mergedGroups = mergeCoursesInline(sourceCourses);
+      const extIdToMergedId = new Map<string, string>();
+      const mergedIdToName = new Map<string, string>();
+      const mergedIdToSources = new Map<string, readonly ISourceCourse[]>();
+      for (const group of mergedGroups) {
+        mergedIdToName.set(group.mergedId, group.normalizedTitle);
+        mergedIdToSources.set(group.mergedId, group.sources);
+        for (const src of group.sources) {
+          extIdToMergedId.set(src.externalId, group.mergedId);
         }
       }
 
@@ -401,7 +503,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
 
       for (const doc of assignmentDocs) {
-        const courseExternalId = (doc['courseExternalId'] as string) ?? '_unknown';
+        const rawCourseId = (doc['courseExternalId'] as string) ?? '_unknown';
+        const courseExternalId = extIdToMergedId.get(rawCourseId) ?? rawCourseId;
         const record = doc['record'] as Record<string, unknown> | undefined;
         const dueAt = record?.['dueAt'] as string | undefined;
         const status = (record?.['status'] as AssignmentStatus) ?? 'unknown';
@@ -470,6 +573,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         recentTrend: 'improving' | 'stable' | 'declining';
         riskLevel: 'none' | 'low' | 'medium' | 'high' | 'critical';
         riskExplanation?: string;
+        materialCount: number;
         assignments: Array<{
           externalId: string;
           title: string;
@@ -501,9 +605,24 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           totalAssignments
         );
 
+        // Resolve course name: prefer merged name, fall back to courseMap, then raw ID
+        const courseName =
+          mergedIdToName.get(courseExternalId) ??
+          courseMap.get(courseExternalId) ??
+          courseExternalId;
+
+        // Aggregate material counts across all source courseExternalIds that mapped to this mergedId
+        const sources = mergedIdToSources.get(courseExternalId);
+        let matCount = materialCountByCourse.get(courseExternalId) ?? 0;
+        if (sources) {
+          for (const src of sources) {
+            matCount += materialCountByCourse.get(src.externalId) ?? 0;
+          }
+        }
+
         courseGrades.push({
           courseExternalId,
-          courseName: courseMap.get(courseExternalId) ?? courseExternalId,
+          courseName,
           grade,
           letterGrade,
           totalAssignments,
@@ -515,6 +634,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           recentTrend: trend,
           riskLevel,
           riskExplanation,
+          materialCount: matCount,
           assignments: data.assignments.sort((a, b) => {
             const ta = a.dueAt ? new Date(a.dueAt).getTime() : 0;
             const tb = b.dueAt ? new Date(b.dueAt).getTime() : 0;
@@ -575,6 +695,302 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         success: false,
         error: error instanceof Error ? error.message : 'Internal server error',
       });
+    }
+  });
+
+  /**
+   * GET /api/students/:id/materials
+   * Get course materials for a student, optionally filtered by course.
+   */
+  router.get('/:id/materials', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId } = req.params;
+      if (!studentDbId) {
+        res.status(400).json({ success: false, error: 'Missing student ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const studentExternalId = student.studentId ?? '';
+      const studentDbIdStr = student._id?.toString() ?? '';
+      const baseUrl = config.baseUrl ?? process.env['API_BASE_URL'] ?? '';
+
+      const materialsColl = config.database.collection('slc_course_materials');
+      const coursesColl = config.database.collection('slc_courses');
+      const assetsColl = config.database.collection('slc_assets');
+
+      const materialFilter = studentDbIdStr
+        ? {
+            userId,
+            deletedAt: null,
+            $or: [
+              { studentId: studentDbIdStr },
+              ...(studentExternalId ? [{ studentExternalId }] : []),
+            ],
+          }
+        : { userId, studentExternalId, deletedAt: null };
+
+      const courseQueryParam = req.query['course'] as string | undefined;
+
+      const [materialDocs, courseDocs, assetDocs] = await Promise.all([
+        materialsColl.find(materialFilter).toArray(),
+        coursesColl.find({ userId, deletedAt: null }).toArray(),
+        assetsColl.find({ userId, deletedAt: null, entityType: 'courseMaterial' }).toArray(),
+      ]);
+
+      const courseMap = new Map<string, string>();
+      for (const c of courseDocs) {
+        const extId = c['externalId'] as string;
+        const name = (c['record']?.name as string) ?? extId;
+        if (extId) courseMap.set(extId, name);
+      }
+
+      const assetMap = new Map<string, { assetId: string; fileSize?: number; mimeType?: string }>();
+      for (const a of assetDocs) {
+        const entityId = a['entityId'] as string | undefined;
+        if (entityId) {
+          assetMap.set(entityId, {
+            assetId: a['_id']?.toString() ?? '',
+            fileSize: a['fileSize'] as number | undefined,
+            mimeType: a['mimeType'] as string | undefined,
+          });
+        }
+      }
+
+      const grouped = new Map<
+        string,
+        Array<{
+          externalId: string;
+          title: string;
+          type: string;
+          url?: string;
+          fileName?: string;
+          mimeType?: string;
+          postedAt?: string;
+          description?: string;
+          fileSize?: number;
+          assetId?: string;
+          downloadUrl?: string;
+        }>
+      >();
+
+      for (const m of materialDocs) {
+        const courseExtId = (m['courseExternalId'] as string) ?? '';
+        if (courseQueryParam && courseExtId !== courseQueryParam) continue;
+
+        const extId = (m['externalId'] as string) ?? '';
+        const rec = m['record'] as Record<string, unknown> | undefined;
+        const asset = assetMap.get(extId);
+
+        const material = {
+          externalId: extId,
+          title: (rec?.['title'] ?? rec?.['name'] ?? m['title'] ?? '') as string,
+          type: (rec?.['type'] ?? m['type'] ?? 'document') as string,
+          url: (rec?.['url'] ?? m['url']) as string | undefined,
+          fileName: (rec?.['fileName'] ?? m['fileName']) as string | undefined,
+          mimeType: asset?.mimeType ?? ((rec?.['mimeType'] ?? m['mimeType']) as string | undefined),
+          postedAt: (rec?.['postedAt'] ?? m['postedAt']) as string | undefined,
+          description: (rec?.['description'] ?? m['description']) as string | undefined,
+          fileSize: asset?.fileSize ?? ((rec?.['fileSize'] ?? m['fileSize']) as number | undefined),
+          assetId: asset?.assetId,
+          downloadUrl: asset ? `${baseUrl}/api/assets/${asset.assetId}/download` : undefined,
+        };
+
+        const list = grouped.get(courseExtId);
+        if (list) {
+          list.push(material);
+        } else {
+          grouped.set(courseExtId, [material]);
+        }
+      }
+
+      const courses = [...grouped.entries()].map(([courseExternalId, materials]) => ({
+        courseExternalId,
+        courseName: courseMap.get(courseExternalId) ?? courseExternalId,
+        materials,
+      }));
+
+      const totalMaterials = courses.reduce((sum, c) => sum + c.materials.length, 0);
+
+      res.status(200).json({
+        studentId: studentDbId,
+        studentName: student.name,
+        totalMaterials,
+        courses,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/students/:id/grade-history
+   * Get grade trend data for charting. Returns time-series grade snapshots per course.
+   * Query params: ?course=<courseExternalId> (optional), ?from=<date>&to=<date> (optional), ?term=<termName> (optional).
+   */
+  router.get('/:id/grade-history', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const studentId = req.params['id'] ?? '';
+      const student = await studentRepository.findById(studentId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ error: 'Student not found' });
+        return;
+      }
+
+      const courseFilter = req.query['course'] as string | undefined;
+      const fromParam = req.query['from'] as string | undefined;
+      const toParam = req.query['to'] as string | undefined;
+      const termParam = req.query['term'] as string | undefined;
+
+      const validation = validateGradeHistoryQuery({ from: fromParam, to: toParam });
+      if (!validation.valid) {
+        res.status(400).json({ error: validation.error });
+        return;
+      }
+
+      const query: Record<string, unknown> = {
+        userId,
+        studentExternalId: student.studentId != null ? student.studentId : { $ne: null },
+      };
+      if (courseFilter) {
+        query['courseExternalId'] = courseFilter;
+      }
+
+      let dateFilter: { $gte?: string; $lte?: string } | undefined;
+      if (fromParam || toParam) {
+        dateFilter = {};
+        if (fromParam) dateFilter.$gte = fromParam;
+        if (toParam) dateFilter.$lte = toParam;
+        query['date'] = dateFilter;
+      } else if (termParam) {
+        const termDocs = await config.database
+          .collection('slc_academic_terms')
+          .find({ userId })
+          .toArray();
+        const term = termDocs.find(
+          (t) => (t['record'] as Record<string, unknown>)?.['title'] === termParam
+        ) as { record?: { startDate?: string; endDate?: string } } | undefined;
+        if (term?.record?.startDate != null || term?.record?.endDate != null) {
+          const dateRange: Record<string, string> = {};
+          if (term.record.startDate != null) dateRange['$gte'] = term.record.startDate;
+          if (term.record.endDate != null) dateRange['$lte'] = term.record.endDate;
+          query['date'] = dateRange;
+        }
+      }
+
+      const docs = await config.database
+        .collection('slc_grade_history')
+        .find(query)
+        .sort({ date: 1 })
+        .toArray();
+
+      const byCourse = new Map<
+        string,
+        Array<{ date: string; percentGrade: number; provider: string; sourceType?: string }>
+      >();
+      for (const doc of docs) {
+        const cid = (doc['courseExternalId'] as string) ?? '';
+        const list = byCourse.get(cid) ?? [];
+        list.push({
+          date: (doc['date'] as string) ?? '',
+          percentGrade: (doc['percentGrade'] as number) ?? 0,
+          provider: (doc['provider'] as string) ?? '',
+          sourceType: (doc['sourceType'] as string) ?? undefined,
+        });
+        byCourse.set(cid, list);
+      }
+
+      const courseNames = new Map<string, string>();
+      const courseDocs = await config.database.collection('slc_courses').find({ userId }).toArray();
+      for (const cd of courseDocs) {
+        const eid = (cd['externalId'] as string) ?? (cd['courseExternalId'] as string) ?? '';
+        const title = (cd['record'] as Record<string, unknown> | undefined)?.['title'] as
+          | string
+          | undefined;
+        if (eid && title) courseNames.set(eid, title);
+      }
+
+      const courses = Array.from(byCourse.entries()).map(([courseExternalId, snapshots]) => ({
+        courseExternalId,
+        courseName: courseNames.get(courseExternalId) ?? courseExternalId,
+        snapshots,
+      }));
+
+      res.status(200).json({ studentId, courses });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
+    }
+  });
+
+  /**
+   * DELETE /api/students/:id/grade-history
+   * Archive records with date < before. Moves docs to slc_grade_history_archive.
+   * Query params: ?before=<date> (required, ISO date string).
+   */
+  router.delete('/:id/grade-history', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
+      const studentId = req.params['id'] ?? '';
+      const student = await studentRepository.findById(studentId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ error: 'Student not found' });
+        return;
+      }
+      const before = req.query['before'] as string | undefined;
+      if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+        res.status(400).json({ error: 'Query param before=<date> required (YYYY-MM-DD)' });
+        return;
+      }
+      if (student.studentId == null) {
+        res.status(400).json({ error: 'Student has no external id; cannot archive grade history' });
+        return;
+      }
+
+      const historyColl = config.database.collection('slc_grade_history');
+      const archiveColl = config.database.collection('slc_grade_history_archive');
+      const filter = {
+        userId,
+        studentExternalId: student.studentId,
+        date: { $lt: before },
+      };
+      const docs = await historyColl.find(filter).toArray();
+      if (docs.length === 0) {
+        res.status(200).json({ archived: 0 });
+        return;
+      }
+      const archivedAt = new Date();
+      const toInsert = docs.map((d) => ({
+        ...d,
+        _id: undefined,
+        archivedAt,
+      }));
+      await archiveColl.insertMany(toInsert);
+      const deleteResult = await historyColl.deleteMany(filter);
+      const count = deleteResult.deletedCount ?? docs.length;
+      res.status(200).json({ archived: count });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
     }
   });
 

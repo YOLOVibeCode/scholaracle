@@ -88,11 +88,19 @@ export default function StudentGradesPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold tracking-tight">{data.studentName} — Grades</h1>
             <p className="text-muted-foreground text-sm">
               Overall GPA: {data.overallGPA.toFixed(1)}
               {data.atRiskCourses > 0 && ` · ${data.atRiskCourses} course(s) at risk`}
+              {' · '}
+              <Link
+                href={`/dashboard/students/${studentId}?tab=trends`}
+                className="text-primary hover:underline"
+                data-testid="grades-page-view-trends"
+              >
+                View trends
+              </Link>
             </p>
           </div>
         </div>
@@ -105,7 +113,7 @@ export default function StudentGradesPage() {
 
         {selectedCourse ? (
           <>
-            <CourseGradeSummaryCard course={selectedCourse} />
+            <CourseGradeSummaryCard course={selectedCourse} studentId={studentId} />
             <div>
               <h2 className="mb-2 text-lg font-semibold">{selectedCourse.courseName} — Assignments</h2>
               <AssignmentTable
