@@ -78,7 +78,7 @@ jobs:
 
   test:
     name: Test (${{ matrix.package }})
-    needs: quality
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -113,6 +113,14 @@ jobs:
             node_modules
             packages/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore build artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/*/dist
+            packages/web/.next
+          key: build-artifacts-${{ runner.os }}-${{ github.sha }}
 
       - name: Cache MongoDB binary
         if: matrix.package != 'connector' && matrix.package != 'web'
@@ -174,6 +182,14 @@ jobs:
 
       - name: Type check (after build)
         run: pnpm type-check
+
+      - name: Cache build artifacts
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            packages/*/dist
+            packages/web/.next
+          key: build-artifacts-${{ runner.os }}-${{ github.sha }}
 
   docker-build:
     name: Docker build (pre-deploy)
