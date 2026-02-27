@@ -19,7 +19,9 @@ export class AdminCustomersPage {
     this.searchInput = page.locator('[data-testid="input-search"]');
     this.customerTable = page.locator('table');
     this.customerRows = page.locator('[data-testid="customer-row"]');
-    this.addCustomerButton = page.locator('[data-testid="button-add-customer"], button:has-text("Add Customer")');
+    this.addCustomerButton = page.locator(
+      '[data-testid="button-add-customer"], button:has-text("Add Customer")'
+    );
     this.exportButton = page.locator('[data-testid="button-export"], button:has-text("Export")');
     this.filterDropdown = page.locator('[data-testid="select-filter"], select');
   }

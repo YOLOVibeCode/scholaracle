@@ -28,13 +28,19 @@ describe('LocalAssetStore', () => {
   it('exists returns true after put, false for missing key', async () => {
     const store = new LocalAssetStore(baseDir);
     expect(await store.exists('missing')).toBe(false);
-    await store.put('k1', Readable.from('x'), { contentType: 'application/octet-stream', contentLength: 1 });
+    await store.put('k1', Readable.from('x'), {
+      contentType: 'application/octet-stream',
+      contentLength: 1,
+    });
     expect(await store.exists('k1')).toBe(true);
   });
 
   it('delete removes file; exists returns false afterward', async () => {
     const store = new LocalAssetStore(baseDir);
-    await store.put('k1', Readable.from('x'), { contentType: 'application/octet-stream', contentLength: 1 });
+    await store.put('k1', Readable.from('x'), {
+      contentType: 'application/octet-stream',
+      contentLength: 1,
+    });
     await store.delete('k1');
     expect(await store.exists('k1')).toBe(false);
   });

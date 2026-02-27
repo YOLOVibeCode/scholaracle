@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, CheckCircle, AlertCircle, Info, TrendingUp } from 'lucide-react';
+import { Bell, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,9 +35,8 @@ export default function AlertsPage() {
   const [stableAlerts, setStableAlerts] = useState<readonly IAlert[]>([]);
 
   useEffect(() => {
-    if (alertsData) {
-      setStableAlerts(alertsData);
-    }
+    if (!alertsData) return;
+    queueMicrotask(() => setStableAlerts(alertsData));
   }, [alertsData]);
 
   // Keep the last successfully loaded alerts visible during refresh/error for UX stability.
@@ -205,7 +204,7 @@ export default function AlertsPage() {
                 <Bell className="h-12 w-12 text-gray-400 mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No alerts</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  You're all caught up! No alerts at this time.
+                  You&apos;re all caught up! No alerts at this time.
                 </p>
               </CardContent>
             </Card>

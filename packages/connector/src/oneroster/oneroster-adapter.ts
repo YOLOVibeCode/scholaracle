@@ -56,9 +56,7 @@ export class OneRosterAdapter implements ILmsAdapterWithTest {
         credentials.baseUrl
       );
     } else {
-      throw new Error(
-        'OneRoster adapter requires either accessToken or clientId + clientSecret'
-      );
+      throw new Error('OneRoster adapter requires either accessToken or clientId + clientSecret');
     }
 
     this._isAuthenticated = true;
@@ -71,7 +69,11 @@ export class OneRosterAdapter implements ILmsAdapterWithTest {
   public async testConnection(): Promise<IConnectionTestResult> {
     const start = Date.now();
     if (!this._client) {
-      return { success: false, message: 'Not authenticated. Call authenticate() first.', durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: 'Not authenticated. Call authenticate() first.',
+        durationMs: Date.now() - start,
+      };
     }
     try {
       const [orgs, courses] = await Promise.all([
@@ -87,7 +89,11 @@ export class OneRosterAdapter implements ILmsAdapterWithTest {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: `Connection failed: ${msg}`,
+        durationMs: Date.now() - start,
+      };
     }
   }
 
@@ -150,7 +156,7 @@ export class OneRosterAdapter implements ILmsAdapterWithTest {
       ops.push(transformCourseToOp(course, baseKey) as unknown as ISlcDeltaOp);
     }
 
-    const resultsByLineItem = new Map<string, typeof results[number]>();
+    const resultsByLineItem = new Map<string, (typeof results)[number]>();
     for (const r of results) {
       resultsByLineItem.set(r.lineItem.sourcedId, r);
     }

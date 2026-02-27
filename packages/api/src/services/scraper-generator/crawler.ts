@@ -129,7 +129,14 @@ export async function crawlStep(loginUrl: string): Promise<ICrawlResult> {
     const analysis = await page.evaluate(() => {
       const result: {
         title: string;
-        loginForm?: { emailField?: string; passwordField?: string; submitButton?: string; ssoOptions?: string[]; formAction?: string; method?: string };
+        loginForm?: {
+          emailField?: string;
+          passwordField?: string;
+          submitButton?: string;
+          ssoOptions?: string[];
+          formAction?: string;
+          method?: string;
+        };
         navigation: Array<{ text: string; href: string }>;
         detectedFramework?: string;
         pageHtml: string;
@@ -154,14 +161,23 @@ export async function crawlStep(loginUrl: string): Promise<ICrawlResult> {
           const sel = input.id ? `#${input.id}` : name ? `input[name="${name}"]` : '';
           if (type === 'password') {
             hasPassword = true;
-            passwordSelector = sel || `input[type="password"]`;
-          } else if (type === 'email' || name.toLowerCase().includes('email') || name.toLowerCase().includes('user')) {
-            emailSelector = sel || `input[type="email"]`;
+            passwordSelector = sel || 'input[type="password"]';
+          } else if (
+            type === 'email' ||
+            name.toLowerCase().includes('email') ||
+            name.toLowerCase().includes('user')
+          ) {
+            emailSelector = sel || 'input[type="email"]';
           }
         }
-        const submit = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+        const submit = form.querySelector(
+          'button[type="submit"], input[type="submit"], button:not([type])'
+        );
         if (submit) {
-          submitSelector = submit.id ? `#${submit.id}` : submit.tagName.toLowerCase() + (submit.className ? '.' + String(submit.className).trim().split(/\s+/)[0] : '');
+          submitSelector = submit.id
+            ? `#${submit.id}`
+            : submit.tagName.toLowerCase() +
+              (submit.className ? `.${String(submit.className).trim().split(/\s+/)[0]}` : '');
         }
         const links = Array.from(form.querySelectorAll('a[href]'));
         for (const a of links) {
@@ -172,7 +188,8 @@ export async function crawlStep(loginUrl: string): Promise<ICrawlResult> {
         }
         if (hasPassword && (emailSelector || passwordSelector)) {
           result.loginForm = {
-            emailField: emailSelector || 'input[type="email"], input[name="username"], input[name="email"]',
+            emailField:
+              emailSelector || 'input[type="email"], input[name="username"], input[name="email"]',
             passwordField: passwordSelector || 'input[type="password"]',
             submitButton: submitSelector || 'button[type="submit"], input[type="submit"]',
             ssoOptions: ssoOptions.length ? ssoOptions : undefined,
@@ -197,8 +214,10 @@ export async function crawlStep(loginUrl: string): Promise<ICrawlResult> {
         }
       }
 
-      if (document.querySelector('[data-reactroot], [data-reactid], #__next]')) result.detectedFramework = 'react';
-      else if (document.querySelector('[ng-version], [ng-app]')) result.detectedFramework = 'angular';
+      if (document.querySelector('[data-reactroot], [data-reactid], #__next]'))
+        result.detectedFramework = 'react';
+      else if (document.querySelector('[ng-version], [ng-app]'))
+        result.detectedFramework = 'angular';
       else if (document.querySelector('[data-v-]')) result.detectedFramework = 'vue';
 
       return result;
@@ -256,7 +275,10 @@ const MFA_SELECTORS = [
 /**
  * Step 3: Verify login form is automatable (no CAPTCHA, no MFA blocking).
  */
-export async function authenticateCheckStep(loginUrl: string, crawlResult: ICrawlResult): Promise<IAuthenticateCheckResult> {
+export async function authenticateCheckStep(
+  loginUrl: string,
+  crawlResult: ICrawlResult
+): Promise<IAuthenticateCheckResult> {
   if (!crawlResult.ok || !crawlResult.loginForm) {
     return { ok: false, error: crawlResult.error ?? 'Crawl did not find a login form' };
   }
@@ -269,24 +291,27 @@ export async function authenticateCheckStep(loginUrl: string, crawlResult: ICraw
     page.setDefaultTimeout(15_000);
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
 
-    const check = await page.evaluate(({ captchaSel, mfaSel }: { captchaSel: string[]; mfaSel: string[] }) => {
-      let captchaDetected = false;
-      for (const sel of captchaSel) {
-        if (document.querySelector(sel)) {
-          captchaDetected = true;
-          break;
+    const check = await page.evaluate(
+      ({ captchaSel, mfaSel }: { captchaSel: string[]; mfaSel: string[] }) => {
+        let captchaDetected = false;
+        for (const sel of captchaSel) {
+          if (document.querySelector(sel)) {
+            captchaDetected = true;
+            break;
+          }
         }
-      }
-      let mfaRequired = false;
-      for (const sel of mfaSel) {
-        const el = document.querySelector(sel);
-        if (el && (el as HTMLElement).offsetParent !== null) {
-          mfaRequired = true;
-          break;
+        let mfaRequired = false;
+        for (const sel of mfaSel) {
+          const el = document.querySelector(sel);
+          if (el && (el as HTMLElement).offsetParent !== null) {
+            mfaRequired = true;
+            break;
+          }
         }
-      }
-      return { captchaDetected, mfaRequired };
-    }, { captchaSel: CAPTCHA_SELECTORS, mfaSel: MFA_SELECTORS });
+        return { captchaDetected, mfaRequired };
+      },
+      { captchaSel: CAPTCHA_SELECTORS, mfaSel: MFA_SELECTORS }
+    );
 
     await browser.close();
     browser = undefined;

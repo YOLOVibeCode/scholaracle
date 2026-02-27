@@ -1,6 +1,6 @@
 /**
  * Admin Notes API Client (ISP)
- * 
+ *
  * Small, focused interface for admin notes operations.
  * Follows Interface Segregation Principle.
  */
@@ -51,7 +51,10 @@ export const adminNotesApi = {
   /**
    * Create a note for a customer.
    */
-  async create(customerId: string, note: ICreateNoteRequest): Promise<{ success: boolean; data?: IAdminNote; error?: string }> {
+  async create(
+    customerId: string,
+    note: ICreateNoteRequest
+  ): Promise<{ success: boolean; data?: IAdminNote; error?: string }> {
     return apiClient.post<{ success: boolean; data?: IAdminNote; error?: string }>(
       `/admin/customers/${customerId}/notes`,
       note,
@@ -62,22 +65,36 @@ export const adminNotesApi = {
   /**
    * Update a note.
    */
-  async update(noteId: string, updates: IUpdateNoteRequest): Promise<{ success: boolean; error?: string }> {
-    return apiClient.put<{ success: boolean; error?: string }>(`/admin/notes/${noteId}`, updates, true);
+  async update(
+    noteId: string,
+    updates: IUpdateNoteRequest
+  ): Promise<{ success: boolean; error?: string }> {
+    return apiClient.put<{ success: boolean; error?: string }>(
+      `/admin/notes/${noteId}`,
+      updates,
+      true
+    );
   },
 
   /**
    * Delete a note.
    */
   async delete(noteId: string): Promise<{ success: boolean; error?: string }> {
-    return apiClient.delete<{ success: boolean; error?: string }>(`/admin/notes/${noteId}`, {}, true);
+    return apiClient.delete<{ success: boolean; error?: string }>(
+      `/admin/notes/${noteId}`,
+      {},
+      true
+    );
   },
 
   /**
    * Toggle pin status of a note.
    */
   async togglePin(noteId: string): Promise<{ success: boolean; error?: string }> {
-    return apiClient.post<{ success: boolean; error?: string }>(`/admin/notes/${noteId}/pin`, {}, true);
+    return apiClient.post<{ success: boolean; error?: string }>(
+      `/admin/notes/${noteId}/pin`,
+      {},
+      true
+    );
   },
 };
-

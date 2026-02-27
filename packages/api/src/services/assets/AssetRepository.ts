@@ -44,11 +44,7 @@ export interface IAssetWriter {
     entityType: string,
     entityExternalId: string
   ): Promise<number>;
-  softDeleteByCourse(
-    userId: string,
-    sourceId: string,
-    courseExternalId: string
-  ): Promise<number>;
+  softDeleteByCourse(userId: string, sourceId: string, courseExternalId: string): Promise<number>;
   softDeleteByAge(
     userId: string,
     sourceId: string,
@@ -72,7 +68,10 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
     return doc as IAssetDocument | null;
   }
 
-  async findBySourceIdAndHash(sourceId: string, contentHash: string): Promise<IAssetDocument | null> {
+  async findBySourceIdAndHash(
+    sourceId: string,
+    contentHash: string
+  ): Promise<IAssetDocument | null> {
     const doc = await this._db
       .collection(COLLECTION)
       .findOne({ sourceId, contentHash, deletedAt: null });
@@ -97,14 +96,15 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
   async softDeleteBySourceId(userId: string, sourceId: string): Promise<number> {
     const r = await this._db
       .collection(COLLECTION)
-      .updateMany(
-        { userId, sourceId, deletedAt: null },
-        { $set: { deletedAt: new Date() } }
-      );
+      .updateMany({ userId, sourceId, deletedAt: null }, { $set: { deletedAt: new Date() } });
     return r.modifiedCount;
   }
 
-  async softDeleteByTerm(userId: string, sourceId: string, academicTermId: string): Promise<number> {
+  async softDeleteByTerm(
+    userId: string,
+    sourceId: string,
+    academicTermId: string
+  ): Promise<number> {
     const r = await this._db
       .collection(COLLECTION)
       .updateMany(
@@ -145,10 +145,12 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
     entityType: string,
     entityExternalId: string
   ): Promise<number> {
-    const r = await this._db.collection(COLLECTION).updateMany(
-      { userId, sourceId, entityType, entityExternalId, deletedAt: null },
-      { $set: { deletedAt: new Date() } }
-    );
+    const r = await this._db
+      .collection(COLLECTION)
+      .updateMany(
+        { userId, sourceId, entityType, entityExternalId, deletedAt: null },
+        { $set: { deletedAt: new Date() } }
+      );
     return r.modifiedCount;
   }
 
@@ -161,10 +163,12 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
     sourceId: string,
     courseExternalId: string
   ): Promise<number> {
-    const r = await this._db.collection(COLLECTION).updateMany(
-      { userId, sourceId, courseExternalId, deletedAt: null },
-      { $set: { deletedAt: new Date() } }
-    );
+    const r = await this._db
+      .collection(COLLECTION)
+      .updateMany(
+        { userId, sourceId, courseExternalId, deletedAt: null },
+        { $set: { deletedAt: new Date() } }
+      );
     return r.modifiedCount;
   }
 
@@ -188,9 +192,7 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
   }
 
   async findSoftDeletedBefore(before: Date): Promise<readonly IAssetDocument[]> {
-    const cursor = this._db
-      .collection(COLLECTION)
-      .find({ deletedAt: { $ne: null, $lt: before } });
+    const cursor = this._db.collection(COLLECTION).find({ deletedAt: { $ne: null, $lt: before } });
     const list = await cursor.toArray();
     return list as unknown as IAssetDocument[];
   }

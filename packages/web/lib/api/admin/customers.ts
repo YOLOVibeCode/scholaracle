@@ -38,7 +38,12 @@ export interface IAdminCustomerStudent {
   };
 }
 
-export type AdminCustomerActivityType = 'note' | 'payment' | 'subscription' | 'student' | 'admin_action';
+export type AdminCustomerActivityType =
+  | 'note'
+  | 'payment'
+  | 'subscription'
+  | 'student'
+  | 'admin_action';
 
 export interface IAdminCustomerActivityItem {
   readonly id: string;
@@ -120,7 +125,10 @@ export const adminCustomersApi = {
   /**
    * Update customer.
    */
-  async update(id: string, updates: { name?: string; phone?: string }): Promise<{ success: boolean }> {
+  async update(
+    id: string,
+    updates: { name?: string; phone?: string }
+  ): Promise<{ success: boolean }> {
     return apiClient.put<{ success: boolean }>(`/admin/customers/${id}`, updates, true);
   },
 
@@ -156,7 +164,10 @@ export const adminCustomersApi = {
    * Get recent activity for a customer.
    */
   async getActivity(id: string, limit: number = 50): Promise<IAdminCustomerActivityResponse> {
-    return apiClient.get<IAdminCustomerActivityResponse>(`/admin/customers/${id}/activity?limit=${limit}`, true);
+    return apiClient.get<IAdminCustomerActivityResponse>(
+      `/admin/customers/${id}/activity?limit=${limit}`,
+      true
+    );
   },
 
   /**
@@ -170,7 +181,10 @@ export const adminCustomersApi = {
    * Impersonate a customer (admin/support only).
    * Returns a *user* JWT token to be stored as the parent session.
    */
-  async impersonate(id: string, reason?: string): Promise<{ success: boolean; data?: { token: string }; error?: string }> {
+  async impersonate(
+    id: string,
+    reason?: string
+  ): Promise<{ success: boolean; data?: { token: string }; error?: string }> {
     return apiClient.post<{ success: boolean; data?: { token: string }; error?: string }>(
       `/admin/customers/${id}/impersonate`,
       { reason },
@@ -178,5 +192,3 @@ export const adminCustomersApi = {
     );
   },
 };
-
-

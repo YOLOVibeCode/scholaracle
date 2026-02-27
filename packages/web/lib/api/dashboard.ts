@@ -1,7 +1,6 @@
-import { apiClient } from './client';
-import { studentsApi, type IStudent } from './students';
-import { alertsApi, type IAlert } from './alerts';
-import { agendaApi, type IAgendaItem } from './agenda';
+import { studentsApi } from './students';
+import { alertsApi } from './alerts';
+import { agendaApi } from './agenda';
 import { MemoryCacheService } from '../cache';
 
 // Cache instance (ISP: Separate cache from API logic)
@@ -114,7 +113,7 @@ export const dashboardApi = {
           }));
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
+         
         console.error('Failed to load alerts or agenda:', error);
         // Continue with empty arrays if API calls fail
       }
@@ -133,7 +132,7 @@ export const dashboardApi = {
 
       return stats;
     } catch (error) {
-      // eslint-disable-next-line no-console
+       
       console.error('Failed to load dashboard stats:', error);
       return {
         totalStudents: 0,

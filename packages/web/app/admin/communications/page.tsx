@@ -591,7 +591,7 @@ export default function AdminCommunicationsPage() {
             />
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
+              onChange={(e) => setFilterStatus((e.target.value || '') as CommunicationStatus | '')}
               className="w-full rounded-md border px-3 py-2 text-sm"
               data-testid="communication-filter-status"
             >
@@ -606,7 +606,7 @@ export default function AdminCommunicationsPage() {
             </select>
             <select
               value={filterChannel}
-              onChange={(e) => setFilterChannel(e.target.value as any)}
+              onChange={(e) => setFilterChannel((e.target.value || '') as CommunicationChannel | '')}
               className="w-full rounded-md border px-3 py-2 text-sm"
               data-testid="communication-filter-channel"
             >
@@ -620,7 +620,7 @@ export default function AdminCommunicationsPage() {
             </select>
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value as any)}
+              onChange={(e) => setFilterType((e.target.value || '') as CommunicationType | '')}
               className="w-full rounded-md border px-3 py-2 text-sm"
               data-testid="communication-filter-type"
             >

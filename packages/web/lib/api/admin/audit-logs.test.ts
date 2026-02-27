@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -43,7 +45,9 @@ function fakeCsvResponse(csvText: string, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -57,7 +61,9 @@ function fakeCsvResponse(csvText: string, status = 200): Response {
 /**
  * Build a fake Response for a JSON error on a non-OK status
  * (content-type: application/json so exportCsv's error branch parses it).
+ * Kept for potential future tests; currently unused.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function fakeJsonErrorResponse(body: { error?: string; code?: string }, status = 403): Response {
   const headers = new Headers({ 'content-type': 'application/json' });
   return {
@@ -69,7 +75,9 @@ function fakeJsonErrorResponse(body: { error?: string; code?: string }, status =
     statusText: 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -88,10 +96,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -129,7 +145,7 @@ describe('adminAuditLogsApi', () => {
   describe('list', () => {
     it('builds query string from params and GETs /admin/audit-logs', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: [], total: 0, page: 1, limit: 20, totalPages: 0 }),
+        fakeResponse({ success: true, data: [], total: 0, page: 1, limit: 20, totalPages: 0 })
       );
 
       await adminAuditLogsApi.list({
@@ -141,15 +157,15 @@ describe('adminAuditLogsApi', () => {
       });
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/audit-logs?page=2&limit=50&action=USER_CREATED&entityType=user&severity=high'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.stringContaining(
+          '/admin/audit-logs?page=2&limit=50&action=USER_CREATED&entityType=user&severity=high'
+        ),
+        expect.objectContaining({ method: 'GET' })
       );
     });
 
     it('returns error object when ApiClientError is thrown', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ error: 'Forbidden', code: 'FORBIDDEN' }, 403),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ error: 'Forbidden', code: 'FORBIDDEN' }, 403));
 
       const result = await adminAuditLogsApi.list();
 
@@ -176,7 +192,7 @@ describe('adminAuditLogsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-tok-123',
           }),
-        }),
+        })
       );
     });
 
@@ -194,7 +210,7 @@ describe('adminAuditLogsApi', () => {
             Authorization: 'Bearer admin-tok-123',
             'x-admin-stepup': 'step-up-tok-456',
           }),
-        }),
+        })
       );
     });
 

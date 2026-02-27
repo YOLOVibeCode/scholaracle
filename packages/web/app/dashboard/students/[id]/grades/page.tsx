@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { studentsApi, type IStudentGradesResponse, type ICourseGrade } from '@/lib/api/students';
+import { studentsApi, type IStudentGradesResponse } from '@/lib/api/students';
 import { GradeSidebar } from '@/components/dashboard/students/GradeSidebar';
 import { AssignmentTable } from '@/components/dashboard/students/AssignmentTable';
 import { CourseGradeSummaryCard } from '@/components/dashboard/students/CourseGradeSummaryCard';

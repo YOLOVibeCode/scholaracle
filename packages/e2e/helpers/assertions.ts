@@ -25,15 +25,15 @@ export async function assertOnAdminDashboard(page: Page): Promise<void> {
  */
 export async function assertNoConsoleErrors(page: Page): Promise<void> {
   const errors: string[] = [];
-  page.on('console', msg => {
+  page.on('console', (msg) => {
     if (msg.type() === 'error') {
       errors.push(msg.text());
     }
   });
-  
+
   // Wait for page to settle
   await page.waitForLoadState('networkidle');
-  
+
   if (errors.length > 0) {
     throw new Error(`CRITICAL: Console errors detected:\n${errors.join('\n')}`);
   }
@@ -60,7 +60,9 @@ export async function assertElementVisible(page: Page, testId: string): Promise<
  */
 export async function assertToastMessage(page: Page, message: string | RegExp): Promise<void> {
   // Next.js includes a route announcer with role="alert" - ignore it.
-  const toast = page.locator('[data-testid="toast"], .toast, [role="alert"]:not(#__next-route-announcer__)').first();
+  const toast = page
+    .locator('[data-testid="toast"], .toast, [role="alert"]:not(#__next-route-announcer__)')
+    .first();
   await expect(toast).toContainText(message);
 }
 
@@ -68,7 +70,9 @@ export async function assertToastMessage(page: Page, message: string | RegExp): 
  * Assert error message is displayed.
  */
 export async function assertErrorMessage(page: Page, message?: string | RegExp): Promise<void> {
-  const errorLocator = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive, [role="alert"]');
+  const errorLocator = page.locator(
+    '[data-testid="message-error"], .text-red-500, .text-destructive, [role="alert"]'
+  );
   await expect(errorLocator).toBeVisible();
   if (message) {
     await expect(errorLocator).toContainText(message);
@@ -105,7 +109,5 @@ export async function assertAccessDenied(page: Page, url: string): Promise<void>
   // Wait a bit longer to avoid flakes on slower CI/local machines.
   const requestedPath = new URL(url, page.url()).pathname;
 
-  await expect
-    .poll(async () => page.url(), { timeout: 5000 })
-    .not.toContain(requestedPath);
+  await expect.poll(async () => page.url(), { timeout: 5000 }).not.toContain(requestedPath);
 }

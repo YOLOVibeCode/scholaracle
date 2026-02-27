@@ -42,7 +42,9 @@ describeIfAvailable(env, 'Google Classroom — Live Integration', () => {
       if (courseWork.length > 0) {
         const cw = courseWork[0]!;
         expect(typeof cw.title).toBe('string');
-        console.log(`    First item: "${cw.title}" (type: ${cw.workType}, max: ${cw.maxPoints ?? 'ungraded'})`);
+        console.log(
+          `    First item: "${cw.title}" (type: ${cw.workType}, max: ${cw.maxPoints ?? 'ungraded'})`
+        );
       }
     });
 
@@ -63,7 +65,9 @@ describeIfAvailable(env, 'Google Classroom — Live Integration', () => {
 
       if (submissions.length > 0) {
         const s = submissions[0]!;
-        console.log(`    First: state=${s.state}, grade=${s.assignedGrade ?? 'none'}, late=${s.late ?? false}`);
+        console.log(
+          `    First: state=${s.state}, grade=${s.assignedGrade ?? 'none'}, late=${s.late ?? false}`
+        );
       }
     });
 

@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -35,10 +37,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -81,9 +91,7 @@ describe('adminAuthApi', () => {
   describe('login', () => {
     it('POSTs to /admin/auth/login and saves token + admin to localStorage on success', async () => {
       const admin = { id: 'a1', email: 'admin@test.com', name: 'Admin', role: 'admin' };
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, token: 'admin-tok-123', admin }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, token: 'admin-tok-123', admin }));
 
       const result = await adminAuthApi.login('admin@test.com', 'secret');
 
@@ -92,7 +100,7 @@ describe('adminAuthApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ email: 'admin@test.com', password: 'secret' }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.token).toBe('admin-tok-123');
@@ -102,7 +110,7 @@ describe('adminAuthApi', () => {
 
     it('returns response without saving when no token (requiresMFA)', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, requiresMFA: true, mfaToken: 'mfa-tok' }),
+        fakeResponse({ success: true, requiresMFA: true, mfaToken: 'mfa-tok' })
       );
 
       const result = await adminAuthApi.login('admin@test.com', 'secret');
@@ -121,9 +129,7 @@ describe('adminAuthApi', () => {
   describe('verifyMFA', () => {
     it('POSTs to /admin/auth/mfa/verify and saves token on success', async () => {
       const admin = { id: 'a1', email: 'admin@test.com', name: 'Admin', role: 'admin' };
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, token: 'verified-tok', admin }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, token: 'verified-tok', admin }));
 
       const result = await adminAuthApi.verifyMFA('mfa-tok-abc', '123456');
 
@@ -132,7 +138,7 @@ describe('adminAuthApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ mfaToken: 'mfa-tok-abc', token: '123456' }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('adminToken', 'verified-tok');
@@ -147,7 +153,11 @@ describe('adminAuthApi', () => {
   describe('setupMFA', () => {
     it('GETs /admin/auth/mfa/setup with admin token', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, secret: 'JBSWY3DPEHPK3PXP', qrCodeUrl: 'https://qr.example.com' }),
+        fakeResponse({
+          success: true,
+          secret: 'JBSWY3DPEHPK3PXP',
+          qrCodeUrl: 'https://qr.example.com',
+        })
       );
 
       const result = await adminAuthApi.setupMFA();
@@ -159,7 +169,7 @@ describe('adminAuthApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.secret).toBe('JBSWY3DPEHPK3PXP');
@@ -173,7 +183,7 @@ describe('adminAuthApi', () => {
   describe('stepUpStart', () => {
     it('POSTs to /admin/auth/step-up/start with empty body and admin token', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { stepUpId: 'su-1', expiresAt: 9999999 } }),
+        fakeResponse({ success: true, data: { stepUpId: 'su-1', expiresAt: 9999999 } })
       );
 
       const result = await adminAuthApi.stepUpStart();
@@ -186,7 +196,7 @@ describe('adminAuthApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.stepUpId).toBe('su-1');
@@ -200,7 +210,7 @@ describe('adminAuthApi', () => {
   describe('stepUpVerify', () => {
     it('POSTs to /admin/auth/step-up/verify with stepUpId and token', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { stepUpToken: 'step-up-jwt', expiresAt: 9999999 } }),
+        fakeResponse({ success: true, data: { stepUpToken: 'step-up-jwt', expiresAt: 9999999 } })
       );
 
       const result = await adminAuthApi.stepUpVerify('su-1', '654321');
@@ -213,7 +223,7 @@ describe('adminAuthApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.stepUpToken).toBe('step-up-jwt');
@@ -251,7 +261,7 @@ describe('adminAuthApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('adminToken');
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('adminUser');

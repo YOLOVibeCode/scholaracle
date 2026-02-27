@@ -60,9 +60,9 @@ describe('GoogleClassroomAdapter', () => {
 
     it('should return a valid envelope with course, assignment, and grade ops', async () => {
       const mockInstance = {
-        getCourses: jest.fn().mockResolvedValue([
-          { id: 'c-1', name: 'English', courseState: 'ACTIVE' },
-        ]),
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([{ id: 'c-1', name: 'English', courseState: 'ACTIVE' }]),
         getCourseWork: jest.fn().mockResolvedValue([
           {
             id: 'cw-1',
@@ -87,9 +87,7 @@ describe('GoogleClassroomAdapter', () => {
         ]),
         getStudents: jest.fn().mockResolvedValue([]),
       };
-      MockGCClient.mockImplementation(
-        () => mockInstance as unknown as GoogleClassroomClient
-      );
+      MockGCClient.mockImplementation(() => mockInstance as unknown as GoogleClassroomClient);
 
       await adapter.authenticate({
         baseUrl: 'https://classroom.googleapis.com',
@@ -124,9 +122,7 @@ describe('GoogleClassroomAdapter', () => {
         getStudentSubmissions: jest.fn(),
         getStudents: jest.fn(),
       };
-      MockGCClient.mockImplementation(
-        () => mockInstance as unknown as GoogleClassroomClient
-      );
+      MockGCClient.mockImplementation(() => mockInstance as unknown as GoogleClassroomClient);
 
       await adapter.authenticate({
         baseUrl: 'https://classroom.googleapis.com',

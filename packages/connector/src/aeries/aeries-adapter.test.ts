@@ -332,44 +332,52 @@ describe('AeriesAdapter', () => {
 
     it('should produce ops from injected scraperFn in scraper mode', async () => {
       const mockExtract: import('./aeries-adapter').IAeriesScrapeResult = {
-        students: [{
-          name: 'Emma Student',
-          studentId: '12345',
-          grade: '10',
-          school: 'Eagle Rock High School',
-          courses: [{
-            period: '1',
-            name: 'Biology',
-            term: 'Semester 1',
-            teacher: 'Ms. Garcia',
-            teacherEmail: 'garcia@school.com',
-            room: '204',
-            currentGrade: 92,
-            currentPercent: 92.5,
-            missingCount: 0,
-            assignments: [{
-              number: '1',
-              title: 'Cell Lab Report',
-              category: 'Summative',
-              scoreEarned: 45,
-              scorePossible: 50,
-              percentCorrect: 90,
-              dateAssigned: '09/01/2025',
-              dateDue: '09/08/2025',
-              dateCompleted: '09/07/2025',
-              gradingComplete: true,
-              isMissing: false,
-              comment: '',
-            }],
-          }],
-          attendance: [{
-            date: '09/05/2025',
-            period: '1',
-            status: 'Absent',
-            reason: 'Illness',
-            course: 'Biology',
-          }],
-        }],
+        students: [
+          {
+            name: 'Emma Student',
+            studentId: '12345',
+            grade: '10',
+            school: 'Eagle Rock High School',
+            courses: [
+              {
+                period: '1',
+                name: 'Biology',
+                term: 'Semester 1',
+                teacher: 'Ms. Garcia',
+                teacherEmail: 'garcia@school.com',
+                room: '204',
+                currentGrade: 92,
+                currentPercent: 92.5,
+                missingCount: 0,
+                assignments: [
+                  {
+                    number: '1',
+                    title: 'Cell Lab Report',
+                    category: 'Summative',
+                    scoreEarned: 45,
+                    scorePossible: 50,
+                    percentCorrect: 90,
+                    dateAssigned: '09/01/2025',
+                    dateDue: '09/08/2025',
+                    dateCompleted: '09/07/2025',
+                    gradingComplete: true,
+                    isMissing: false,
+                    comment: '',
+                  },
+                ],
+              },
+            ],
+            attendance: [
+              {
+                date: '09/05/2025',
+                period: '1',
+                status: 'Absent',
+                reason: 'Illness',
+                course: 'Biology',
+              },
+            ],
+          },
+        ],
         timestamp: '2025-09-10T12:00:00.000Z',
       };
 
@@ -400,7 +408,7 @@ describe('AeriesAdapter', () => {
       expect(scraperFn).toHaveBeenCalledWith(
         'https://kellerisd.aeries.net/student/LoginParent.aspx',
         'parent@example.com',
-        'secret123',
+        'secret123'
       );
     });
 

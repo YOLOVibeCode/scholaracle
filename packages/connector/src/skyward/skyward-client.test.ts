@@ -35,9 +35,7 @@ describe('SkywardClient', () => {
 
   describe('getReport', () => {
     it('should call scrapeReport with credentials', async () => {
-      const reports = [
-        { course: 97776, scores: [{ bucket: 'TERM 1', score: 95 }] },
-      ];
+      const reports = [{ course: 97776, scores: [{ bucket: 'TERM 1', score: 95 }] }];
       (scraper.scrapeReport as jest.Mock).mockResolvedValue({ data: reports });
 
       const result = await client.getReport();

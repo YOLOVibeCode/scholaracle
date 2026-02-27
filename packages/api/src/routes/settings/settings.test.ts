@@ -34,7 +34,11 @@ describe('Settings API Routes', () => {
 
     // Create test user and get token
     authService = new AuthService(database);
-    const registerResult = await authService.register('settings@example.com', 'password123', 'Settings User');
+    const registerResult = await authService.register(
+      'settings@example.com',
+      'password123',
+      'Settings User'
+    );
     if (registerResult.success && registerResult.user && registerResult.token) {
       testUserId = registerResult.user.id;
       testToken = registerResult.token;
@@ -45,7 +49,9 @@ describe('Settings API Routes', () => {
         testUserId = loginResult.user.id;
         testToken = loginResult.token;
       } else {
-        throw new Error(`Failed to authenticate test user: ${registerResult.error ?? loginResult.error ?? 'Unknown error'}`);
+        throw new Error(
+          `Failed to authenticate test user: ${registerResult.error ?? loginResult.error ?? 'Unknown error'}`
+        );
       }
     }
 
@@ -112,11 +118,15 @@ describe('Settings API Routes', () => {
     it('should return defaults for new user', async () => {
       // Clean up any existing user first
       await database.collection('users').deleteMany({ email: 'newuser@example.com' });
-      
+
       // Create a new user without settings
-      const newUserResult = await authService.register('newuser@example.com', 'password123', 'New User');
+      const newUserResult = await authService.register(
+        'newuser@example.com',
+        'password123',
+        'New User'
+      );
       let newToken = newUserResult.token ?? '';
-      
+
       // If registration didn't return token, try login
       if (!newToken && newUserResult.success) {
         const loginResult = await authService.login('newuser@example.com', 'password123');
@@ -132,7 +142,9 @@ describe('Settings API Routes', () => {
       }
 
       if (!newToken) {
-        throw new Error(`Failed to get token for new user: ${newUserResult.error ?? 'Unknown error'}`);
+        throw new Error(
+          `Failed to get token for new user: ${newUserResult.error ?? 'Unknown error'}`
+        );
       }
 
       const response = await request(app)
@@ -271,4 +283,3 @@ describe('Settings API Routes', () => {
     });
   });
 });
-

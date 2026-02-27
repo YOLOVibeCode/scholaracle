@@ -26,9 +26,7 @@ export class SendGridTransport {
     }
 
     const messageId =
-      typeof response.body === 'object' &&
-      response.body !== null &&
-      'message_id' in response.body
+      typeof response.body === 'object' && response.body !== null && 'message_id' in response.body
         ? String(response.body.message_id)
         : undefined;
 

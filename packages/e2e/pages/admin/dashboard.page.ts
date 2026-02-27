@@ -21,11 +21,17 @@ export class AdminDashboardPage {
     this.heading = page.locator('h1:has-text("Dashboard"), [data-testid="admin-header"]');
     this.customersLink = page.locator('a[href="/admin/customers"], [data-testid="customers-link"]');
     this.paymentsLink = page.locator('a[href="/admin/payments"], [data-testid="payments-link"]');
-    this.subscriptionsLink = page.locator('a[href="/admin/subscriptions"], [data-testid="subscriptions-link"]');
-    this.communicationsLink = page.locator('a[href="/admin/communications"], [data-testid="communications-link"]');
+    this.subscriptionsLink = page.locator(
+      'a[href="/admin/subscriptions"], [data-testid="subscriptions-link"]'
+    );
+    this.communicationsLink = page.locator(
+      'a[href="/admin/communications"], [data-testid="communications-link"]'
+    );
     this.reportsLink = page.locator('a[href="/admin/reports"], [data-testid="reports-link"]');
     this.settingsLink = page.locator('a[href="/admin/settings"], [data-testid="settings-link"]');
-    this.auditLogsLink = page.locator('a[href="/admin/audit-logs"], [data-testid="audit-logs-link"]');
+    this.auditLogsLink = page.locator(
+      'a[href="/admin/audit-logs"], [data-testid="audit-logs-link"]'
+    );
     this.logoutButton = page.locator('[data-testid="button-logout"], button:has-text("Logout")');
     this.kpiCards = page.locator('.stat-card, [data-testid="admin-header"] ~ div');
   }

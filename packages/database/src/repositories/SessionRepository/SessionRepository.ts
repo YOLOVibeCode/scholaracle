@@ -30,7 +30,11 @@ export interface ISessionRepository {
   create(data: Omit<ISessionData, 'createdAt'>): Promise<ISessionRecord>;
   findActiveByUserId(userId: string, userType: UserType): Promise<ISessionRecord[]>;
   findActiveByAdminId(adminId: string): Promise<ISessionRecord[]>;
-  findByFamilyId(userId: string, userType: UserType, familyId: string): Promise<ISessionRecord | null>;
+  findByFamilyId(
+    userId: string,
+    userType: UserType,
+    familyId: string
+  ): Promise<ISessionRecord | null>;
   revokeById(sessionId: string): Promise<boolean>;
   revokeByFamilyId(userId: string, userType: UserType, familyId: string): Promise<boolean>;
   revokeAllExcept(userId: string, userType: UserType, exceptFamilyId: string): Promise<number>;
@@ -75,9 +79,7 @@ export class SessionRepository implements ISessionRepository {
     this._collection = database.collection<SessionDocument>('sessions');
   }
 
-  public async create(
-    data: Omit<ISessionData, 'createdAt'>
-  ): Promise<ISessionRecord> {
+  public async create(data: Omit<ISessionData, 'createdAt'>): Promise<ISessionRecord> {
     const now = new Date();
     const doc: SessionDocument = {
       userId: new ObjectId(data.userId),
@@ -97,10 +99,7 @@ export class SessionRepository implements ISessionRepository {
     } as SessionDocument & { _id: ObjectId });
   }
 
-  public async findActiveByUserId(
-    userId: string,
-    userType: UserType
-  ): Promise<ISessionRecord[]> {
+  public async findActiveByUserId(userId: string, userType: UserType): Promise<ISessionRecord[]> {
     const cursor = this._collection.find({
       userId: new ObjectId(userId),
       userType,

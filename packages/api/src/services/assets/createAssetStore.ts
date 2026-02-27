@@ -28,7 +28,6 @@ export function createAssetStore(): IAssetStore {
       endpoint: process.env['AWS_S3_ENDPOINT'] ?? undefined,
     });
   }
-  const path =
-    process.env['ASSET_STORAGE_PATH'] ?? join(process.cwd(), 'data', 'assets');
+  const path = process.env['ASSET_STORAGE_PATH'] ?? join(process.cwd(), 'data', 'assets');
   return new LocalAssetStore(path);
 }

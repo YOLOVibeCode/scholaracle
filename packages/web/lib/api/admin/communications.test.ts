@@ -1,5 +1,5 @@
 import { adminCommunicationsApi } from './communications';
-import { apiClient, ApiClientError } from '../client';
+import { apiClient } from '../client';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -35,10 +37,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -80,9 +90,7 @@ describe('adminCommunicationsApi', () => {
 
   describe('listLogs', () => {
     it('builds query string from params', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: [], total: 0 }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: [], total: 0 }));
 
       await adminCommunicationsApi.listLogs({
         userId: 'u1',
@@ -112,7 +120,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
 
@@ -123,7 +131,7 @@ describe('adminCommunicationsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/communications/logs',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -134,9 +142,7 @@ describe('adminCommunicationsApi', () => {
 
   describe('sendEmail', () => {
     it('POSTs /admin/communications/send with payload and admin token', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { id: 'comm-1' } }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: { id: 'comm-1' } }));
 
       const payload = { recipientEmail: 'user@test.com', subject: 'Hello', content: '<p>Hi</p>' };
       const result = await adminCommunicationsApi.sendEmail(payload);
@@ -149,7 +155,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.id).toBe('comm-1');
@@ -162,7 +168,19 @@ describe('adminCommunicationsApi', () => {
 
   describe('listTemplates', () => {
     it('GETs /admin/communications/templates with admin token', async () => {
-      const templates = [{ id: 't1', name: 'Welcome', channel: 'email', type: 'notification', subject: 'Welcome!', content: 'Hi', isActive: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' }];
+      const templates = [
+        {
+          id: 't1',
+          name: 'Welcome',
+          channel: 'email',
+          type: 'notification',
+          subject: 'Welcome!',
+          content: 'Hi',
+          isActive: true,
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
       fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: templates }));
 
       const result = await adminCommunicationsApi.listTemplates();
@@ -174,7 +192,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data).toEqual(templates);
@@ -187,11 +205,15 @@ describe('adminCommunicationsApi', () => {
 
   describe('createTemplate', () => {
     it('POSTs /admin/communications/templates with payload and admin token', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { id: 'tpl-new' } }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: { id: 'tpl-new' } }));
 
-      const payload = { name: 'Reset Password', channel: 'email' as const, type: 'system' as const, subject: 'Reset your password', content: '<p>Click here</p>' };
+      const payload = {
+        name: 'Reset Password',
+        channel: 'email' as const,
+        type: 'system' as const,
+        subject: 'Reset your password',
+        content: '<p>Click here</p>',
+      };
       const result = await adminCommunicationsApi.createTemplate(payload);
 
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -202,7 +224,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.id).toBe('tpl-new');
@@ -228,7 +250,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -239,9 +261,7 @@ describe('adminCommunicationsApi', () => {
 
   describe('bulkSend', () => {
     it('POSTs /admin/communications/bulk-send without stepUpToken via post()', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { batchId: 'batch-1' } }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: { batchId: 'batch-1' } }));
 
       const payload = { criteria: { role: 'user' }, subject: 'Announcement', content: 'Hello all' };
       const result = await adminCommunicationsApi.bulkSend(payload);
@@ -254,16 +274,14 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.batchId).toBe('batch-1');
     });
 
     it('sends x-admin-stepup header via request() when stepUpToken is provided', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { batchId: 'batch-2' } }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: { batchId: 'batch-2' } }));
 
       const payload = { criteria: { emails: ['a@b.c'] }, subject: 'Targeted', content: 'Hey' };
       const result = await adminCommunicationsApi.bulkSend(payload, 'step-up-jwt-xyz');
@@ -277,14 +295,16 @@ describe('adminCommunicationsApi', () => {
             Authorization: 'Bearer admin-jwt-token',
             'x-admin-stepup': 'step-up-jwt-xyz',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.batchId).toBe('batch-2');
     });
 
     it('returns error object on ApiClientError instead of throwing', async () => {
-      fetchSpy.mockResolvedValue(fakeResponse({ error: 'Step-up required', code: 'STEP_UP_REQUIRED' }, 403));
+      fetchSpy.mockResolvedValue(
+        fakeResponse({ error: 'Step-up required', code: 'STEP_UP_REQUIRED' }, 403)
+      );
 
       const payload = { criteria: { role: 'user' }, subject: 'Test', content: 'x' };
       const result = await adminCommunicationsApi.bulkSend(payload);
@@ -300,7 +320,18 @@ describe('adminCommunicationsApi', () => {
 
   describe('listBatches', () => {
     it('GETs /admin/communications/batches with admin token', async () => {
-      const batches = [{ id: 'b1', status: 'completed', criteria: {}, subject: 'Hi', totalRecipients: 100, sentCount: 100, failedCount: 0, createdAt: '2024-01-01' }];
+      const batches = [
+        {
+          id: 'b1',
+          status: 'completed',
+          criteria: {},
+          subject: 'Hi',
+          totalRecipients: 100,
+          sentCount: 100,
+          failedCount: 0,
+          createdAt: '2024-01-01',
+        },
+      ];
       fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: batches }));
 
       const result = await adminCommunicationsApi.listBatches();
@@ -312,7 +343,7 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data).toEqual(batches);
@@ -335,7 +366,7 @@ describe('adminCommunicationsApi', () => {
   describe('getAnalytics', () => {
     it('GETs /admin/communications/analytics with default days=30', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { days: 30, total: 500, sent: 490, delivered: 480 } }),
+        fakeResponse({ success: true, data: { days: 30, total: 500, sent: 490, delivered: 480 } })
       );
 
       const result = await adminCommunicationsApi.getAnalytics();
@@ -347,22 +378,20 @@ describe('adminCommunicationsApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.days).toBe(30);
     });
 
     it('GETs /admin/communications/analytics with custom days param', async () => {
-      fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { days: 7, total: 100 } }),
-      );
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: { days: 7, total: 100 } }));
 
       await adminCommunicationsApi.getAnalytics(7);
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/communications/analytics?days=7',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });

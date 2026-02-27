@@ -15,7 +15,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -34,10 +36,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -77,7 +87,7 @@ describe('adminNotesApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/customers/cust-abc-123/notes',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -88,7 +98,11 @@ describe('adminNotesApi', () => {
 
   describe('create', () => {
     it('POSTs with note body to customer notes endpoint', async () => {
-      const note = { content: 'VIP customer, handle with care', category: 'general' as const, isInternal: true };
+      const note = {
+        content: 'VIP customer, handle with care',
+        category: 'general' as const,
+        isInternal: true,
+      };
       await adminNotesApi.create('cust-abc-123', note);
 
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -96,7 +110,7 @@ describe('adminNotesApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(note),
-        }),
+        })
       );
     });
   });
@@ -115,7 +129,7 @@ describe('adminNotesApi', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify(updates),
-        }),
+        })
       );
     });
   });
@@ -133,7 +147,7 @@ describe('adminNotesApi', () => {
         expect.objectContaining({
           method: 'DELETE',
           body: JSON.stringify({}),
-        }),
+        })
       );
     });
   });
@@ -151,7 +165,7 @@ describe('adminNotesApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({}),
-        }),
+        })
       );
     });
   });

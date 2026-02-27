@@ -128,7 +128,7 @@ function LoginForm() {
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/register" className="font-medium text-blue-600 hover:underline dark:text-blue-400" data-testid="link-register">
                 Sign up
               </Link>

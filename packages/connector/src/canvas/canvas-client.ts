@@ -258,9 +258,12 @@ export class CanvasClient {
 
   /** Get assignment groups (categories like "Homework", "Tests"). */
   public async getAssignmentGroups(courseId: number): Promise<readonly ICanvasAssignmentGroup[]> {
-    return this._paginatedGet<ICanvasAssignmentGroup>(`/api/v1/courses/${courseId}/assignment_groups`, {
-      per_page: '100',
-    });
+    return this._paginatedGet<ICanvasAssignmentGroup>(
+      `/api/v1/courses/${courseId}/assignment_groups`,
+      {
+        per_page: '100',
+      }
+    );
   }
 
   /** Get modules for a course (ordered content structure). */
@@ -271,10 +274,16 @@ export class CanvasClient {
   }
 
   /** Get items within a module. */
-  public async getModuleItems(courseId: number, moduleId: number): Promise<readonly ICanvasModuleItem[]> {
-    return this._paginatedGet<ICanvasModuleItem>(`/api/v1/courses/${courseId}/modules/${moduleId}/items`, {
-      per_page: '100',
-    });
+  public async getModuleItems(
+    courseId: number,
+    moduleId: number
+  ): Promise<readonly ICanvasModuleItem[]> {
+    return this._paginatedGet<ICanvasModuleItem>(
+      `/api/v1/courses/${courseId}/modules/${moduleId}/items`,
+      {
+        per_page: '100',
+      }
+    );
   }
 
   /** Get the current user's TODO items (upcoming assignments). */
@@ -292,7 +301,9 @@ export class CanvasClient {
   }
 
   /** Get missing assignments for the current user. */
-  public async getMissingSubmissions(): Promise<readonly (ICanvasAssignment & { course_id: number })[]> {
+  public async getMissingSubmissions(): Promise<
+    readonly (ICanvasAssignment & { course_id: number })[]
+  > {
     return this._paginatedGet<ICanvasAssignment & { course_id: number }>(
       '/api/v1/users/self/missing_submissions',
       { per_page: '100' }
@@ -339,7 +350,9 @@ export class CanvasClient {
   }
 
   /** Get announcements (across courses). */
-  public async getAnnouncements(contextCodes: readonly string[]): Promise<readonly ICanvasAnnouncement[]> {
+  public async getAnnouncements(
+    contextCodes: readonly string[]
+  ): Promise<readonly ICanvasAnnouncement[]> {
     return this._paginatedGet<ICanvasAnnouncement>('/api/v1/announcements', {
       ...Object.fromEntries(contextCodes.map((c, i) => [`context_codes[${i}]`, c])),
       per_page: '50',
@@ -348,9 +361,12 @@ export class CanvasClient {
 
   /** Get discussion topics for a course. */
   public async getDiscussionTopics(courseId: number): Promise<readonly ICanvasDiscussionTopic[]> {
-    return this._paginatedGet<ICanvasDiscussionTopic>(`/api/v1/courses/${courseId}/discussion_topics`, {
-      per_page: '50',
-    });
+    return this._paginatedGet<ICanvasDiscussionTopic>(
+      `/api/v1/courses/${courseId}/discussion_topics`,
+      {
+        per_page: '50',
+      }
+    );
   }
 
   /** Get rubrics for a course. */

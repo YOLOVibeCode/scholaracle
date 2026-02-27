@@ -39,7 +39,7 @@ export default function CoursesPage() {
     { retryCount: 2, retryDelay: 1000 }
   );
 
-  const students = studentsAndGrades?.students ?? [];
+  const students = useMemo(() => studentsAndGrades?.students ?? [], [studentsAndGrades?.students]);
   const grades = studentsAndGrades?.grades ?? [];
 
   const selectedStudent = useMemo(
@@ -50,7 +50,7 @@ export default function CoursesPage() {
   const selectedGrades = selectedGradesIndex >= 0 ? grades[selectedGradesIndex] ?? null : null;
 
   useEffect(() => {
-    if (students.length > 0 && !selectedStudentId) setSelectedStudentId(students[0].id);
+    if (students.length > 0 && !selectedStudentId) queueMicrotask(() => setSelectedStudentId(students[0].id));
   }, [students, selectedStudentId]);
 
   const handleSelectStudent = (student: IStudent) => setSelectedStudentId(student.id);

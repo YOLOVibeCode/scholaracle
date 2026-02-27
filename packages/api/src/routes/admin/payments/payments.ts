@@ -2,7 +2,10 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { PaymentRepository, AuditLogRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
-import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import {
+  adminAuthMiddleware,
+  type IAdminAuthenticatedRequest,
+} from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 
 export interface IPaymentsRouterConfig {
@@ -26,7 +29,7 @@ async function handleGetPayments(
       // Get all payments (limited)
       const collection = paymentRepository['_collection'];
       const filter: Record<string, unknown> = {};
-      
+
       if (status) {
         filter['status'] = status;
       }
@@ -37,23 +40,27 @@ async function handleGetPayments(
 
     res.status(200).json({
       success: true,
-      data: Array.isArray(payments) ? payments.map((payment: {
-        _id?: { toString: () => string };
-        userId: string;
-        amount: number;
-        currency: string;
-        status: string;
-        paymentMethod: string;
-        createdAt?: Date;
-      }) => ({
-        id: payment._id?.toString(),
-        userId: payment.userId,
-        amount: payment.amount / 100, // Convert to dollars
-        currency: payment.currency,
-        status: payment.status,
-        paymentMethod: payment.paymentMethod,
-        createdAt: payment.createdAt?.toISOString(),
-      })) : [],
+      data: Array.isArray(payments)
+        ? payments.map(
+            (payment: {
+              _id?: { toString: () => string };
+              userId: string;
+              amount: number;
+              currency: string;
+              status: string;
+              paymentMethod: string;
+              createdAt?: Date;
+            }) => ({
+              id: payment._id?.toString(),
+              userId: payment.userId,
+              amount: payment.amount / 100, // Convert to dollars
+              currency: payment.currency,
+              status: payment.status,
+              paymentMethod: payment.paymentMethod,
+              createdAt: payment.createdAt?.toISOString(),
+            })
+          )
+        : [],
     });
   } catch (error) {
     res.status(500).json({
@@ -262,5 +269,3 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
 
   return router;
 }
-
-

@@ -1,9 +1,9 @@
 /**
  * TDD Tests for LoadingSkeleton component
- * 
  * Following ISP: Small, focused component for loading states
+ * @jest-environment jsdom
  */
-
+import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { LoadingSkeleton } from './LoadingSkeleton';
 

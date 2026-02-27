@@ -25,9 +25,19 @@ export interface IAnalyticsService {
   calculateMRR(): Promise<number>;
   calculateChurnRate(): Promise<number>;
   calculateARPU(): Promise<number>;
-  getRevenueByPeriod(period: 'day' | 'week' | 'month' | 'year', startDate: Date, endDate: Date): Promise<readonly IRevenueDataPoint[]>;
-  getSubscriptionGrowth(period: 'day' | 'week' | 'month' | 'year', months: number): Promise<readonly IGrowthDataPoint[]>;
-  getCustomerGrowth(period: 'day' | 'week' | 'month' | 'year', months: number): Promise<readonly IGrowthDataPoint[]>;
+  getRevenueByPeriod(
+    period: 'day' | 'week' | 'month' | 'year',
+    startDate: Date,
+    endDate: Date
+  ): Promise<readonly IRevenueDataPoint[]>;
+  getSubscriptionGrowth(
+    period: 'day' | 'week' | 'month' | 'year',
+    months: number
+  ): Promise<readonly IGrowthDataPoint[]>;
+  getCustomerGrowth(
+    period: 'day' | 'week' | 'month' | 'year',
+    months: number
+  ): Promise<readonly IGrowthDataPoint[]>;
 }
 
 /**
@@ -61,7 +71,7 @@ export class AnalyticsService implements IAnalyticsService {
     for (const user of users.data) {
       const plan = user.subscription.plan;
       const pricing = PLAN_PRICING[plan];
-      
+
       // Assume monthly billing for now (can be enhanced to check billingCycle)
       mrr += pricing.monthly;
     }
@@ -121,7 +131,7 @@ export class AnalyticsService implements IAnalyticsService {
     // This would typically query the payments collection
     // For now, return empty array as PaymentRepository needs to be implemented
     const paymentsCollection = this._database.collection('payments');
-    
+
     const dateFormat: Record<string, string> = {
       day: '%Y-%m-%d',
       week: '%Y-%U',
@@ -215,10 +225,7 @@ export class AnalyticsService implements IAnalyticsService {
       },
     ];
 
-    const results = await this._database
-      .collection('users')
-      .aggregate(pipeline)
-      .toArray();
+    const results = await this._database.collection('users').aggregate(pipeline).toArray();
 
     const dataPoints: IGrowthDataPoint[] = [];
     let previousCount = 0;
@@ -257,4 +264,3 @@ export class AnalyticsService implements IAnalyticsService {
     return this.getSubscriptionGrowth(period, months);
   }
 }
-

@@ -63,9 +63,9 @@ describe('mapAeriesAssignmentStatus', () => {
   });
 
   it('should return "missing" when grading completed but no score', () => {
-    expect(
-      mapAeriesAssignmentStatus(makeAssignment({ GradingCompleted: true }), undefined)
-    ).toBe('missing');
+    expect(mapAeriesAssignmentStatus(makeAssignment({ GradingCompleted: true }), undefined)).toBe(
+      'missing'
+    );
   });
 
   it('should return "unknown" with no score and grading not completed', () => {

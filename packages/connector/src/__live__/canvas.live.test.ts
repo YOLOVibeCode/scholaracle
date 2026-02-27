@@ -61,7 +61,9 @@ describeIfAvailable(env, 'Canvas LMS — Live Integration', () => {
         const a = assignments[0]!;
         expect(typeof a.name).toBe('string');
         expect(typeof a.points_possible).toBe('number');
-        console.log(`    First assignment: "${a.name}" (${a.points_possible} pts, due: ${a.due_at ?? 'none'})`);
+        console.log(
+          `    First assignment: "${a.name}" (${a.points_possible} pts, due: ${a.due_at ?? 'none'})`
+        );
       }
     });
 
@@ -78,7 +80,9 @@ describeIfAvailable(env, 'Canvas LMS — Live Integration', () => {
       if (submissions.length > 0) {
         const s = submissions[0]!;
         expect(typeof s.assignment_id).toBe('number');
-        console.log(`    First submission: assignment ${s.assignment_id}, score: ${s.score}, state: ${s.workflow_state}`);
+        console.log(
+          `    First submission: assignment ${s.assignment_id}, score: ${s.score}, state: ${s.workflow_state}`
+        );
       }
     });
 

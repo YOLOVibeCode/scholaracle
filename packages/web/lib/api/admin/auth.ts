@@ -99,12 +99,12 @@ export const adminAuthApi = {
       mfaToken,
       token: totpCode,
     });
-    
+
     if (response.success && response.token) {
       localStorage.setItem('adminToken', response.token);
       localStorage.setItem('adminUser', JSON.stringify(response.admin));
     }
-    
+
     return response;
   },
 
@@ -154,7 +154,11 @@ export const adminAuthApi = {
    * Verify a step-up challenge and receive a short-lived step-up token.
    */
   async stepUpVerify(stepUpId: string, totpCode: string): Promise<IStepUpVerifyResponse> {
-    return apiClient.post<IStepUpVerifyResponse>('/admin/auth/step-up/verify', { stepUpId, token: totpCode }, true);
+    return apiClient.post<IStepUpVerifyResponse>(
+      '/admin/auth/step-up/verify',
+      { stepUpId, token: totpCode },
+      true
+    );
   },
 
   /**
@@ -191,5 +195,3 @@ export const adminAuthApi = {
     return !!this.getToken();
   },
 };
-
-

@@ -5,5 +5,8 @@ module.exports = {
   displayName: 'workers',
   rootDir: '.',
   testEnvironment: 'node',
+  coverageThreshold: {
+    global: { statements: 37, branches: 47, functions: 22, lines: 38 },
+  },
 };
 

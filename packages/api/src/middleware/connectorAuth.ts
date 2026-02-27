@@ -14,7 +14,7 @@ export interface IConnectorAuthMiddlewareOptions {
 
 export function connectorAuthMiddleware(
   connectorTokenService: ConnectorTokenService,
-  options?: IConnectorAuthMiddlewareOptions,
+  options?: IConnectorAuthMiddlewareOptions
 ) {
   return (req: IConnectorAuthenticatedRequest, res: Response, next: NextFunction): void => {
     const authHeader = req.headers.authorization;

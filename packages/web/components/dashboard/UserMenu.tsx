@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { LogOut, User } from 'lucide-react';
+import Link from 'next/link';
+import { LogOut, User, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -31,6 +32,12 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/account" data-testid="account-menu-item">
+            <UserCircle className="mr-2 h-4 w-4" />
+            <span>Account</span>
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleLogout} data-testid="logout-menu-item">
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>

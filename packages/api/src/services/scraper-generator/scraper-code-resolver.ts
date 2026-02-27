@@ -26,7 +26,12 @@ export interface IConnectionInput {
  * - Otherwise: return generic fallback (CSS-selector login, no real scrape).
  */
 export async function resolveScraperCode(
-  collection: Collection<{ _id?: unknown; scraperCode?: string; transformerCode?: string; metadata?: string }>,
+  collection: Collection<{
+    _id?: unknown;
+    scraperCode?: string;
+    transformerCode?: string;
+    metadata?: string;
+  }>,
   connection: IConnectionInput
 ): Promise<IScraperCode> {
   if (connection.scraperId) {
@@ -60,7 +65,12 @@ export async function resolveScraperCode(
     scraperCode: '// generic fallback scraper (CSS-selector login only)',
     transformerCode: '// Generic transformer',
     metadata: JSON.stringify(
-      { id: 'generic-browser', name: connection.platformName, version: '1.0.0', description: 'Generic' },
+      {
+        id: 'generic-browser',
+        name: connection.platformName,
+        version: '1.0.0',
+        description: 'Generic',
+      },
       null,
       2
     ),

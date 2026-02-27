@@ -68,9 +68,14 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
             </span>
           )}
         </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/dashboard/students/${studentId}/grades`}>View all grades</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/dashboard/students/${studentId}?tab=trends`}>View trends</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/dashboard/students/${studentId}/grades`}>View all grades</Link>
+          </Button>
+        </div>
       </div>
 
       {data.aiOverview && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -34,15 +34,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const isLoginRoute = pathname === '/admin/login';
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [adminUser, setAdminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(
+  const [adminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(
     () => getInitialAdminUser()
   );
 
-  useEffect(() => {
-    // Keep state in sync in case localStorage changes after initial load.
-    const user = getInitialAdminUser();
-    if (user) setAdminUser(user);
-  }, [router]);
+  // Admin user is initialized from getInitialAdminUser() above; no sync effect to avoid set-state-in-effect.
 
   // Enforce auth as early as possible for best UX (and stable E2E).
   useLayoutEffect(() => {

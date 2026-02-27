@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import type { ICourseGrade, ICourseAssignment } from '@/lib/api/students';
+import { GradeTrendChart } from './GradeTrendChart';
 
 export interface CourseGradeSummaryCardProps {
   course: ICourseGrade;
+  studentId?: string;
 }
 
 function letterGradeColor(grade: number): string {
@@ -64,7 +67,7 @@ function scoreText(a: ICourseAssignment): string {
   return '—';
 }
 
-export function CourseGradeSummaryCard({ course }: CourseGradeSummaryCardProps) {
+export function CourseGradeSummaryCard({ course, studentId }: CourseGradeSummaryCardProps) {
   const trendLabel =
     course.recentTrend === 'improving'
       ? 'Improving'
@@ -96,8 +99,25 @@ export function CourseGradeSummaryCard({ course }: CourseGradeSummaryCardProps) 
               {course.riskLevel} risk
             </span>
           )}
+          {studentId && course.materialCount != null && course.materialCount > 0 && (
+            <Link
+              href={`/dashboard/students/${studentId}?tab=documents&course=${encodeURIComponent(course.courseExternalId)}`}
+              className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+              data-testid="view-materials-link"
+            >
+              {course.materialCount} material{course.materialCount !== 1 ? 's' : ''}
+            </Link>
+          )}
         </div>
       </div>
+
+      {studentId && (
+        <GradeTrendChart
+          studentId={studentId}
+          courseExternalId={course.courseExternalId}
+          courseName={course.courseName}
+        />
+      )}
 
       <div className="rounded-lg border bg-card p-4" data-testid="why-this-grade">
         <h3 className="mb-2 font-semibold">Why this grade?</h3>

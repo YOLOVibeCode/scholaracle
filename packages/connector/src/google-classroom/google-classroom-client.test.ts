@@ -145,9 +145,7 @@ describe('GoogleClassroomClient', () => {
 
   describe('error handling', () => {
     it('should throw on non-OK response', async () => {
-      fetchSpy.mockResolvedValueOnce(
-        mockErrorResponse(401, 'Unauthorized', 'Invalid token')
-      );
+      fetchSpy.mockResolvedValueOnce(mockErrorResponse(401, 'Unauthorized', 'Invalid token'));
 
       await expect(client.getCourses()).rejects.toThrow('HTTP 401 Unauthorized');
     });

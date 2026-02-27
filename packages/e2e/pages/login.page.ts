@@ -17,16 +17,24 @@ export class LoginPage {
     this.emailInput = page.locator('[data-testid="input-email"]');
     this.passwordInput = page.locator('[data-testid="input-password"]');
     this.loginButton = page.locator('[data-testid="button-login"]');
-    this.errorMessage = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50');
+    this.errorMessage = page.locator(
+      '[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50'
+    );
     this.registerLink = page.locator('[data-testid="link-register"], a[href="/register"]');
-    this.forgotPasswordLink = page.locator('[data-testid="link-forgot-password"], a[href="/forgot-password"]');
+    this.forgotPasswordLink = page.locator(
+      '[data-testid="link-forgot-password"], a[href="/forgot-password"]'
+    );
   }
 
   async goto(): Promise<void> {
     await this.page.goto('/login');
   }
 
-  async login(email: string, password: string, options?: { readonly waitForDashboard?: boolean }): Promise<void> {
+  async login(
+    email: string,
+    password: string,
+    options?: { readonly waitForDashboard?: boolean }
+  ): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     await this.loginButton.click();
@@ -47,5 +55,3 @@ export class LoginPage {
     await expect(this.emailInput).toBeVisible();
   }
 }
-
-
