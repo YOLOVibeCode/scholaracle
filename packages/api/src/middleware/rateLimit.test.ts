@@ -27,5 +27,3 @@ describe('rateLimitMiddleware', () => {
     expect(String(res.body.error ?? '')).toMatch(/rate limit/i);
   });
 });
-
-

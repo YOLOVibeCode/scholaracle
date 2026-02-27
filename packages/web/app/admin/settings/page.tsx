@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -87,11 +87,11 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const startEdit = (id: string, currentRole: AdminRole) => {
+  const startEdit = useCallback((id: string, currentRole: AdminRole) => {
     setToast(null);
     setEditingId(id);
     setEditRole(currentRole);
-  };
+  }, []);
 
   const cancelEdit = () => setEditingId(null);
 

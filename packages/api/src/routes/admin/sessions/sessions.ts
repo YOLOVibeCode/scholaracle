@@ -99,13 +99,9 @@ export function adminSessionsRouter(config: IAdminSessionsRouterConfig): Router 
   const router = Router();
   const sessionRepo = new SessionRepository(config.database);
 
-  router.get(
-    '/',
-    adminAuthMiddleware(config.adminAuthService),
-    (req: Request, res: Response) => {
-      void handleListAdminSessions(req, res, sessionRepo, config.adminJwtSecret);
-    }
-  );
+  router.get('/', adminAuthMiddleware(config.adminAuthService), (req: Request, res: Response) => {
+    void handleListAdminSessions(req, res, sessionRepo, config.adminJwtSecret);
+  });
 
   router.delete(
     '/:id',

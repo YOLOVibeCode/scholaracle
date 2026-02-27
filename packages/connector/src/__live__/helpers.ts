@@ -81,11 +81,7 @@ export function oneRosterEnv(): ILiveTestEnv & {
  * Conditionally run a describe block only if the env check passes.
  * Prints a skip message when credentials are missing.
  */
-export function describeIfAvailable(
-  env: ILiveTestEnv,
-  name: string,
-  fn: () => void
-): void {
+export function describeIfAvailable(env: ILiveTestEnv, name: string, fn: () => void): void {
   if (env.available) {
     describe(name, fn);
   } else {

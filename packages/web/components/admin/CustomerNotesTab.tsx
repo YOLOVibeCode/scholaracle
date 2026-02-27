@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { adminNotesApi, type IAdminNote } from '@/lib/api/admin/notes';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton, ConfirmDialog } from '@/components/common';
-import { Pin, Trash2, Edit2 } from 'lucide-react';
+import { Pin, Trash2 } from 'lucide-react';
 
 export interface ICustomerNotesTabProps {
   readonly customerId: string;

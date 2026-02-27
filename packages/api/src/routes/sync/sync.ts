@@ -44,7 +44,8 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
     // Access check
     const ownerId = student['userId']?.toString();
     const shared = (student['sharedWith'] as Array<{ userId?: string; status?: string }>) ?? [];
-    const hasAccess = ownerId === userId || shared.some((s) => s.userId === userId && s.status === 'accepted');
+    const hasAccess =
+      ownerId === userId || shared.some((s) => s.userId === userId && s.status === 'accepted');
     if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const dataSources = (student['dataSources'] ?? []) as Array<{
@@ -86,7 +87,8 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
 
     const ownerId = student['userId']?.toString();
     const shared = (student['sharedWith'] as Array<{ userId?: string; status?: string }>) ?? [];
-    const hasAccess = ownerId === userId || shared.some((s) => s.userId === userId && s.status === 'accepted');
+    const hasAccess =
+      ownerId === userId || shared.some((s) => s.userId === userId && s.status === 'accepted');
     if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const dataSources = (student['dataSources'] ?? []) as Array<{

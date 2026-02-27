@@ -30,7 +30,9 @@ describe('PasswordResetTokenRepository', () => {
 
       await repository.create(userId, 'secure-token-123', expiresAt);
 
-      const doc = await database.collection('password_reset_tokens').findOne({ token: 'secure-token-123' });
+      const doc = await database
+        .collection('password_reset_tokens')
+        .findOne({ token: 'secure-token-123' });
       expect(doc).not.toBeNull();
       expect(doc?.['userId']?.toString()).toBe(userId);
       expect(doc?.['expiresAt']).toEqual(expiresAt);
@@ -78,7 +80,9 @@ describe('PasswordResetTokenRepository', () => {
 
       await repository.invalidateForUser(userId);
 
-      const count = await database.collection('password_reset_tokens').countDocuments({ userId: new ObjectId(userId) });
+      const count = await database
+        .collection('password_reset_tokens')
+        .countDocuments({ userId: new ObjectId(userId) });
       expect(count).toBe(0);
     });
 

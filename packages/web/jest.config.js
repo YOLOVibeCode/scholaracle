@@ -23,6 +23,7 @@ module.exports = {
       },
     ],
   },
+  // No global setupFilesAfterEnv — component tests that need jest-dom matchers import '@testing-library/jest-dom' in-file
   // No MongoDB needed for web tests
   globalSetup: undefined,
   globalTeardown: undefined,

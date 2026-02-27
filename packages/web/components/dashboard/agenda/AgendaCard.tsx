@@ -42,7 +42,8 @@ export interface AgendaCardProps {
 
 export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) {
   const [remindLoading, setRemindLoading] = useState(false);
-  const borderClass = importanceBorder[item.importance] ?? importanceBorder.medium;
+  const importance = item.importance ?? 'medium';
+  const borderClass = importanceBorder[importance];
   const latestReminder = item.reminders?.[0];
 
   const handleSendReminder = async (channel: 'sms' | 'email') => {
@@ -97,7 +98,7 @@ export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) 
               </p>
             )}
             <div className="flex flex-wrap gap-1 pt-1">
-              {(item.labels ?? []).slice(0, 6).map((label) => (
+              {(item.labels ?? []).slice(0, 6).map((label: string) => (
                 <Badge
                   key={label}
                   variant="secondary"
@@ -115,7 +116,7 @@ export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) 
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 <span>
-                  {latestReminder.channel.toUpperCase()} sent {formatReminderTime(latestReminder.sentAt)}
+                  {(latestReminder.channel ?? 'email').toUpperCase()} sent {formatReminderTime(latestReminder.sentAt)}
                 </span>
               </div>
             )}

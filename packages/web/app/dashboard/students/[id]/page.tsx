@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, LayoutDashboard } from 'lucide-react';
@@ -35,25 +35,7 @@ export default function EditStudentPage() {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [connectWizardOpen, setConnectWizardOpen] = useState(false);
 
-  useEffect(() => {
-    void loadStudent();
-  }, [studentId]);
-
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && (VALID_TABS as readonly string[]).includes(tab)) {
-      setActiveTab(tab as TabId);
-    }
-  }, [searchParams]);
-
-  const setActiveTabWithUrl = (tab: TabId) => {
-    setActiveTab(tab);
-    const next = new URLSearchParams(searchParams.toString());
-    next.set('tab', tab);
-    router.replace(`/dashboard/students/${studentId}?${next.toString()}`, { scroll: false });
-  };
-
-  const loadStudent = async () => {
+  const loadStudent = useCallback(async () => {
     if (!studentId) return;
     setIsLoading(true);
     try {
@@ -71,6 +53,24 @@ export default function EditStudentPage() {
     } finally {
       setIsLoading(false);
     }
+  }, [studentId]);
+
+  useEffect(() => {
+    void loadStudent();
+  }, [loadStudent]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && (VALID_TABS as readonly string[]).includes(tab)) {
+      setActiveTab(tab as TabId);
+    }
+  }, [searchParams]);
+
+  const setActiveTabWithUrl = (tab: TabId) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams.toString());
+    next.set('tab', tab);
+    router.replace(`/dashboard/students/${studentId}?${next.toString()}`, { scroll: false });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

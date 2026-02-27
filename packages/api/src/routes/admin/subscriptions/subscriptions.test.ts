@@ -37,7 +37,10 @@ describe('Admin Subscription Routes', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/admin/subscriptions', subscriptionsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/subscriptions',
+      subscriptionsRouter({ database, jwtSecret: 'test-secret' })
+    );
   });
 
   afterAll(async () => {
@@ -212,5 +215,3 @@ describe('Admin Subscription Routes', () => {
     });
   });
 });
-
-

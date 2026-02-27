@@ -1,9 +1,9 @@
 /**
  * TDD Tests for CustomerOverviewTab component
- * 
  * Following ISP: Small, focused component for customer overview
+ * @jest-environment jsdom
  */
-
+import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { CustomerOverviewTab } from './CustomerOverviewTab';
 import type { ICustomerDetail } from '@/lib/api/admin/customers';
@@ -43,8 +43,8 @@ describe('CustomerOverviewTab Component (ISP)', () => {
   it('should show subscription information', () => {
     render(<CustomerOverviewTab customer={mockCustomer} onSuspend={() => {}} onUnsuspend={() => {}} />);
     
-    expect(screen.getByText(/premium/i)).toBeInTheDocument();
-    expect(screen.getByText(/active/i)).toBeInTheDocument();
+    expect(screen.getByTestId('subscription-plan')).toHaveTextContent(/premium/i);
+    expect(screen.getByTestId('subscription-status')).toHaveTextContent(/active/i);
   });
 
   it('should call onSuspend when suspend button is clicked', () => {

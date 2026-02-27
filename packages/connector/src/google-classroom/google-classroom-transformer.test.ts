@@ -5,7 +5,11 @@ import {
   transformCourseToOp,
   transformGradeSnapshotToOp,
 } from './google-classroom-transformer';
-import type { IGoogleCourseWork, IGoogleStudentSubmission, IGoogleCourse } from './google-classroom-client';
+import type {
+  IGoogleCourseWork,
+  IGoogleStudentSubmission,
+  IGoogleCourse,
+} from './google-classroom-client';
 
 const BASE_KEY = {
   provider: 'google-classroom',

@@ -5,10 +5,7 @@ import { AlertType } from '@scholaracle/contracts';
  * Used by NotificationService to decide whether to generate/deliver student and/or parent notifications.
  * Default: both true for all types (current behavior). Adjust per docs/alert-audience.md.
  */
-export const alertAudience: Record<
-  AlertType,
-  { student: boolean; parent: boolean }
-> = {
+export const alertAudience: Record<AlertType, { student: boolean; parent: boolean }> = {
   [AlertType.MISSING_ASSIGNMENT]: { student: true, parent: true },
   [AlertType.DEADLINE]: { student: true, parent: true },
   [AlertType.GRADE_DROP]: { student: true, parent: true },

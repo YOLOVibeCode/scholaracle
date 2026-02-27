@@ -70,4 +70,3 @@ export class MFAService implements IMFAService {
     return QRCode.toDataURL(otpauthUrl);
   }
 }
-

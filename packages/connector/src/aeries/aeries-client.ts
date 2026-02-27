@@ -242,9 +242,7 @@ export class AeriesClient {
   }
 
   public async getSchool(): Promise<IAeriesSchool> {
-    const [school] = await this._get<IAeriesSchool[]>(
-      `/api/v5/schools/${this._config.schoolCode}`
-    );
+    const [school] = await this._get<IAeriesSchool[]>(`/api/v5/schools/${this._config.schoolCode}`);
     return school!;
   }
 
@@ -317,12 +315,8 @@ export class AeriesClient {
     );
   }
 
-  public async getAssignments(
-    gradebookNumber: number
-  ): Promise<readonly IAeriesAssignment[]> {
-    return this._get<IAeriesAssignment[]>(
-      `/api/v5/gradebooks/${gradebookNumber}/assignments`
-    );
+  public async getAssignments(gradebookNumber: number): Promise<readonly IAeriesAssignment[]> {
+    return this._get<IAeriesAssignment[]>(`/api/v5/gradebooks/${gradebookNumber}/assignments`);
   }
 
   public async getAssignmentScores(

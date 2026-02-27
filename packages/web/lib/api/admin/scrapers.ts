@@ -198,7 +198,10 @@ export const adminScrapersApi = {
   },
 
   async getCacheById(id: string): Promise<IScraperCacheDetailResponse> {
-    return apiClient.get<IScraperCacheDetailResponse>(`/admin/scrapers/caches/${encodeURIComponent(id)}`, true);
+    return apiClient.get<IScraperCacheDetailResponse>(
+      `/admin/scrapers/caches/${encodeURIComponent(id)}`,
+      true
+    );
   },
 
   async deleteCache(id: string): Promise<{ success: boolean; deleted?: boolean; error?: string }> {

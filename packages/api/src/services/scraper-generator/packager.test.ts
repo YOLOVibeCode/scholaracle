@@ -114,7 +114,7 @@ describe('Packager', () => {
       expect(runJs).toContain('--scheduled');
       expect(runJs).toContain("process.argv.includes('--scheduled')");
       expect(runJs).toContain("require('ts-node/register')");
-      expect(runJs).toContain("require(scraperPath)");
+      expect(runJs).toContain('require(scraperPath)');
       expect(runJs).toContain('setupScheduling');
       expect(runJs).toContain('StartCalendarInterval');
       expect(runJs).toContain('LaunchAgents');
@@ -233,7 +233,9 @@ describe('Packager', () => {
 // ScraperCodeResolver (Cycle 1)
 // ---------------------------------------------------------------------------
 
-function mockCollection(docs: Record<string, { scraperCode: string; transformerCode: string; metadata: string }>): Collection {
+function mockCollection(
+  docs: Record<string, { scraperCode: string; transformerCode: string; metadata: string }>
+): Collection {
   return {
     findOne: async (filter: { _id?: unknown }) => {
       if (filter._id) {
@@ -294,7 +296,13 @@ import type { IScraperCode } from './scraper-code-resolver';
 function resolved(
   platformId: string,
   scraper: IScraperCode
-): { platformId: string; platformName: string; loginUrl: string; credentials: { username: string; password: string; studentNameHint?: string }; scraper: IScraperCode } {
+): {
+  platformId: string;
+  platformName: string;
+  loginUrl: string;
+  credentials: { username: string; password: string; studentNameHint?: string };
+  scraper: IScraperCode;
+} {
   return {
     platformId,
     platformName: platformId.charAt(0).toUpperCase() + platformId.slice(1),
@@ -306,10 +314,21 @@ function resolved(
 
 describe('BundleFileEmitter', () => {
   it('embeds per-connection scraper files with unique names', () => {
-    const files = emitBundleFiles([
-      resolved('aeries', { scraperCode: '// aeries code', transformerCode: '// aeries tf', metadata: '{}' }),
-      resolved('canvas', { scraperCode: '// canvas code', transformerCode: '// canvas tf', metadata: '{}' }),
-    ], { apiBaseUrl: 'http://localhost', connectorToken: 'tok' });
+    const files = emitBundleFiles(
+      [
+        resolved('aeries', {
+          scraperCode: '// aeries code',
+          transformerCode: '// aeries tf',
+          metadata: '{}',
+        }),
+        resolved('canvas', {
+          scraperCode: '// canvas code',
+          transformerCode: '// canvas tf',
+          metadata: '{}',
+        }),
+      ],
+      { apiBaseUrl: 'http://localhost', connectorToken: 'tok' }
+    );
     expect(files).toContainEqual(
       expect.objectContaining({ filename: 'scraper-aeries.ts', content: '// aeries code' })
     );
@@ -470,7 +489,10 @@ export function transformTestPlatformExtract(raw: Record<string, unknown>): ISlc
     fs.writeFileSync(path.join(workDir, 'metadata.json'), metadataJson);
     fs.writeFileSync(path.join(workDir, 'tsconfig.json'), tsconfig);
 
-    require('ts-node').register({ transpileOnly: true, project: path.join(workDir, 'tsconfig.json') });
+    require('ts-node').register({
+      transpileOnly: true,
+      project: path.join(workDir, 'tsconfig.json'),
+    });
     const scraperModule = require(path.join(workDir, 'scraper.ts'));
     const ScraperClass = scraperModule.default ?? scraperModule.TestPlatformScraper;
 
@@ -509,14 +531,22 @@ export default class LifecycleScraper {
 `;
 
     const tsconfig = JSON.stringify({
-      compilerOptions: { module: 'commonjs', target: 'ES2020', esModuleInterop: true, strict: false },
+      compilerOptions: {
+        module: 'commonjs',
+        target: 'ES2020',
+        esModuleInterop: true,
+        strict: false,
+      },
       include: ['*.ts'],
     });
 
     fs.writeFileSync(path.join(workDir, 'scraper.ts'), scraperTs);
     fs.writeFileSync(path.join(workDir, 'tsconfig.json'), tsconfig);
 
-    require('ts-node').register({ transpileOnly: true, project: path.join(workDir, 'tsconfig.json') });
+    require('ts-node').register({
+      transpileOnly: true,
+      project: path.join(workDir, 'tsconfig.json'),
+    });
     const mod = require(path.join(workDir, 'scraper.ts'));
     const ScraperClass = mod.default;
     const instance = new ScraperClass();
@@ -606,7 +636,7 @@ describe('Packager E2E', () => {
       .send({
         sourceId,
         provider: sourceId,
-        adapterId: sourceId + '-browser',
+        adapterId: `${sourceId}-browser`,
         displayName: 'E2E Test Platform',
         portalBaseUrl: 'https://example.edu',
       });
@@ -625,7 +655,7 @@ describe('Packager E2E', () => {
         entity: 'course',
         key: {
           provider: sourceId,
-          adapterId: sourceId + '-browser',
+          adapterId: `${sourceId}-browser`,
           externalId: 'c1',
         },
         observedAt: now,
@@ -635,7 +665,7 @@ describe('Packager E2E', () => {
 
     const runRes = await request(app)
       .post('/api/ingest/v1/runs')
-      .set('Authorization', 'Bearer ' + connectorToken)
+      .set('Authorization', `Bearer ${connectorToken}`)
       .send({ sourceId });
     expect(runRes.status).toBe(200);
     const runId = runRes.body.runId as string;
@@ -646,7 +676,7 @@ describe('Packager E2E', () => {
         runId,
         startedAt: now,
         provider: sourceId,
-        adapterId: sourceId + '-browser',
+        adapterId: `${sourceId}-browser`,
         adapterVersion: '1.0.0',
         mode: 'delta',
         timezone: 'America/Los_Angeles',
@@ -660,21 +690,18 @@ describe('Packager E2E', () => {
     };
 
     const envRes = await request(app)
-      .post('/api/ingest/v1/runs/' + runId + '/envelope')
-      .set('Authorization', 'Bearer ' + connectorToken)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
     expect(envRes.status).toBe(200);
 
     const completeRes = await request(app)
-      .post('/api/ingest/v1/runs/' + runId + '/complete')
-      .set('Authorization', 'Bearer ' + connectorToken)
+      .post(`/api/ingest/v1/runs/${runId}/complete`)
+      .set('Authorization', `Bearer ${connectorToken}`)
       .send({});
     expect(completeRes.status).toBe(200);
 
-    const courses = await database
-      .collection('slc_courses')
-      .find({ provider: sourceId })
-      .toArray();
+    const courses = await database.collection('slc_courses').find({ provider: sourceId }).toArray();
     expect(courses.length).toBeGreaterThanOrEqual(1);
     const course = courses.find((c) => c['record']?.title === 'Math') ?? courses[0];
     expect(course?.['record']?.title).toBe('Math');

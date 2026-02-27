@@ -52,9 +52,7 @@ export async function createTestAdmin(
 
   const loginResult = await authService.login(email, password);
   if (!loginResult.requiresMFA || !loginResult.mfaToken) {
-    throw new Error(
-      `Expected requiresMFA from login, got: ${JSON.stringify(loginResult)}`
-    );
+    throw new Error(`Expected requiresMFA from login, got: ${JSON.stringify(loginResult)}`);
   }
 
   const totpToken = speakeasy.totp({
@@ -64,9 +62,7 @@ export async function createTestAdmin(
 
   const verifyResult = await authService.verifyMFAToken(loginResult.mfaToken, totpToken);
   if (!verifyResult.success || !verifyResult.token || !verifyResult.admin) {
-    throw new Error(
-      `MFA verification failed: ${JSON.stringify(verifyResult)}`
-    );
+    throw new Error(`MFA verification failed: ${JSON.stringify(verifyResult)}`);
   }
 
   return {

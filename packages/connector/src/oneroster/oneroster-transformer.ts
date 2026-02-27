@@ -21,9 +21,7 @@ type BaseKey = Omit<ISlcEntityKey, 'externalId'>;
 // ---------------------------------------------------------------------------
 
 /** Map OneRoster scoreStatus to Scholaracle assignment status. */
-export function mapOneRosterStatus(
-  result: IOneRosterResult | undefined
-): ISlcAssignment['status'] {
+export function mapOneRosterStatus(result: IOneRosterResult | undefined): ISlcAssignment['status'] {
   if (!result) return 'unknown';
   switch (result.scoreStatus) {
     case 'fully graded':
@@ -55,9 +53,7 @@ export function transformLineItemToOp(
     key: {
       ...baseKey,
       externalId: `or-lineitem-${lineItem.sourcedId}`,
-      courseExternalId: lineItem.class
-        ? `or-class-${lineItem.class.sourcedId}`
-        : undefined,
+      courseExternalId: lineItem.class ? `or-class-${lineItem.class.sourcedId}` : undefined,
     },
     observedAt: new Date().toISOString(),
     record: {

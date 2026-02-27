@@ -160,9 +160,7 @@ describe('SkywardAdapter', () => {
 
     it('should continue when gradebook scrape fails for a course', async () => {
       (scraper.scrapeReport as jest.Mock).mockResolvedValue({
-        data: [
-          { course: 11111, scores: [{ bucket: 'Q1', score: 80 }] },
-        ],
+        data: [{ course: 11111, scores: [{ bucket: 'Q1', score: 80 }] }],
       });
       (scraper.scrapeGradebook as jest.Mock).mockRejectedValue(
         new Error('Gradebook not available')

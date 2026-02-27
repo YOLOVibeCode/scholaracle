@@ -54,7 +54,7 @@ describe('ExportService', () => {
 
     it('should export customers with date filters', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       // Create user now (will have current date)
       await userRepository.create({
         email: 'filtered@test.com',
@@ -135,4 +135,3 @@ describe('ExportService', () => {
     });
   });
 });
-

@@ -5,9 +5,9 @@ import { TEST_USERS } from '../fixtures/test-data';
 
 /**
  * Layer 4: Feature CRUD Tests (Admin)
- * 
+ *
  * Core functionality works for admin roles.
- * 
+ *
  * Depends on: Layer 3 (@navigation)
  * If Layer 3 fails → don't run
  */
@@ -15,10 +15,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-001: Read customer list', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customersPage = new AdminCustomersPage(page);
     await customersPage.expectOnCustomersPage();
-    
+
     // Verify table or list is visible
     await expect(customersPage.customerTable.or(customersPage.customerRows).first()).toBeVisible();
   });
@@ -26,10 +26,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-002: Search customers', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customersPage = new AdminCustomersPage(page);
     await customersPage.searchCustomer('test@example.com');
-    
+
     // Verify search executed
     await page.waitForTimeout(500);
     await expect(page.locator('body')).toBeVisible();
@@ -38,10 +38,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-003: Filter customers by plan', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const filterDropdown = page.locator('[data-testid="select-filter"], select').first();
     const count = await filterDropdown.count();
-    
+
     if (count > 0) {
       await filterDropdown.selectOption({ index: 1 });
       await page.waitForTimeout(500);
@@ -52,14 +52,14 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-004: View customer detail', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
       await expect(page).toHaveURL(/\/admin\/customers\/[^/]+/);
-      
+
       // Verify customer info is visible
       await expect(page.locator('body')).toBeVisible();
 
@@ -71,28 +71,28 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-005: Suspend customer', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
-      
+
       const suspendButton = page.locator('[data-testid="button-suspend"]');
       const suspendCount = await suspendButton.count();
-      
+
       if (suspendCount > 0) {
         await suspendButton.click();
-        
+
         // Confirm dialog appears
         const confirmButton = page.locator('[data-testid="button-confirm-suspend"]');
         const confirmCount = await confirmButton.count();
-        
+
         if (confirmCount > 0) {
           await confirmButton.click();
         }
-        
+
         await assertToastMessage(page, /suspended|success/i);
       }
     }
@@ -101,19 +101,19 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-006: Unsuspend customer', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     // This test would require a suspended customer
     // For now, verify the functionality exists
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
-      
+
       const unsuspendButton = page.locator('[data-testid="button-unsuspend"]');
       const unsuspendCount = await unsuspendButton.count();
-      
+
       // If button exists, test it
       if (unsuspendCount > 0) {
         await unsuspendButton.click();
@@ -125,24 +125,24 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-007: Update subscription plan', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
-      
+
       // Navigate to subscription tab
       const subscriptionTab = page.locator('[data-testid="tab-subscription"]');
       const tabCount = await subscriptionTab.count();
-      
+
       if (tabCount > 0) {
         await subscriptionTab.click();
-        
+
         const changePlanButton = page.locator('[data-testid="button-change-plan"]');
         const buttonCount = await changePlanButton.count();
-        
+
         if (buttonCount > 0) {
           await changePlanButton.click();
           await page.waitForTimeout(500);
@@ -155,7 +155,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-008: Cancel subscription', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/subscriptions');
-    
+
     await expect(page.locator('[data-testid="admin-subscriptions-page"]')).toBeVisible();
     await expect(page.locator('[data-testid="subscriptions-table"]')).toBeVisible();
 
@@ -206,37 +206,39 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await page.locator('[data-testid="button-confirm-refund"]').click();
 
     // Refund may show a toast, or silently close the panel (API may not emit a toast in E2E)
-    const toast = page.locator('[data-testid="toast"], .toast, [role="alert"]:not(#__next-route-announcer__)').first();
+    const toast = page
+      .locator('[data-testid="toast"], .toast, [role="alert"]:not(#__next-route-announcer__)')
+      .first();
     await toast.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
   });
 
   test('FEAT-A-010: Create admin note', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
       await page.waitForURL(/\/admin\/customers\/[^/]+/);
-      
+
       // Navigate to notes tab
       const notesTab = page.locator('[data-testid="tab-notes"]');
       const tabCount = await notesTab.count();
-      
+
       if (tabCount > 0) {
         await notesTab.click();
-        
+
         const addNoteButton = page.locator('[data-testid="button-add-note"]');
         const buttonCount = await addNoteButton.count();
-        
+
         if (buttonCount > 0) {
           await addNoteButton.click();
-          
+
           const noteTextarea = page.locator('[data-testid="note-content-input"]');
           await noteTextarea.fill('Test note from E2E');
-          
+
           await addNoteButton.click(); // Add Note button submits
           await assertToastMessage(page, /note|success/i);
         }
@@ -247,19 +249,19 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-011: Update admin note', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
-      
+
       const notesTab = page.locator('[data-testid="tab-notes"]');
       const tabCount = await notesTab.count();
-      
+
       if (tabCount > 0) {
         await notesTab.click();
-        
+
         // Notes are read-only in current implementation, so this test verifies UI exists
         await expect(page.locator('[data-testid="customer-notes-tab"]')).toBeVisible();
       }
@@ -269,26 +271,26 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-012: Delete admin note', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/customers');
-    
+
     const customerRow = page.locator('[data-testid="customer-row"]').first();
     const count = await customerRow.count();
-    
+
     if (count > 0) {
       await customerRow.click();
-      
+
       const notesTab = page.locator('[data-testid="tab-notes"]');
       const tabCount = await notesTab.count();
-      
+
       if (tabCount > 0) {
         await notesTab.click();
-        
+
         // Find first delete button for a note
         const deleteButton = page.locator('[data-testid^="delete-note-"]').first();
         const deleteCount = await deleteButton.count();
-        
+
         if (deleteCount > 0) {
           await deleteButton.click();
-          
+
           // Confirm dialog appears
           const confirmButton = page.locator('[data-testid="button-confirm-dialog"]');
           await confirmButton.click();
@@ -301,7 +303,7 @@ test.describe('@feature Layer 4: Admin Features', () => {
   test('FEAT-A-013: Send communication to customer', async ({ page, loginAsRole }) => {
     await loginAsRole('admin');
     await page.goto('/admin/communications');
-    
+
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
 
     // Fill compose form (no skipping: requires real UI)
@@ -392,9 +394,12 @@ test.describe('@feature Layer 4: Admin Features', () => {
     const adminToken = await page.evaluate(() => localStorage.getItem('adminToken'));
     expect(adminToken).toBeTruthy();
 
-    const listRes = await page.request.get('http://localhost:2801/api/admin/communications/logs?recipientEmail=test.parent@example.com&limit=25', {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
+    const listRes = await page.request.get(
+      'http://localhost:2801/api/admin/communications/logs?recipientEmail=test.parent@example.com&limit=25',
+      {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }
+    );
     expect(listRes.ok()).toBeTruthy();
     const listJson = await listRes.json();
     const item = (listJson.data as any[]).find((x) => x.subject === subject);
@@ -402,15 +407,21 @@ test.describe('@feature Layer 4: Admin Features', () => {
     const logId = item.id as string;
 
     // Simulate webhook delivery update
-    const whRes = await page.request.post('http://localhost:2801/api/webhooks/communications/status', {
-      headers: { 'x-webhook-secret': 'test-webhook-secret' },
-      data: { logId, status: 'opened' },
-    });
+    const whRes = await page.request.post(
+      'http://localhost:2801/api/webhooks/communications/status',
+      {
+        headers: { 'x-webhook-secret': 'test-webhook-secret' },
+        data: { logId, status: 'opened' },
+      }
+    );
     expect(whRes.ok()).toBeTruthy();
 
     // Refresh logs UI and assert status updated
     await page.locator('[data-testid="button-refresh-logs"]').click({ force: true });
-    const row = page.locator('[data-testid="communication-log-row"]').filter({ hasText: subject }).first();
+    const row = page
+      .locator('[data-testid="communication-log-row"]')
+      .filter({ hasText: subject })
+      .first();
     await expect(row).toContainText('opened', { timeout: 10_000 });
   });
 
@@ -459,5 +470,30 @@ test.describe('@feature Layer 4: Admin Features', () => {
       await assertToastMessage(page, /updated|success|MFA/i);
     }
     // If edit form doesn't appear (MFA blocked), test passes — action was gated
+  });
+
+  test('FEAT-A-016: Impersonate button on customer detail navigates to impersonate page', async ({
+    page,
+    loginAsRole,
+  }) => {
+    await loginAsRole('admin');
+    await page.goto('/admin/customers');
+
+    const customerRow = page.locator('[data-testid="customer-row"]').first();
+    const count = await customerRow.count();
+    if (count === 0) {
+      test.skip();
+      return;
+    }
+    await customerRow.click();
+    await page.waitForURL(/\/admin\/customers\/[^/]+/);
+
+    const impersonateBtn = page.locator('[data-testid="button-impersonate"]');
+    await expect(impersonateBtn).toBeVisible();
+    await impersonateBtn.click();
+    await expect(page).toHaveURL(/\/admin\/impersonate\/[^/]+/);
+    await expect(page.locator('[data-testid="admin-impersonate-page"]')).toBeVisible({
+      timeout: 5000,
+    });
   });
 });

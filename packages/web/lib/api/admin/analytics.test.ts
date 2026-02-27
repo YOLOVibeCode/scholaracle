@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -35,10 +37,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -77,7 +87,14 @@ describe('adminAnalyticsApi', () => {
     it('GETs /admin/analytics/overview with admin token', async () => {
       const overview = {
         success: true,
-        data: { mrr: 5000, churnRate: 2.5, arpu: 25, totalCustomers: 200, activeCustomers: 180, newCustomers: 15 },
+        data: {
+          mrr: 5000,
+          churnRate: 2.5,
+          arpu: 25,
+          totalCustomers: 200,
+          activeCustomers: 180,
+          newCustomers: 15,
+        },
       };
       fetchSpy.mockResolvedValue(fakeResponse(overview));
 
@@ -85,7 +102,7 @@ describe('adminAnalyticsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/admin/analytics/overview'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(overview);
     });
@@ -106,8 +123,10 @@ describe('adminAnalyticsApi', () => {
       });
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/analytics/revenue?period=month&startDate=2024-01-01&endDate=2024-12-31'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.stringContaining(
+          '/admin/analytics/revenue?period=month&startDate=2024-01-01&endDate=2024-12-31'
+        ),
+        expect.objectContaining({ method: 'GET' })
       );
     });
 
@@ -134,7 +153,7 @@ describe('adminAnalyticsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/admin/analytics/customers?period=month&months=6'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -152,7 +171,7 @@ describe('adminAnalyticsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/admin/analytics/churn'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(churnData);
     });

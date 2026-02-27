@@ -286,8 +286,12 @@ describe('AdminAuthService', () => {
   describe('verifyToken', () => {
     it('should verify valid admin token', async () => {
       const { token, adminId } = await loginAdmin(
-        authService, adminRepository, mfaService,
-        'token@test.com', 'TokenPass123!', 'Token Admin'
+        authService,
+        adminRepository,
+        mfaService,
+        'token@test.com',
+        'TokenPass123!',
+        'Token Admin'
       );
       const verifyResult = await authService.verifyToken(token);
 
@@ -303,8 +307,12 @@ describe('AdminAuthService', () => {
 
     it('should return null for deactivated admin', async () => {
       const { token, adminId } = await loginAdmin(
-        authService, adminRepository, mfaService,
-        'deactivate@test.com', 'DeactivatePass123!', 'Deactivate Admin'
+        authService,
+        adminRepository,
+        mfaService,
+        'deactivate@test.com',
+        'DeactivatePass123!',
+        'Deactivate Admin'
       );
 
       await adminRepository.deactivate(adminId);
@@ -408,8 +416,12 @@ describe('AdminAuthService', () => {
   describe('refreshToken', () => {
     it('should refresh a valid token', async () => {
       const { token } = await loginAdmin(
-        authService, adminRepository, mfaService,
-        'refresh@test.com', 'RefreshPass123!', 'Refresh Admin'
+        authService,
+        adminRepository,
+        mfaService,
+        'refresh@test.com',
+        'RefreshPass123!',
+        'Refresh Admin'
       );
 
       // Wait briefly so the new token has a different iat
@@ -430,8 +442,12 @@ describe('AdminAuthService', () => {
   describe('logout', () => {
     it('should return true for valid token', async () => {
       const { token } = await loginAdmin(
-        authService, adminRepository, mfaService,
-        'logout@test.com', 'LogoutPass123!', 'Logout Admin'
+        authService,
+        adminRepository,
+        mfaService,
+        'logout@test.com',
+        'LogoutPass123!',
+        'Logout Admin'
       );
       const logoutResult = await authService.logout(token);
       expect(logoutResult).toBe(true);

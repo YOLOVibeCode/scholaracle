@@ -50,9 +50,7 @@ export class S3AssetStore implements IAssetStore {
   }
 
   async get(key: string): Promise<{ stream: Readable; metadata: IAssetMetadata }> {
-    const out = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key })
-    );
+    const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     const body = out.Body;
     if (!body || typeof body === 'string') {
       throw new Error('S3 GetObject returned no body');

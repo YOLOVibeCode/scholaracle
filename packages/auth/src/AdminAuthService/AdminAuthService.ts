@@ -48,16 +48,23 @@ export interface IAdminAuthService {
   login(email: string, password: string): Promise<IAdminAuthResult>;
   verifyMFAToken(mfaToken: string, totpToken: string): Promise<IAdminAuthResult>;
   /** Get QR code and manual key for MFA setup (requires valid mfaSetupToken from login). */
-  getMFASetupData(mfaSetupToken: string): Promise<{ qrCodeUrl: string; manualEntryKey: string } | { error: string }>;
+  getMFASetupData(
+    mfaSetupToken: string
+  ): Promise<{ qrCodeUrl: string; manualEntryKey: string } | { error: string }>;
   /** Complete MFA setup with TOTP verification and issue admin JWT. */
   completeMFASetup(mfaSetupToken: string, totpToken: string): Promise<IAdminAuthResult>;
   verifyToken(token: string): Promise<IAdminTokenPayload | null>;
   issueStepUpToken(adminId: string): Promise<string | null>;
-  verifyStepUpToken(token: string): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null>;
+  verifyStepUpToken(
+    token: string
+  ): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null>;
   refreshToken(token: string): Promise<IAdminAuthResult>;
   logout(token: string): Promise<boolean>;
   requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }>;
-  resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean; error?: string }>;
+  resetPasswordWithToken(
+    token: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }>;
 }
 
 /**
@@ -91,13 +98,21 @@ export class AdminAuthService implements IAdminAuthService {
   ) {
     this._adminRepository = new AdminUserRepository(database);
     this._mfaService = mfaService ?? new MFAService();
-    this._jwtSecret = jwtSecret ?? process.env['ADMIN_JWT_SECRET'] ?? process.env['JWT_SECRET'] ?? 'default-admin-secret';
+    this._jwtSecret =
+      jwtSecret ??
+      process.env['ADMIN_JWT_SECRET'] ??
+      process.env['JWT_SECRET'] ??
+      'default-admin-secret';
     this._jwtExpiresIn = jwtExpiresIn ?? process.env['ADMIN_JWT_EXPIRES_IN'] ?? '8h';
     this._revokedTokenStore = revokedTokenStore;
     this._mfaTokenStore = mfaTokenStore;
     this._passwordResetTokenStore = passwordResetTokenStore;
     this._passwordResetEmailSender = passwordResetEmailSender;
-    this._adminBaseUrl = adminBaseUrl ?? process.env['ADMIN_BASE_URL'] ?? process.env['BASE_URL'] ?? process.env['WEB_URL'];
+    this._adminBaseUrl =
+      adminBaseUrl ??
+      process.env['ADMIN_BASE_URL'] ??
+      process.env['BASE_URL'] ??
+      process.env['WEB_URL'];
   }
 
   /**
@@ -512,11 +527,9 @@ export class AdminAuthService implements IAdminAuthService {
 
     const issuedAt = Date.now();
     const expiresAt = issuedAt + 5 * 60 * 1000;
-    return jwt.sign(
-      { adminId, type: 'step_up', issuedAt, expiresAt },
-      this._jwtSecret,
-      { expiresIn: '5m' } as jwt.SignOptions
-    ) as string;
+    return jwt.sign({ adminId, type: 'step_up', issuedAt, expiresAt }, this._jwtSecret, {
+      expiresIn: '5m',
+    } as jwt.SignOptions) as string;
   }
 
   /**
@@ -594,11 +607,7 @@ export class AdminAuthService implements IAdminAuthService {
    * Request admin password reset. Always returns success to avoid email enumeration.
    */
   public async requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
-    if (
-      !this._passwordResetTokenStore ||
-      !this._passwordResetEmailSender ||
-      !this._adminBaseUrl
-    ) {
+    if (!this._passwordResetTokenStore || !this._passwordResetEmailSender || !this._adminBaseUrl) {
       return { success: false, error: 'Admin password reset is not configured' };
     }
 
@@ -664,11 +673,10 @@ export class AdminAuthService implements IAdminAuthService {
    */
   private _generateToken(adminId: string, email: string, role: AdminRole): string {
     const jti = crypto.randomUUID();
-    return jwt.sign(
-      { adminId, email, role, type: 'admin' },
-      this._jwtSecret,
-      { expiresIn: this._jwtExpiresIn, jwtid: jti } as jwt.SignOptions
-    ) as string;
+    return jwt.sign({ adminId, email, role, type: 'admin' }, this._jwtSecret, {
+      expiresIn: this._jwtExpiresIn,
+      jwtid: jti,
+    } as jwt.SignOptions) as string;
   }
 
   /**
@@ -681,11 +689,9 @@ export class AdminAuthService implements IAdminAuthService {
   private _generateMFAToken(adminId: string, secret: string): string {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
     const expiresAtDate = new Date(expiresAt);
-    const token = jwt.sign(
-      { adminId, type: 'mfa', expiresAt },
-      this._jwtSecret,
-      { expiresIn: this._mfaTokenExpiresIn } as jwt.SignOptions
-    ) as string;
+    const token = jwt.sign({ adminId, type: 'mfa', expiresAt }, this._jwtSecret, {
+      expiresIn: this._mfaTokenExpiresIn,
+    } as jwt.SignOptions) as string;
 
     // Store MFA data in DB when store is provided; otherwise in-memory
     if (this._mfaTokenStore) {
@@ -699,11 +705,8 @@ export class AdminAuthService implements IAdminAuthService {
 
   /** Generate short-lived JWT for MFA setup flow (10 min). */
   private _generateMFASetupToken(adminId: string): string {
-    return jwt.sign(
-      { adminId, type: 'mfa_setup' },
-      this._jwtSecret,
-      { expiresIn: '10m' } as jwt.SignOptions
-    ) as string;
+    return jwt.sign({ adminId, type: 'mfa_setup' }, this._jwtSecret, {
+      expiresIn: '10m',
+    } as jwt.SignOptions) as string;
   }
 }
-

@@ -21,6 +21,7 @@ export default function AdminAuditLogsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isStepUpOpen, setIsStepUpOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- pendingExport held for step-up; passed to export after verify
   const [pendingExport, setPendingExport] = useState<null | Omit<Parameters<typeof adminAuditLogsApi.exportCsv>[0], 'page' | 'limit'>>(null);
   const [selected, setSelected] = useState<IAdminAuditLogItem | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -274,7 +275,6 @@ export default function AdminAuditLogsPage() {
           if (!open) setPendingExport(null);
         }}
         onVerified={(token) => {
-          const q = pendingExport ?? exportQuery;
           setPendingExport(null);
           void handleExport(token);
         }}

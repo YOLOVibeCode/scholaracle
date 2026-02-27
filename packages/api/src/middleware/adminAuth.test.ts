@@ -120,4 +120,3 @@ describe('adminAuthMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 });
-

@@ -97,11 +97,9 @@ export class GoogleClassroomClient {
   }
 
   public async getCourseWork(courseId: string): Promise<readonly IGoogleCourseWork[]> {
-    return this._paginatedGet<IGoogleCourseWork>(
-      `/courses/${courseId}/courseWork`,
-      'courseWork',
-      { pageSize: '100' }
-    );
+    return this._paginatedGet<IGoogleCourseWork>(`/courses/${courseId}/courseWork`, 'courseWork', {
+      pageSize: '100',
+    });
   }
 
   public async getStudentSubmissions(
@@ -116,11 +114,9 @@ export class GoogleClassroomClient {
   }
 
   public async getStudents(courseId: string): Promise<readonly IGoogleCourseStudent[]> {
-    return this._paginatedGet<IGoogleCourseStudent>(
-      `/courses/${courseId}/students`,
-      'students',
-      { pageSize: '100' }
-    );
+    return this._paginatedGet<IGoogleCourseStudent>(`/courses/${courseId}/students`, 'students', {
+      pageSize: '100',
+    });
   }
 
   private async _paginatedGet<T>(

@@ -47,7 +47,11 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
   public async testConnection(): Promise<IConnectionTestResult> {
     const start = Date.now();
     if (!this._client) {
-      return { success: false, message: 'Not authenticated. Call authenticate() first.', durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: 'Not authenticated. Call authenticate() first.',
+        durationMs: Date.now() - start,
+      };
     }
     try {
       const [user, courses] = await Promise.all([
@@ -62,7 +66,11 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: `Connection failed: ${msg}`,
+        durationMs: Date.now() - start,
+      };
     }
   }
 

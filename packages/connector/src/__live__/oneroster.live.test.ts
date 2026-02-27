@@ -71,7 +71,9 @@ describeIfAvailable(env, 'OneRoster — Live Integration', () => {
       if (lineItems.length > 0) {
         const li = lineItems[0]!;
         expect(typeof li.title).toBe('string');
-        console.log(`    First: "${li.title}" (due: ${li.dueDate ?? 'none'}, max: ${li.resultValueMax ?? 'n/a'})`);
+        console.log(
+          `    First: "${li.title}" (due: ${li.dueDate ?? 'none'}, max: ${li.resultValueMax ?? 'n/a'})`
+        );
       }
     });
 

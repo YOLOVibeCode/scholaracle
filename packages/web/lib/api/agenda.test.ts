@@ -15,7 +15,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -75,7 +77,7 @@ describe('agendaApi', () => {
       const expectedUrl = `${BASE}/agenda?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`;
       expect(fetchSpy).toHaveBeenCalledWith(
         expectedUrl,
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(responseBody);
     });
@@ -87,10 +89,7 @@ describe('agendaApi', () => {
       };
       fetchSpy.mockResolvedValue(fakeResponse(responseBody));
 
-      const result = await agendaApi.getRange(
-        '2025-06-01T00:00:00Z',
-        '2025-06-08T00:00:00Z',
-      );
+      const result = await agendaApi.getRange('2025-06-01T00:00:00Z', '2025-06-08T00:00:00Z');
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ items: [] });
@@ -122,7 +121,7 @@ describe('agendaApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(params),
-        }),
+        })
       );
       expect(result).toEqual(responseBody);
     });

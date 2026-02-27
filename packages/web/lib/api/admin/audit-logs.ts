@@ -65,7 +65,10 @@ export const adminAuditLogsApi = {
     }
   },
 
-  async exportCsv(query: Omit<IAuditLogsQuery, 'page' | 'limit'> = {}, stepUpToken?: string): Promise<{ success: boolean; data?: string; error?: string; code?: string }> {
+  async exportCsv(
+    query: Omit<IAuditLogsQuery, 'page' | 'limit'> = {},
+    stepUpToken?: string
+  ): Promise<{ success: boolean; data?: string; error?: string; code?: string }> {
     const qs = new URLSearchParams();
     if (query.action) qs.set('action', query.action);
     if (query.entityType) qs.set('entityType', query.entityType);
@@ -105,5 +108,3 @@ export const adminAuditLogsApi = {
     }
   },
 };
-
-

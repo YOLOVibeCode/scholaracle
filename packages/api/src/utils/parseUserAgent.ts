@@ -8,7 +8,11 @@ export function parseUserAgent(userAgent: string | undefined): ISessionDeviceInf
   if (!userAgent || typeof userAgent !== 'string') {
     return { browser: 'Unknown', os: 'Unknown', device: 'Desktop' };
   }
-  const parser = new (UAParser as unknown as new (ua?: string) => { getBrowser(): unknown; getOS(): unknown; getDevice(): unknown })(userAgent);
+  const parser = new (UAParser as unknown as new (ua?: string) => {
+    getBrowser(): unknown;
+    getOS(): unknown;
+    getDevice(): unknown;
+  })(userAgent);
   const browser = parser.getBrowser();
   const os = parser.getOS();
   const device = parser.getDevice();

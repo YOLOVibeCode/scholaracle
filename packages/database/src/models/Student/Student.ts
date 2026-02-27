@@ -117,9 +117,7 @@ export class Student {
   /** Check if a given user ID has access to this student (owner or shared). */
   public hasAccess(userId: string): boolean {
     if (this.userId.toString() === userId) return true;
-    return this.sharedWith.some(
-      (sp) => sp.status === 'accepted' && sp.userId === userId
-    );
+    return this.sharedWith.some((sp) => sp.status === 'accepted' && sp.userId === userId);
   }
 
   /** Check if a given user ID is the primary owner. */

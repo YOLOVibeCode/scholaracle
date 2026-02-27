@@ -65,19 +65,27 @@ export function requireAdminStepUp(options: IAdminStepUpOptions) {
         return;
       }
 
-      const decoded = (await adminAuthService.verifyStepUpToken(token)) as IAdminStepUpPayload | null;
+      const decoded = (await adminAuthService.verifyStepUpToken(
+        token
+      )) as IAdminStepUpPayload | null;
       if (!decoded || decoded.type !== 'step_up' || decoded.adminId !== adminId) {
-        res.status(401).json({ success: false, error: 'Invalid step-up token', code: 'MFA_STEP_UP_INVALID' });
+        res
+          .status(401)
+          .json({ success: false, error: 'Invalid step-up token', code: 'MFA_STEP_UP_INVALID' });
         return;
       }
 
       if (Date.now() > decoded.expiresAt) {
-        res.status(401).json({ success: false, error: 'Step-up token expired', code: 'MFA_STEP_UP_EXPIRED' });
+        res
+          .status(401)
+          .json({ success: false, error: 'Step-up token expired', code: 'MFA_STEP_UP_EXPIRED' });
         return;
       }
 
       if (Date.now() - decoded.issuedAt > maxAgeMs) {
-        res.status(401).json({ success: false, error: 'Step-up token expired', code: 'MFA_STEP_UP_EXPIRED' });
+        res
+          .status(401)
+          .json({ success: false, error: 'Step-up token expired', code: 'MFA_STEP_UP_EXPIRED' });
         return;
       }
 
@@ -91,5 +99,3 @@ export function requireAdminStepUp(options: IAdminStepUpOptions) {
     }
   };
 }
-
-

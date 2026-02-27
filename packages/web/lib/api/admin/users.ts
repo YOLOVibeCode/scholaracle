@@ -37,11 +37,25 @@ export const adminUsersApi = {
   ): Promise<{ success: boolean; data?: { id: string }; error?: string; code?: string }> {
     try {
       if (!stepUpToken) {
-        return await apiClient.post<{ success: boolean; data?: { id: string }; error?: string; code?: string }>('/admin/users', payload, true);
+        return await apiClient.post<{
+          success: boolean;
+          data?: { id: string };
+          error?: string;
+          code?: string;
+        }>('/admin/users', payload, true);
       }
-      return await apiClient.request<{ success: boolean; data?: { id: string }; error?: string; code?: string }>(
+      return await apiClient.request<{
+        success: boolean;
+        data?: { id: string };
+        error?: string;
+        code?: string;
+      }>(
         '/admin/users',
-        { method: 'POST', body: JSON.stringify(payload), headers: { 'x-admin-stepup': stepUpToken } },
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'x-admin-stepup': stepUpToken },
+        },
         true
       );
     } catch (error) {
@@ -58,11 +72,19 @@ export const adminUsersApi = {
   ): Promise<{ success: boolean; error?: string; code?: string }> {
     try {
       if (!stepUpToken) {
-        return await apiClient.put<{ success: boolean; error?: string; code?: string }>(`/admin/users/${id}`, payload, true);
+        return await apiClient.put<{ success: boolean; error?: string; code?: string }>(
+          `/admin/users/${id}`,
+          payload,
+          true
+        );
       }
       return await apiClient.request<{ success: boolean; error?: string; code?: string }>(
         `/admin/users/${id}`,
-        { method: 'PUT', body: JSON.stringify(payload), headers: { 'x-admin-stepup': stepUpToken } },
+        {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+          headers: { 'x-admin-stepup': stepUpToken },
+        },
         true
       );
     } catch (error) {
@@ -72,5 +94,3 @@ export const adminUsersApi = {
     }
   },
 };
-
-

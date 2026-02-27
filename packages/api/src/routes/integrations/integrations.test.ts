@@ -516,15 +516,50 @@ describe('Integrations API Routes', () => {
     });
   });
 
+  describe('POST /api/integrations/test-connection', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app)
+        .post('/api/integrations/test-connection')
+        .send({
+          provider: 'unsupported',
+          adapterId: 'com.test.adapter',
+          credentials: { authType: 'api', accessToken: 'x' },
+        });
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 400 when body invalid (missing provider or credentials)', async () => {
+      const res = await request(app)
+        .post('/api/integrations/test-connection')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ provider: 'canvas' });
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should return 200 with success false for unsupported provider', async () => {
+      const res = await request(app)
+        .post('/api/integrations/test-connection')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'unsupported',
+          adapterId: 'com.test.adapter',
+          credentials: { authType: 'api', accessToken: 'x' },
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/not supported/i);
+      expect(typeof res.body.durationMs).toBe('number');
+    });
+  });
+
   describe('POST /api/integrations/generate-scraper', () => {
     it('returns 401 without token', async () => {
-      const response = await request(app)
-        .post('/api/integrations/generate-scraper')
-        .send({
-          platformName: 'OtherLMS',
-          loginUrl: 'https://example.edu/login',
-          loginMethod: 'form',
-        });
+      const response = await request(app).post('/api/integrations/generate-scraper').send({
+        platformName: 'OtherLMS',
+        loginUrl: 'https://example.edu/login',
+        loginMethod: 'form',
+      });
       expect(response.status).toBe(401);
     });
 
@@ -598,7 +633,9 @@ describe('Integrations API Routes', () => {
 
     it('returns 200 with status and result when job is ready', async () => {
       if (!database) return;
-      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
       if (!user) throw new Error('Test user not found');
       const userId = (user._id as import('mongodb').ObjectId).toString();
       const jobId = 'test-ready-job-id';
@@ -633,7 +670,9 @@ describe('Integrations API Routes', () => {
   describe('POST /api/integrations/scraper-download', () => {
     it('downloading a bundle does not revoke unrelated scraper tokens', async () => {
       if (!database) return;
-      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
       if (!user) throw new Error('Test user not found');
       const userId = (user._id as import('mongodb').ObjectId).toString();
       const revokedColl = database.collection('revoked_connector_tokens');
@@ -671,7 +710,9 @@ describe('Integrations API Routes', () => {
 
     it('returns 200 and script with scraperId (single-platform)', async () => {
       if (!database) return;
-      const user = await database.collection('users').findOne({ email: 'integrations@example.com' });
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
       if (!user) throw new Error('Test user not found');
       const insertResult = await database.collection('generated_scrapers').insertOne({
         platformName: 'TestPlatform',
@@ -775,7 +816,11 @@ describe('Integrations API Routes', () => {
                 {
                   platform: 'Canvas',
                   loginUrl: 'https://canvas.example.edu',
-                  credentials: { studentName: 'Alice', username: 'alice@test.com', password: 'secret' },
+                  credentials: {
+                    studentName: 'Alice',
+                    username: 'alice@test.com',
+                    password: 'secret',
+                  },
                 },
               ],
             },
@@ -795,6 +840,102 @@ describe('Integrations API Routes', () => {
         .send({ os: 'mac', useAllStudents: true });
       expect(response.status).toBe(400);
       expect(response.body.error).toMatch(/No students or platforms/);
+    });
+  });
+
+  describe('POST /api/integrations/scraper-token', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app).post('/api/integrations/scraper-token').send({});
+      expect(res.status).toBe(401);
+    });
+
+    it('should generate a scraper token and return token + jti + expiresIn', async () => {
+      const res = await request(app)
+        .post('/api/integrations/scraper-token')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.token).toBeDefined();
+      expect(res.body.jti).toBeDefined();
+      expect(res.body.expiresIn).toBe('365 days');
+    });
+  });
+
+  describe('GET /api/integrations/scraper-token', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app).get('/api/integrations/scraper-token');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return status: none when user has no scraper token', async () => {
+      const res = await request(app)
+        .get('/api/integrations/scraper-token')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.status).toBe('none');
+    });
+  });
+
+  describe('DELETE /api/integrations/scraper-token', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app).delete('/api/integrations/scraper-token');
+      expect(res.status).toBe(401);
+    });
+
+    it('should revoke scraper token and return 200', async () => {
+      await request(app)
+        .post('/api/integrations/scraper-token')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+
+      const res = await request(app)
+        .delete('/api/integrations/scraper-token')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('GET /api/integrations/reconciliation/pending', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app).get('/api/integrations/reconciliation/pending');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return empty array when user has no pending reconciliations', async () => {
+      const res = await request(app)
+        .get('/api/integrations/reconciliation/pending')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(Array.isArray(res.body.pending)).toBe(true);
+      expect(res.body.pending).toHaveLength(0);
+    });
+  });
+
+  describe('POST /api/integrations/scraper-report', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app)
+        .post('/api/integrations/scraper-report')
+        .send({ outcome: 'success' });
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 200 when report submitted', async () => {
+      const res = await request(app)
+        .post('/api/integrations/scraper-report')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          outcome: 'success',
+          scraperId: 'scraper-1',
+          platformName: 'Canvas',
+          durationMs: 5000,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
   });
 });

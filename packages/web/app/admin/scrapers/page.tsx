@@ -160,7 +160,7 @@ export default function AdminScrapersPage() {
     if (tab === 'reports') void loadReports();
   }, [tab, loadReports]);
 
-  const openCacheDetail = async (id: string) => {
+  const openCacheDetail = useCallback(async (id: string) => {
     setCacheDetailId(id);
     setCacheDetailOpen(true);
     try {
@@ -170,9 +170,9 @@ export default function AdminScrapersPage() {
     } catch {
       setCacheDetail(null);
     }
-  };
+  }, []);
 
-  const purgeCache = async (id: string) => {
+  const purgeCache = useCallback(async (id: string) => {
     if (!confirm('Purge this cached scraper? It will be regenerated on next request.')) return;
     try {
       await adminScrapersApi.deleteCache(id);
@@ -184,7 +184,7 @@ export default function AdminScrapersPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
-  };
+  }, [loadCaches, loadStats]);
 
   const expandJob = async (jobId: string) => {
     if (expandedJobId === jobId) {

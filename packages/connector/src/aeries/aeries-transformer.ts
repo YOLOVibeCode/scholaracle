@@ -87,9 +87,8 @@ export function transformReportCardToGradeOps(
   course: IAeriesReportCardCourse,
   baseKey: BaseKey
 ): readonly ISlcDeltaOp<ISlcGradeSnapshot>[] {
-  return course.MarkingPeriodGrades
-    .filter((mpg) => mpg.Mark && mpg.Mark.trim() !== '')
-    .map((mpg) => ({
+  return course.MarkingPeriodGrades.filter((mpg) => mpg.Mark && mpg.Mark.trim() !== '').map(
+    (mpg) => ({
       op: 'upsert' as const,
       entity: 'gradeSnapshot' as const,
       key: {
@@ -105,7 +104,8 @@ export function transformReportCardToGradeOps(
         letterGrade: mpg.Mark,
         asOfDate: new Date().toISOString().split('T')[0]!,
       },
-    }));
+    })
+  );
 }
 
 /** Transform report card course attendance data into attendance ops. */
@@ -287,9 +287,7 @@ export function transformScheduleToCourseOp(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function inferTermType(
-  description: string
-): ISlcAcademicTerm['type'] {
+function inferTermType(description: string): ISlcAcademicTerm['type'] {
   const lower = description.toLowerCase();
   if (lower.includes('semester') || lower.includes('sem')) return 'semester';
   if (lower.includes('quarter') || lower.includes('qtr')) return 'quarter';

@@ -5,6 +5,7 @@
   "description": "AI-powered parenting assistant for academic success",
   "scripts": {
     "build": "pnpm -r build",
+    "build:docker": "pnpm build && docker build -f Dockerfile.api -t scholaracle-api:local . && docker build -f Dockerfile.workers -t scholaracle-workers:local . && docker build -f Dockerfile.web -t scholaracle-web:local .",
     "test": "pnpm -r test",
     "test:coverage": "pnpm -r test:coverage",
     "lint": "pnpm -r lint",

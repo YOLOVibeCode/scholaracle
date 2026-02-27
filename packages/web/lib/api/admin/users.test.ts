@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -35,10 +37,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -78,7 +88,16 @@ describe('adminUsersApi', () => {
       const usersData = {
         success: true,
         data: [
-          { id: '1', email: 'admin@test.com', name: 'Admin', role: 'admin', isActive: true, mfaEnabled: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+          {
+            id: '1',
+            email: 'admin@test.com',
+            name: 'Admin',
+            role: 'admin',
+            isActive: true,
+            mfaEnabled: true,
+            createdAt: '2024-01-01',
+            updatedAt: '2024-01-01',
+          },
         ],
       };
       fetchSpy.mockResolvedValue(fakeResponse(usersData));
@@ -87,14 +106,14 @@ describe('adminUsersApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/admin/users'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(usersData);
     });
 
     it('returns error object on failure', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401),
+        fakeResponse({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401)
       );
 
       const result = await adminUsersApi.list();
@@ -126,7 +145,7 @@ describe('adminUsersApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ id: 'new-1' });
@@ -145,7 +164,7 @@ describe('adminUsersApi', () => {
           headers: expect.objectContaining({
             'x-admin-stepup': 'step-up-tok-789',
           }),
-        }),
+        })
       );
     });
   });
@@ -171,7 +190,7 @@ describe('adminUsersApi', () => {
           headers: expect.objectContaining({
             'x-admin-stepup': 'step-up-tok-abc',
           }),
-        }),
+        })
       );
     });
   });

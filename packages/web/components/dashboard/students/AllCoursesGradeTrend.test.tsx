@@ -17,6 +17,7 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- need mocked module reference after jest.mock()
 const studentsApi = require('@/lib/api/students').studentsApi as { getGradeHistory: jest.Mock };
 
 describe('pivotToChartData', () => {

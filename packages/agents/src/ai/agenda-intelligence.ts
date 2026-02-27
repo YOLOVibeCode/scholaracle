@@ -78,10 +78,10 @@ export class AgendaIntelligenceService {
 
     try {
       const userPrompt = this._buildUserPrompt(items);
-      const response = await this._client.complete(
-        [{ role: 'user', content: userPrompt }],
-        { maxTokens: 2048, system: SYSTEM_PROMPT }
-      );
+      const response = await this._client.complete([{ role: 'user', content: userPrompt }], {
+        maxTokens: 2048,
+        system: SYSTEM_PROMPT,
+      });
 
       const parsed = this._parseResponse(response.content, items);
       this._cache.set(cacheKey, parsed);
@@ -100,18 +100,14 @@ export class AgendaIntelligenceService {
 
   private _buildUserPrompt(items: readonly IAgendaItemInput[]): string {
     const lines = items.map((i) => {
-      const parts = [
-        `id: ${i.id}`,
-        `type: ${i.type}`,
-        `title: ${i.title}`,
-        `timeAt: ${i.timeAt}`,
-      ];
+      const parts = [`id: ${i.id}`, `type: ${i.type}`, `title: ${i.title}`, `timeAt: ${i.timeAt}`];
       if (i.studentName) parts.push(`student: ${i.studentName}`);
       if (i.courseName) parts.push(`course: ${i.courseName}`);
       if (i.isOverdue) parts.push('isOverdue: true');
       if (i.assignmentStatus) parts.push(`status: ${i.assignmentStatus}`);
       if (i.eventCategory) parts.push(`category: ${i.eventCategory}`);
-      if (i.pointsPossible != null) parts.push(`points: ${i.pointsEarned ?? 0}/${i.pointsPossible}`);
+      if (i.pointsPossible != null)
+        parts.push(`points: ${i.pointsEarned ?? 0}/${i.pointsPossible}`);
       return parts.join(', ');
     });
     return `Agenda items:\n${lines.join('\n')}\n\nReturn JSON with "items" array as specified.`;
@@ -122,8 +118,13 @@ export class AgendaIntelligenceService {
     _items: readonly IAgendaItemInput[]
   ): Map<string, IAgendaItemEnhancement> {
     const map = new Map<string, IAgendaItemEnhancement>();
-    const trimmed = content.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
-    let data: { items?: Array<{ id?: string; importance?: string; labels?: string[]; aiSummary?: string }> };
+    const trimmed = content
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/\s*```$/i, '');
+    let data: {
+      items?: Array<{ id?: string; importance?: string; labels?: string[]; aiSummary?: string }>;
+    };
     try {
       data = JSON.parse(trimmed) as typeof data;
     } catch {
@@ -139,7 +140,9 @@ export class AgendaIntelligenceService {
       const id = row.id;
       if (!id || typeof id !== 'string') continue;
       const importance = validImportance(String(row.importance ?? 'medium'));
-      const labels = Array.isArray(row.labels) ? row.labels.filter((l) => typeof l === 'string') : [];
+      const labels = Array.isArray(row.labels)
+        ? row.labels.filter((l) => typeof l === 'string')
+        : [];
       const aiSummary =
         typeof row.aiSummary === 'string' && row.aiSummary.length > 0 ? row.aiSummary : undefined;
       map.set(id, { importance, labels, aiSummary });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -28,17 +28,17 @@ export function SyncHistorySheet({
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
 
-  useEffect(() => {
-    if (!studentId || !sourceId) return;
-    void loadRuns();
-  }, [studentId, sourceId]);
-
-  const loadRuns = async () => {
+  const loadRuns = useCallback(async () => {
     setLoading(true);
     const list = await sourcesApi.listRuns(studentId, sourceId);
     setRuns(list);
     setLoading(false);
-  };
+  }, [studentId, sourceId]);
+
+  useEffect(() => {
+    if (!studentId || !sourceId) return;
+    queueMicrotask(() => loadRuns());
+  }, [studentId, sourceId, loadRuns]);
 
   const handleTriggerSync = async () => {
     setTriggering(true);
@@ -56,7 +56,7 @@ export function SyncHistorySheet({
       ? new Date(run.committedAt).getTime()
       : run.uploadedAt
         ? new Date(run.uploadedAt).getTime()
-        : Date.now();
+        : start;
     const sec = Math.round((end - start) / 1000);
     return `${sec}s`;
   };

@@ -1,4 +1,9 @@
-export { AeriesAdapter, type AeriesScraperFn, type AeriesAdapterMode, type IAeriesScrapeResult } from './aeries-adapter';
+export {
+  AeriesAdapter,
+  type AeriesScraperFn,
+  type AeriesAdapterMode,
+  type IAeriesScrapeResult,
+} from './aeries-adapter';
 export { AeriesClient } from './aeries-client';
 export type {
   IAeriesClientConfig,

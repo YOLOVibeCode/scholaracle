@@ -19,7 +19,11 @@ export function connectorOrUserAuthMiddleware(
   authService: AuthService,
   options?: IConnectorOrUserAuthOptions
 ) {
-  return async (req: IAssetAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+  return async (
+    req: IAssetAuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       res.status(401).json({ success: false, error: 'Missing or invalid authorization header' });

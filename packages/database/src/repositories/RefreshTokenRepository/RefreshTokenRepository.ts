@@ -2,12 +2,7 @@ import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 
 export interface IRefreshTokenStore {
-  create(
-    userId: string,
-    tokenHash: string,
-    familyId: string,
-    expiresAt: Date
-  ): Promise<void>;
+  create(userId: string, tokenHash: string, familyId: string, expiresAt: Date): Promise<void>;
   findValidByTokenHash(
     tokenHash: string
   ): Promise<{ userId: string; familyId: string; expiresAt: Date } | null>;
@@ -85,17 +80,11 @@ export class RefreshTokenRepository implements IRefreshTokenStore {
 
   public async revokeByTokenHash(tokenHash: string): Promise<void> {
     const now = new Date();
-    await this._collection.updateOne(
-      { tokenHash },
-      { $set: { revokedAt: now } }
-    );
+    await this._collection.updateOne({ tokenHash }, { $set: { revokedAt: now } });
   }
 
   public async revokeFamily(familyId: string): Promise<void> {
     const now = new Date();
-    await this._collection.updateMany(
-      { familyId },
-      { $set: { revokedAt: now } }
-    );
+    await this._collection.updateMany({ familyId }, { $set: { revokedAt: now } });
   }
 }

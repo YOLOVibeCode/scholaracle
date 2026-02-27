@@ -16,10 +16,18 @@ export class AdminLoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.locator('[data-testid="input-admin-email"], input#email, input[name="email"], input[type="email"]');
-    this.passwordInput = page.locator('[data-testid="input-admin-password"], input#password, input[name="password"], input[type="password"]');
-    this.loginButton = page.locator('button[type="submit"], [data-testid="button-login"], button:has-text("Sign in")');
-    this.errorMessage = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50');
+    this.emailInput = page.locator(
+      '[data-testid="input-admin-email"], input#email, input[name="email"], input[type="email"]'
+    );
+    this.passwordInput = page.locator(
+      '[data-testid="input-admin-password"], input#password, input[name="password"], input[type="password"]'
+    );
+    this.loginButton = page.locator(
+      'button[type="submit"], [data-testid="button-login"], button:has-text("Sign in")'
+    );
+    this.errorMessage = page.locator(
+      '[data-testid="message-error"], .text-red-500, .text-destructive, .bg-red-50'
+    );
     this.mfaInput = page.locator('[data-testid="input-mfa-code"]');
     this.verifyMfaButton = page.locator('[data-testid="button-verify-mfa"]');
   }

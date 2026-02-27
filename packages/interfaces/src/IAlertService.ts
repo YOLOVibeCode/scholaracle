@@ -42,4 +42,3 @@ export interface ICreateAlertRequest {
   readonly message: string;
   readonly relatedData?: Record<string, unknown>;
 }
-

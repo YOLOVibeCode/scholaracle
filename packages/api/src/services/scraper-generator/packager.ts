@@ -153,7 +153,10 @@ export function emitBundleFiles(
   files.push({
     filename: 'tsconfig.json',
     content: JSON.stringify(
-      { compilerOptions: { target: 'ES2020', module: 'commonjs', esModuleInterop: true }, include: ['*.ts', 'run.js'] },
+      {
+        compilerOptions: { target: 'ES2020', module: 'commonjs', esModuleInterop: true },
+        include: ['*.ts', 'run.js'],
+      },
       null,
       2
     ),
@@ -263,13 +266,11 @@ export interface IBundleRunnerConnection {
  * Generates run.js for the bundle flow: ts-node, per-connection scraper load, full BaseScraper lifecycle
  * (initialize → authenticate → discoverStudents → switchToStudent → scrape → transform), ingest API.
  */
-export function generateBundleRunJs(
-  connections: ReadonlyArray<IBundleRunnerConnection>
-): string {
+export function generateBundleRunJs(connections: ReadonlyArray<IBundleRunnerConnection>): string {
   if (connections.length === 0) {
     return getBundleRunJs();
   }
-  const loadComment = connections.map((c) => 'scraper-' + c.platformId + '.ts').join(', ');
+  const loadComment = connections.map((c) => `scraper-${c.platformId}.ts`).join(', ');
   return `require('ts-node/register');
 // Loads per-connection: ${loadComment}
 const fs = require('fs');
@@ -414,14 +415,13 @@ function generateMacCommandBundle(opts: IPackageBundleOptions): string {
     })
     .join('\n');
   const chmodPayload =
-    files.some((f) => f.filename === 'payload.json') &&
-    'chmod 600 "$APP_DIR/payload.json"';
+    files.some((f) => f.filename === 'payload.json') && 'chmod 600 "$APP_DIR/payload.json"';
   return `#!/bin/bash
 set -e
 APP_DIR="${appDir}"
 mkdir -p "$APP_DIR"
 ${fileWrites}
-${chmodPayload ? chmodPayload + '\n' : ''}if [ ! -d "$APP_DIR/node_modules" ]; then
+${chmodPayload ? `${chmodPayload}\n` : ''}if [ ! -d "$APP_DIR/node_modules" ]; then
   echo "  Setting up (first time only)..."
   cd "$APP_DIR" && npm install --silent 2>/dev/null && npx playwright install chromium 2>/dev/null
   echo "  ✓ Ready"
@@ -553,7 +553,9 @@ function generateMacCommandMulti(opts: IPackageMultiOptions): string {
         credentials: p.credentials,
       })),
     })),
-  }).replace(/\\/g, '\\\\').replace(/'/g, "'\\''");
+  })
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "'\\''");
   const runJsContent = getMultiRunJs();
   return `#!/bin/bash
 set -e
@@ -614,7 +616,6 @@ echo.
 pause
 `;
 }
-
 
 // ---------------------------------------------------------------------------
 // Mac .command file
@@ -702,12 +703,12 @@ CONFIGEOF
 CREDSEOF
 
   # Write scraper files
-${opts.scraper.typesCode != null ? writeEmbeddedFile(`$APP_DIR/types.ts`, opts.scraper.typesCode, 'TYPESEOF') + '\n\n  ' : ''}${opts.scraper.baseScraperCode != null ? writeEmbeddedFile(`$APP_DIR/base-scraper.ts`, opts.scraper.baseScraperCode, 'BASESCRAPEREOF') + '\n\n  ' : ''}
-${writeEmbeddedFile(`$APP_DIR/scraper.ts`, opts.scraper.scraperCode)}
+${opts.scraper.typesCode != null ? `${writeEmbeddedFile('$APP_DIR/types.ts', opts.scraper.typesCode, 'TYPESEOF')}\n\n  ` : ''}${opts.scraper.baseScraperCode != null ? `${writeEmbeddedFile('$APP_DIR/base-scraper.ts', opts.scraper.baseScraperCode, 'BASESCRAPEREOF')}\n\n  ` : ''}
+${writeEmbeddedFile('$APP_DIR/scraper.ts', opts.scraper.scraperCode)}
 
-${writeEmbeddedFile(`$APP_DIR/transformer.ts`, opts.scraper.transformerCode)}
+${writeEmbeddedFile('$APP_DIR/transformer.ts', opts.scraper.transformerCode)}
 
-${writeEmbeddedFile(`$APP_DIR/metadata.json`, opts.scraper.metadata)}
+${writeEmbeddedFile('$APP_DIR/metadata.json', opts.scraper.metadata)}
 
   # Write tsconfig for ts-node (compile scraper.ts / transformer.ts)
   cat > "$APP_DIR/tsconfig.json" << 'TSCONFIGEOF'
@@ -715,7 +716,7 @@ ${writeEmbeddedFile(`$APP_DIR/metadata.json`, opts.scraper.metadata)}
 TSCONFIGEOF
 
   # Write the run.js entry point
-${writeEmbeddedFile(`$APP_DIR/run.js`, generateRunJs(opts))}
+${writeEmbeddedFile('$APP_DIR/run.js', generateRunJs(opts))}
 
   # Install dependencies
   echo "  Installing dependencies..."
@@ -785,7 +786,7 @@ if not exist "%APP_DIR%\\package.json" (
 
   powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\metadata.json', '${escapeForPowerShell(opts.scraper.metadata)}', [System.Text.Encoding]::UTF8)"
 
-  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\tsconfig.json', '{\"compilerOptions\":{\"module\":\"commonjs\",\"target\":\"ES2020\",\"esModuleInterop\":true,\"resolveJsonModule\":true},\"include\":[\"*.ts\"]}', [System.Text.Encoding]::UTF8)"
+  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\tsconfig.json', '{"compilerOptions":{"module":"commonjs","target":"ES2020","esModuleInterop":true,"resolveJsonModule":true},"include":["*.ts"]}', [System.Text.Encoding]::UTF8)"
 
 ${opts.scraper.typesCode != null ? `  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\\\types.ts', '${escapeForPowerShell(opts.scraper.typesCode)}', [System.Text.Encoding]::UTF8)"\n\n` : ''}${opts.scraper.baseScraperCode != null ? `  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\\\base-scraper.ts', '${escapeForPowerShell(opts.scraper.baseScraperCode)}', [System.Text.Encoding]::UTF8)"\n\n` : ''}  powershell -Command "[System.IO.File]::WriteAllText('%APP_DIR%\\scraper.ts', '${escapeForPowerShell(opts.scraper.scraperCode)}', [System.Text.Encoding]::UTF8)"
 
