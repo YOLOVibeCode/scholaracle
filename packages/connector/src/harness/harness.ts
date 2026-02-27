@@ -79,7 +79,7 @@ function createAdapter(provider: string): ILmsAdapter {
         } catch {
           throw new Error(
             'skyward-rest is not installed. Run: npm install skyward-rest\n' +
-            'This package is required to scrape Skyward portals.'
+              'This package is required to scrape Skyward portals.'
           );
         }
       });
@@ -90,7 +90,9 @@ function createAdapter(provider: string): ILmsAdapter {
     case 'oneroster':
       return new OneRosterAdapter();
     default:
-      throw new Error(`Unknown provider: "${provider}". Supported: skyward, canvas, google-classroom, oneroster`);
+      throw new Error(
+        `Unknown provider: "${provider}". Supported: skyward, canvas, google-classroom, oneroster`
+      );
   }
 }
 
@@ -110,12 +112,16 @@ function buildCredentials(provider: string): ILmsCredentials {
       return { baseUrl: url, username, password };
 
     case 'canvas':
-      if (!url) throw new Error('Canvas requires --url (e.g. https://school.instructure.com) or HARNESS_URL');
+      if (!url)
+        throw new Error(
+          'Canvas requires --url (e.g. https://school.instructure.com) or HARNESS_URL'
+        );
       if (!token) throw new Error('Canvas requires --token (API access token) or HARNESS_TOKEN');
       return { baseUrl: url, accessToken: token };
 
     case 'google-classroom':
-      if (!token) throw new Error('Google Classroom requires --token (OAuth access token) or HARNESS_TOKEN');
+      if (!token)
+        throw new Error('Google Classroom requires --token (OAuth access token) or HARNESS_TOKEN');
       return { baseUrl: 'https://classroom.googleapis.com', accessToken: token };
 
     case 'oneroster':
@@ -123,7 +129,12 @@ function buildCredentials(provider: string): ILmsCredentials {
       if (!token && (!clientId || !clientSecret)) {
         throw new Error('OneRoster requires --token or --client-id + --client-secret');
       }
-      return { baseUrl: url, accessToken: token || undefined, clientId: clientId || undefined, clientSecret: clientSecret || undefined };
+      return {
+        baseUrl: url,
+        accessToken: token || undefined,
+        clientId: clientId || undefined,
+        clientSecret: clientSecret || undefined,
+      };
 
     default:
       return { baseUrl: url };
@@ -134,7 +145,11 @@ function buildCredentials(provider: string): ILmsCredentials {
 // Output
 // ---------------------------------------------------------------------------
 
-function writeOutput(provider: string, envelope: ISlcIngestEnvelopeV1, report: IValidationReport): void {
+function writeOutput(
+  provider: string,
+  envelope: ISlcIngestEnvelopeV1,
+  report: IValidationReport
+): void {
   const outDir = join(process.cwd(), 'harness-output');
   mkdirSync(outDir, { recursive: true });
 
@@ -147,7 +162,7 @@ function writeOutput(provider: string, envelope: ISlcIngestEnvelopeV1, report: I
   const reportPath = join(outDir, `${baseName}.report.json`);
   writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
 
-  console.log(`  Files written:`);
+  console.log('  Files written:');
   console.log(`    Envelope: ${envelopePath}`);
   console.log(`    Report:   ${reportPath}`);
 }
@@ -211,7 +226,7 @@ async function main(): Promise<void> {
   let credentials: ILmsCredentials;
   try {
     credentials = buildCredentials(provider);
-    console.log(`✓ Credentials parsed`);
+    console.log('✓ Credentials parsed');
   } catch (err) {
     console.error(`✗ ${err instanceof Error ? err.message : err}`);
     process.exit(1);
@@ -224,7 +239,7 @@ async function main(): Promise<void> {
   // 3. Authenticate
   try {
     await adapter.authenticate(credentials);
-    console.log(`✓ Authenticated`);
+    console.log('✓ Authenticated');
   } catch (err) {
     console.error(`✗ Authentication failed: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
@@ -233,7 +248,9 @@ async function main(): Promise<void> {
   // 4. Test connection (if adapter supports it)
   const adapterAny = adapter as unknown as Record<string, unknown>;
   if (typeof adapterAny['testConnection'] === 'function') {
-    const testResult: IConnectionTestResult = await (adapterAny['testConnection'] as () => Promise<IConnectionTestResult>)();
+    const testResult: IConnectionTestResult = await (
+      adapterAny['testConnection'] as () => Promise<IConnectionTestResult>
+    )();
     if (testResult.success) {
       console.log(`✓ Connection test: ${testResult.message} (${testResult.durationMs}ms)`);
     } else {
@@ -243,7 +260,7 @@ async function main(): Promise<void> {
   }
 
   // 5. Fetch envelope (the actual scrape/API call)
-  console.log(`\n⏳ Fetching data...\n`);
+  console.log('\n⏳ Fetching data...\n');
   const start = Date.now();
   let envelope: ISlcIngestEnvelopeV1;
   try {

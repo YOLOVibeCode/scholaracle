@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowLeft } from 'lucide-react';
@@ -19,7 +19,6 @@ import { SyncHistorySheet } from '@/components/dashboard/students/SyncHistoryShe
 
 export default function IntegrationDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const integrationId = params.id as string;
 
   const [assignSheetOpen, setAssignSheetOpen] = useState(false);
@@ -50,65 +49,20 @@ export default function IntegrationDetailPage() {
     setCredentialsStudentId(null);
   };
 
-  const handleUnlink = async (studentId: string) => {
+  const handleUnlink = useCallback(async (studentId: string) => {
     if (!integrationId) return;
     const ok = await integrationsApi.unlinkStudent(integrationId, studentId);
     if (ok) {
       refresh();
       refreshStudents();
     }
-  };
+  }, [integrationId, refresh, refreshStudents]);
 
-  const handleTriggerSync = async (studentId: string) => {
+  const handleTriggerSync = useCallback(async (studentId: string) => {
     if (!integrationId) return;
     await sourcesApi.triggerSync(studentId, integrationId);
     refreshStudents();
-  };
-
-  if (!integrationId) {
-    return (
-      <div className="space-y-4">
-        <p className="text-muted-foreground">Missing integration ID.</p>
-        <Button asChild variant="outline">
-          <Link href="/dashboard/integrations">Back to Integrations</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  if (isLoading && !integration) {
-    return (
-      <div className="space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-40 animate-pulse rounded bg-muted" />
-      </div>
-    );
-  }
-
-  if (error && !integration) {
-    return (
-      <div className="space-y-4">
-        <ErrorDisplay error={error} title="Failed to load integration" onRetry={retry} />
-        <Button asChild variant="outline">
-          <Link href="/dashboard/integrations">Back to Integrations</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  if (!integration) {
-    return (
-      <div className="space-y-4">
-        <p className="text-muted-foreground">Integration not found.</p>
-        <Button asChild variant="outline">
-          <Link href="/dashboard/integrations">Back to Integrations</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  const linked = linkedStudents ?? [];
-  const linkedIds = linked.map((s) => s.studentId);
+  }, [integrationId, refreshStudents]);
 
   const linkedColumns: ColumnDef<IIntegrationLinkedStudent, unknown>[] = useMemo(
     () => [
@@ -175,6 +129,51 @@ export default function IntegrationDetailPage() {
     ],
     [setCredentialsStudentId, setRunsStudentId, handleTriggerSync, handleUnlink]
   );
+
+  if (!integrationId) {
+    return (
+      <div className="space-y-4">
+        <p className="text-muted-foreground">Missing integration ID.</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/integrations">Back to Integrations</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading && !integration) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-40 animate-pulse rounded bg-muted" />
+      </div>
+    );
+  }
+
+  if (error && !integration) {
+    return (
+      <div className="space-y-4">
+        <ErrorDisplay error={error} title="Failed to load integration" onRetry={retry} />
+        <Button asChild variant="outline">
+          <Link href="/dashboard/integrations">Back to Integrations</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!integration) {
+    return (
+      <div className="space-y-4">
+        <p className="text-muted-foreground">Integration not found.</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/integrations">Back to Integrations</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const linked = linkedStudents ?? [];
+  const linkedIds = linked.map((s) => s.studentId);
 
   return (
     <div className="space-y-6" data-testid="integration-detail-page">

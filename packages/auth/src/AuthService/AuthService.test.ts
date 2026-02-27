@@ -193,7 +193,14 @@ describe('AuthService', () => {
     });
 
     it('should return success when user does not exist (no email enumeration)', async () => {
-      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender, 'https://app.example.com');
+      const service = new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        mockTokenStore,
+        mockEmailSender,
+        'https://app.example.com'
+      );
       const result = await service.requestPasswordReset('nonexistent@example.com');
 
       expect(result.success).toBe(true);
@@ -206,7 +213,14 @@ describe('AuthService', () => {
       const user = await userRepository.findByEmail('reset@example.com');
       expect(user).not.toBeNull();
 
-      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender, 'https://app.example.com');
+      const service = new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        mockTokenStore,
+        mockEmailSender,
+        'https://app.example.com'
+      );
       const result = await service.requestPasswordReset('reset@example.com');
 
       expect(result.success).toBe(true);
@@ -252,7 +266,13 @@ describe('AuthService', () => {
       mockTokenStore.findValidByToken.mockResolvedValue({ userId });
       mockTokenStore.invalidateForUser.mockResolvedValue(undefined);
 
-      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender);
+      const service = new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        mockTokenStore,
+        mockEmailSender
+      );
       const result = await service.resetPasswordWithToken('valid-token-123', 'NewPass456!');
 
       expect(result.success).toBe(true);
@@ -267,7 +287,13 @@ describe('AuthService', () => {
     it('should return error when token is invalid or expired', async () => {
       mockTokenStore.findValidByToken.mockResolvedValue(null);
 
-      const service = new AuthService(database, TEST_SECRET, TEST_EXPIRES, mockTokenStore, mockEmailSender);
+      const service = new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        mockTokenStore,
+        mockEmailSender
+      );
       const result = await service.resetPasswordWithToken('invalid-token', 'NewPass456!');
 
       expect(result.success).toBe(false);

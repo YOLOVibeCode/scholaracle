@@ -68,6 +68,22 @@ test.describe('User Login', () => {
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
+  test('LOG-006: Should handle remember me if present', async ({ page }) => {
+    const rememberMeCheckbox = page.locator('[data-testid="checkbox-remember"], input[type="checkbox"]').first();
+    if ((await rememberMeCheckbox.count()) === 0) {
+      test.skip();
+      return;
+    }
+    
+    // Login with remember me checked
+    await loginPage.emailInput.fill(testEmail);
+    await loginPage.passwordInput.fill(testPassword);
+    await rememberMeCheckbox.check();
+    await loginPage.loginButton.click();
+    
+    await expect(page).toHaveURL('/dashboard');
+  });
+
   test('LOG-007: Should persist session', async ({ page }) => {
     await loginPage.login(testEmail, testPassword);
     await expect(page).toHaveURL('/dashboard');

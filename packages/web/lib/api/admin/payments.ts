@@ -1,6 +1,6 @@
 /**
  * Admin Payments API Client (ISP)
- * 
+ *
  * Small, focused interface for payment operations.
  * Follows Interface Segregation Principle.
  */
@@ -49,7 +49,10 @@ export const adminPaymentsApi = {
   /**
    * List payments (optionally filter by status or userId).
    */
-  async list(params?: { readonly status?: string; readonly userId?: string }): Promise<IPaymentsResponse> {
+  async list(params?: {
+    readonly status?: string;
+    readonly userId?: string;
+  }): Promise<IPaymentsResponse> {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.userId) qs.set('userId', params.userId);
@@ -67,15 +70,25 @@ export const adminPaymentsApi = {
   /**
    * Refund a payment.
    */
-  async refund(paymentId: string, request: IAdminRefundPaymentRequest): Promise<IAdminRefundPaymentResponse> {
-    return apiClient.post<IAdminRefundPaymentResponse>(`/admin/payments/${paymentId}/refund`, request, true);
+  async refund(
+    paymentId: string,
+    request: IAdminRefundPaymentRequest
+  ): Promise<IAdminRefundPaymentResponse> {
+    return apiClient.post<IAdminRefundPaymentResponse>(
+      `/admin/payments/${paymentId}/refund`,
+      request,
+      true
+    );
   },
 
   /**
    * Retry a failed payment.
    */
   async retry(paymentId: string): Promise<IAdminRetryPaymentResponse> {
-    return apiClient.post<IAdminRetryPaymentResponse>(`/admin/payments/${paymentId}/retry`, {}, true);
+    return apiClient.post<IAdminRetryPaymentResponse>(
+      `/admin/payments/${paymentId}/retry`,
+      {},
+      true
+    );
   },
 };
-

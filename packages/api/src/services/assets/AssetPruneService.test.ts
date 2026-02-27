@@ -53,7 +53,12 @@ describe('AssetPruneService', () => {
   });
 
   it('pruneByAge should call writer.softDeleteByAge with date cutoffs', async () => {
-    const count = await service.pruneByAge('user-1', 'source-1', 365 * 24 * 60 * 60 * 1000, 180 * 24 * 60 * 60 * 1000);
+    const count = await service.pruneByAge(
+      'user-1',
+      'source-1',
+      365 * 24 * 60 * 60 * 1000,
+      180 * 24 * 60 * 60 * 1000
+    );
     expect(count).toBe(1);
     expect(writer.softDeleteByAge).toHaveBeenCalledWith(
       'user-1',

@@ -49,12 +49,10 @@ describe('Admin Auth Routes', () => {
         role: 'admin',
       });
 
-      const response = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'login@test.com',
-          password: 'LoginPass123!',
-        });
+      const response = await request(app).post('/api/admin/auth/login').send({
+        email: 'login@test.com',
+        password: 'LoginPass123!',
+      });
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
@@ -63,12 +61,10 @@ describe('Admin Auth Routes', () => {
     });
 
     it('should reject invalid credentials', async () => {
-      const response = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'invalid@test.com',
-          password: 'WrongPass123!',
-        });
+      const response = await request(app).post('/api/admin/auth/login').send({
+        email: 'invalid@test.com',
+        password: 'WrongPass123!',
+      });
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
@@ -89,12 +85,10 @@ describe('Admin Auth Routes', () => {
         mfaSecret: secret,
       });
 
-      const response = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'mfa@test.com',
-          password: 'MFAPass123!',
-        });
+      const response = await request(app).post('/api/admin/auth/login').send({
+        email: 'mfa@test.com',
+        password: 'MFAPass123!',
+      });
 
       expect(response.status).toBe(401);
       expect(response.body.requiresMFA).toBe(true);
@@ -121,9 +115,13 @@ describe('Admin Auth Routes', () => {
 
         // 10 allowed, 11th should 429
         for (let i = 0; i < 10; i++) {
-          await request(app2).post('/api/admin/auth/login').send({ email: 'ratelimit@test.com', password: 'wrong' });
+          await request(app2)
+            .post('/api/admin/auth/login')
+            .send({ email: 'ratelimit@test.com', password: 'wrong' });
         }
-        const res = await request(app2).post('/api/admin/auth/login').send({ email: 'ratelimit@test.com', password: 'wrong' });
+        const res = await request(app2)
+          .post('/api/admin/auth/login')
+          .send({ email: 'ratelimit@test.com', password: 'wrong' });
         expect(res.status).toBe(429);
         expect(res.body.code).toBe('RATE_LIMIT_EXCEEDED');
       } finally {
@@ -150,12 +148,10 @@ describe('Admin Auth Routes', () => {
       });
 
       // Login to get MFA token
-      const loginResponse = await request(app)
-        .post('/api/admin/auth/login')
-        .send({
-          email: 'mfaverify@test.com',
-          password: 'MFAPass123!',
-        });
+      const loginResponse = await request(app).post('/api/admin/auth/login').send({
+        email: 'mfaverify@test.com',
+        password: 'MFAPass123!',
+      });
 
       expect(loginResponse.body.requiresMFA).toBe(true);
       const mfaToken = loginResponse.body.mfaToken;
@@ -167,12 +163,10 @@ describe('Admin Auth Routes', () => {
         encoding: 'base32',
       });
 
-      const verifyResponse = await request(app)
-        .post('/api/admin/auth/mfa/verify')
-        .send({
-          mfaToken,
-          token: totpToken,
-        });
+      const verifyResponse = await request(app).post('/api/admin/auth/mfa/verify').send({
+        mfaToken,
+        token: totpToken,
+      });
 
       expect(verifyResponse.status).toBe(200);
       expect(verifyResponse.body.success).toBe(true);
@@ -180,12 +174,10 @@ describe('Admin Auth Routes', () => {
     });
 
     it('should reject invalid MFA token', async () => {
-      const response = await request(app)
-        .post('/api/admin/auth/mfa/verify')
-        .send({
-          mfaToken: 'invalid-token',
-          token: '000000',
-        });
+      const response = await request(app).post('/api/admin/auth/mfa/verify').send({
+        mfaToken: 'invalid-token',
+        token: '000000',
+      });
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
@@ -265,4 +257,3 @@ describe('Admin Auth Routes', () => {
     });
   });
 });
-

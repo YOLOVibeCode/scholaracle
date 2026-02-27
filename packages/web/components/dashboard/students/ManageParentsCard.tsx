@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, Plus, Trash2, Mail, Check, Clock, Crown, ShieldCheck, ShieldOff } from 'lucide-react';
-import { studentsApi, type ISharedParent } from '@/lib/api/students';
+import { Users, Trash2, Mail, Check, Clock, Crown, ShieldCheck, ShieldOff } from 'lucide-react';
+import { studentsApi } from '@/lib/api/students';
 import { useAsyncData } from '@/lib/hooks';
 
 export interface ManageParentsCardProps {

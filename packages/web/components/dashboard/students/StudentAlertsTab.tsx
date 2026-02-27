@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Bell, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,9 +29,16 @@ export function StudentAlertsTab({ studentId, student, onSaveOverrides }: Studen
   const [lowGradeThreshold, setLowGradeThreshold] = useState(80);
   const [frequency, setFrequency] = useState<'minimal' | 'balanced' | 'proactive'>('balanced');
 
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    const list = await studentsApi.getAlerts(studentId);
+    setAlerts(list);
+    setLoading(false);
+  }, [studentId]);
+
   useEffect(() => {
     void loadAlerts();
-  }, [studentId]);
+  }, [loadAlerts]);
 
   useEffect(() => {
     if (student?.alertPreferences) {
@@ -41,13 +48,6 @@ export function StudentAlertsTab({ studentId, student, onSaveOverrides }: Studen
       setFrequency((student.alertPreferences.frequency as 'minimal' | 'balanced' | 'proactive') ?? 'balanced');
     }
   }, [student?.alertPreferences]);
-
-  const loadAlerts = async () => {
-    setLoading(true);
-    const list = await studentsApi.getAlerts(studentId);
-    setAlerts(list);
-    setLoading(false);
-  };
 
   const handleSaveOverrides = () => {
     onSaveOverrides?.({

@@ -410,7 +410,9 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
    * Kept static so the class is easy to test/mock independently.
    */
   private static async _runViaScraperLib(
-    url: string, email: string, password: string
+    url: string,
+    email: string,
+    password: string
   ): Promise<IAeriesScrapeResult> {
     const root = process.env['SCHOLARACLE_SCRAPERS_SRC'];
     let scraperModulePath: string;
@@ -419,8 +421,16 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
       scraperModulePath = require('path').join(root, 'src', 'scrapers', 'aeries', 'aeries-scraper');
     } else {
       try {
-        const pkgPath = require.resolve('scholaracle-scraper/package.json', { paths: [process.cwd(), __dirname] });
-        scraperModulePath = require('path').join(require('path').dirname(pkgPath), 'src', 'scrapers', 'aeries', 'aeries-scraper');
+        const pkgPath = require.resolve('scholaracle-scraper/package.json', {
+          paths: [process.cwd(), __dirname],
+        });
+        scraperModulePath = require('path').join(
+          require('path').dirname(pkgPath),
+          'src',
+          'scrapers',
+          'aeries',
+          'aeries-scraper'
+        );
       } catch {
         throw new Error(
           'scholaracle-scraper package not found. Set SCHOLARACLE_SCRAPERS_SRC or install scholaracle-scraper.'
@@ -431,6 +441,7 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
     require('ts-node/register');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require(scraperModulePath);
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- class constructor reference
     const ScraperClass = mod.AeriesScraper ?? mod.default;
     if (!ScraperClass) {
       throw new Error('AeriesScraper class not found in scholaracle-scraper');
@@ -480,7 +491,10 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
         ops.push({
           op: 'upsert',
           entity: 'institution',
-          key: { ...baseKey, externalId: `aeries-school-${student.school.replace(/\s+/g, '-').toLowerCase()}` },
+          key: {
+            ...baseKey,
+            externalId: `aeries-school-${student.school.replace(/\s+/g, '-').toLowerCase()}`,
+          },
           observedAt: extract.timestamp,
           record: { name: student.school, type: 'school' },
         } as unknown as ISlcDeltaOp);
@@ -554,9 +568,7 @@ export class AeriesAdapter implements ILmsAdapterWithTest {
             observedAt: extract.timestamp,
             record: {
               title: assignment.title,
-              dueAt: assignment.dateDue
-                ? new Date(assignment.dateDue).toISOString()
-                : undefined,
+              dueAt: assignment.dateDue ? new Date(assignment.dateDue).toISOString() : undefined,
               status: assignment.isMissing
                 ? 'missing'
                 : assignment.scoreEarned !== null

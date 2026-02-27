@@ -35,7 +35,10 @@ export function validateGeneratedScraper(scraper: IGeneratedScraper): IValidatio
   if (!scraper.transformerCode || scraper.transformerCode.trim().length < 50) {
     errors.push('Transformer code is missing or too short');
   } else {
-    if (!scraper.transformerCode.includes('ISlcDeltaOp') && !scraper.transformerCode.includes('DeltaOp')) {
+    if (
+      !scraper.transformerCode.includes('ISlcDeltaOp') &&
+      !scraper.transformerCode.includes('DeltaOp')
+    ) {
       errors.push('Transformer must produce ISlcDeltaOp operations');
     }
     if (!scraper.transformerCode.includes('upsert')) {

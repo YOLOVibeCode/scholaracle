@@ -10,24 +10,33 @@ export interface GradeSidebarProps {
   compact?: boolean;
 }
 
-function gradeColorClass(grade: number, riskLevel: RiskLevel): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- riskLevel kept for API consistency
+export function gradeColorClass(grade: number, riskLevel: RiskLevel): string {
   if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400';
   if (grade >= 70) return 'text-amber-600 dark:text-amber-400';
   if (grade >= 60) return 'text-orange-600 dark:text-orange-400';
   return 'text-red-600 dark:text-red-400';
 }
 
-function borderRiskClass(riskLevel: RiskLevel): string {
+export function borderRiskClass(riskLevel: RiskLevel): string {
   if (riskLevel === 'critical' || riskLevel === 'high') return 'border-l-4 border-l-amber-500 dark:border-l-amber-400';
   if (riskLevel === 'medium') return 'border-l-4 border-l-amber-400/70 dark:border-l-amber-500/70';
   return 'border-l-4 border-l-transparent';
+}
+
+export function riskBadgeClass(riskLevel: RiskLevel): string {
+  if (riskLevel === 'critical') return 'bg-red-600 text-white dark:bg-red-500';
+  if (riskLevel === 'high') return 'bg-amber-600 text-white dark:bg-amber-500';
+  if (riskLevel === 'medium') return 'bg-amber-500/80 text-white dark:bg-amber-400/80';
+  if (riskLevel === 'low') return 'bg-muted text-muted-foreground';
+  return 'bg-muted/60 text-muted-foreground';
 }
 
 export function GradeSidebar({
   courseGrades,
   selectedCourseId,
   onSelectCourse,
-  compact = false,
+  compact = false, // eslint-disable-line @typescript-eslint/no-unused-vars -- reserved for compact layout
 }: GradeSidebarProps) {
   if (courseGrades.length === 0) {
     return (
@@ -56,6 +65,11 @@ export function GradeSidebar({
             </div>
             <div className={`text-xl font-bold tabular-nums ${colorClass}`}>{course.grade}</div>
             <div className={`text-xs font-medium ${colorClass}`}>{course.letterGrade}</div>
+            {course.materialCount != null && course.materialCount > 0 && (
+              <div className="mt-0.5 text-[10px] text-muted-foreground">
+                {course.materialCount} material{course.materialCount !== 1 ? 's' : ''}
+              </div>
+            )}
             {isAtRisk && (
               <span
                 className="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"

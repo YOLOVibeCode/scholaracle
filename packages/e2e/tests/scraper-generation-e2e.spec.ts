@@ -72,7 +72,7 @@ test.describe('Scraper generation and execution E2E', () => {
       await expect(page.getByLabel(/School Portal URL/i)).toBeVisible();
       await page.getByLabel(/School Portal URL/i).fill(TEST_CANVAS_URL);
       await page.getByLabel(/Student Name/i).fill('Ava Lewis');
-      await page.getByLabel(/Email \/ Username/i).fill(TEST_CANVAS_EMAIL);
+      await page.getByLabel(/^Username$/i).fill(TEST_CANVAS_EMAIL);
       await page.getByLabel(/^Password/i).fill(TEST_CANVAS_PASSWORD);
 
       const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
@@ -100,7 +100,7 @@ test.describe('Scraper generation and execution E2E', () => {
       await expect(page.getByLabel(/School Portal URL/i)).toBeVisible();
       await page.getByLabel(/School Portal URL/i).fill(TEST_SKYWARD_URL);
       await page.getByLabel(/Student Name/i).fill('Ava Lewis');
-      await page.getByLabel(/Email \/ Username/i).fill(TEST_SKYWARD_USERNAME);
+      await page.getByLabel(/^Username$/i).fill(TEST_SKYWARD_USERNAME);
       await page.getByLabel(/^Password/i).fill(TEST_SKYWARD_PASSWORD);
 
       await page.getByRole('button', { name: 'Continue' }).click();

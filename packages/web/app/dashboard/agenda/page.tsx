@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useCallback } from 'react';
-import { agendaApi, type IAgendaItem, type IAgendaResponse } from '@/lib/api/agenda';
+import { agendaApi, type IAgendaResponse } from '@/lib/api/agenda';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import {
@@ -38,7 +38,7 @@ export default function AgendaPage() {
     { retryCount: 2, retryDelay: 1000 }
   );
 
-  const rawItems = agendaResponse?.items ?? [];
+  const rawItems = useMemo(() => agendaResponse?.items ?? [], [agendaResponse]);
   const filteredItems = useMemo(
     () => filterItems(rawItems, selectedLabels, selectedStudents),
     [rawItems, selectedLabels, selectedStudents]

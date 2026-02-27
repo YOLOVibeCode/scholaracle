@@ -60,7 +60,7 @@ export default function NewStudentPage() {
         <form onSubmit={handleSubmit}>
           <CardHeader>
             <CardTitle>Student Information</CardTitle>
-            <CardDescription>Enter the student's basic information</CardDescription>
+            <CardDescription>Enter the student&apos;s basic information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {error && (

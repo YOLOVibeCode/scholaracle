@@ -39,5 +39,3 @@ export function saveConfig(config: ISlcLocalConfig, path = getDefaultConfigPath(
   mkdirSync(dir, { recursive: true });
   writeFileSync(path, JSON.stringify(config, null, 2), 'utf8');
 }
-
-

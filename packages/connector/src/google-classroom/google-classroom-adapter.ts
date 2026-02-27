@@ -50,7 +50,11 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
   public async testConnection(): Promise<IConnectionTestResult> {
     const start = Date.now();
     if (!this._client) {
-      return { success: false, message: 'Not authenticated. Call authenticate() first.', durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: 'Not authenticated. Call authenticate() first.',
+        durationMs: Date.now() - start,
+      };
     }
     try {
       const courses = await this._client.getCourses();
@@ -62,7 +66,11 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: `Connection failed: ${msg}`,
+        durationMs: Date.now() - start,
+      };
     }
   }
 
@@ -117,9 +125,7 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
       for (const cw of courseWork) {
         const submissions = await client.getStudentSubmissions(course.id, cw.id);
         const submission = submissions[0];
-        ops.push(
-          transformCourseWorkToOp(cw, submission, baseKey) as unknown as ISlcDeltaOp
-        );
+        ops.push(transformCourseWorkToOp(cw, submission, baseKey) as unknown as ISlcDeltaOp);
 
         if (submission?.assignedGrade !== undefined && cw.maxPoints) {
           totalEarned += submission.assignedGrade;
@@ -129,7 +135,12 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
 
       if (totalPossible > 0) {
         ops.push(
-          transformGradeSnapshotToOp(course.id, totalEarned, totalPossible, baseKey) as unknown as ISlcDeltaOp
+          transformGradeSnapshotToOp(
+            course.id,
+            totalEarned,
+            totalPossible,
+            baseKey
+          ) as unknown as ISlcDeltaOp
         );
       }
     }

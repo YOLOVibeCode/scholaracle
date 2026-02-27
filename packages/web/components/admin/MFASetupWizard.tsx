@@ -115,6 +115,7 @@ export function MFASetupWizard({ mfaSetupToken, onComplete, onCancel }: MFASetup
         <form onSubmit={handleSubmit} className="space-y-4">
           {qrCodeUrl && (
             <div className="flex justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element -- QR code data URL, not a static asset */}
               <img
                 src={qrCodeUrl}
                 alt="MFA QR code"

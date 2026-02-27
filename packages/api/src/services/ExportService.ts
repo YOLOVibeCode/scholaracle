@@ -27,7 +27,7 @@ export class ExportService implements IExportService {
    * @returns CSV string
    */
   public async exportCustomers(startDate?: Date, endDate?: Date): Promise<string> {
-    let filters: Record<string, unknown> = {};
+    const filters: Record<string, unknown> = {};
 
     if (startDate || endDate) {
       filters['createdAt'] = {};
@@ -50,16 +50,7 @@ export class ExportService implements IExportService {
     });
 
     // CSV header
-    const headers = [
-      'ID',
-      'Email',
-      'Name',
-      'Phone',
-      'Plan',
-      'Status',
-      'Suspended',
-      'Created At',
-    ];
+    const headers = ['ID', 'Email', 'Name', 'Phone', 'Plan', 'Status', 'Suspended', 'Created At'];
 
     const rows = users.data.map((user) => [
       user._id?.toString() ?? '',
@@ -85,7 +76,7 @@ export class ExportService implements IExportService {
   public async exportPayments(startDate?: Date, endDate?: Date): Promise<string> {
     const paymentsCollection = this._database.collection('payments');
 
-    let query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = {};
     if (startDate || endDate) {
       query['createdAt'] = {};
       if (startDate) {
@@ -147,7 +138,7 @@ export class ExportService implements IExportService {
    * @returns CSV string
    */
   public async exportSubscriptions(startDate?: Date, endDate?: Date): Promise<string> {
-    let filters: Record<string, unknown> = {};
+    const filters: Record<string, unknown> = {};
 
     if (startDate || endDate) {
       filters['createdAt'] = {};
@@ -169,14 +160,7 @@ export class ExportService implements IExportService {
       sort: { createdAt: -1 },
     });
 
-    const headers = [
-      'User Email',
-      'Name',
-      'Plan',
-      'Status',
-      'Created At',
-      'Last Updated',
-    ];
+    const headers = ['User Email', 'Name', 'Plan', 'Status', 'Created At', 'Last Updated'];
 
     const rows = users.data.map((user) => [
       user.email,
@@ -213,4 +197,3 @@ export class ExportService implements IExportService {
     return csvRows.join('\n');
   }
 }
-

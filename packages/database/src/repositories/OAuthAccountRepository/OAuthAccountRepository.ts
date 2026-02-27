@@ -3,13 +3,23 @@ import { ObjectId } from 'mongodb';
 import type { OAuthProvider } from '../../models/OAuthAccount';
 
 export interface IOAuthAccountRepository {
-  findByProviderAndId(provider: OAuthProvider, providerAccountId: string): Promise<{
+  findByProviderAndId(
+    provider: OAuthProvider,
+    providerAccountId: string
+  ): Promise<{
     userId: string;
     email: string;
     createdAt: Date;
   } | null>;
-  findByUserId(userId: string): Promise<{ provider: OAuthProvider; email: string; createdAt: Date }[]>;
-  create(userId: string, provider: OAuthProvider, providerAccountId: string, email: string): Promise<void>;
+  findByUserId(
+    userId: string
+  ): Promise<{ provider: OAuthProvider; email: string; createdAt: Date }[]>;
+  create(
+    userId: string,
+    provider: OAuthProvider,
+    providerAccountId: string,
+    email: string
+  ): Promise<void>;
   deleteByProviderAndUserId(provider: OAuthProvider, userId: string): Promise<boolean>;
 }
 

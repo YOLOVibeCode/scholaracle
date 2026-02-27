@@ -1,9 +1,6 @@
 import { INotificationDelivery } from '@scholaracle/interfaces';
 import type { Notification } from '@scholaracle/contracts';
-import {
-  DeliveryResult,
-  NotificationChannel,
-} from '@scholaracle/contracts';
+import { DeliveryResult, NotificationChannel } from '@scholaracle/contracts';
 
 export interface IPushDeliveryConfig {
   readonly projectId: string;

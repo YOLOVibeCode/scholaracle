@@ -50,11 +50,13 @@ function formatNotificationResponse(result: IProcessAlertResult): Record<string,
       subject: result.parentNotification.subject,
       priority: result.parentNotification.priority,
     },
-    deliveryResults: (Array.isArray(result.deliveryResults) ? result.deliveryResults : []).map((r) => ({
-      success: r.success,
-      channel: r.channel,
-      messageId: r.messageId,
-    })),
+    deliveryResults: (Array.isArray(result.deliveryResults) ? result.deliveryResults : []).map(
+      (r) => ({
+        success: r.success,
+        channel: r.channel,
+        messageId: r.messageId,
+      })
+    ),
   };
 }
 

@@ -99,5 +99,3 @@ export const TEST_SETTINGS = {
 export function generateUniqueEmail(prefix: string = 'test'): string {
   return `${prefix}.${Date.now()}.${Math.random().toString(36).substring(7)}@example.com`;
 }
-
-

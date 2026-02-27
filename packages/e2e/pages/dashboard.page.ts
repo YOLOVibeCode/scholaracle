@@ -44,13 +44,13 @@ export class DashboardPage {
   async getStudentCount(): Promise<string> {
     const card = this.page.locator(':has-text("Students")').first();
     const countElement = card.locator('.text-2xl');
-    return await countElement.textContent() ?? '0';
+    return (await countElement.textContent()) ?? '0';
   }
 
   async getAlertsCount(): Promise<string> {
     const card = this.page.locator(':has-text("Alerts")').first();
     const countElement = card.locator('.text-2xl');
-    return await countElement.textContent() ?? '0';
+    return (await countElement.textContent()) ?? '0';
   }
 
   async navigateToStudents(): Promise<void> {
@@ -73,5 +73,3 @@ export class DashboardPage {
     await this.page.waitForURL('/login');
   }
 }
-
-

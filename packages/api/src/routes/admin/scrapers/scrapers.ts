@@ -4,7 +4,11 @@ import { ObjectId } from 'mongodb';
 import { UserRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
-import { connectStep, crawlStep, authenticateCheckStep } from '../../../services/scraper-generator/crawler';
+import {
+  connectStep,
+  crawlStep,
+  authenticateCheckStep,
+} from '../../../services/scraper-generator/crawler';
 
 export interface IScrapersAdminRouterConfig {
   readonly database: Db;
@@ -32,21 +36,30 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      const [totalCaches, jobStatusAgg, reports24h, reports7d, reports30d, uniquePlatforms] = await Promise.all([
-        generatedScrapersCollection.countDocuments(),
-        scraperGenerationJobsCollection.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]).toArray(),
-        scraperReportsCollection.countDocuments({ reportedAt: { $gte: dayAgo } }),
-        scraperReportsCollection.countDocuments({ reportedAt: { $gte: weekAgo } }),
-        scraperReportsCollection.countDocuments({ reportedAt: { $gte: monthAgo } }),
-        generatedScrapersCollection.distinct('platformName'),
-      ]);
+      const [totalCaches, jobStatusAgg, reports24h, reports7d, reports30d, uniquePlatforms] =
+        await Promise.all([
+          generatedScrapersCollection.countDocuments(),
+          scraperGenerationJobsCollection
+            .aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
+            .toArray(),
+          scraperReportsCollection.countDocuments({ reportedAt: { $gte: dayAgo } }),
+          scraperReportsCollection.countDocuments({ reportedAt: { $gte: weekAgo } }),
+          scraperReportsCollection.countDocuments({ reportedAt: { $gte: monthAgo } }),
+          generatedScrapersCollection.distinct('platformName'),
+        ]);
 
       const statusCounts: Record<string, number> = {};
       for (const s of jobStatusAgg) {
         statusCounts[s['_id'] as string] = s['count'] as number;
       }
-      const activeJobs = (statusCounts['queued'] ?? 0) + (statusCounts['connecting'] ?? 0) + (statusCounts['crawling'] ?? 0) +
-        (statusCounts['authenticating'] ?? 0) + (statusCounts['crawl_complete'] ?? 0) + (statusCounts['generating'] ?? 0) + (statusCounts['validating'] ?? 0);
+      const activeJobs =
+        (statusCounts['queued'] ?? 0) +
+        (statusCounts['connecting'] ?? 0) +
+        (statusCounts['crawling'] ?? 0) +
+        (statusCounts['authenticating'] ?? 0) +
+        (statusCounts['crawl_complete'] ?? 0) +
+        (statusCounts['generating'] ?? 0) +
+        (statusCounts['validating'] ?? 0);
 
       res.status(200).json({
         success: true,
@@ -75,7 +88,10 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
   router.get('/caches', async (req: Request, res: Response) => {
     try {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
-      const limit = Math.min(100, Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25));
+      const limit = Math.min(
+        100,
+        Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25)
+      );
       const platformName = (req.query['platformName'] as string)?.trim() || undefined;
       const loginUrl = (req.query['loginUrl'] as string)?.trim() || undefined;
       const sort = (req.query['sort'] as string) || 'createdAt';
@@ -98,7 +114,11 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         generatedScrapersCollection.countDocuments(filter),
       ]);
 
-      const userIds = [...new Set((items as Array<{ generatedBy?: string }>).map((i) => i.generatedBy).filter(Boolean))] as string[];
+      const userIds = [
+        ...new Set(
+          (items as Array<{ generatedBy?: string }>).map((i) => i.generatedBy).filter(Boolean)
+        ),
+      ] as string[];
       const userMap: Record<string, string> = {};
       for (const uid of userIds) {
         const user = await userRepository.findById(uid);
@@ -115,8 +135,12 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
           createdAt: (doc['createdAt'] as Date)?.toISOString?.(),
           generatedBy: doc['generatedBy'],
           generatedByEmail: doc['generatedBy'] ? userMap[doc['generatedBy'] as string] : undefined,
-          scraperCodeLength: typeof doc['scraperCode'] === 'string' ? (doc['scraperCode'] as string).length : 0,
-          transformerCodeLength: typeof doc['transformerCode'] === 'string' ? (doc['transformerCode'] as string).length : 0,
+          scraperCodeLength:
+            typeof doc['scraperCode'] === 'string' ? (doc['scraperCode'] as string).length : 0,
+          transformerCodeLength:
+            typeof doc['transformerCode'] === 'string'
+              ? (doc['transformerCode'] as string).length
+              : 0,
           pageFingerprint: doc['pageFingerprint'],
         })),
         total,
@@ -215,7 +239,10 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
   router.get('/jobs', async (req: Request, res: Response) => {
     try {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
-      const limit = Math.min(100, Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25));
+      const limit = Math.min(
+        100,
+        Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25)
+      );
       const status = (req.query['status'] as string)?.trim() || undefined;
       const userId = (req.query['userId'] as string)?.trim() || undefined;
       const platformName = (req.query['platformName'] as string)?.trim() || undefined;
@@ -249,7 +276,9 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
           createdAt: (doc['createdAt'] as Date)?.toISOString?.(),
           updatedAt: (doc['updatedAt'] as Date)?.toISOString?.(),
           error: doc['error'],
-          result: doc['result'] ? { scraperId: (doc['result'] as Record<string, unknown>)['scraperId'] } : undefined,
+          result: doc['result']
+            ? { scraperId: (doc['result'] as Record<string, unknown>)['scraperId'] }
+            : undefined,
         })),
         total,
         page,
@@ -313,7 +342,10 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
   router.get('/reports', async (req: Request, res: Response) => {
     try {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
-      const limit = Math.min(100, Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25));
+      const limit = Math.min(
+        100,
+        Math.max(1, parseInt((req.query['limit'] as string) || '25') || 25)
+      );
       const cacheKey = (req.query['cacheKey'] as string)?.trim() || undefined;
 
       const filter: Record<string, unknown> = {};
@@ -328,7 +360,9 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         .toArray();
       const total = await scraperReportsCollection.countDocuments(filter);
 
-      const cacheKeys = [...new Set((items as unknown as Array<{ cacheKey: string }>).map((i) => i.cacheKey))];
+      const cacheKeys = [
+        ...new Set((items as unknown as Array<{ cacheKey: string }>).map((i) => i.cacheKey)),
+      ];
       const cacheDocs = await generatedScrapersCollection
         .find({ cacheKey: { $in: cacheKeys } })
         .toArray();
@@ -418,7 +452,9 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
             error: crawlResult.error,
           },
           authenticateCheck: authResult,
-          message: authResult.ok ? 'Page is reachable and login appears automatable.' : authResult.error,
+          message: authResult.ok
+            ? 'Page is reachable and login appears automatable.'
+            : authResult.error,
         },
       });
     } catch (error) {

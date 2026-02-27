@@ -2,8 +2,8 @@
  * PlaywrightUX: Non-reference platform wizard with AI generation.
  *
  * Uses page.route() to mock the API so the test works without ANTHROPIC_API_KEY.
- * Exercises the full ConnectSchoolWizard flow: platform selection -> details ->
- * generation progress -> download.
+ * Exercises the full ConnectProviderWizard flow in bundle mode:
+ *   platform selection -> details -> generation progress -> bundle -> download.
  */
 import path from 'path';
 import fs from 'fs';
@@ -23,8 +23,6 @@ export default class PowerSchoolScraper {
   }
   async cleanup() {}
 }`;
-const MOCK_TRANSFORMER_CODE = `export type ISlcDeltaOp = unknown;`;
-const MOCK_METADATA = JSON.stringify({ id: 'powerschool-browser', name: 'PowerSchool', version: '1.0.0' });
 
 test.describe('AI-generated scraper wizard', () => {
   test.setTimeout(60_000);
@@ -33,13 +31,13 @@ test.describe('AI-generated scraper wizard', () => {
   let pollCount: number;
 
   test.describe.serial('PowerSchool generation flow', () => {
-    test('Full wizard: select platform -> fill details -> generate -> download', async ({ page, loginAsRole }) => {
+    test('Full wizard: select platform -> fill details -> generate -> bundle download', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
       downloadDir = path.join(os.tmpdir(), `scraper-ai-e2e-${Date.now()}`);
       await fs.promises.mkdir(downloadDir, { recursive: true });
       pollCount = 0;
 
-      // Mock generate-scraper API: return a job ID (as the real endpoint does for non-reference)
+      // Mock generate-scraper API: return a job ID (non-reference triggers async generation)
       await page.route('**/api/integrations/generate-scraper', async (route) => {
         await route.fulfill({
           status: 200,
@@ -59,7 +57,7 @@ test.describe('AI-generated scraper wizard', () => {
       await page.route('**/api/integrations/generate-status**', async (route) => {
         pollCount++;
         const steps = [
-          { name: 'connect', status: 'complete' as const, details: null },
+          { name: 'connect', status: pollCount >= 1 ? 'complete' as const : 'in_progress' as const, details: null },
           { name: 'crawl', status: pollCount >= 2 ? 'complete' as const : 'in_progress' as const, details: null },
           { name: 'authenticate_check', status: pollCount >= 3 ? 'complete' as const : (pollCount >= 2 ? 'in_progress' as const : 'pending' as const), details: null },
           { name: 'generate', status: pollCount >= 4 ? 'complete' as const : (pollCount >= 3 ? 'in_progress' as const : 'pending' as const), details: null },
@@ -73,18 +71,18 @@ test.describe('AI-generated scraper wizard', () => {
             success: true,
             jobId: MOCK_JOB_ID,
             status: isReady ? 'ready' : 'generating',
+            platformName: 'PowerSchool',
+            loginUrl: 'https://powerschool.example.com/public',
             steps,
             result: isReady ? {
               scraperId: 'mock-scraper-id',
               scraperCode: MOCK_SCRAPER_CODE,
-              transformerCode: MOCK_TRANSFORMER_CODE,
-              metadata: MOCK_METADATA,
             } : undefined,
           }),
         });
       });
 
-      // Mock scraper-download: return a .command file with embedded scraper code
+      // Mock bundle download: return a .command file
       await page.route('**/api/integrations/scraper-download', async (route) => {
         const script = `#!/bin/bash
 # Scholaracle Scraper for PowerSchool (mock)
@@ -103,50 +101,46 @@ echo "Done"
           status: 200,
           headers: {
             'Content-Type': 'application/x-sh',
-            'Content-Disposition': 'attachment; filename="scholaracle-powerschool.command"',
+            'Content-Disposition': 'attachment; filename="scholaracle-bundle.command"',
           },
           body: script,
         });
       });
 
-      // Navigate to integrations and start wizard
+      // Navigate to integrations and open the wizard
       await page.goto('/dashboard/integrations');
       await page.locator('[data-testid="button-connect-school"]').click();
       await expect(page.getByRole('dialog')).toBeVisible();
 
-      // Select PowerSchool (non-reference, triggers AI)
+      // Select PowerSchool (non-reference, triggers AI generation)
       await page.locator('[data-testid="platform-powerschool"]').click();
 
-      // Fill details
-      await expect(page.getByLabel(/School Portal URL/i)).toBeVisible();
-      await page.getByLabel(/School Portal URL/i).fill('https://powerschool.example.com/public');
+      // Fill credentials
+      await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
+      await page.getByLabel(/School portal URL/i).fill('https://powerschool.example.com/public');
+      await page.getByLabel(/Student name/i).fill('Test Student');
+      await page.getByLabel(/^Username$/i).fill('parent@example.com');
+      await page.getByLabel(/^Password$/i).fill('testpass');
 
-      // Select login method (shown for non-reference platforms)
-      const emailPwBtn = page.getByRole('button', { name: 'Email + Password' });
-      if (await emailPwBtn.isVisible()) {
-        await emailPwBtn.click();
-      }
-
-      await page.getByLabel(/Student Name/i).fill('Test Student');
-      await page.getByLabel(/Email \/ Username/i).fill('parent@example.com');
-      await page.getByLabel(/^Password/i).fill('testpass');
-
-      // Click "Generate Scraper"
+      // Click "Generate Scraper" (non-reference button text)
       await page.getByRole('button', { name: 'Generate Scraper' }).click();
 
       // Verify generation progress screen appears
       await expect(page.getByRole('heading', { name: 'Creating Your Scraper' })).toBeVisible({ timeout: 5000 });
 
-      // Wait for generation to complete (mock polls automatically)
-      await expect(page.getByRole('heading', { name: 'Ready to Download' })).toBeVisible({ timeout: 15000 });
+      // Wait for wizard to close (generation completes → added to bundle → onConnectionReady fires → dialog closes)
+      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 30000 });
 
-      // Download the script
+      // Verify platform appears in the bundle with "Ready" badge
+      await expect(page.getByText('Ready')).toBeVisible({ timeout: 5000 });
+
+      // Download the bundle script
       const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-      await page.locator('[data-testid="button-download-scraper"]').click();
+      await page.locator('[data-testid="button-download-bundle"]').click();
       const download = await downloadPromise;
 
       const filename = download.suggestedFilename();
-      expect(filename).toContain('powerschool');
+      expect(filename).toMatch(/bundle|powerschool/i);
       const downloadPath = path.join(downloadDir, filename);
       await download.saveAs(downloadPath);
 

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc --build",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "PORT=2801 ts-node-dev --respawn --transpile-only src/server.ts",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "lint": "eslint src --ext .ts",

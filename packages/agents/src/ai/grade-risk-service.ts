@@ -54,9 +54,7 @@ export class GradeRiskService {
     this._client = this._enabled
       ? new LlmClient({ apiKey: config.apiKey!, model: config.model })
       : undefined;
-    this._cache = new ResponseCache<IGradeRiskResult>(
-      config.cacheTtlMs ?? 5 * 60 * 1000
-    );
+    this._cache = new ResponseCache<IGradeRiskResult>(config.cacheTtlMs ?? 5 * 60 * 1000);
   }
 
   public isAvailable(): boolean {
@@ -82,10 +80,10 @@ export class GradeRiskService {
 
     try {
       const userPrompt = this._buildUserPrompt(studentName, courseGrades, studentGPA);
-      const response = await this._client.complete(
-        [{ role: 'user', content: userPrompt }],
-        { maxTokens: 1024, system: SYSTEM_PROMPT }
-      );
+      const response = await this._client.complete([{ role: 'user', content: userPrompt }], {
+        maxTokens: 1024,
+        system: SYSTEM_PROMPT,
+      });
 
       const parsed = this._parseResponse(response.content, courseGrades);
       this._cache.set(cacheKey, parsed);
@@ -137,7 +135,10 @@ export class GradeRiskService {
     const courseEnhancements = new Map<string, ICourseRiskEnhancement>();
     let aiOverview: string | undefined;
 
-    const trimmed = content.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+    const trimmed = content
+      .trim()
+      .replace(/^```json\s*/i, '')
+      .replace(/\s*```$/i, '');
     let data: {
       courses?: Array<{ courseExternalId?: string; riskLevel?: string; riskExplanation?: string }>;
       aiOverview?: string;

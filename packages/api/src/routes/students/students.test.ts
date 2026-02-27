@@ -517,10 +517,10 @@ describe('Students API Routes', () => {
         },
         {} as Record<string, { courseName: string; snapshots: unknown[] }>
       );
-      expect(byCourse['course-1'].courseName).toBe('Math');
-      expect(byCourse['course-1'].snapshots).toHaveLength(2);
-      expect(byCourse['course-2'].courseName).toBe('Science');
-      expect(byCourse['course-2'].snapshots).toHaveLength(1);
+      expect(byCourse['course-1']!.courseName).toBe('Math');
+      expect(byCourse['course-1']!.snapshots).toHaveLength(2);
+      expect(byCourse['course-2']!.courseName).toBe('Science');
+      expect(byCourse['course-2']!.snapshots).toHaveLength(1);
     });
 
     it('should filter by from and to when query params provided', async () => {
@@ -792,14 +792,14 @@ describe('Students API Routes', () => {
         .find({ userId, studentExternalId: 'ext-archive-1' })
         .toArray();
       expect(remaining).toHaveLength(1);
-      expect(remaining[0].date).toBe('2025-07-02');
+      expect(remaining[0]!['date']).toBe('2025-07-02');
 
       const archived = await database
         .collection('slc_grade_history_archive')
         .find({ userId, studentExternalId: 'ext-archive-1' })
         .toArray();
       expect(archived).toHaveLength(2);
-      expect(archived.every((d) => d.archivedAt != null)).toBe(true);
+      expect(archived.every((d) => d['archivedAt'] != null)).toBe(true);
     });
   });
 

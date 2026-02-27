@@ -181,12 +181,16 @@ describe('Seed API Routes', () => {
       it('should store admin user in the database with correct role', async () => {
         await request(app).post('/api/seed');
 
-        const admin = await database.collection('admin_users').findOne({ email: 'admin@scholarmancy.com' });
+        const admin = await database
+          .collection('admin_users')
+          .findOne({ email: 'admin@scholarmancy.com' });
         expect(admin).not.toBeNull();
         expect(admin!['role']).toBe('admin');
         expect(admin!['isActive']).toBe(true);
 
-        const analyst = await database.collection('admin_users').findOne({ email: 'analyst@scholarmancy.com' });
+        const analyst = await database
+          .collection('admin_users')
+          .findOne({ email: 'analyst@scholarmancy.com' });
         expect(analyst).not.toBeNull();
         expect(analyst!['role']).toBe('admin');
         expect(analyst!['isActive']).toBe(true);

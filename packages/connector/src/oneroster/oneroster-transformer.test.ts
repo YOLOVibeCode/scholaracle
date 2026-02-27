@@ -26,33 +26,27 @@ describe('mapOneRosterStatus', () => {
   });
 
   it('should return graded for fully graded', () => {
-    expect(
-      mapOneRosterStatus({ scoreStatus: 'fully graded' } as IOneRosterResult)
-    ).toBe('graded');
+    expect(mapOneRosterStatus({ scoreStatus: 'fully graded' } as IOneRosterResult)).toBe('graded');
   });
 
   it('should return graded for partially graded', () => {
-    expect(
-      mapOneRosterStatus({ scoreStatus: 'partially graded' } as IOneRosterResult)
-    ).toBe('graded');
+    expect(mapOneRosterStatus({ scoreStatus: 'partially graded' } as IOneRosterResult)).toBe(
+      'graded'
+    );
   });
 
   it('should return submitted for submitted', () => {
-    expect(
-      mapOneRosterStatus({ scoreStatus: 'submitted' } as IOneRosterResult)
-    ).toBe('submitted');
+    expect(mapOneRosterStatus({ scoreStatus: 'submitted' } as IOneRosterResult)).toBe('submitted');
   });
 
   it('should return missing for not submitted', () => {
-    expect(
-      mapOneRosterStatus({ scoreStatus: 'not submitted' } as IOneRosterResult)
-    ).toBe('missing');
+    expect(mapOneRosterStatus({ scoreStatus: 'not submitted' } as IOneRosterResult)).toBe(
+      'missing'
+    );
   });
 
   it('should return unknown for exempt', () => {
-    expect(
-      mapOneRosterStatus({ scoreStatus: 'exempt' } as IOneRosterResult)
-    ).toBe('unknown');
+    expect(mapOneRosterStatus({ scoreStatus: 'exempt' } as IOneRosterResult)).toBe('unknown');
   });
 });
 

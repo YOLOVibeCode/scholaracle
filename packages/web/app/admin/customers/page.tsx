@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +32,7 @@ export default function AdminCustomersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadCustomers = async (pageOverride?: number, searchOverride?: string) => {
+  const loadCustomers = useCallback(async (pageOverride?: number, searchOverride?: string) => {
     setIsLoading(true);
     try {
       const effectivePage = pageOverride ?? page;
@@ -49,7 +49,7 @@ export default function AdminCustomersPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, search]);
 
   const handleSearch = () => {
     // Reset to first page and persist query in URL
@@ -61,7 +61,7 @@ export default function AdminCustomersPage() {
     void loadCustomers(1, search);
   };
 
-  const getPlanBadgeColor = (plan?: string) => {
+  const getPlanBadgeColor = useCallback((plan?: string) => {
     switch (plan) {
       case 'premium':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
@@ -70,7 +70,7 @@ export default function AdminCustomersPage() {
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
-  };
+  }, []);
 
   const paginationState = useMemo(() => ({ pageIndex: page - 1, pageSize: 25 }), [page]);
   const onPaginationChange = useCallback(
@@ -84,7 +84,7 @@ export default function AdminCustomersPage() {
       router.push(`/admin/customers?${qs.toString()}`);
       void loadCustomers(nextPage, search);
     },
-    [page, search, router, loadCustomers, paginationState]
+    [search, router, loadCustomers, paginationState]
   );
 
   const customerColumns: ColumnDef<ICustomer, unknown>[] = useMemo(

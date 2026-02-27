@@ -25,7 +25,7 @@ import {
 } from '@/lib/api/integrations';
 import { apiClient } from '@/lib/api/client';
 import { useAsyncData } from '@/lib/hooks';
-import { findProviderById, type IProviderDescriptor } from '@/lib/providers';
+import { findProviderById } from '@/lib/providers';
 import { ConnectProviderWizard } from '@/components/dashboard/integrations/ConnectProviderWizard';
 import type { IBundleConnection, IBundleConnectionPayload } from '@/components/dashboard/integrations/bundle-types';
 
@@ -70,8 +70,8 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
   // Credentials for the current connection
-  const [authType, setAuthType] = useState<'api' | 'login'>('api');
-  const [accessToken, setAccessToken] = useState('');
+  const [, setAuthType] = useState<'api' | 'login'>('api');
+  const [, setAccessToken] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -87,7 +87,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   // Fetch available integrations (account-level providers the parent already set up)
   const fetchIntegrations = useCallback(() => integrationsApi.list(), []);
-  const { data: integrations, retry: refreshIntegrations } = useAsyncData(fetchIntegrations, {
+  const { data: integrations } = useAsyncData(fetchIntegrations, {
     retryCount: 1,
   });
 

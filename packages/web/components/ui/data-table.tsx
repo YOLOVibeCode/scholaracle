@@ -131,6 +131,8 @@ export function DataTable<TData, TValue>({
     [onColumnFiltersChange]
   );
 
+  // TanStack Table returns unstable refs; React Compiler skips memoization here by design.
+  // eslint-disable-next-line react-hooks/incompatible-library -- useReactTable() API limitation
   const table = useReactTable({
     data: data as TData[],
     columns,

@@ -2,7 +2,10 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { AdminNoteRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
-import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import {
+  adminAuthMiddleware,
+  type IAdminAuthenticatedRequest,
+} from '../../../middleware/adminAuth';
 
 export interface INotesRouterConfig {
   readonly database: Db;
@@ -25,17 +28,29 @@ async function handleGetNotesByCustomer(
 
     res.status(200).json({
       success: true,
-      data: notes.map((note: { _id?: { toString: () => string }; content: string; category: string; isInternal: boolean; isPinned: boolean; adminUserId: string; adminName?: string; createdAt: Date; updatedAt: Date }) => ({
-        id: note._id?.toString(),
-        content: note.content,
-        category: note.category,
-        isInternal: note.isInternal,
-        isPinned: note.isPinned,
-        adminUserId: note.adminUserId,
-        adminName: note.adminName,
-        createdAt: note.createdAt.toISOString(),
-        updatedAt: note.updatedAt.toISOString(),
-      })),
+      data: notes.map(
+        (note: {
+          _id?: { toString: () => string };
+          content: string;
+          category: string;
+          isInternal: boolean;
+          isPinned: boolean;
+          adminUserId: string;
+          adminName?: string;
+          createdAt: Date;
+          updatedAt: Date;
+        }) => ({
+          id: note._id?.toString(),
+          content: note.content,
+          category: note.category,
+          isInternal: note.isInternal,
+          isPinned: note.isPinned,
+          adminUserId: note.adminUserId,
+          adminName: note.adminName,
+          createdAt: note.createdAt.toISOString(),
+          updatedAt: note.updatedAt.toISOString(),
+        })
+      ),
     });
   } catch (error) {
     res.status(500).json({
@@ -240,4 +255,3 @@ export function notesRouter(config: INotesRouterConfig): Router {
 
   return router;
 }
-

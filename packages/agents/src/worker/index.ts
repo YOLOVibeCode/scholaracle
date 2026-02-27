@@ -9,4 +9,3 @@ export type {
   ISyncWorkerConfig,
   AdapterRunnerFn,
 } from './SyncWorker';
-

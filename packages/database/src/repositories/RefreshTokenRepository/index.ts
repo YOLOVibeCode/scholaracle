@@ -1,4 +1,1 @@
-export {
-  RefreshTokenRepository,
-  type IRefreshTokenStore,
-} from './RefreshTokenRepository';
+export { RefreshTokenRepository, type IRefreshTokenStore } from './RefreshTokenRepository';

@@ -3,7 +3,10 @@ import type { Db } from 'mongodb';
 import { SubscriptionRepository, AuditLogRepository } from '@scholaracle/database';
 import type { SubscriptionPlan } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
-import { adminAuthMiddleware, type IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import {
+  adminAuthMiddleware,
+  type IAdminAuthenticatedRequest,
+} from '../../../middleware/adminAuth';
 
 export interface ISubscriptionsRouterConfig {
   readonly database: Db;
@@ -21,7 +24,7 @@ async function handleGetSubscriptions(
     const userId = req.query['userId'] as string | undefined;
 
     const filter: Record<string, unknown> = {};
-    
+
     if (status) {
       filter['status'] = status;
     }
@@ -380,4 +383,3 @@ export function subscriptionsRouter(config: ISubscriptionsRouterConfig): Router 
 
   return router;
 }
-

@@ -77,7 +77,11 @@ interface ISubjectPattern {
 const SUBJECT_PATTERNS: readonly ISubjectPattern[] = [
   // *** Priority: Specific compound terms that would otherwise match a broader category ***
   // "Computer Science" must match technology, not science
-  { area: 'technology', subArea: 'computer-science', patterns: [/computer sci/i, /\bap cs\b/i, /\bcsa\b/i, /programming/i, /coding/i] },
+  {
+    area: 'technology',
+    subArea: 'computer-science',
+    patterns: [/computer sci/i, /\bap cs\b/i, /\bcsa\b/i, /programming/i, /coding/i],
+  },
   // "Art History" must match arts, not social-studies
   { area: 'arts', subArea: 'visual-art', patterns: [/\bart hist/i] },
   // "Creative Writing" must match english/creative-writing, not composition
@@ -96,39 +100,102 @@ const SUBJECT_PATTERNS: readonly ISubjectPattern[] = [
   { area: 'science', subArea: 'physics', patterns: [/physics/i, /\bphys\b/i, /\bphy\d/i] },
   { area: 'science', subArea: 'chemistry', patterns: [/chemistry/i, /\bchem\b/i] },
   { area: 'science', subArea: 'biology', patterns: [/biology/i, /\bbio\b/i, /\bbiol\b/i] },
-  { area: 'science', subArea: 'environmental', patterns: [/environmental/i, /\benviro/i, /\bapes\b/i] },
-  { area: 'science', subArea: 'earth-science', patterns: [/earth sci/i, /geology/i, /geoscience/i] },
+  {
+    area: 'science',
+    subArea: 'environmental',
+    patterns: [/environmental/i, /\benviro/i, /\bapes\b/i],
+  },
+  {
+    area: 'science',
+    subArea: 'earth-science',
+    patterns: [/earth sci/i, /geology/i, /geoscience/i],
+  },
   { area: 'science', subArea: 'anatomy', patterns: [/anatomy/i, /physiology/i, /\ba&p\b/i] },
   { area: 'science', patterns: [/(?<!computer )science/i, /(?<!computer )\bsci\b/i, /\blab\b/i] },
 
   // English / Language Arts
   { area: 'english', subArea: 'creative-writing', patterns: [/creative writ/i] },
   { area: 'english', subArea: 'literature', patterns: [/literature/i, /\blit\b/i] },
-  { area: 'english', subArea: 'composition', patterns: [/composition/i, /\bcomp\b/i, /\bwriting\b/i] },
-  { area: 'english', patterns: [/english/i, /\beng\b/i, /\bela\b/i, /language arts/i, /\brla\b/i, /\bla\d/i, /reading/i] },
+  {
+    area: 'english',
+    subArea: 'composition',
+    patterns: [/composition/i, /\bcomp\b/i, /\bwriting\b/i],
+  },
+  {
+    area: 'english',
+    patterns: [
+      /english/i,
+      /\beng\b/i,
+      /\bela\b/i,
+      /language arts/i,
+      /\brla\b/i,
+      /\bla\d/i,
+      /reading/i,
+    ],
+  },
 
   // Arts (art history already matched above in priority section)
-  { area: 'arts', subArea: 'visual-art', patterns: [/\bart\b/i, /visual art/i, /painting/i, /drawing/i, /sculpture/i, /ceramics/i] },
-  { area: 'arts', subArea: 'music', patterns: [/music/i, /\bband\b/i, /orchestra/i, /choir/i, /chorus/i] },
+  {
+    area: 'arts',
+    subArea: 'visual-art',
+    patterns: [/\bart\b/i, /visual art/i, /painting/i, /drawing/i, /sculpture/i, /ceramics/i],
+  },
+  {
+    area: 'arts',
+    subArea: 'music',
+    patterns: [/music/i, /\bband\b/i, /orchestra/i, /choir/i, /chorus/i],
+  },
   { area: 'arts', subArea: 'theater', patterns: [/theat(er|re)/i, /drama/i, /\bact(ing)?\b/i] },
   { area: 'arts', subArea: 'dance', patterns: [/dance/i] },
 
   // Technology (must come before social-studies to catch "AP Computer Science" before bare patterns)
-  { area: 'technology', subArea: 'computer-science', patterns: [/computer sci/i, /\bap cs/i, /\bcsa\b/i, /programming/i, /coding/i] },
-  { area: 'technology', subArea: 'engineering', patterns: [/engineering/i, /robotics/i, /\bpltw\b/i] },
+  {
+    area: 'technology',
+    subArea: 'computer-science',
+    patterns: [/computer sci/i, /\bap cs/i, /\bcsa\b/i, /programming/i, /coding/i],
+  },
+  {
+    area: 'technology',
+    subArea: 'engineering',
+    patterns: [/engineering/i, /robotics/i, /\bpltw\b/i],
+  },
   { area: 'technology', patterns: [/technolog/i, /\btech\b/i, /digital/i, /information tech/i] },
 
   // Social Studies
-  { area: 'social-studies', subArea: 'us-history', patterns: [/us hist/i, /u\.s\. hist/i, /american hist/i, /\bush\b/i, /\bapush\b/i] },
-  { area: 'social-studies', subArea: 'world-history', patterns: [/world hist/i, /\bwhist\b/i, /\bap world/i] },
-  { area: 'social-studies', subArea: 'government', patterns: [/government/i, /\bgov\b/i, /\bcivics\b/i, /\bap gov/i] },
-  { area: 'social-studies', subArea: 'economics', patterns: [/economics/i, /\becon\b/i, /\bap (micro|macro)/i] },
-  { area: 'social-studies', subArea: 'geography', patterns: [/geography/i, /\bgeog\b/i, /\bap human geo/i] },
+  {
+    area: 'social-studies',
+    subArea: 'us-history',
+    patterns: [/us hist/i, /u\.s\. hist/i, /american hist/i, /\bush\b/i, /\bapush\b/i],
+  },
+  {
+    area: 'social-studies',
+    subArea: 'world-history',
+    patterns: [/world hist/i, /\bwhist\b/i, /\bap world/i],
+  },
+  {
+    area: 'social-studies',
+    subArea: 'government',
+    patterns: [/government/i, /\bgov\b/i, /\bcivics\b/i, /\bap gov/i],
+  },
+  {
+    area: 'social-studies',
+    subArea: 'economics',
+    patterns: [/economics/i, /\becon\b/i, /\bap (micro|macro)/i],
+  },
+  {
+    area: 'social-studies',
+    subArea: 'geography',
+    patterns: [/geography/i, /\bgeog\b/i, /\bap human geo/i],
+  },
   { area: 'social-studies', subArea: 'psychology', patterns: [/psychology/i, /\bpsych\b/i] },
   { area: 'social-studies', patterns: [/social stud/i, /\bss\d/i, /history/i, /\bhist\b/i] },
 
   // World Languages
-  { area: 'world-languages', subArea: 'spanish', patterns: [/spanish/i, /\bspan\b/i, /espa[ñn]ol/i] },
+  {
+    area: 'world-languages',
+    subArea: 'spanish',
+    patterns: [/spanish/i, /\bspan\b/i, /espa[ñn]ol/i],
+  },
   { area: 'world-languages', subArea: 'french', patterns: [/french/i, /fran[cç]ais/i] },
   { area: 'world-languages', subArea: 'german', patterns: [/german/i, /deutsch/i] },
   { area: 'world-languages', subArea: 'latin', patterns: [/\blatin\b/i] },
@@ -139,7 +206,11 @@ const SUBJECT_PATTERNS: readonly ISubjectPattern[] = [
   // (Arts and Technology patterns were moved above Social Studies for correct precedence)
 
   // Health & PE
-  { area: 'health-pe', subArea: 'pe', patterns: [/phys(ical)? ed/i, /\bpe\b/i, /athletics/i, /\bgym\b/i] },
+  {
+    area: 'health-pe',
+    subArea: 'pe',
+    patterns: [/phys(ical)? ed/i, /\bpe\b/i, /athletics/i, /\bgym\b/i],
+  },
   { area: 'health-pe', subArea: 'health', patterns: [/health/i, /wellness/i, /nutrition/i] },
 ];
 
@@ -183,7 +254,7 @@ export function reconcileCourse(rawTitle: string, teacherName?: string): IReconc
   if (isDualEnrollment) signals.push('Dual enrollment flag detected');
 
   // Clean the title for classification
-  let cleaned = rawTitle
+  const cleaned = rawTitle
     .replace(AP_PATTERN, '')
     .replace(HONORS_PATTERN, '')
     .replace(DUAL_ENROLL_PATTERN, '')

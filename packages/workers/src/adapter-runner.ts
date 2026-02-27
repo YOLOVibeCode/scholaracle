@@ -17,7 +17,7 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
     _adapterId: string,
     credentials: Record<string, string>,
     baseUrl: string,
-    runId: string,
+    runId: string
   ) => {
     console.log(`[AdapterRunner] run=${runId} provider=${provider} url=${baseUrl}`);
 
@@ -31,12 +31,26 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
             return await runCanvasApi(baseUrl, credentials['accessToken'], runId);
           }
           if (credentials['googleEmail'] && credentials['googlePassword']) {
-            return await runCanvasBrowser(baseUrl, credentials['googleEmail'], credentials['googlePassword'], runId);
+            return await runCanvasBrowser(
+              baseUrl,
+              credentials['googleEmail'],
+              credentials['googlePassword'],
+              runId
+            );
           }
           if (credentials['username'] && credentials['password']) {
-            return await runCanvasBrowser(baseUrl, credentials['username'], credentials['password'], runId);
+            return await runCanvasBrowser(
+              baseUrl,
+              credentials['username'],
+              credentials['password'],
+              runId
+            );
           }
-          return { success: false, summary: {}, error: 'Canvas requires accessToken or googleEmail+googlePassword' };
+          return {
+            success: false,
+            summary: {},
+            error: 'Canvas requires accessToken or googleEmail+googlePassword',
+          };
         }
 
         // -----------------------------------------------------------------
@@ -57,7 +71,11 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
         case 'google-classroom': {
           const token = credentials['accessToken'] ?? '';
           if (!token) {
-            return { success: false, summary: {}, error: 'Google Classroom requires an OAuth access token' };
+            return {
+              success: false,
+              summary: {},
+              error: 'Google Classroom requires an OAuth access token',
+            };
           }
           return await runGoogleClassroomApi(token, runId);
         }
@@ -87,7 +105,7 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
 async function runCanvasApi(
   baseUrl: string,
   token: string,
-  runId: string,
+  runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
     const { CanvasAdapter } = await import('@scholaracle/connector');
@@ -102,10 +120,16 @@ async function runCanvasApi(
     });
 
     const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
-    const assignments = envelope.ops.filter((o: { entity: string }) => o.entity === 'assignment').length;
-    const grades = envelope.ops.filter((o: { entity: string }) => o.entity === 'gradeSnapshot').length;
+    const assignments = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'assignment'
+    ).length;
+    const grades = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'gradeSnapshot'
+    ).length;
 
-    console.log(`[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades`);
+    console.log(
+      `[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades`
+    );
     return { success: true, summary: { courses, assignments, grades } };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
@@ -120,17 +144,36 @@ async function runCanvasBrowser(
   baseUrl: string,
   email: string,
   password: string,
-  runId: string,
+  runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
-    const { scrapeCanvasViaBrowser } = await import('@scholaracle/connector/dist/harness/canvas-browser-scrape');
-    const result = await scrapeCanvasViaBrowser(baseUrl, email, password);
+    const canvasHarnessPath = '@scholaracle/connector/dist/harness/canvas-browser-scrape';
+    const canvasMod = (await import(canvasHarnessPath)) as {
+      scrapeCanvasViaBrowser: (
+        b: string,
+        e: string,
+        p: string
+      ) => Promise<{
+        courses: Array<{ assignments: { length: number }; files: { length: number } }>;
+      }>;
+    };
+    const result = await canvasMod.scrapeCanvasViaBrowser(baseUrl, email, password);
 
     const courses = result.courses.length;
-    const assignments = result.courses.reduce((s: number, c: { assignments: { length: number }; files: { length: number } }) => s + c.assignments.length, 0);
-    const files = result.courses.reduce((s: number, c: { assignments: { length: number }; files: { length: number } }) => s + c.files.length, 0);
+    const assignments = result.courses.reduce(
+      (s: number, c: { assignments: { length: number }; files: { length: number } }) =>
+        s + c.assignments.length,
+      0
+    );
+    const files = result.courses.reduce(
+      (s: number, c: { assignments: { length: number }; files: { length: number } }) =>
+        s + c.files.length,
+      0
+    );
 
-    console.log(`[AdapterRunner] Canvas browser (${runId}): ${courses} courses, ${assignments} assignments, ${files} files`);
+    console.log(
+      `[AdapterRunner] Canvas browser (${runId}): ${courses} courses, ${assignments} assignments, ${files} files`
+    );
     return { success: true, summary: { courses, assignments, files } };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
@@ -145,17 +188,30 @@ async function runSkywardBrowser(
   baseUrl: string,
   username: string,
   password: string,
-  runId: string,
+  runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
-    const { scrapeSkywardComplete } = await import('@scholaracle/connector/dist/harness/skyward-browser-scrape');
-    const result = await scrapeSkywardComplete(baseUrl, username, password);
+    const skywardHarnessPath = '@scholaracle/connector/dist/harness/skyward-browser-scrape';
+    const skywardMod = (await import(skywardHarnessPath)) as {
+      scrapeSkywardComplete: (
+        b: string,
+        u: string,
+        p: string
+      ) => Promise<{
+        courses: { length: number };
+        missingAssignments: { length: number };
+        attendance: { length: number };
+      }>;
+    };
+    const result = await skywardMod.scrapeSkywardComplete(baseUrl, username, password);
 
     const courses = result.courses.length;
     const assignments = result.missingAssignments.length;
     const attendance = result.attendance.length;
 
-    console.log(`[AdapterRunner] Skyward browser (${runId}): ${courses} courses, ${assignments} missing, ${attendance} attendance`);
+    console.log(
+      `[AdapterRunner] Skyward browser (${runId}): ${courses} courses, ${assignments} missing, ${attendance} attendance`
+    );
     return { success: true, summary: { courses, assignments, attendance } };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
@@ -168,7 +224,7 @@ async function runSkywardBrowser(
 
 async function runGoogleClassroomApi(
   token: string,
-  runId: string,
+  runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
     const { GoogleClassroomAdapter } = await import('@scholaracle/connector');
@@ -182,7 +238,9 @@ async function runGoogleClassroomApi(
     });
 
     const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
-    const assignments = envelope.ops.filter((o: { entity: string }) => o.entity === 'assignment').length;
+    const assignments = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'assignment'
+    ).length;
 
     return { success: true, summary: { courses, assignments } };
   } catch (err) {
@@ -197,7 +255,7 @@ async function runGoogleClassroomApi(
 async function runOneRosterApi(
   baseUrl: string,
   credentials: Record<string, string>,
-  runId: string,
+  runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
     const { OneRosterAdapter } = await import('@scholaracle/connector');
@@ -217,7 +275,9 @@ async function runOneRosterApi(
     });
 
     const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
-    const assignments = envelope.ops.filter((o: { entity: string }) => o.entity === 'assignment').length;
+    const assignments = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'assignment'
+    ).length;
 
     return { success: true, summary: { courses, assignments } };
   } catch (err) {

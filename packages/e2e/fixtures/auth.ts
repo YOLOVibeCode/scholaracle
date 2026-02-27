@@ -52,8 +52,12 @@ export const test = base.extend<AuthFixtures>({
       await disableNextDevOverlay();
 
       // Use stable data-testid selectors (admin uses input-admin-email / input-admin-password)
-      const emailInput = page.locator(isAdmin ? '[data-testid="input-admin-email"]' : '[data-testid="input-email"]');
-      const passwordInput = page.locator(isAdmin ? '[data-testid="input-admin-password"]' : '[data-testid="input-password"]');
+      const emailInput = page.locator(
+        isAdmin ? '[data-testid="input-admin-email"]' : '[data-testid="input-email"]'
+      );
+      const passwordInput = page.locator(
+        isAdmin ? '[data-testid="input-admin-password"]' : '[data-testid="input-password"]'
+      );
       const loginButton = page.locator('[data-testid="button-login"]');
 
       await emailInput.fill(user.email);
@@ -63,11 +67,17 @@ export const test = base.extend<AuthFixtures>({
       // Wait for redirect: prefer dashboard landmark for stability
       if (role === 'parent' || role === 'newUser') {
         await page.waitForURL('/dashboard', { timeout: 15000 });
-        await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        await page
+          .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
+          .first()
+          .waitFor({ state: 'visible', timeout: 5000 })
+          .catch(() => {});
       } else {
         // Admin login may show MFA verification prompt (seeded admins have MFA enabled)
         const mfaInput = page.locator('[data-testid="input-mfa-code"]');
-        const adminDashboard = page.locator('text=Admin Dashboard, text=Dashboard, [data-testid="admin-dashboard"]').first();
+        const adminDashboard = page
+          .locator('text=Admin Dashboard, text=Dashboard, [data-testid="admin-dashboard"]')
+          .first();
         // Wait for either MFA input or dashboard
         await Promise.race([
           mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
@@ -82,7 +92,7 @@ export const test = base.extend<AuthFixtures>({
         }
       }
     };
-    
+
     await use(login);
   },
 
@@ -113,7 +123,11 @@ export const test = base.extend<AuthFixtures>({
     await page.locator('[data-testid="button-register"]').first().click({ force: true });
 
     await page.waitForURL('/dashboard', { timeout: 15000 });
-    await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    await page
+      .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .catch(() => {});
 
     await use(page);
   },
@@ -138,7 +152,11 @@ export async function login(page: Page, email: string, password: string): Promis
   await page.fill('[data-testid="input-password"]', password);
   await page.locator('[data-testid="button-login"]').first().click({ force: true });
   await page.waitForURL('/dashboard', { timeout: 15000 });
-  await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  await page
+    .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .catch(() => {});
 }
 
 /**
@@ -184,10 +202,7 @@ export async function logout(page: Page): Promise<void> {
     const menuTrigger = page.locator('[data-testid="user-menu-trigger"]').first();
     if ((await menuTrigger.count()) > 0) {
       await menuTrigger.click({ force: true });
-      await page
-        .locator('[data-testid="logout-menu-item"]')
-        .first()
-        .click({ force: true });
+      await page.locator('[data-testid="logout-menu-item"]').first().click({ force: true });
     }
   }
   await page.waitForURL(/\/login/, { timeout: 10000 });
@@ -218,5 +233,3 @@ export async function register(
   await page.click('[data-testid="button-register"]');
   await page.waitForURL('/dashboard', { timeout: 10000 });
 }
-
-

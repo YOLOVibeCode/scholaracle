@@ -195,10 +195,13 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     // Invite Parent B via API
     const parentBEmail = generateUniqueEmail('promoB');
-    const inviteRes = await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/invite`, {
-      data: { email: parentBEmail, role: 'guardian' },
-      headers: { authorization: `Bearer ${parentAToken}` },
-    });
+    const inviteRes = await request.post(
+      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      {
+        data: { email: parentBEmail, role: 'guardian' },
+        headers: { authorization: `Bearer ${parentAToken}` },
+      }
+    );
     expect(inviteRes.ok()).toBeTruthy();
 
     // Register Parent B via API
@@ -209,10 +212,13 @@ test.describe('@feature Multi-Parent Sharing', () => {
     const parentBToken = ((await regBRes.json()) as { token: string }).token;
 
     // Accept invite
-    const acceptRes = await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/accept`, {
-      data: { email: parentBEmail },
-      headers: { authorization: `Bearer ${parentBToken}` },
-    });
+    const acceptRes = await request.post(
+      `${apiBaseUrl}/api/students/${student.id}/parents/accept`,
+      {
+        data: { email: parentBEmail },
+        headers: { authorization: `Bearer ${parentBToken}` },
+      }
+    );
     expect(acceptRes.ok()).toBeTruthy();
 
     // Parent A promotes Parent B to admin

@@ -1,3 +1,6 @@
+/**
+ * @jest-environment jsdom
+ */
 import { render, screen, waitFor } from '@testing-library/react';
 import { CustomerStudentsTab } from './CustomerStudentsTab';
 import { adminCustomersApi } from '@/lib/api/admin/customers';
@@ -11,7 +14,7 @@ describe('CustomerStudentsTab', () => {
 
   it('renders empty state', async () => {
     render(<CustomerStudentsTab customerId="u1" />);
-    await waitFor(() => expect(screen.getByTestId('customer-students-empty')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('customer-students-empty')).toBeTruthy());
   });
 
   it('renders students', async () => {
@@ -30,8 +33,8 @@ describe('CustomerStudentsTab', () => {
     });
 
     render(<CustomerStudentsTab customerId="u1" />);
-    await waitFor(() => expect(screen.getByText('Student One')).toBeInTheDocument());
-    expect(screen.getByTestId('customer-students-list')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Student One')).toBeTruthy());
+    expect(screen.getByTestId('customer-students-list')).toBeTruthy();
   });
 });
 

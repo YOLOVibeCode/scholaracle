@@ -23,7 +23,7 @@ export interface StudentOverviewTabProps {
 }
 
 export function StudentOverviewTab({
-  studentId,
+  studentId: _studentId, // eslint-disable-line @typescript-eslint/no-unused-vars -- required by interface
   student,
   name,
   grade,
@@ -34,7 +34,7 @@ export function StudentOverviewTab({
   onGradeChange,
   onStudentIdFieldChange,
   onSubmit,
-  onCancel,
+  onCancel: _onCancel, // eslint-disable-line @typescript-eslint/no-unused-vars -- required by interface
 }: StudentOverviewTabProps) {
   return (
     <Card className="max-w-2xl">

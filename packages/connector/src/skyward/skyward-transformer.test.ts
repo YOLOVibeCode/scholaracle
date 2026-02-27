@@ -5,11 +5,7 @@ import {
   transformGradebookToAssignmentOps,
   transformSkywardCourseToOp,
 } from './skyward-transformer';
-import type {
-  ISkywardAssignment,
-  ISkywardReport,
-  ISkywardGradebook,
-} from './skyward-client';
+import type { ISkywardAssignment, ISkywardReport, ISkywardGradebook } from './skyward-client';
 
 const BASE_KEY = {
   provider: 'skyward',
