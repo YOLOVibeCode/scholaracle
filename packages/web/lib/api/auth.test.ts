@@ -42,6 +42,15 @@ const mockLocalStorage = {
   key: jest.fn(() => null),
 };
 
+const mockSessionStorage = {
+  getItem: jest.fn((key: string) => mockStorage[key] ?? null),
+  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
+  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
+  clear: jest.fn(() => { mockStorage = {}; }),
+  get length() { return Object.keys(mockStorage).length; },
+  key: jest.fn(() => null),
+};
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -59,6 +68,8 @@ describe('authApi', () => {
     (globalThis as any).window = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (globalThis as any).localStorage = mockLocalStorage;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).sessionStorage = mockSessionStorage;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (globalThis as any).document = { cookie: '' };
 
