@@ -202,10 +202,12 @@ export default function DashboardPage() {
                 {studentsSectionLoading || !studentsAndGrades ? (
                   <LoadingSkeleton variant="list" count={2} />
                 ) : studentsAndGrades.students.length > 0 ? (
-                  <ActionBoard
-                    studentId={studentsAndGrades.students[0].id}
-                    compact
-                  />
+                  <div data-testid="dashboard-deadlines-list">
+                    <ActionBoard
+                      studentId={studentsAndGrades.students[0].id}
+                      compact
+                    />
+                  </div>
                 ) : (
                   <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="dashboard-deadlines-empty">
                     Add a student to see their action board here.

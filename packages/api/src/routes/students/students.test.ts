@@ -425,4 +425,659 @@ describe('Students API Routes', () => {
       ).toBe(true);
     });
   });
+
+  describe('GET /api/students/:id/grade-history', () => {
+    beforeEach(async () => {
+      if (database) {
+        await database.collection('slc_grade_history').deleteMany({});
+        await database.collection('slc_grade_history_archive').deleteMany({});
+        await database.collection('slc_courses').deleteMany({});
+        await database.collection('slc_academic_terms').deleteMany({});
+      }
+    });
+
+    it('should return 401 without token', async () => {
+      const id = new ObjectId().toString();
+      const res = await request(app).get(`/api/students/${id}/grade-history`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get(`/api/students/${new ObjectId().toString()}/grade-history`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should return 200 with studentId and courses from slc_grade_history', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'History Student', grade: 10, studentId: 'ext-stu-1' });
+      const studentDbId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_courses').insertMany([
+        { userId, externalId: 'course-1', courseExternalId: 'course-1', record: { title: 'Math' } },
+        {
+          userId,
+          externalId: 'course-2',
+          courseExternalId: 'course-2',
+          record: { title: 'Science' },
+        },
+      ]);
+      await database.collection('slc_grade_history').insertMany([
+        {
+          userId,
+          studentExternalId: 'ext-stu-1',
+          courseExternalId: 'course-1',
+          date: '2025-02-01',
+          percentGrade: 88,
+          provider: 'canvas',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-stu-1',
+          courseExternalId: 'course-1',
+          date: '2025-02-08',
+          percentGrade: 90,
+          provider: 'canvas',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-stu-1',
+          courseExternalId: 'course-2',
+          date: '2025-02-01',
+          percentGrade: 72,
+          provider: 'canvas',
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.studentId).toBe(studentDbId);
+      expect(Array.isArray(res.body.courses)).toBe(true);
+      expect(res.body.courses).toHaveLength(2);
+      const byCourse = (
+        res.body.courses as Array<{
+          courseExternalId: string;
+          courseName: string;
+          snapshots: unknown[];
+        }>
+      ).reduce(
+        (acc, c) => {
+          acc[c.courseExternalId] = c;
+          return acc;
+        },
+        {} as Record<string, { courseName: string; snapshots: unknown[] }>
+      );
+      expect(byCourse['course-1'].courseName).toBe('Math');
+      expect(byCourse['course-1'].snapshots).toHaveLength(2);
+      expect(byCourse['course-2'].courseName).toBe('Science');
+      expect(byCourse['course-2'].snapshots).toHaveLength(1);
+    });
+
+    it('should filter by from and to when query params provided', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Range Student', grade: 9, studentId: 'ext-range' });
+      const studentDbId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        externalId: 'c1',
+        courseExternalId: 'c1',
+        record: { title: 'Algebra' },
+      });
+      await database.collection('slc_grade_history').insertMany([
+        {
+          userId,
+          studentExternalId: 'ext-range',
+          courseExternalId: 'c1',
+          date: '2025-01-15',
+          percentGrade: 80,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-range',
+          courseExternalId: 'c1',
+          date: '2025-02-01',
+          percentGrade: 82,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-range',
+          courseExternalId: 'c1',
+          date: '2025-02-15',
+          percentGrade: 85,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-range',
+          courseExternalId: 'c1',
+          date: '2025-03-01',
+          percentGrade: 88,
+          provider: 'test',
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?from=2025-02-01&to=2025-02-28`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courses).toHaveLength(1);
+      expect(res.body.courses[0].snapshots).toHaveLength(2);
+      const dates = (res.body.courses[0].snapshots as Array<{ date: string }>).map((s) => s.date);
+      expect(dates).toContain('2025-02-01');
+      expect(dates).toContain('2025-02-15');
+    });
+
+    it('should filter by course when course query param provided', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Course Filter Student', grade: 11, studentId: 'ext-cf' });
+      const studentDbId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_courses').insertMany([
+        { userId, externalId: 'c-a', courseExternalId: 'c-a', record: { title: 'Art' } },
+        { userId, externalId: 'c-b', courseExternalId: 'c-b', record: { title: 'Biology' } },
+      ]);
+      await database.collection('slc_grade_history').insertMany([
+        {
+          userId,
+          studentExternalId: 'ext-cf',
+          courseExternalId: 'c-a',
+          date: '2025-02-01',
+          percentGrade: 95,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-cf',
+          courseExternalId: 'c-b',
+          date: '2025-02-01',
+          percentGrade: 78,
+          provider: 'test',
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?course=c-b`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courses).toHaveLength(1);
+      expect(res.body.courses[0].courseExternalId).toBe('c-b');
+      expect(res.body.courses[0].courseName).toBe('Biology');
+    });
+
+    it('should return 400 when from is not YYYY-MM-DD', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Date Student', grade: 9, studentId: 'ext-date' });
+      const studentDbId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?from=02-01-2025`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/from|date|YYYY-MM-DD/i);
+    });
+
+    it('should return 400 when to is not YYYY-MM-DD', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Date Student 2', grade: 9, studentId: 'ext-date2' });
+      const studentDbId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?to=invalid`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/to|date|YYYY-MM-DD/i);
+    });
+
+    it('should return 400 when from is after to', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Range Student 2', grade: 9, studentId: 'ext-range2' });
+      const studentDbId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?from=2025-06-01&to=2025-01-01`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/from.*to|range|before/i);
+    });
+
+    it('should return 200 when from and to are valid YYYY-MM-DD', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Valid Date Student', grade: 10, studentId: 'ext-valid' });
+      const studentDbId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentDbId}/grade-history?from=2025-01-01&to=2025-12-31`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.studentId).toBe(studentDbId);
+      expect(Array.isArray(res.body.courses)).toBe(true);
+    });
+  });
+
+  describe('DELETE /api/students/:id/grade-history', () => {
+    beforeEach(async () => {
+      if (database) {
+        await database.collection('slc_grade_history').deleteMany({});
+        await database.collection('slc_grade_history_archive').deleteMany({});
+      }
+    });
+
+    it('should return 401 without token', async () => {
+      const id = new ObjectId().toString();
+      const res = await request(app).delete(`/api/students/${id}/grade-history?before=2025-07-01`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .delete(`/api/students/${new ObjectId().toString()}/grade-history?before=2025-07-01`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should return 400 when before param missing or invalid', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Archive Student', grade: 10, studentId: 'ext-arch' });
+      const studentDbId = createRes.body.id as string;
+
+      const resMissing = await request(app)
+        .delete(`/api/students/${studentDbId}/grade-history`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(resMissing.status).toBe(400);
+
+      const resBad = await request(app)
+        .delete(`/api/students/${studentDbId}/grade-history?before=invalid`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(resBad.status).toBe(400);
+    });
+
+    it('should return 400 when student has no external id', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'No External Id', grade: 9 });
+      const studentDbId = createRes.body.id as string;
+
+      const res = await request(app)
+        .delete(`/api/students/${studentDbId}/grade-history?before=2025-07-01`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('external id');
+    });
+
+    it('should move matching docs to archive and return archived count', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Archive Me', grade: 10, studentId: 'ext-archive-1' });
+      const studentDbId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_grade_history').insertMany([
+        {
+          userId,
+          studentExternalId: 'ext-archive-1',
+          courseExternalId: 'c1',
+          date: '2025-01-01',
+          percentGrade: 70,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-archive-1',
+          courseExternalId: 'c1',
+          date: '2025-06-15',
+          percentGrade: 75,
+          provider: 'test',
+        },
+        {
+          userId,
+          studentExternalId: 'ext-archive-1',
+          courseExternalId: 'c1',
+          date: '2025-07-02',
+          percentGrade: 80,
+          provider: 'test',
+        },
+      ]);
+
+      const res = await request(app)
+        .delete(`/api/students/${studentDbId}/grade-history?before=2025-07-01`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.archived).toBe(2);
+
+      const remaining = await database
+        .collection('slc_grade_history')
+        .find({ userId, studentExternalId: 'ext-archive-1' })
+        .toArray();
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].date).toBe('2025-07-02');
+
+      const archived = await database
+        .collection('slc_grade_history_archive')
+        .find({ userId, studentExternalId: 'ext-archive-1' })
+        .toArray();
+      expect(archived).toHaveLength(2);
+      expect(archived.every((d) => d.archivedAt != null)).toBe(true);
+    });
+  });
+
+  describe('GET /api/students/:id/grades', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Grades Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app).get(`/api/students/${studentId}/grades`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get('/api/students/507f1f77bcf86cd799439011/grades')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should return 200 with studentId, courseGrades array, and overallGPA when no SLC data', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'No SLC Student', grade: 10 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/grades`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.studentId).toBe(studentId);
+      expect(res.body.studentName).toBe('No SLC Student');
+      expect(Array.isArray(res.body.courseGrades)).toBe(true);
+      expect(res.body.courseGrades).toHaveLength(0);
+      expect(typeof res.body.overallGPA).toBe('number');
+      expect(res.body.atRiskCourses).toBe(0);
+    });
+  });
+
+  describe('GET /api/students/:id/sources', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Sources Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app).get(`/api/students/${studentId}/sources`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get('/api/students/507f1f77bcf86cd799439011/sources')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should return empty array when student has no data sources', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'No Sources Student', grade: 11 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(0);
+    });
+  });
+
+  describe('POST /api/students/:id/sources', () => {
+    it('should create a data source and return 201', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'With Source Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas LMS',
+          dataTypes: ['assignments', 'grades'],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.id).toBeDefined();
+      expect(res.body.pluginId).toBe('com.instructure.canvas');
+      expect(res.body.provider).toBe('canvas');
+      expect(res.body.displayName).toBe('Canvas LMS');
+      expect(res.body.enabled).toBe(true);
+
+      const listRes = await request(app)
+        .get(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.length).toBe(1);
+      expect(listRes.body[0].id).toBe(res.body.id);
+    });
+
+    it('should return 400 when body invalid (missing dataTypes)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('GET /api/students/:id/alerts', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Alerts Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app).get(`/api/students/${studentId}/alerts`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get('/api/students/507f1f77bcf86cd799439011/alerts')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should return 200 with array of alerts for student', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student With Alerts', grade: 10 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(0);
+    });
+  });
+
+  describe('GET /api/students/invites/pending', () => {
+    it('should return 401 without token', async () => {
+      const res = await request(app).get('/api/students/invites/pending');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return empty array when no email query param', async () => {
+      const res = await request(app)
+        .get('/api/students/invites/pending')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(0);
+    });
+
+    it('should return empty array when user has no pending invites for email', async () => {
+      const res = await request(app)
+        .get('/api/students/invites/pending?email=noinvites@example.com')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(0);
+    });
+  });
+
+  describe('GET /api/students/:id/parents', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app).get(`/api/students/${studentId}/parents`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get('/api/students/507f1f77bcf86cd799439011/parents')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should return 200 with owner parent', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Multi Parent Student', grade: 10 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/parents`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThanOrEqual(1);
+      const owner = res.body.find((p: { isOwner: boolean }) => p.isOwner);
+      expect(owner).toBeDefined();
+      expect(owner.isAdmin).toBe(true);
+      expect(owner.status).toBe('accepted');
+    });
+  });
+
+  describe('POST /api/students/:id/parents/invite', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .send({ email: 'invite@example.com', role: 'parent' });
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 400 when email missing', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ role: 'parent' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('DELETE /api/students/:id/parents/:email', () => {
+    it('should return 401 without token', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id;
+      const res = await request(app).delete(`/api/students/${studentId}/parents/other@example.com`);
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .delete('/api/students/507f1f77bcf86cd799439011/parents/other@example.com')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+  });
 });

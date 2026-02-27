@@ -85,6 +85,7 @@ export interface ICourseGrade {
   readonly recentTrend: 'improving' | 'stable' | 'declining';
   readonly riskLevel: RiskLevel;
   readonly riskExplanation?: string;
+  readonly materialCount?: number;
   readonly assignments: readonly ICourseAssignment[];
 }
 
@@ -142,6 +143,51 @@ export interface ICreateStudentRequest {
   readonly name: string;
   readonly grade?: string;
   readonly school?: string;
+}
+
+export interface IGradeHistorySnapshot {
+  readonly date: string;
+  readonly percentGrade: number;
+  readonly provider: string;
+  readonly sourceType?: string;
+}
+
+export interface ICourseGradeHistory {
+  readonly courseExternalId: string;
+  readonly courseName: string;
+  readonly snapshots: readonly IGradeHistorySnapshot[];
+}
+
+export interface IGradeHistoryResponse {
+  readonly studentId: string;
+  readonly courses: readonly ICourseGradeHistory[];
+}
+
+export interface ICourseMaterial {
+  readonly externalId: string;
+  readonly title: string;
+  readonly type: string;
+  readonly url?: string;
+  readonly fileName?: string;
+  readonly mimeType?: string;
+  readonly postedAt?: string;
+  readonly description?: string;
+  readonly fileSize?: number;
+  readonly assetId?: string;
+  readonly downloadUrl?: string;
+}
+
+export interface ICourseMaterials {
+  readonly courseExternalId: string;
+  readonly courseName: string;
+  readonly materials: readonly ICourseMaterial[];
+}
+
+export interface IStudentMaterialsResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly totalMaterials: number;
+  readonly courses: readonly ICourseMaterials[];
 }
 
 /**
@@ -247,6 +293,41 @@ export const studentsApi = {
       return await apiClient.get<IActionBoardResponse>(`/students/${id}/action-board`);
     } catch (error) {
       console.error('Failed to load action board:', error);
+      return null;
+    }
+  },
+
+  async getGradeHistory(
+    id: string,
+    courseExternalId?: string,
+    opts?: { readonly from?: string; readonly to?: string; readonly term?: string }
+  ): Promise<IGradeHistoryResponse | null> {
+    try {
+      const params = new URLSearchParams();
+      if (courseExternalId) params.set('course', courseExternalId);
+      if (opts?.from) params.set('from', opts.from);
+      if (opts?.to) params.set('to', opts.to);
+      if (opts?.term) params.set('term', opts.term);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return await apiClient.get<IGradeHistoryResponse>(`/students/${id}/grade-history${query}`);
+    } catch (error) {
+      console.error('Failed to load grade history:', error);
+      return null;
+    }
+  },
+
+  async archiveGradeHistory(id: string, before: string): Promise<void> {
+    await apiClient.delete<{ readonly archived: number }>(
+      `/students/${id}/grade-history?before=${encodeURIComponent(before)}`
+    );
+  },
+
+  async getMaterials(id: string, courseExternalId?: string): Promise<IStudentMaterialsResponse | null> {
+    try {
+      const query = courseExternalId ? `?course=${encodeURIComponent(courseExternalId)}` : '';
+      return await apiClient.get<IStudentMaterialsResponse>(`/students/${id}/materials${query}`);
+    } catch (error) {
+      console.error('Failed to load materials:', error);
       return null;
     }
   },
