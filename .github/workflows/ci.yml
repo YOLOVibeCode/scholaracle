@@ -70,8 +70,10 @@ jobs:
             packages/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Build contracts (required for type-check)
-        run: pnpm --filter @scholaracle/contracts build
+      - name: Build base packages (required for type-check)
+        run: |
+          pnpm --filter @scholaracle/contracts build
+          pnpm --filter @scholaracle/interfaces build
 
       - name: Lint
         run: pnpm lint
