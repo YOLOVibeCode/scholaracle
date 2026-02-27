@@ -45,7 +45,7 @@ jobs:
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
   quality:
-    name: Quality Gate
+    name: Quality Gate (Lint & Format)
     needs: install
     runs-on: ubuntu-latest
     steps:
@@ -70,19 +70,11 @@ jobs:
             packages/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Build base packages (required for type-check)
-        run: |
-          pnpm --filter @scholaracle/contracts build
-          pnpm --filter @scholaracle/interfaces build
-
       - name: Lint
         run: pnpm lint
 
       - name: Format check
         run: pnpm format:check
-
-      - name: Type check
-        run: pnpm type-check
 
   test:
     name: Test (${{ matrix.package }})
@@ -179,6 +171,9 @@ jobs:
 
       - name: Build all packages
         run: pnpm build
+
+      - name: Type check (after build)
+        run: pnpm type-check
 
   docker-build:
     name: Docker build (pre-deploy)
