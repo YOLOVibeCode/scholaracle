@@ -2,11 +2,11 @@ import { chromium, type FullConfig } from '@playwright/test';
 
 /**
  * Global setup for E2E tests.
- * 
+ *
  * This runs before all tests to ensure:
  * 1. API server is accessible
  * 2. Database is seeded with live test data (not mocks)
- * 
+ *
  * ⚠️ PORT POLICY: Uses FIXED port 2801 for API. DO NOT change this port.
  */
 function isProductionOrStagingApi(apiBaseUrl: string): boolean {
@@ -50,7 +50,7 @@ async function globalSetup(config: FullConfig) {
         retries++;
         if (retries < maxRetries) {
           console.log(`   Waiting for API server... (${retries}/${maxRetries})`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       }
     }
@@ -101,4 +101,3 @@ async function globalSetup(config: FullConfig) {
 }
 
 export default globalSetup;
-

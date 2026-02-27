@@ -1,10 +1,10 @@
 /**
  * TDD Tests for CustomerNotesTab component
- * 
  * Following ISP: Small, focused component for customer notes
+ * @jest-environment jsdom
  */
-
-import { render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { CustomerNotesTab } from './CustomerNotesTab';
 import { adminNotesApi } from '@/lib/api/admin/notes';
 
@@ -54,9 +54,8 @@ describe('CustomerNotesTab Component (ISP)', () => {
     const input = screen.getByPlaceholderText(/add a note/i);
     const submitButton = screen.getByRole('button', { name: /add note/i });
     
-    // Simulate form submission
-    input.value = 'New note';
-    submitButton.click();
+    fireEvent.change(input, { target: { value: 'New note' } });
+    fireEvent.click(submitButton);
     
     await waitFor(() => {
       expect(adminNotesApi.create).toHaveBeenCalledWith('123', expect.objectContaining({ content: 'New note' }));
@@ -72,8 +71,8 @@ describe('CustomerNotesTab Component (ISP)', () => {
       expect(screen.getByText('Test note 1')).toBeInTheDocument();
     });
     
-    const deleteButton = screen.getByRole('button', { name: /delete/i });
-    deleteButton.click();
+    fireEvent.click(screen.getByTestId('delete-note-1'));
+    fireEvent.click(screen.getByTestId('button-confirm-dialog'));
     
     await waitFor(() => {
       expect(adminNotesApi.delete).toHaveBeenCalledWith('1');

@@ -118,7 +118,14 @@ describe('OneRosterClient', () => {
       fetchSpy.mockResolvedValueOnce(
         mockResponse({
           academicSessions: [
-            { sourcedId: 's-1', title: 'Fall', startDate: '2025-08-20', endDate: '2025-12-19', type: 'semester', schoolYear: '2025' },
+            {
+              sourcedId: 's-1',
+              title: 'Fall',
+              startDate: '2025-08-20',
+              endDate: '2025-12-19',
+              type: 'semester',
+              schoolYear: '2025',
+            },
           ],
         })
       );
@@ -160,9 +167,7 @@ describe('OneRosterClient', () => {
 
   describe('error handling', () => {
     it('should throw on non-OK response', async () => {
-      fetchSpy.mockResolvedValueOnce(
-        mockErrorResponse(403, 'Forbidden', 'Access denied')
-      );
+      fetchSpy.mockResolvedValueOnce(mockErrorResponse(403, 'Forbidden', 'Access denied'));
 
       await expect(client.getCourses()).rejects.toThrow('HTTP 403 Forbidden');
     });

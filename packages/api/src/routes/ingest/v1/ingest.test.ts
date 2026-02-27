@@ -240,6 +240,28 @@ describe('Ingest v1 API', () => {
   // ---------------------------------------------------------------------------
   // 5. Source registration with missing fields
   // ---------------------------------------------------------------------------
+  it('returns 404 for GET /sources/:sourceId/credentials when source not found or no credentials', async () => {
+    const start = await request(app).post('/api/ingest/v1/device/start').send({});
+    expect(start.status).toBe(200);
+    const deviceCode = start.body.deviceCode as string;
+    const userCode = start.body.userCode as string;
+    await request(app)
+      .post('/api/ingest/v1/device/approve')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ userCode });
+    const poll = await request(app).post('/api/ingest/v1/device/poll').send({ deviceCode });
+    expect(poll.status).toBe(200);
+    const connectorToken = poll.body.connectorToken as string;
+
+    const res = await request(app)
+      .get('/api/ingest/v1/sources/non-existent-source-id/credentials')
+      .set('Authorization', `Bearer ${connectorToken}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toMatch(/not found|no credentials/i);
+  });
+
   it('returns 400 on source registration with missing fields', async () => {
     const connectorToken = await getConnectorToken();
     const res = await request(app)
@@ -304,9 +326,7 @@ describe('Ingest v1 API', () => {
       name: 'Emma Lewis',
       grade: 7,
       studentId: 'stu-emma-1',
-      dataSources: [
-        { id: 'src-connector-students', pluginId: 'canvas', enabled: true },
-      ],
+      dataSources: [{ id: 'src-connector-students', pluginId: 'canvas', enabled: true }],
     });
 
     const connectorToken = await getConnectorToken();
@@ -331,7 +351,9 @@ describe('Ingest v1 API', () => {
     expect(emma.externalId).toBe('stu-emma-1');
     expect(emma.grade).toBe(7);
     expect(Array.isArray(emma.dataSources)).toBe(true);
-    const ds = emma.dataSources.find((d: { sourceId?: string }) => d.sourceId === 'src-connector-students');
+    const ds = emma.dataSources.find(
+      (d: { sourceId?: string }) => d.sourceId === 'src-connector-students'
+    );
     expect(ds).toBeDefined();
     expect(ds.provider).toBe('canvas');
     expect(ds.displayName).toBe('Canvas LMS');
@@ -554,76 +576,143 @@ describe('Ingest v1 API', () => {
       source: { sourceId: 'src-all-entities', displayName: 'All Entities Source' },
       ops: [
         {
-          op: 'upsert', entity: 'assignment',
+          op: 'upsert',
+          entity: 'assignment',
           key: { ...baseKey, externalId: 'a-all-1', courseExternalId: 'c-1' },
           observedAt: now,
-          record: { title: 'HW All', status: 'graded', pointsPossible: 100, pointsEarned: 95, description: 'Full desc', category: 'Homework' },
+          record: {
+            title: 'HW All',
+            status: 'graded',
+            pointsPossible: 100,
+            pointsEarned: 95,
+            description: 'Full desc',
+            category: 'Homework',
+          },
         },
         {
-          op: 'upsert', entity: 'course',
+          op: 'upsert',
+          entity: 'course',
           key: { ...baseKey, externalId: 'c-1' },
           observedAt: now,
-          record: { title: 'AP Math', courseCode: 'MATH-301', teacherName: 'Mrs. Johnson', period: '3rd', room: 'B204' },
+          record: {
+            title: 'AP Math',
+            courseCode: 'MATH-301',
+            teacherName: 'Mrs. Johnson',
+            period: '3rd',
+            room: 'B204',
+          },
         },
         {
-          op: 'upsert', entity: 'gradeSnapshot',
+          op: 'upsert',
+          entity: 'gradeSnapshot',
           key: { ...baseKey, externalId: 'gs-1', courseExternalId: 'c-1' },
           observedAt: now,
-          record: { courseExternalId: 'c-1', asOfDate: '2026-02-16', letterGrade: 'A', percentGrade: 95.5, missingCount: 0 },
+          record: {
+            courseExternalId: 'c-1',
+            asOfDate: '2026-02-16',
+            letterGrade: 'A',
+            percentGrade: 95.5,
+            missingCount: 0,
+          },
         },
         {
-          op: 'upsert', entity: 'attendanceEvent',
+          op: 'upsert',
+          entity: 'attendanceEvent',
           key: { ...baseKey, externalId: 'att-1' },
           observedAt: now,
-          record: { date: '2026-02-14', status: 'present', periodName: '1st', courseName: 'AP Math' },
+          record: {
+            date: '2026-02-14',
+            status: 'present',
+            periodName: '1st',
+            courseName: 'AP Math',
+          },
         },
         {
-          op: 'upsert', entity: 'academicTerm',
+          op: 'upsert',
+          entity: 'academicTerm',
           key: { ...baseKey, externalId: 'term-1' },
           observedAt: now,
-          record: { title: 'Spring 2026', startDate: '2026-01-13', endDate: '2026-05-22', type: 'semester' },
+          record: {
+            title: 'Spring 2026',
+            startDate: '2026-01-13',
+            endDate: '2026-05-22',
+            type: 'semester',
+          },
         },
         {
-          op: 'upsert', entity: 'institution',
+          op: 'upsert',
+          entity: 'institution',
           key: { ...baseKey, externalId: 'inst-all' },
           observedAt: now,
           record: { name: 'Lake Dallas High School', type: 'school' },
         },
         {
-          op: 'upsert', entity: 'teacher',
+          op: 'upsert',
+          entity: 'teacher',
           key: { ...baseKey, externalId: 'teacher-1' },
           observedAt: now,
           record: { name: 'Mrs. Johnson', email: 'johnson@school.edu', department: 'Mathematics' },
         },
         {
-          op: 'upsert', entity: 'courseMaterial',
+          op: 'upsert',
+          entity: 'courseMaterial',
           key: { ...baseKey, externalId: 'mat-1', courseExternalId: 'c-1' },
           observedAt: now,
-          record: { title: 'Study Guide', courseExternalId: 'c-1', type: 'study_guide', url: 'https://example.com/sg.pdf' },
+          record: {
+            title: 'Study Guide',
+            courseExternalId: 'c-1',
+            type: 'study_guide',
+            url: 'https://example.com/sg.pdf',
+          },
         },
         {
-          op: 'upsert', entity: 'message',
+          op: 'upsert',
+          entity: 'message',
           key: { ...baseKey, externalId: 'msg-1' },
           observedAt: now,
-          record: { subject: 'Conference', body: 'Please attend.', senderName: 'Mrs. Johnson', sentAt: now, importance: 'important' },
+          record: {
+            subject: 'Conference',
+            body: 'Please attend.',
+            senderName: 'Mrs. Johnson',
+            sentAt: now,
+            importance: 'important',
+          },
         },
         {
-          op: 'upsert', entity: 'studentProfile',
+          op: 'upsert',
+          entity: 'studentProfile',
           key: { ...baseKey, externalId: 'profile-1' },
           observedAt: now,
-          record: { name: 'Emma Lewis', gradeLevel: '10th', school: 'Lake Dallas HS', studentId: '12345' },
+          record: {
+            name: 'Emma Lewis',
+            gradeLevel: '10th',
+            school: 'Lake Dallas HS',
+            studentId: '12345',
+          },
         },
         {
-          op: 'upsert', entity: 'eventSeries',
+          op: 'upsert',
+          entity: 'eventSeries',
           key: { ...baseKey, externalId: 'es-all-1' },
           observedAt: now,
-          record: { title: 'Quiz', category: 'quiz', timezone: 'America/Chicago', startsAt: '2026-03-01T09:00:00', recurrence: { rrule: 'FREQ=WEEKLY;BYDAY=FR', count: 3 } },
+          record: {
+            title: 'Quiz',
+            category: 'quiz',
+            timezone: 'America/Chicago',
+            startsAt: '2026-03-01T09:00:00',
+            recurrence: { rrule: 'FREQ=WEEKLY;BYDAY=FR', count: 3 },
+          },
         },
         {
-          op: 'upsert', entity: 'eventOverride',
+          op: 'upsert',
+          entity: 'eventOverride',
           key: { ...baseKey, externalId: 'eo-all-1' },
           observedAt: now,
-          record: { seriesExternalId: 'es-all-1', occurrenceStartAt: '2026-03-08T09:00:00', op: 'cancel' },
+          record: {
+            seriesExternalId: 'es-all-1',
+            occurrenceStartAt: '2026-03-08T09:00:00',
+            op: 'cancel',
+          },
         },
       ],
     };
@@ -661,7 +750,8 @@ describe('Ingest v1 API', () => {
 
     // Verify enriched fields are stored in the record
     const storedCourse = await database.collection('slc_courses').findOne({
-      externalId: 'c-1', provider: 'test',
+      externalId: 'c-1',
+      provider: 'test',
     });
     expect(storedCourse).toBeDefined();
     const courseRecord = storedCourse?.['record'] as Record<string, unknown> | undefined;
@@ -670,7 +760,8 @@ describe('Ingest v1 API', () => {
     expect(courseRecord?.['room']).toBe('B204');
 
     const storedProfile = await database.collection('slc_student_profiles').findOne({
-      externalId: 'profile-1', provider: 'test',
+      externalId: 'profile-1',
+      provider: 'test',
     });
     expect(storedProfile).toBeDefined();
     const profileRecord = storedProfile?.['record'] as Record<string, unknown> | undefined;
@@ -678,7 +769,8 @@ describe('Ingest v1 API', () => {
     expect(profileRecord?.['gradeLevel']).toBe('10th');
 
     const storedGrade = await database.collection('slc_grade_snapshots').findOne({
-      externalId: 'gs-1', provider: 'test',
+      externalId: 'gs-1',
+      provider: 'test',
     });
     expect(storedGrade).toBeDefined();
     const gradeRecord = storedGrade?.['record'] as Record<string, unknown> | undefined;
@@ -731,13 +823,15 @@ describe('Ingest v1 API', () => {
       source: { sourceId: 'src-delete-test', displayName: 'Delete Test' },
       ops: [
         {
-          op: 'upsert', entity: 'course',
+          op: 'upsert',
+          entity: 'course',
           key: { ...baseKey, externalId: 'course-del-1' },
           observedAt: now,
           record: { title: 'To Be Deleted' },
         },
         {
-          op: 'delete', entity: 'course',
+          op: 'delete',
+          entity: 'course',
           key: { ...baseKey, externalId: 'course-del-1' },
           observedAt: now,
         },
@@ -752,7 +846,8 @@ describe('Ingest v1 API', () => {
 
     // The course should exist but with a deletedAt timestamp
     const doc = await database.collection('slc_courses').findOne({
-      externalId: 'course-del-1', provider: 'test',
+      externalId: 'course-del-1',
+      provider: 'test',
     });
     expect(doc).toBeDefined();
     expect(doc?.['deletedAt']).toBeDefined();

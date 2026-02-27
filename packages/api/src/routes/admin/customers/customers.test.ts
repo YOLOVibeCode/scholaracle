@@ -263,10 +263,12 @@ describe('Admin Customer Routes', () => {
       expect(decoded?.userId).toBe(customer._id!.toString());
       expect(decoded?.email).toBe('impersonate@test.com');
 
-      const auditLogs = await database.collection('audit_logs').find({ action: 'customer:impersonate' }).toArray();
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:impersonate' })
+        .toArray();
       expect(auditLogs.length).toBeGreaterThan(0);
     });
-
   });
 
   describe('GET /api/admin/customers', () => {
@@ -291,7 +293,7 @@ describe('Admin Customer Routes', () => {
     it('should support pagination', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
       const userRepo = new UserRepository(database);
-      
+
       // Create 15 customers
       for (let i = 0; i < 15; i++) {
         await userRepo.create({
@@ -463,10 +465,13 @@ describe('Admin Customer Routes', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({ reason: 'Test deletion' });
 
-      const auditLogs = await database.collection('audit_logs').find({
-        action: 'customer:delete',
-      }).toArray();
-      
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({
+          action: 'customer:delete',
+        })
+        .toArray();
+
       expect(auditLogs.length).toBeGreaterThan(0);
     });
   });
@@ -519,10 +524,13 @@ describe('Admin Customer Routes', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ reason: 'Test suspension' });
 
-      const auditLogs = await database.collection('audit_logs').find({
-        action: 'customer:suspend',
-      }).toArray();
-      
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({
+          action: 'customer:suspend',
+        })
+        .toArray();
+
       expect(auditLogs.length).toBeGreaterThan(0);
     });
   });
@@ -563,12 +571,14 @@ describe('Admin Customer Routes', () => {
         .post(`/api/admin/customers/${customer._id!.toString()}/unsuspend`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const auditLogs = await database.collection('audit_logs').find({
-        action: 'customer:unsuspend',
-      }).toArray();
-      
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({
+          action: 'customer:unsuspend',
+        })
+        .toArray();
+
       expect(auditLogs.length).toBeGreaterThan(0);
     });
   });
 });
-

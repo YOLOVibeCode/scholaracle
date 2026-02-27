@@ -8,6 +8,7 @@ export interface CourseGradeCardProps {
   course: ICourseGrade;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- riskLevel kept for API consistency with RiskLevel
 function gradeColorClass(grade: number, riskLevel: RiskLevel): string {
   if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400 border-emerald-500/50';
   if (grade >= 70) return 'text-amber-600 dark:text-amber-400 border-amber-500/50';

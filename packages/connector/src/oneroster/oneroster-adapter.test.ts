@@ -61,15 +61,15 @@ describe('OneRosterAdapter', () => {
     });
 
     it('should throw if no auth method provided', async () => {
-      await expect(
-        adapter.authenticate({ baseUrl: 'https://sis.school.edu' })
-      ).rejects.toThrow('OneRoster adapter requires either accessToken or clientId + clientSecret');
+      await expect(adapter.authenticate({ baseUrl: 'https://sis.school.edu' })).rejects.toThrow(
+        'OneRoster adapter requires either accessToken or clientId + clientSecret'
+      );
     });
 
     it('should throw if baseUrl is missing', async () => {
-      await expect(
-        adapter.authenticate({ baseUrl: '', accessToken: 'x' })
-      ).rejects.toThrow('OneRoster adapter requires baseUrl');
+      await expect(adapter.authenticate({ baseUrl: '', accessToken: 'x' })).rejects.toThrow(
+        'OneRoster adapter requires baseUrl'
+      );
     });
   });
 
@@ -82,9 +82,9 @@ describe('OneRosterAdapter', () => {
 
     it('should return envelope with org, session, course, and assignment ops', async () => {
       const mockInstance = {
-        getOrgs: jest.fn().mockResolvedValue([
-          { sourcedId: 'org-1', name: 'Lincoln HS', type: 'school' },
-        ]),
+        getOrgs: jest
+          .fn()
+          .mockResolvedValue([{ sourcedId: 'org-1', name: 'Lincoln HS', type: 'school' }]),
         getAcademicSessions: jest.fn().mockResolvedValue([
           {
             sourcedId: 'ses-1',
@@ -95,9 +95,9 @@ describe('OneRosterAdapter', () => {
             schoolYear: '2025',
           },
         ]),
-        getCourses: jest.fn().mockResolvedValue([
-          { sourcedId: 'crs-1', title: 'Algebra', courseCode: 'ALG1' },
-        ]),
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([{ sourcedId: 'crs-1', title: 'Algebra', courseCode: 'ALG1' }]),
         getLineItems: jest.fn().mockResolvedValue([
           {
             sourcedId: 'li-1',

@@ -141,29 +141,17 @@ export function sessionsRouter(config: ISessionsRouterConfig): Router {
   const router = Router();
   const sessionRepo = new SessionRepository(config.database);
 
-  router.get(
-    '/',
-    authMiddleware(config.authService),
-    (req: Request, res: Response) => {
-      void handleListSessions(req, res, sessionRepo, config.authService);
-    }
-  );
+  router.get('/', authMiddleware(config.authService), (req: Request, res: Response) => {
+    void handleListSessions(req, res, sessionRepo, config.authService);
+  });
 
-  router.delete(
-    '/:id',
-    authMiddleware(config.authService),
-    (req: Request, res: Response) => {
-      void handleRevokeSession(req, res, sessionRepo);
-    }
-  );
+  router.delete('/:id', authMiddleware(config.authService), (req: Request, res: Response) => {
+    void handleRevokeSession(req, res, sessionRepo);
+  });
 
-  router.delete(
-    '/',
-    authMiddleware(config.authService),
-    (req: Request, res: Response) => {
-      void handleRevokeAllOtherSessions(req, res, sessionRepo, config.authService);
-    }
-  );
+  router.delete('/', authMiddleware(config.authService), (req: Request, res: Response) => {
+    void handleRevokeAllOtherSessions(req, res, sessionRepo, config.authService);
+  });
 
   return router;
 }

@@ -1,9 +1,9 @@
 /**
  * TDD Tests for ErrorDisplay component
- * 
  * Following ISP: Small, focused component for error display
+ * @jest-environment jsdom
  */
-
+import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
 import { ErrorDisplay } from './ErrorDisplay';
 

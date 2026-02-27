@@ -311,7 +311,10 @@ async function handleMFAEnable(
 
     res.status(200).json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
   }
 }
 
@@ -343,7 +346,10 @@ async function handleStepUpStart(
     await stepUpStore.create(stepUpId, authReq.adminId, new Date(expiresAt));
     res.status(200).json({ success: true, data: { stepUpId, expiresAt } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
   }
 }
 
@@ -396,7 +402,10 @@ async function handleStepUpVerify(
 
     res.status(200).json({ success: true, data: { stepUpToken } });
   } catch (error) {
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
   }
 }
 
@@ -574,7 +583,7 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
       keyPrefix: 'admin:auth:login',
     }),
     (req: Request, res: Response) => {
-    void handleLogin(req, res, adminAuthService);
+      void handleLogin(req, res, adminAuthService);
     }
   );
 
@@ -590,29 +599,45 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
     void handleMFACompleteSetup(req, res, adminAuthService, config.sessionRepository);
   });
 
-  router.post('/mfa/setup', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void handleMFASetup(req, res, adminAuthService, mfaService);
-  });
+  router.post(
+    '/mfa/setup',
+    adminAuthMiddleware(adminAuthService),
+    (req: Request, res: Response) => {
+      void handleMFASetup(req, res, adminAuthService, mfaService);
+    }
+  );
 
-  router.post('/mfa/enable', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void handleMFAEnable(req, res, adminRepo, auditLogRepo, mfaService);
-  });
+  router.post(
+    '/mfa/enable',
+    adminAuthMiddleware(adminAuthService),
+    (req: Request, res: Response) => {
+      void handleMFAEnable(req, res, adminRepo, auditLogRepo, mfaService);
+    }
+  );
 
-  router.post('/step-up/start', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void (stepUpStore
-      ? handleStepUpStart(req, res, adminRepo, stepUpStore)
-      : Promise.resolve().then(() => {
-          res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
-        }));
-  });
+  router.post(
+    '/step-up/start',
+    adminAuthMiddleware(adminAuthService),
+    (req: Request, res: Response) => {
+      void (stepUpStore
+        ? handleStepUpStart(req, res, adminRepo, stepUpStore)
+        : Promise.resolve().then(() => {
+            res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+          }));
+    }
+  );
 
-  router.post('/step-up/verify', adminAuthMiddleware(adminAuthService), (req: Request, res: Response) => {
-    void (stepUpStore
-      ? handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore)
-      : Promise.resolve().then(() => {
-          res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
-        }));
-  });
+  router.post(
+    '/step-up/verify',
+    adminAuthMiddleware(adminAuthService),
+    (req: Request, res: Response) => {
+      void (stepUpStore
+        ? handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore)
+        : Promise.resolve().then(() => {
+            res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+          }));
+    }
+  );
 
   router.post('/forgot-password', (req: Request, res: Response) => {
     void handleAdminForgotPassword(req, res, adminAuthService);
@@ -632,4 +657,3 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
 
   return router;
 }
-

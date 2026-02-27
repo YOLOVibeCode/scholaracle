@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ export default function AdminPaymentsPage() {
     { retryCount: 2, retryDelay: 1000 }
   );
 
-  const payments = paymentsData ?? [];
+  const payments = useMemo(() => paymentsData ?? [], [paymentsData]);
   const hasLoadedOnce = paymentsData !== null;
   const showFullLoading = isLoading && !hasLoadedOnce;
 
@@ -38,7 +38,7 @@ export default function AdminPaymentsPage() {
     return Math.max(0, p.amount - alreadyRefunded);
   }, [payments, refundPaymentId]);
 
-  const openRefund = (payment: IPayment) => {
+  const openRefund = useCallback((payment: IPayment) => {
     setToast(null);
     setRefundPaymentId(payment.id);
     setRefundReason('');
@@ -46,7 +46,7 @@ export default function AdminPaymentsPage() {
     const alreadyRefunded = payment.amountRefunded ?? 0;
     const remaining = Math.max(0, payment.amount - alreadyRefunded);
     setRefundAmount(remaining.toFixed(2));
-  };
+  }, []);
 
   const closeRefund = () => {
     setRefundPaymentId(null);
@@ -85,7 +85,7 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  const retryPayment = async (paymentId: string) => {
+  const retryPayment = useCallback(async (paymentId: string) => {
     setToast(null);
     const res = await adminPaymentsApi.retry(paymentId);
     if (res.success) {
@@ -94,7 +94,7 @@ export default function AdminPaymentsPage() {
     } else {
       setToast(res.error ?? 'Failed to retry payment');
     }
-  };
+  }, [refresh]);
 
   const paymentColumns: ColumnDef<IPayment, unknown>[] = useMemo(
     () => [

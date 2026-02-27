@@ -1,6 +1,6 @@
 /**
  * Admin Subscriptions API Client (ISP)
- * 
+ *
  * Small, focused interface for subscription operations.
  * Follows Interface Segregation Principle.
  */
@@ -51,7 +51,11 @@ export const adminSubscriptionsApi = {
   /**
    * List subscriptions (optionally filter by user/status/plan).
    */
-  async list(params?: { readonly userId?: string; readonly status?: string; readonly plan?: string }): Promise<ISubscriptionsResponse> {
+  async list(params?: {
+    readonly userId?: string;
+    readonly status?: string;
+    readonly plan?: string;
+  }): Promise<ISubscriptionsResponse> {
     const qs = new URLSearchParams();
     if (params?.userId) qs.set('userId', params.userId);
     if (params?.status) qs.set('status', params.status);
@@ -77,29 +81,50 @@ export const adminSubscriptionsApi = {
   /**
    * Change subscription plan.
    */
-  async changePlan(userId: string, plan: ISubscription['plan']): Promise<ISubscriptionActionResponse> {
-    return apiClient.put<ISubscriptionActionResponse>(`/admin/subscriptions/${userId}/plan`, { plan }, true);
+  async changePlan(
+    userId: string,
+    plan: ISubscription['plan']
+  ): Promise<ISubscriptionActionResponse> {
+    return apiClient.put<ISubscriptionActionResponse>(
+      `/admin/subscriptions/${userId}/plan`,
+      { plan },
+      true
+    );
   },
 
   /**
    * Cancel subscription.
    */
   async cancel(userId: string, reason: string): Promise<ISubscriptionActionResponse> {
-    return apiClient.post<ISubscriptionActionResponse>(`/admin/subscriptions/${userId}/cancel`, { reason }, true);
+    return apiClient.post<ISubscriptionActionResponse>(
+      `/admin/subscriptions/${userId}/cancel`,
+      { reason },
+      true
+    );
   },
 
   /**
    * Reactivate subscription.
    */
   async reactivate(userId: string): Promise<ISubscriptionActionResponse> {
-    return apiClient.post<ISubscriptionActionResponse>(`/admin/subscriptions/${userId}/reactivate`, {}, true);
+    return apiClient.post<ISubscriptionActionResponse>(
+      `/admin/subscriptions/${userId}/reactivate`,
+      {},
+      true
+    );
   },
 
   /**
    * Extend trial.
    */
-  async extendTrial(userId: string, request: IExtendTrialRequest): Promise<ISubscriptionActionResponse> {
-    return apiClient.post<ISubscriptionActionResponse>(`/admin/subscriptions/${userId}/extend-trial`, request, true);
+  async extendTrial(
+    userId: string,
+    request: IExtendTrialRequest
+  ): Promise<ISubscriptionActionResponse> {
+    return apiClient.post<ISubscriptionActionResponse>(
+      `/admin/subscriptions/${userId}/extend-trial`,
+      request,
+      true
+    );
   },
 };
-

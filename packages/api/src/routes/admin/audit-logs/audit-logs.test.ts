@@ -62,7 +62,9 @@ describe('Admin Audit Logs Routes', () => {
       userAgent: 'jest',
     });
 
-    const res = await request(app).get('/api/admin/audit-logs?page=1&limit=25').set('Authorization', `Bearer ${superAdminToken}`);
+    const res = await request(app)
+      .get('/api/admin/audit-logs?page=1&limit=25')
+      .set('Authorization', `Bearer ${superAdminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
@@ -119,7 +121,9 @@ describe('Admin Audit Logs Routes', () => {
       userAgent: 'jest',
     });
 
-    const res = await request(app).get('/api/admin/audit-logs').set('Authorization', `Bearer ${superAdminToken}`);
+    const res = await request(app)
+      .get('/api/admin/audit-logs')
+      .set('Authorization', `Bearer ${superAdminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data?.length).toBeGreaterThan(0);
@@ -155,10 +159,15 @@ describe('Admin Audit Logs Routes', () => {
 
       expect(res.status).toBe(200);
       expect(String(res.headers['content-type'] ?? '')).toContain('text/csv');
-      expect(String(res.text)).toContain('timestamp,adminEmail,action,entityType,entityId,severity,reason');
+      expect(String(res.text)).toContain(
+        'timestamp,adminEmail,action,entityType,entityId,severity,reason'
+      );
       expect(String(res.text)).toContain('customer:suspend');
 
-      const docs = await database.collection('audit_logs').find({ action: 'system:export' }).toArray();
+      const docs = await database
+        .collection('audit_logs')
+        .find({ action: 'system:export' })
+        .toArray();
       expect(docs.length).toBeGreaterThan(0);
     });
 
@@ -183,5 +192,3 @@ describe('Admin Audit Logs Routes', () => {
     });
   });
 });
-
-

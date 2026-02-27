@@ -12,7 +12,11 @@ export class ConnectorTokenService {
   private readonly _jwtExpiresIn: string;
 
   constructor(jwtSecret?: string, jwtExpiresIn?: string) {
-    this._jwtSecret = jwtSecret ?? process.env['CONNECTOR_JWT_SECRET'] ?? process.env['JWT_SECRET'] ?? 'default-secret-change-in-production';
+    this._jwtSecret =
+      jwtSecret ??
+      process.env['CONNECTOR_JWT_SECRET'] ??
+      process.env['JWT_SECRET'] ??
+      'default-secret-change-in-production';
     this._jwtExpiresIn = jwtExpiresIn ?? process.env['CONNECTOR_JWT_EXPIRES_IN'] ?? '30d';
   }
 
@@ -30,12 +34,16 @@ export class ConnectorTokenService {
   verifyToken(token: string): IConnectorTokenPayload | null {
     try {
       const decoded = jwt.verify(token, this._jwtSecret) as IConnectorTokenPayload;
-      if (decoded.type !== 'connector' || decoded.scope !== 'ingest' || !decoded.userId || !decoded.jti) return null;
+      if (
+        decoded.type !== 'connector' ||
+        decoded.scope !== 'ingest' ||
+        !decoded.userId ||
+        !decoded.jti
+      )
+        return null;
       return decoded;
     } catch {
       return null;
     }
   }
 }
-
-

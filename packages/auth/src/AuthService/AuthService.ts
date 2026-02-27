@@ -46,7 +46,12 @@ export interface IRegisterOptions {
 }
 
 export interface IAuthService {
-  register(email: string, password: string, name: string, options?: IRegisterOptions & { rememberMe?: boolean }): Promise<IAuthResult>;
+  register(
+    email: string,
+    password: string,
+    name: string,
+    options?: IRegisterOptions & { rememberMe?: boolean }
+  ): Promise<IAuthResult>;
   login(email: string, password: string, options?: { rememberMe?: boolean }): Promise<IAuthResult>;
   /** Find or create user via OAuth provider; link account if existing user; issue tokens. */
   loginOrRegisterOAuth(
@@ -63,8 +68,13 @@ export interface IAuthService {
     email: string
   ): Promise<{ success: boolean; error?: string }>;
   /** Unlink an OAuth provider from a user. */
-  unlinkOAuthAccount(userId: string, provider: OAuthProvider): Promise<{ success: boolean; error?: string }>;
-  verifyToken(token: string): Promise<{ readonly userId: string; readonly email: string; readonly fid?: string } | null>;
+  unlinkOAuthAccount(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<{ success: boolean; error?: string }>;
+  verifyToken(
+    token: string
+  ): Promise<{ readonly userId: string; readonly email: string; readonly fid?: string } | null>;
   requestPasswordReset(email: string): Promise<IRequestPasswordResetResult>;
   resetPasswordWithToken(token: string, newPassword: string): Promise<IRequestPasswordResetResult>;
   refreshAccessToken(refreshToken: string): Promise<IRefreshResult | { error: string }>;
@@ -119,7 +129,8 @@ export class AuthService implements IAuthService {
   ) {
     this._userRepository = new UserRepository(database);
     this._oauthAccountRepository = oauthAccountRepository;
-    this._jwtSecret = jwtSecret ?? process.env['JWT_SECRET'] ?? 'default-secret-change-in-production';
+    this._jwtSecret =
+      jwtSecret ?? process.env['JWT_SECRET'] ?? 'default-secret-change-in-production';
     this._jwtExpiresIn =
       jwtExpiresIn ??
       process.env['JWT_ACCESS_EXPIRES_IN'] ??
@@ -127,11 +138,11 @@ export class AuthService implements IAuthService {
       '15m';
     this._refreshTokenExpiresInMs = refreshTokenExpiresIn
       ? parseExpiryToMs(refreshTokenExpiresIn)
-      : parseExpiryToMs(
-          process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d'
-        );
+      : parseExpiryToMs(process.env['REFRESH_TOKEN_EXPIRES_IN'] ?? '30d');
     this._sessionRefreshTokenExpiresInMs = parseExpiryToMs(
-      sessionRefreshTokenExpiresIn ?? process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ?? SESSION_REFRESH_DEFAULT
+      sessionRefreshTokenExpiresIn ??
+        process.env['SESSION_REFRESH_TOKEN_EXPIRES_IN'] ??
+        SESSION_REFRESH_DEFAULT
     );
     this._passwordResetTokenStore = passwordResetTokenStore;
     this._passwordResetEmailSender = passwordResetEmailSender;
@@ -217,7 +228,11 @@ export class AuthService implements IAuthService {
    * @param options - Optional rememberMe (default true). When false, session-only with shorter refresh token.
    * @returns Auth result with token
    */
-  public async login(email: string, password: string, options?: { rememberMe?: boolean }): Promise<IAuthResult> {
+  public async login(
+    email: string,
+    password: string,
+    options?: { rememberMe?: boolean }
+  ): Promise<IAuthResult> {
     const rememberMe = options?.rememberMe !== false;
     try {
       // Find user
@@ -282,7 +297,10 @@ export class AuthService implements IAuthService {
     }
     try {
       // 1) Existing OAuth link -> login
-      const existingLink = await this._oauthAccountRepository.findByProviderAndId(provider, providerAccountId);
+      const existingLink = await this._oauthAccountRepository.findByProviderAndId(
+        provider,
+        providerAccountId
+      );
       if (existingLink) {
         const user = await this._userRepository.findById(existingLink.userId);
         if (!user) {
@@ -367,7 +385,10 @@ export class AuthService implements IAuthService {
       return { success: false, error: 'OAuth is not configured' };
     }
     try {
-      const existing = await this._oauthAccountRepository.findByProviderAndId(provider, providerAccountId);
+      const existing = await this._oauthAccountRepository.findByProviderAndId(
+        provider,
+        providerAccountId
+      );
       if (existing && existing.userId !== userId) {
         return { success: false, error: 'This account is already linked to another user' };
       }
@@ -393,7 +414,10 @@ export class AuthService implements IAuthService {
   /**
    * Unlink an OAuth provider from a user.
    */
-  public async unlinkOAuthAccount(userId: string, provider: OAuthProvider): Promise<{ success: boolean; error?: string }> {
+  public async unlinkOAuthAccount(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this._oauthAccountRepository) {
       return { success: false, error: 'OAuth is not configured' };
     }
@@ -524,7 +548,9 @@ export class AuthService implements IAuthService {
    * Refresh access token using a valid refresh token. Rotates refresh token (new one issued, old revoked).
    * If the provided token was already revoked, revokes the entire family (reuse attack).
    */
-  public async refreshAccessToken(refreshToken: string): Promise<IRefreshResult | { error: string }> {
+  public async refreshAccessToken(
+    refreshToken: string
+  ): Promise<IRefreshResult | { error: string }> {
     if (!this._refreshTokenStore) {
       return { error: 'Refresh tokens are not configured' };
     }
@@ -568,7 +594,9 @@ export class AuthService implements IAuthService {
   /**
    * Revoke a refresh token (logout). Revokes the entire family so all sessions are invalidated.
    */
-  public async revokeRefreshToken(refreshToken: string): Promise<{ success: boolean; error?: string }> {
+  public async revokeRefreshToken(
+    refreshToken: string
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this._refreshTokenStore) {
       return { success: true };
     }
@@ -604,9 +632,7 @@ export class AuthService implements IAuthService {
     const tokenHash = crypto.createHash('sha256').update(refreshTokenRaw).digest('hex');
     const expiresAt =
       expiresAtOverride ??
-      new Date(
-        Date.now() + (expiresInMsOverride ?? this._refreshTokenExpiresInMs)
-      );
+      new Date(Date.now() + (expiresInMsOverride ?? this._refreshTokenExpiresInMs));
 
     await this._refreshTokenStore.create(userId, tokenHash, fid, expiresAt);
     const token = this._generateToken(userId, email);
@@ -633,4 +659,3 @@ export class AuthService implements IAuthService {
     ) as string;
   }
 }
-

@@ -82,7 +82,7 @@ export class StudentRepository implements IStudentRepository {
         $or: [
           { userId: userIdObj },
           {
-            'sharedWith': {
+            sharedWith: {
               $elemMatch: { userId: userIdStr, status: 'accepted' },
             },
           },
@@ -125,7 +125,7 @@ export class StudentRepository implements IStudentRepository {
   public async findPendingInvites(email: string): Promise<readonly Student[]> {
     const documents = await this._collection
       .find({
-        'sharedWith': {
+        sharedWith: {
           $elemMatch: { email: email.toLowerCase(), status: 'pending' },
         },
       })

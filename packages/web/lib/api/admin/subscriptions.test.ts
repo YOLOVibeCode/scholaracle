@@ -15,7 +15,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -34,10 +36,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -77,7 +87,7 @@ describe('adminSubscriptionsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/admin/subscriptions?'),
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
 
       const url = fetchSpy.mock.calls[0][0] as string;
@@ -92,7 +102,7 @@ describe('adminSubscriptionsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/subscriptions',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -107,7 +117,7 @@ describe('adminSubscriptionsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/subscriptions/sub-abc-123',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -122,7 +132,7 @@ describe('adminSubscriptionsApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/subscriptions?userId=user-42',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -140,7 +150,7 @@ describe('adminSubscriptionsApi', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({ plan: 'enterprise' }),
-        }),
+        })
       );
     });
   });
@@ -158,7 +168,7 @@ describe('adminSubscriptionsApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ reason: 'Customer requested cancellation' }),
-        }),
+        })
       );
     });
   });
@@ -177,7 +187,7 @@ describe('adminSubscriptionsApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(request),
-        }),
+        })
       );
     });
   });

@@ -58,6 +58,8 @@ describe('Worker', () => {
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
+    // Use port 0 so each test gets a random free port and avoids EADDRINUSE when run in parallel
+    process.env['PORT'] = '0';
     mockCollection = {
       createIndex: jest.fn().mockResolvedValue('index-name'),
       insertOne: jest.fn(),

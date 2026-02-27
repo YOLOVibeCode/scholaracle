@@ -145,9 +145,7 @@ export function transformSkywardCourseToOp(
 }
 
 /** Get the reconciled subject info for a Skyward course. */
-export function reconcileSkywardCourse(
-  gradebook: ISkywardGradebook
-): IReconciledCourse {
+export function reconcileSkywardCourse(gradebook: ISkywardGradebook): IReconciledCourse {
   return reconcileCourse(gradebook.course, gradebook.instructor);
 }
 

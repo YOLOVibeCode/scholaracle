@@ -311,21 +311,64 @@ async function applyOps(params: {
       await collection.updateOne(
         baseFilter,
         { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
-        { upsert: true },
+        { upsert: true }
       );
-      if (assetRepo && params.sourceId && ENTITIES_WITH_ASSETS.includes(op.entity as (typeof ENTITIES_WITH_ASSETS)[number])) {
+      if (
+        assetRepo &&
+        params.sourceId &&
+        ENTITIES_WITH_ASSETS.includes(op.entity as (typeof ENTITIES_WITH_ASSETS)[number])
+      ) {
         if (op.entity === 'course') {
           await assetRepo.softDeleteByCourse(params.userId, params.sourceId, key.externalId);
         } else {
-          await assetRepo.softDeleteByEntity(params.userId, params.sourceId, op.entity, key.externalId);
+          await assetRepo.softDeleteByEntity(
+            params.userId,
+            params.sourceId,
+            op.entity,
+            key.externalId
+          );
         }
       }
     } else {
       await collection.updateOne(
         baseFilter,
         { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
-        { upsert: true },
+        { upsert: true }
       );
+
+      if (op.entity === 'gradeSnapshot' && op.op === 'upsert') {
+        const rec = op.record as Record<string, unknown> | undefined;
+        const pct = rec?.['percentGrade'] as number | undefined;
+        if (pct != null) {
+          const historyDate = (rec?.['asOfDate'] as string) || op.observedAt.split('T')[0];
+          await params.database.collection('slc_grade_history').updateOne(
+            {
+              userId: params.userId,
+              provider: key.provider,
+              courseExternalId: key.courseExternalId ?? key.externalId,
+              studentExternalId: key.studentExternalId ?? null,
+              date: historyDate,
+            },
+            {
+              $set: {
+                userId: params.userId,
+                provider: key.provider,
+                adapterId: key.adapterId,
+                courseExternalId: key.courseExternalId ?? key.externalId,
+                studentExternalId: key.studentExternalId ?? null,
+                date: historyDate,
+                percentGrade: pct,
+                letterGrade: (rec?.['letterGrade'] as string) || undefined,
+                sourceType: (rec?.['sourceType'] as string) || undefined,
+                observedAt: new Date(op.observedAt),
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            { upsert: true }
+          );
+        }
+      }
     }
   }
 }
@@ -335,7 +378,9 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
   const authService = new AuthService(config.database, config.jwtSecret);
   const connectorTokenService = new ConnectorTokenService(config.jwtSecret);
-  const connectorAuth = connectorAuthMiddleware(connectorTokenService, { database: config.database });
+  const connectorAuth = connectorAuthMiddleware(connectorTokenService, {
+    database: config.database,
+  });
 
   const deviceRepo = new IngestDeviceAuthRepository(config.database);
   const sourceRepo = new IngestSourceRepository(config.database);

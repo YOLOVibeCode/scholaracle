@@ -82,6 +82,27 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
   const allProviders = getAllProviders();
   const detectedOS = typeof navigator !== 'undefined' && navigator.userAgent.includes('Win') ? 'windows' : 'mac';
 
+  // Reset wizard state whenever the dialog opens (guards against stale state
+  // if a previous session ended via onConnectionReady without handleClose).
+  useEffect(() => {
+    if (!open) return;
+    setStep('platform');
+    setPortalUrl('');
+    setDetectedProvider(undefined);
+    setSelectedProvider(null);
+    setCustomPlatformName('');
+    setStudentNameHint('');
+    setUsername('');
+    setPassword('');
+    setScraperId(null);
+    setJobId(null);
+    setJobStatus(null);
+    setError(null);
+    setGeneratedCode(null);
+    setShowCode(false);
+    setPendingConnection(null);
+  }, [open]);
+
   useEffect(() => {
     const detected = detectProviderFromUrl(portalUrl);
     setDetectedProvider(detected);

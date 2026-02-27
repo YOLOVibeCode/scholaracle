@@ -106,4 +106,3 @@ export function reportsRouter(config: IReportsRouterConfig): Router {
 
   return router;
 }
-

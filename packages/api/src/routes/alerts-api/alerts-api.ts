@@ -324,4 +324,3 @@ export function alertsApiRouter(config: IAlertsApiRouterConfig): Router {
 
   return router;
 }
-

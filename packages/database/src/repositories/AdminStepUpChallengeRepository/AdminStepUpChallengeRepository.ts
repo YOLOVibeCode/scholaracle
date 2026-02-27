@@ -25,11 +25,7 @@ export class AdminStepUpChallengeRepository implements IAdminStepUpChallengeStor
     this._collection = database.collection<StepUpDocument>('admin_step_up_challenges');
   }
 
-  public async create(
-    stepUpId: string,
-    adminId: string,
-    expiresAt: Date
-  ): Promise<void> {
+  public async create(stepUpId: string, adminId: string, expiresAt: Date): Promise<void> {
     const now = new Date();
     await this._collection.insertOne({
       stepUpId,

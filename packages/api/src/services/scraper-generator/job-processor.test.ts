@@ -27,7 +27,9 @@ const mockConnect = connectStep as jest.MockedFunction<typeof connectStep>;
 const mockCrawl = crawlStep as jest.MockedFunction<typeof crawlStep>;
 const mockAuthCheck = authenticateCheckStep as jest.MockedFunction<typeof authenticateCheckStep>;
 const mockGenerate = generateScraperWithAI as jest.MockedFunction<typeof generateScraperWithAI>;
-const mockValidate = validateGeneratedScraper as jest.MockedFunction<typeof validateGeneratedScraper>;
+const mockValidate = validateGeneratedScraper as jest.MockedFunction<
+  typeof validateGeneratedScraper
+>;
 
 // ---------------------------------------------------------------------------
 // Realistic mock data
@@ -152,9 +154,20 @@ describe('processScraperGenerationJob', () => {
     it('transitions queued -> ready and caches the result', async () => {
       await seedJob('job-happy');
 
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 150, sslValid: true });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 150,
+        sslValid: true,
+      });
       mockCrawl.mockResolvedValue(makeRealisticCrawlResult());
-      mockAuthCheck.mockResolvedValue({ ok: true, loginFormUsable: true, captchaDetected: false, mfaRequired: false, loginMethod: 'email_password' });
+      mockAuthCheck.mockResolvedValue({
+        ok: true,
+        loginFormUsable: true,
+        captchaDetected: false,
+        mfaRequired: false,
+        loginMethod: 'email_password',
+      });
       mockGenerate.mockResolvedValue(makeRealisticGenerated());
       mockValidate.mockReturnValue({ valid: true, errors: [] });
 
@@ -162,7 +175,9 @@ describe('processScraperGenerationJob', () => {
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-happy' });
       expect(job?.['status']).toBe('ready');
-      const result = job?.['result'] as { scraperCode?: string; transformerCode?: string } | undefined;
+      const result = job?.['result'] as
+        | { scraperCode?: string; transformerCode?: string }
+        | undefined;
       expect(result?.scraperCode).toContain('PowerSchoolScraper');
       expect(result?.transformerCode).toContain('ISlcDeltaOp');
       expect(job?.['error']).toBeNull();
@@ -176,9 +191,19 @@ describe('processScraperGenerationJob', () => {
     it('calls each pipeline step in order', async () => {
       await seedJob('job-order');
 
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 50, sslValid: true });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 50,
+        sslValid: true,
+      });
       mockCrawl.mockResolvedValue(makeRealisticCrawlResult());
-      mockAuthCheck.mockResolvedValue({ ok: true, loginFormUsable: true, captchaDetected: false, mfaRequired: false });
+      mockAuthCheck.mockResolvedValue({
+        ok: true,
+        loginFormUsable: true,
+        captchaDetected: false,
+        mfaRequired: false,
+      });
       mockGenerate.mockResolvedValue(makeRealisticGenerated());
       mockValidate.mockReturnValue({ valid: true, errors: [] });
 
@@ -206,7 +231,9 @@ describe('processScraperGenerationJob', () => {
 
       await processScraperGenerationJob(db, 'job-connect-fail');
 
-      const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-connect-fail' });
+      const job = await db
+        .collection('scraper_generation_jobs')
+        .findOne({ jobId: 'job-connect-fail' });
       expect(job?.['status']).toBe('failed');
       expect(job?.['error']).toContain('ECONNREFUSED');
       expect(mockCrawl).not.toHaveBeenCalled();
@@ -214,12 +241,23 @@ describe('processScraperGenerationJob', () => {
 
     it('fails if crawl finds no login form', async () => {
       await seedJob('job-crawl-fail');
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 50, sslValid: true });
-      mockCrawl.mockResolvedValue({ ok: false, title: 'Home Page', error: 'Could not find a login form at this URL' });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 50,
+        sslValid: true,
+      });
+      mockCrawl.mockResolvedValue({
+        ok: false,
+        title: 'Home Page',
+        error: 'Could not find a login form at this URL',
+      });
 
       await processScraperGenerationJob(db, 'job-crawl-fail');
 
-      const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-crawl-fail' });
+      const job = await db
+        .collection('scraper_generation_jobs')
+        .findOne({ jobId: 'job-crawl-fail' });
       expect(job?.['status']).toBe('failed');
       expect(job?.['error']).toContain('login form');
       expect(mockAuthCheck).not.toHaveBeenCalled();
@@ -227,9 +265,18 @@ describe('processScraperGenerationJob', () => {
 
     it('fails if CAPTCHA is detected', async () => {
       await seedJob('job-captcha');
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 50, sslValid: true });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 50,
+        sslValid: true,
+      });
       mockCrawl.mockResolvedValue(makeRealisticCrawlResult());
-      mockAuthCheck.mockResolvedValue({ ok: false, captchaDetected: true, error: 'Login requires CAPTCHA' });
+      mockAuthCheck.mockResolvedValue({
+        ok: false,
+        captchaDetected: true,
+        error: 'Login requires CAPTCHA',
+      });
 
       await processScraperGenerationJob(db, 'job-captcha');
 
@@ -241,9 +288,19 @@ describe('processScraperGenerationJob', () => {
 
     it('fails if AI generation throws', async () => {
       await seedJob('job-ai-fail');
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 50, sslValid: true });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 50,
+        sslValid: true,
+      });
       mockCrawl.mockResolvedValue(makeRealisticCrawlResult());
-      mockAuthCheck.mockResolvedValue({ ok: true, loginFormUsable: true, captchaDetected: false, mfaRequired: false });
+      mockAuthCheck.mockResolvedValue({
+        ok: true,
+        loginFormUsable: true,
+        captchaDetected: false,
+        mfaRequired: false,
+      });
       mockGenerate.mockRejectedValue(new Error('ANTHROPIC_API_KEY not set'));
 
       await processScraperGenerationJob(db, 'job-ai-fail');
@@ -255,15 +312,34 @@ describe('processScraperGenerationJob', () => {
 
     it('fails if generated code fails validation', async () => {
       await seedJob('job-validate-fail');
-      mockConnect.mockResolvedValue({ ok: true, httpStatus: 200, responseTimeMs: 50, sslValid: true });
+      mockConnect.mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        responseTimeMs: 50,
+        sslValid: true,
+      });
       mockCrawl.mockResolvedValue(makeRealisticCrawlResult());
-      mockAuthCheck.mockResolvedValue({ ok: true, loginFormUsable: true, captchaDetected: false, mfaRequired: false });
-      mockGenerate.mockResolvedValue({ scraperCode: '// too short', transformerCode: '', metadata: '' });
-      mockValidate.mockReturnValue({ valid: false, errors: ['Scraper code is missing or too short', 'Transformer code is missing'] });
+      mockAuthCheck.mockResolvedValue({
+        ok: true,
+        loginFormUsable: true,
+        captchaDetected: false,
+        mfaRequired: false,
+      });
+      mockGenerate.mockResolvedValue({
+        scraperCode: '// too short',
+        transformerCode: '',
+        metadata: '',
+      });
+      mockValidate.mockReturnValue({
+        valid: false,
+        errors: ['Scraper code is missing or too short', 'Transformer code is missing'],
+      });
 
       await processScraperGenerationJob(db, 'job-validate-fail');
 
-      const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-validate-fail' });
+      const job = await db
+        .collection('scraper_generation_jobs')
+        .findOne({ jobId: 'job-validate-fail' });
       expect(job?.['status']).toBe('failed');
       expect(job?.['error']).toContain('validation');
     });

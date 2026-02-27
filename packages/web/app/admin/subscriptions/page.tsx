@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,24 +35,24 @@ export default function AdminSubscriptionsPage() {
   const hasLoadedOnce = subsData !== null;
   const showFullLoading = isLoading && !hasLoadedOnce;
 
-  const openCancel = (s: ISubscription) => {
+  const openCancel = useCallback((s: ISubscription) => {
     setToast(null);
     setCancelUserId(s.userId);
     setCancelReason('');
-  };
+  }, []);
 
-  const openExtend = (s: ISubscription) => {
+  const openExtend = useCallback((s: ISubscription) => {
     setToast(null);
     setExtendUserId(s.userId);
     setExtendDays('7');
     setExtendReason('');
-  };
+  }, []);
 
-  const openPlan = (s: ISubscription) => {
+  const openPlan = useCallback((s: ISubscription) => {
     setToast(null);
     setPlanUserId(s.userId);
     setSelectedPlan(s.plan);
-  };
+  }, []);
 
   const closePanels = () => {
     setCancelUserId(null);

@@ -15,10 +15,9 @@ describe('SmtpTransport', () => {
 
   beforeEach(() => {
     mockSendMail = jest.fn();
-    transport = new SmtpTransport(
-      { host: 'localhost', port: 1025 },
-      { sendMail: mockSendMail } as any
-    );
+    transport = new SmtpTransport({ host: 'localhost', port: 1025 }, {
+      sendMail: mockSendMail,
+    } as any);
   });
 
   it('calls transporter.sendMail() with correct shape', async () => {

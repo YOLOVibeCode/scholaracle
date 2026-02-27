@@ -75,7 +75,11 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
   public async testConnection(): Promise<IConnectionTestResult> {
     const start = Date.now();
     if (!this._client) {
-      return { success: false, message: 'Not authenticated. Call authenticate() first.', durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: 'Not authenticated. Call authenticate() first.',
+        durationMs: Date.now() - start,
+      };
     }
     try {
       const report = await this._client.getReport();
@@ -97,7 +101,11 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
           details: { courseCount: 0 },
         };
       }
-      return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
+      return {
+        success: false,
+        message: `Connection failed: ${msg}`,
+        durationMs: Date.now() - start,
+      };
     }
   }
 
@@ -163,7 +171,11 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
 
           // Course op (with subject reconciliation)
           ops.push(
-            transformSkywardCourseToOp(gradebook, courseReport.course, baseKey) as unknown as ISlcDeltaOp
+            transformSkywardCourseToOp(
+              gradebook,
+              courseReport.course,
+              baseKey
+            ) as unknown as ISlcDeltaOp
           );
 
           // Assignment ops (every assignment in every category)
@@ -183,9 +195,7 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
     try {
       const schedule = await client.getSchedule();
       for (const entry of schedule) {
-        ops.push(
-          transformScheduleToTeacherOp(entry, baseKey) as unknown as ISlcDeltaOp
-        );
+        ops.push(transformScheduleToTeacherOp(entry, baseKey) as unknown as ISlcDeltaOp);
       }
     } catch {
       warnings.push('Could not scrape schedule/teacher data');
@@ -195,9 +205,7 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
     try {
       const attendance = await client.getAttendance();
       for (const record of attendance) {
-        ops.push(
-          transformAttendanceToOp(record, baseKey) as unknown as ISlcDeltaOp
-        );
+        ops.push(transformAttendanceToOp(record, baseKey) as unknown as ISlcDeltaOp);
       }
     } catch {
       warnings.push('Could not scrape attendance data');
@@ -207,9 +215,7 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
     try {
       const documents = await client.getDocuments();
       for (const doc of documents) {
-        ops.push(
-          transformDocumentToOp(doc, baseKey) as unknown as ISlcDeltaOp
-        );
+        ops.push(transformDocumentToOp(doc, baseKey) as unknown as ISlcDeltaOp);
       }
     } catch {
       warnings.push('Could not scrape documents');
@@ -219,9 +225,7 @@ export class SkywardAdapter implements ILmsAdapterWithTest {
     try {
       const messages = await client.getMessages();
       for (const msg of messages) {
-        ops.push(
-          transformMessageToOp(msg, baseKey) as unknown as ISlcDeltaOp
-        );
+        ops.push(transformMessageToOp(msg, baseKey) as unknown as ISlcDeltaOp);
       }
     } catch {
       warnings.push('Could not scrape messages');

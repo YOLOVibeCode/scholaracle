@@ -30,7 +30,7 @@ describe('AnalyticsService', () => {
   describe('calculateMRR', () => {
     it('should calculate MRR correctly', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       // Create users with different subscription plans
       await userRepository.create({
         email: 'premium1@test.com',
@@ -66,7 +66,7 @@ describe('AnalyticsService', () => {
 
     it('should exclude cancelled subscriptions from MRR', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       await userRepository.create({
         email: 'cancelled@test.com',
         passwordHash,
@@ -82,7 +82,7 @@ describe('AnalyticsService', () => {
   describe('calculateChurnRate', () => {
     it('should calculate churn rate correctly', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       // Create active and cancelled subscriptions
       await userRepository.create({
         email: 'active1@test.com',
@@ -114,7 +114,7 @@ describe('AnalyticsService', () => {
   describe('calculateARPU', () => {
     it('should calculate ARPU correctly', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       await userRepository.create({
         email: 'premium1@test.com',
         passwordHash,
@@ -139,8 +139,12 @@ describe('AnalyticsService', () => {
     it('should get revenue by period', async () => {
       // This will require PaymentRepository to be implemented
       // For now, test the structure
-      const revenue = await analyticsService.getRevenueByPeriod('month', new Date('2024-01-01'), new Date('2024-01-31'));
-      
+      const revenue = await analyticsService.getRevenueByPeriod(
+        'month',
+        new Date('2024-01-01'),
+        new Date('2024-01-31')
+      );
+
       expect(revenue).toBeDefined();
       expect(Array.isArray(revenue)).toBe(true);
     });
@@ -149,7 +153,7 @@ describe('AnalyticsService', () => {
   describe('getSubscriptionGrowth', () => {
     it('should get subscription growth over time', async () => {
       const growth = await analyticsService.getSubscriptionGrowth('month', 6);
-      
+
       expect(growth).toBeDefined();
       expect(Array.isArray(growth)).toBe(true);
     });
@@ -158,7 +162,7 @@ describe('AnalyticsService', () => {
   describe('getCustomerGrowth', () => {
     it('should get customer growth over time', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      
+
       await userRepository.create({
         email: 'growth1@test.com',
         passwordHash,
@@ -167,10 +171,9 @@ describe('AnalyticsService', () => {
       });
 
       const growth = await analyticsService.getCustomerGrowth('month', 6);
-      
+
       expect(growth).toBeDefined();
       expect(Array.isArray(growth)).toBe(true);
     });
   });
 });
-

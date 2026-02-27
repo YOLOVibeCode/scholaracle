@@ -43,7 +43,7 @@ export default function StudentViewDashboardPage() {
     { retryCount: 2, retryDelay: 1000 }
   );
 
-  const items = agendaResponse?.items ?? [];
+  const items = useMemo(() => agendaResponse?.items ?? [], [agendaResponse]);
   const studentItems = useMemo(() => {
     if (!studentName && !studentExternalId) return items;
     return items.filter(

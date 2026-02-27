@@ -25,17 +25,61 @@ export const DEMO_STUDENT_LIAM = {
 export const DEMO_STUDENTS = [DEMO_STUDENT_EMMA, DEMO_STUDENT_LIAM] as const;
 
 /** Course definitions: [studentExternalId, courseExternalId, courseName] */
-export const DEMO_COURSES: ReadonlyArray<{ studentId: string; courseExternalId: string; courseName: string }> = [
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-ap-bio', courseName: 'AP Biology' },
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-alg2', courseName: 'Algebra II' },
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-eng10', courseName: 'English 10 Honors' },
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-world-hist', courseName: 'World History' },
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-span2', courseName: 'Spanish II' },
-  { studentId: DEMO_STUDENT_EMMA.studentId, courseExternalId: 'demo-emma-pe', courseName: 'PE / Health' },
-  { studentId: DEMO_STUDENT_LIAM.studentId, courseExternalId: 'demo-liam-math7', courseName: 'Math 7' },
-  { studentId: DEMO_STUDENT_LIAM.studentId, courseExternalId: 'demo-liam-la', courseName: 'Language Arts' },
-  { studentId: DEMO_STUDENT_LIAM.studentId, courseExternalId: 'demo-liam-science', courseName: 'Life Science' },
-  { studentId: DEMO_STUDENT_LIAM.studentId, courseExternalId: 'demo-liam-ss', courseName: 'Social Studies' },
+export const DEMO_COURSES: ReadonlyArray<{
+  studentId: string;
+  courseExternalId: string;
+  courseName: string;
+}> = [
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-ap-bio',
+    courseName: 'AP Biology',
+  },
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-alg2',
+    courseName: 'Algebra II',
+  },
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-eng10',
+    courseName: 'English 10 Honors',
+  },
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-world-hist',
+    courseName: 'World History',
+  },
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-span2',
+    courseName: 'Spanish II',
+  },
+  {
+    studentId: DEMO_STUDENT_EMMA.studentId,
+    courseExternalId: 'demo-emma-pe',
+    courseName: 'PE / Health',
+  },
+  {
+    studentId: DEMO_STUDENT_LIAM.studentId,
+    courseExternalId: 'demo-liam-math7',
+    courseName: 'Math 7',
+  },
+  {
+    studentId: DEMO_STUDENT_LIAM.studentId,
+    courseExternalId: 'demo-liam-la',
+    courseName: 'Language Arts',
+  },
+  {
+    studentId: DEMO_STUDENT_LIAM.studentId,
+    courseExternalId: 'demo-liam-science',
+    courseName: 'Life Science',
+  },
+  {
+    studentId: DEMO_STUDENT_LIAM.studentId,
+    courseExternalId: 'demo-liam-ss',
+    courseName: 'Social Studies',
+  },
   { studentId: DEMO_STUDENT_LIAM.studentId, courseExternalId: 'demo-liam-art', courseName: 'Art' },
 ];
 
@@ -74,7 +118,7 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
       externalId: `demo-emma-ap-bio-a${i}`,
       title: `Unit ${Math.floor((i + 40) / 5)} Homework`,
       dueAt: day(i),
-      status: i <= 0 ? 'graded' : (i > 3 ? 'missing' : 'submitted'),
+      status: i <= 0 ? 'graded' : i > 3 ? 'missing' : 'submitted',
       pointsPossible: pts,
       pointsEarned: earned,
     });
@@ -82,7 +126,14 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
 
   // Emma - Algebra II: 67% (D+), at risk, 3 missing
   const alg2Graded = [
-    [10, 5], [10, 6], [10, 7], [15, 9], [10, 4], [10, 8], [20, 10], [10, 6],
+    [10, 5],
+    [10, 6],
+    [10, 7],
+    [15, 9],
+    [10, 4],
+    [10, 8],
+    [20, 10],
+    [10, 6],
   ];
   alg2Graded.forEach(([possible, earned], idx) => {
     out.push({
@@ -118,7 +169,7 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
       externalId: `demo-emma-eng10-a${i}`,
       title: i === 9 ? 'Essay draft' : `Reading response ${i + 1}`,
       dueAt: day(-42 + i * 5),
-      status: i < 9 ? 'graded' : (i === 9 ? 'submitted' : 'missing'),
+      status: i < 9 ? 'graded' : i === 9 ? 'submitted' : 'missing',
       pointsPossible: pts,
       pointsEarned: earned,
     });

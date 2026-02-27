@@ -168,4 +168,3 @@ export function analyticsRouter(config: IAnalyticsRouterConfig): Router {
 
   return router;
 }
-

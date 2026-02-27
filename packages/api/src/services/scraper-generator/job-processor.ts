@@ -4,7 +4,14 @@
  */
 
 import type { Db } from 'mongodb';
-import { connectStep, crawlStep, authenticateCheckStep, type IConnectResult, type ICrawlResult, type IAuthenticateCheckResult } from './crawler';
+import {
+  connectStep,
+  crawlStep,
+  authenticateCheckStep,
+  type IConnectResult,
+  type ICrawlResult,
+  type IAuthenticateCheckResult,
+} from './crawler';
 import { generateScraperWithAI, type IGenerateRequest } from './ai-generator';
 import { validateGeneratedScraper } from './validator';
 import type { IPageAnalysis } from './crawler';
@@ -24,11 +31,25 @@ export interface IScraperGenerationJob {
   platformName: string;
   loginUrl: string;
   cacheKey: string;
-  status: 'queued' | 'connecting' | 'crawling' | 'authenticating' | 'crawl_complete' | 'generating' | 'validating' | 'ready' | 'failed';
+  status:
+    | 'queued'
+    | 'connecting'
+    | 'crawling'
+    | 'authenticating'
+    | 'crawl_complete'
+    | 'generating'
+    | 'validating'
+    | 'ready'
+    | 'failed';
   createdAt: Date;
   updatedAt: Date;
   steps: IJobStep[];
-  result?: { scraperId: string; scraperCode: string; transformerCode: string; metadata: string } | null;
+  result?: {
+    scraperId: string;
+    scraperCode: string;
+    transformerCode: string;
+    metadata: string;
+  } | null;
   error?: string | null;
   retryCount?: number;
 }
@@ -42,10 +63,7 @@ export function isKnownPlatform(platformName: string): boolean {
 /**
  * Process a single job. Call this when a job is created or when worker picks from queue.
  */
-export async function processScraperGenerationJob(
-  db: Db,
-  jobId: string
-): Promise<void> {
+export async function processScraperGenerationJob(db: Db, jobId: string): Promise<void> {
   const jobsCollection = db.collection<IScraperGenerationJob>('scraper_generation_jobs');
   const generatedCollection = db.collection('generated_scrapers');
 
@@ -60,7 +78,7 @@ export async function processScraperGenerationJob(
     details?: Record<string, unknown> | null
   ) => {
     const steps = [...(job.steps || [])];
-    let idx = steps.findIndex((s) => s.name === stepName);
+    const idx = steps.findIndex((s) => s.name === stepName);
     if (idx === -1) {
       steps.push({
         name: stepName,
@@ -140,7 +158,10 @@ export async function processScraperGenerationJob(
 
     // Step 3: Authenticate check
     await updateStep('authenticate_check', 'in_progress');
-    const authResult: IAuthenticateCheckResult = await authenticateCheckStep(job.loginUrl, crawlResult);
+    const authResult: IAuthenticateCheckResult = await authenticateCheckStep(
+      job.loginUrl,
+      crawlResult
+    );
     await updateStep('authenticate_check', 'complete', {
       loginFormUsable: authResult.loginFormUsable,
       captchaDetected: authResult.captchaDetected,

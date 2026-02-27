@@ -28,7 +28,7 @@ describe('MFAService', () => {
   describe('verifyToken', () => {
     it('should verify valid TOTP token', () => {
       const { secret } = mfaService.generateSecret('admin@test.com');
-      
+
       // Generate a valid token
       const speakeasy = require('speakeasy');
       const token = speakeasy.totp({
@@ -73,4 +73,3 @@ describe('MFAService', () => {
     });
   });
 });
-

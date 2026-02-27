@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Key, Link2, Plug, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,16 +22,16 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
   const [credentialsSource, setCredentialsSource] = useState<IDataSource | null>(null);
   const [connectToIntegrationOpen, setConnectToIntegrationOpen] = useState(false);
 
-  useEffect(() => {
-    void loadSources();
-  }, [studentId]);
-
-  const loadSources = async () => {
+  const loadSources = useCallback(async () => {
     setLoading(true);
     const list = await sourcesApi.listForStudent(studentId);
     setSources(list);
     setLoading(false);
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    queueMicrotask(() => loadSources());
+  }, [loadSources]);
 
   if (loading) {
     return (

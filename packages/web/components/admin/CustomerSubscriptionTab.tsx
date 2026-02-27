@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, CreditCard } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { adminSubscriptionsApi, type ISubscription } from '@/lib/api/admin/subscriptions';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';

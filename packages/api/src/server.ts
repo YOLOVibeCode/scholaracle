@@ -43,10 +43,7 @@ import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
-import {
-  createAssetUploadRouter,
-  createAssetServeRouter,
-} from './routes/assets/assets';
+import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
@@ -169,8 +166,9 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
     { fromEmail: sendGridConfig.fromEmail, fromName: sendGridConfig.fromName },
     transport
   );
-  const twilioConfigured =
-    Boolean(twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.fromNumber);
+  const twilioConfigured = Boolean(
+    twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.fromNumber
+  );
   const twilioClient = twilioConfigured
     ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
     : ({} as unknown as Twilio);
@@ -335,7 +333,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
       const syncQueue = new MongoQueue(database);
       const syncScheduler = new SyncScheduler(syncQueue, database);
-      app.use('/api/sync', authMiddleware(authService), createSyncRouter({ database, syncScheduler }));
+      app.use(
+        '/api/sync',
+        authMiddleware(authService),
+        createSyncRouter({ database, syncScheduler })
+      );
     } catch {
       // Sync route or agents not available — skip /api/sync
     }

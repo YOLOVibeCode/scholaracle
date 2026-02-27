@@ -69,10 +69,18 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
       const entityExternalId = (req.body?.entityExternalId as string)?.trim();
       const courseExternalId = (req.body?.courseExternalId as string)?.trim() || undefined;
       const academicTermId = (req.body?.academicTermId as string)?.trim() || undefined;
-      if (!sourceId || !provider || !originalUrl || !contentHash || !entityType || !entityExternalId) {
+      if (
+        !sourceId ||
+        !provider ||
+        !originalUrl ||
+        !contentHash ||
+        !entityType ||
+        !entityExternalId
+      ) {
         res.status(400).json({
           success: false,
-          error: 'Missing required fields: sourceId, provider, originalUrl, contentHash, entityType, entityExternalId',
+          error:
+            'Missing required fields: sourceId, provider, originalUrl, contentHash, entityType, entityExternalId',
         });
         return;
       }

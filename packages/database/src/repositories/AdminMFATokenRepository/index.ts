@@ -1,4 +1,1 @@
-export {
-  AdminMFATokenRepository,
-  type IAdminMFATokenStore,
-} from './AdminMFATokenRepository';
+export { AdminMFATokenRepository, type IAdminMFATokenStore } from './AdminMFATokenRepository';

@@ -1,9 +1,5 @@
 import type { INotificationDelivery } from '@scholaracle/interfaces';
-import {
-  Notification,
-  DeliveryResult,
-  NotificationChannel,
-} from '@scholaracle/contracts';
+import { Notification, DeliveryResult, NotificationChannel } from '@scholaracle/contracts';
 
 /**
  * Routes notifications to the appropriate delivery service based on channel.

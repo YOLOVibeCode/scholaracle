@@ -60,7 +60,10 @@ function parseGeneratedFiles(response: string, platformName: string): IGenerated
     let content = sections[i + 1]?.trim() ?? '';
 
     // Strip markdown code fences
-    content = content.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim();
+    content = content
+      .replace(/^```\w*\n?/, '')
+      .replace(/\n?```$/, '')
+      .trim();
 
     if (fileName.includes('metadata')) {
       metadata = content;
@@ -75,26 +78,43 @@ function parseGeneratedFiles(response: string, platformName: string): IGenerated
   if (!scraperCode && !transformerCode) {
     const codeBlocks = response.match(/```(?:typescript|ts)?\n([\s\S]*?)```/g) ?? [];
     if (codeBlocks.length >= 2) {
-      transformerCode = codeBlocks[0]!.replace(/```\w*\n?/, '').replace(/\n?```$/, '').trim();
-      scraperCode = codeBlocks[1]!.replace(/```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      transformerCode = codeBlocks[0]!
+        .replace(/```\w*\n?/, '')
+        .replace(/\n?```$/, '')
+        .trim();
+      scraperCode = codeBlocks[1]!
+        .replace(/```\w*\n?/, '')
+        .replace(/\n?```$/, '')
+        .trim();
     }
     if (codeBlocks.length >= 3) {
-      metadata = codeBlocks[2]!.replace(/```\w*\n?/, '').replace(/\n?```$/, '').trim();
+      metadata = codeBlocks[2]!
+        .replace(/```\w*\n?/, '')
+        .replace(/\n?```$/, '')
+        .trim();
     }
   }
 
   if (!metadata) {
-    metadata = JSON.stringify({
-      id: `${platformId}-browser`,
-      name: platformName,
-      version: '1.0.0',
-      description: `Scrapes student data from ${platformName}`,
-      platforms: ['*'],
-      capabilities: {
-        grades: true, assignments: true, attendance: true,
-        schedule: false, messages: true, documents: true,
+    metadata = JSON.stringify(
+      {
+        id: `${platformId}-browser`,
+        name: platformName,
+        version: '1.0.0',
+        description: `Scrapes student data from ${platformName}`,
+        platforms: ['*'],
+        capabilities: {
+          grades: true,
+          assignments: true,
+          attendance: true,
+          schedule: false,
+          messages: true,
+          documents: true,
+        },
       },
-    }, null, 2);
+      null,
+      2
+    );
   }
 
   return { scraperCode, transformerCode, metadata };

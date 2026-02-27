@@ -100,7 +100,10 @@ transformer.ts imports:
 The generated code must be SELF-CONTAINED. Do not reference any external @scholaracle packages.`;
 }
 
-export function getScraperGeneratePrompt(request: IGenerateRequest, pageAnalysis?: IPageAnalysis | null): string {
+export function getScraperGeneratePrompt(
+  request: IGenerateRequest,
+  pageAnalysis?: IPageAnalysis | null
+): string {
   let base = `Generate a Playwright scraper for "${request.platformName}".
 
 Login URL: ${request.loginUrl}

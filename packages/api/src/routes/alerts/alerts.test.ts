@@ -31,7 +31,11 @@ describe('Alerts API Routes', () => {
 
     // Create test user and get token
     authService = new AuthService(database);
-    const registerResult = await authService.register('test@example.com', 'password123', 'Test User');
+    const registerResult = await authService.register(
+      'test@example.com',
+      'password123',
+      'Test User'
+    );
     if (registerResult.success && registerResult.user) {
       testUserId = registerResult.user.id;
       testToken = registerResult.token ?? '';

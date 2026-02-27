@@ -76,7 +76,9 @@ export class NotificationService {
     if (shouldNotifyParent(alert.type)) {
       // Normalize to array for multi-parent broadcast
       const recipients: readonly IResolvedRecipient[] = resolvedRecipients
-        ? (Array.isArray(resolvedRecipients) ? resolvedRecipients : [resolvedRecipients])
+        ? Array.isArray(resolvedRecipients)
+          ? resolvedRecipients
+          : [resolvedRecipients]
         : [{}]; // empty = use parentNotification.userId as-is
 
       for (const recipient of recipients) {

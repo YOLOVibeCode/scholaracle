@@ -1,10 +1,7 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
-import {
-  PasswordResetTokenRepository,
-  RefreshTokenRepository,
-} from '@scholaracle/database';
+import { PasswordResetTokenRepository, RefreshTokenRepository } from '@scholaracle/database';
 import { authRouter } from './auth';
 
 const noOpEmailSender = {
@@ -37,16 +34,19 @@ describe('Auth API Routes', () => {
     // Setup Express app with routes
     app = express();
     app.use(express.json());
-    app.use('/api/auth', authRouter({
-      database,
-      jwtSecret: 'test-secret',
-      jwtExpiresIn: '15m',
-      passwordResetTokenStore,
-      passwordResetEmailSender: noOpEmailSender,
-      baseUrl: 'http://localhost:2800',
-      refreshTokenStore,
-      refreshTokenExpiresIn: '30d',
-    }));
+    app.use(
+      '/api/auth',
+      authRouter({
+        database,
+        jwtSecret: 'test-secret',
+        jwtExpiresIn: '15m',
+        passwordResetTokenStore,
+        passwordResetEmailSender: noOpEmailSender,
+        baseUrl: 'http://localhost:2800',
+        refreshTokenStore,
+        refreshTokenExpiresIn: '30d',
+      })
+    );
   });
 
   afterAll(async () => {
@@ -170,32 +170,24 @@ describe('Auth API Routes', () => {
     });
 
     it('should return 400 when email is missing', async () => {
-      const response = await request(app)
-        .post('/api/auth/forgot-password')
-        .send({});
+      const response = await request(app).post('/api/auth/forgot-password').send({});
 
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('email');
     });
 
-    it(
-      'should return 429 when rate limit exceeded for same email',
-      async () => {
-        const email = 'ratelimit@example.com';
-        for (let i = 0; i < 5; i++) {
-          await request(app).post('/api/auth/forgot-password').send({ email });
-        }
-        const response = await request(app)
-          .post('/api/auth/forgot-password')
-          .send({ email });
+    it('should return 429 when rate limit exceeded for same email', async () => {
+      const email = 'ratelimit@example.com';
+      for (let i = 0; i < 5; i++) {
+        await request(app).post('/api/auth/forgot-password').send({ email });
+      }
+      const response = await request(app).post('/api/auth/forgot-password').send({ email });
 
-        expect(response.status).toBe(429);
-        expect(response.body.success).toBe(false);
-        expect(response.body.error).toMatch(/too many|try again/i);
-      },
-      10000
-    );
+      expect(response.status).toBe(429);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toMatch(/too many|try again/i);
+    }, 10000);
   });
 
   describe('POST /api/auth/reset-password', () => {
@@ -253,6 +245,37 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('refreshToken');
+    });
+  });
+
+  describe('POST /api/auth/oauth', () => {
+    it('should return 401 when x-internal-api-secret is missing or invalid', async () => {
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .send({ email: 'oauth@example.com', name: 'OAuth User' });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toMatch(/unauthorized/i);
+    });
+
+    it('should return 400 when email or name is missing', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', 'test-internal-secret')
+        .send({
+          provider: 'google',
+          providerAccountId: '12345',
+          email: 'oauth@example.com',
+        });
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/missing|required/i);
     });
   });
 

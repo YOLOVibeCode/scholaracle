@@ -36,7 +36,16 @@ export interface IAgendaItem {
   /** True when timeAt < now for assignments. */
   readonly isOverdue?: boolean;
   readonly assignmentStatus?: 'missing' | 'submitted' | 'graded' | 'late' | 'unknown';
-  readonly eventCategory?: 'test' | 'quiz' | 'classwork' | 'project' | 'meeting' | 'field_trip' | 'activity' | 'deadline' | 'other';
+  readonly eventCategory?:
+    | 'test'
+    | 'quiz'
+    | 'classwork'
+    | 'project'
+    | 'meeting'
+    | 'field_trip'
+    | 'activity'
+    | 'deadline'
+    | 'other';
   readonly pointsPossible?: number;
   readonly pointsEarned?: number;
   readonly labels: string[];
@@ -62,7 +71,16 @@ function makeAssignmentOccurrenceKey(doc: Record<string, unknown>, dueAtIso: str
 }
 
 type AssignmentStatus = 'missing' | 'submitted' | 'graded' | 'late' | 'unknown';
-type EventCategory = 'test' | 'quiz' | 'classwork' | 'project' | 'meeting' | 'field_trip' | 'activity' | 'deadline' | 'other';
+type EventCategory =
+  | 'test'
+  | 'quiz'
+  | 'classwork'
+  | 'project'
+  | 'meeting'
+  | 'field_trip'
+  | 'activity'
+  | 'deadline'
+  | 'other';
 
 function computeLabelsAndImportance(
   type: 'assignment' | 'event_occurrence',
@@ -86,7 +104,8 @@ function computeLabelsAndImportance(
       const hoursUntil = (due.getTime() - now.getTime()) / (60 * 60 * 1000);
       if (hoursUntil <= 24 && hoursUntil > 0) labels.push('due-today');
       if (hoursUntil <= 48 && hoursUntil > 24) labels.push('due-tomorrow');
-      if (hoursUntil <= 24 && hoursUntil > 0) importance = importance === 'medium' ? 'high' : importance;
+      if (hoursUntil <= 24 && hoursUntil > 0)
+        importance = importance === 'medium' ? 'high' : importance;
       if (hoursUntil <= 0 && !isOverdue) importance = 'high';
     }
     if (assignmentStatus === 'missing') importance = importance === 'medium' ? 'high' : importance;
@@ -195,8 +214,16 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
         const isOverdue = new Date(dueAt).getTime() < now.getTime();
         const id = `assignment:${itemKey}`;
         itemIds.push(id);
-        const { labels, importance } = computeLabelsAndImportance('assignment', isOverdue, status, undefined, dueAt);
-        const studentName = studentExternalId ? studentNameByExternalId.get(studentExternalId) ?? studentExternalId : undefined;
+        const { labels, importance } = computeLabelsAndImportance(
+          'assignment',
+          isOverdue,
+          status,
+          undefined,
+          dueAt
+        );
+        const studentName = studentExternalId
+          ? (studentNameByExternalId.get(studentExternalId) ?? studentExternalId)
+          : undefined;
         items.push({
           id,
           type: 'assignment',
@@ -240,8 +267,16 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
           const id = `event_occurrence:${itemKey}`;
           itemIds.push(id);
           const studentExternalId = series['studentExternalId'] as string | undefined;
-          const { labels, importance } = computeLabelsAndImportance('event_occurrence', false, undefined, category, d.toISOString());
-          const studentName = studentExternalId ? studentNameByExternalId.get(studentExternalId) ?? studentExternalId : undefined;
+          const { labels, importance } = computeLabelsAndImportance(
+            'event_occurrence',
+            false,
+            undefined,
+            category,
+            d.toISOString()
+          );
+          const studentName = studentExternalId
+            ? (studentNameByExternalId.get(studentExternalId) ?? studentExternalId)
+            : undefined;
           items.push({
             id,
             type: 'event_occurrence',
@@ -302,7 +337,12 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
           const r: IAgendaReminder = {
             channel: channel as 'sms' | 'email',
             sentAt: sentAt instanceof Date ? sentAt.toISOString() : String(sentAt),
-            status: status === 'failed' || status === 'bounced' ? 'failed' : status === 'delivered' || status === 'opened' || status === 'clicked' ? 'delivered' : 'sent',
+            status:
+              status === 'failed' || status === 'bounced'
+                ? 'failed'
+                : status === 'delivered' || status === 'opened' || status === 'clicked'
+                  ? 'delivered'
+                  : 'sent',
           };
           const arr = remindersByItemId.get(itemId) ?? [];
           arr.push(r);

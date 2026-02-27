@@ -251,4 +251,15 @@ describe('Agenda API', () => {
     );
     expect(afterItems.length).toBe(0);
   });
+
+  it('returns 503 when reminder service not configured', async () => {
+    const res = await request(app)
+      .post('/api/agenda/remind')
+      .set('Authorization', `Bearer ${testToken}`)
+      .send({ itemId: 'item-1', channel: 'email' });
+
+    expect(res.status).toBe(503);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('Reminder service');
+  });
 });

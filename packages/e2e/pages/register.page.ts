@@ -26,7 +26,9 @@ export class RegisterPage {
     this.termsConsentCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
     this.smsConsentCheckbox = page.locator('[data-testid="sms-consent-checkbox"]');
     this.registerButton = page.locator('[data-testid="button-register"], button[type="submit"]');
-    this.errorMessage = page.locator('[data-testid="message-error"], .text-red-500, .text-destructive');
+    this.errorMessage = page.locator(
+      '[data-testid="message-error"], .text-red-500, .text-destructive'
+    );
     this.loginLink = page.locator('[data-testid="link-login"], a[href="/login"]');
   }
 
@@ -61,5 +63,3 @@ export class RegisterPage {
     await expect(this.emailInput).toBeVisible();
   }
 }
-
-

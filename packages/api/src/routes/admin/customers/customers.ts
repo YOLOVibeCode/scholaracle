@@ -89,17 +89,21 @@ async function handleGetCustomers(
             .toArray()
         : Promise.resolve([]),
       userIds.length > 0
-        ? (scraperJobsCollection.aggregate([
-            { $match: { userId: { $in: userIds } } },
-            { $group: { _id: '$userId', count: { $sum: 1 } } },
-          ]).toArray() as Promise<Array<{ _id: string; count: number }>>)
+        ? (scraperJobsCollection
+            .aggregate([
+              { $match: { userId: { $in: userIds } } },
+              { $group: { _id: '$userId', count: { $sum: 1 } } },
+            ])
+            .toArray() as Promise<Array<{ _id: string; count: number }>>)
         : Promise.resolve([]),
       userIds.length > 0
-        ? (scraperJobsCollection.aggregate([
-            { $match: { userId: { $in: userIds }, status: 'ready' } },
-            { $sort: { updatedAt: -1 } },
-            { $group: { _id: '$userId', lastSync: { $first: '$updatedAt' } } },
-          ]).toArray() as Promise<Array<{ _id: string; lastSync: Date }>>)
+        ? (scraperJobsCollection
+            .aggregate([
+              { $match: { userId: { $in: userIds }, status: 'ready' } },
+              { $sort: { updatedAt: -1 } },
+              { $group: { _id: '$userId', lastSync: { $first: '$updatedAt' } } },
+            ])
+            .toArray() as Promise<Array<{ _id: string; lastSync: Date }>>)
         : Promise.resolve([]),
     ]);
 
@@ -107,27 +111,27 @@ async function handleGetCustomers(
     for (const uid of userIds) tokenStatusByUser[uid] = 'none';
     for (const doc of tokenDocs as unknown as Array<{ userId: string; revokedAt: Date | null }>) {
       if (doc.revokedAt == null) tokenStatusByUser[doc.userId] = 'active';
-      else if (tokenStatusByUser[doc.userId] !== 'active') tokenStatusByUser[doc.userId] = 'revoked';
+      else if (tokenStatusByUser[doc.userId] !== 'active')
+        tokenStatusByUser[doc.userId] = 'revoked';
     }
 
     const jobCountByUser: Record<string, number> = {};
-    for (const g of jobCounts as Array<{ _id: string; count: number }>) jobCountByUser[g._id] = g.count;
+    for (const g of jobCounts as Array<{ _id: string; count: number }>)
+      jobCountByUser[g._id] = g.count;
 
     const lastSyncByUser: Record<string, string> = {};
     for (const s of lastSyncDocs) {
       if (s.lastSync) lastSyncByUser[s._id] = (s.lastSync as Date).toISOString();
     }
 
-    const mapCustomer = (
-      c: {
-        _id?: { toString: () => string };
-        email: string;
-        name: string;
-        subscription: unknown;
-        isSuspended: boolean;
-        createdAt: Date;
-      }
-    ) => {
+    const mapCustomer = (c: {
+      _id?: { toString: () => string };
+      email: string;
+      name: string;
+      subscription: unknown;
+      isSuspended: boolean;
+      createdAt: Date;
+    }) => {
       const id = c._id?.toString();
       return {
         id,
@@ -136,9 +140,9 @@ async function handleGetCustomers(
         subscription: c.subscription,
         isSuspended: c.isSuspended,
         createdAt: c.createdAt.toISOString(),
-        scraperTokenStatus: id ? tokenStatusByUser[id] ?? 'none' : 'none',
-        scraperJobCount: id ? jobCountByUser[id] ?? 0 : 0,
-        lastScraperSync: id ? lastSyncByUser[id] ?? null : null,
+        scraperTokenStatus: id ? (tokenStatusByUser[id] ?? 'none') : 'none',
+        scraperJobCount: id ? (jobCountByUser[id] ?? 0) : 0,
+        lastScraperSync: id ? (lastSyncByUser[id] ?? null) : null,
       };
     };
 
@@ -197,11 +201,10 @@ async function handleGetCustomer(
     const [tokenDocs, jobCount, lastSyncDoc] = await Promise.all([
       revokedTokensCollection.find({ userId: id, tokenPurpose: 'scraper' }).toArray(),
       scraperJobsCollection.countDocuments({ userId: id }),
-      scraperJobsCollection
-        .findOne(
-          { userId: id, status: 'ready' },
-          { sort: { updatedAt: -1 }, projection: { updatedAt: 1 } }
-        ),
+      scraperJobsCollection.findOne(
+        { userId: id, status: 'ready' },
+        { sort: { updatedAt: -1 }, projection: { updatedAt: 1 } }
+      ),
     ]);
 
     let scraperTokenStatus: 'active' | 'none' | 'revoked' = 'none';

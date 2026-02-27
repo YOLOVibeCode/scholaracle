@@ -43,9 +43,8 @@ export default function StudentViewAlertsPage() {
   const [stableAlerts, setStableAlerts] = useState<readonly IAlert[]>([]);
 
   useEffect(() => {
-    if (studentAlerts.length > 0) {
-      setStableAlerts(studentAlerts);
-    }
+    if (studentAlerts.length === 0) return;
+    queueMicrotask(() => setStableAlerts(studentAlerts));
   }, [studentAlerts]);
 
   const alerts = alertsData !== null ? studentAlerts : stableAlerts;

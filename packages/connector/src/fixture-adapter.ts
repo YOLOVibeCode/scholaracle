@@ -73,5 +73,3 @@ export function buildFixtureEnvelope(params: {
     ],
   };
 }
-
-

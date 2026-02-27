@@ -176,6 +176,75 @@ describe('authApi', () => {
   });
 
   // -------------------------------------------------------------------------
+  // requestPasswordReset (TDD: API contract for password reset flow)
+  // -------------------------------------------------------------------------
+
+  describe('requestPasswordReset', () => {
+    it('POSTs to /auth/forgot-password with email', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true }));
+
+      const result = await authApi.requestPasswordReset('user@example.com');
+
+      expect(result.success).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/forgot-password'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ email: 'user@example.com' }),
+        }),
+      );
+    });
+
+    it('returns error on failure', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: false, error: 'Service unavailable' }, 503));
+
+      const result = await authApi.requestPasswordReset('user@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Service unavailable');
+    });
+
+    it('returns error when fetch throws', async () => {
+      fetchSpy.mockRejectedValue(new Error('Network error'));
+
+      const result = await authApi.requestPasswordReset('user@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resetPassword (TDD: API contract for reset-with-token)
+  // -------------------------------------------------------------------------
+
+  describe('resetPassword', () => {
+    it('POSTs to /auth/reset-password with token and newPassword', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true }));
+
+      const result = await authApi.resetPassword('reset-tok-123', 'NewSecurePass1!');
+
+      expect(result.success).toBe(true);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/reset-password'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'reset-tok-123', newPassword: 'NewSecurePass1!' }),
+        }),
+      );
+    });
+
+    it('returns error on failure', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: false, error: 'Invalid or expired token' }, 400));
+
+      const result = await authApi.resetPassword('bad-token', 'NewPass1!');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid or expired token');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // getToken
   // -------------------------------------------------------------------------
 

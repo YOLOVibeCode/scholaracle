@@ -39,7 +39,13 @@ describe('AssetRepository', () => {
     const count = await repo.softDeleteByEntity('u', 's', 'assignment', 'ext-1');
     expect(count).toBe(2);
     expect(coll.updateMany).toHaveBeenCalledWith(
-      { userId: 'u', sourceId: 's', entityType: 'assignment', entityExternalId: 'ext-1', deletedAt: null },
+      {
+        userId: 'u',
+        sourceId: 's',
+        entityType: 'assignment',
+        entityExternalId: 'ext-1',
+        deletedAt: null,
+      },
       expect.objectContaining({ $set: expect.objectContaining({ deletedAt: expect.any(Date) }) })
     );
   });

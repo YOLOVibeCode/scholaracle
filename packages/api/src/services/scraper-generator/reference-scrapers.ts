@@ -20,7 +20,9 @@ function getScrapersRoot(): string | null {
     return null;
   }
   try {
-    const pkgPath = require.resolve('scholaracle-scraper/package.json', { paths: [process.cwd(), __dirname] });
+    const pkgPath = require.resolve('scholaracle-scraper/package.json', {
+      paths: [process.cwd(), __dirname],
+    });
     const root = path.dirname(pkgPath);
     if (fs.existsSync(path.join(root, 'src', 'core', 'types.ts'))) return root;
   } catch {
@@ -61,7 +63,9 @@ export interface IReferenceScraperBundle {
  * Load reference scraper source for a known platform. Returns null if the
  * scholaracle_scrapers source is not available.
  */
-export function getReferenceScraper(platformId: ReferencePlatformId): IReferenceScraperBundle | null {
+export function getReferenceScraper(
+  platformId: ReferencePlatformId
+): IReferenceScraperBundle | null {
   const root = getScrapersRoot();
   if (!root) return null;
 
@@ -69,7 +73,12 @@ export function getReferenceScraper(platformId: ReferencePlatformId): IReference
   const typesCode = readFileSafe(src, 'core', 'types.ts');
   const baseScraperCode = readFileSafe(src, 'core', 'base-scraper.ts');
   const scraperCodeRaw = readFileSafe(src, 'scrapers', platformId, `${platformId}-scraper.ts`);
-  const transformerCodeRaw = readFileSafe(src, 'scrapers', platformId, `${platformId}-transformer.ts`);
+  const transformerCodeRaw = readFileSafe(
+    src,
+    'scrapers',
+    platformId,
+    `${platformId}-transformer.ts`
+  );
   const metadataRaw = readFileSafe(src, 'scrapers', platformId, 'metadata.json');
 
   if (!typesCode || !baseScraperCode || !scraperCodeRaw || !transformerCodeRaw || !metadataRaw) {

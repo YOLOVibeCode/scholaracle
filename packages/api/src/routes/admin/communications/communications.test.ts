@@ -63,7 +63,10 @@ describe('Admin Communications Routes', () => {
         stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
       })
     );
-    app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/communications',
+      communicationsRouter({ database, jwtSecret: 'test-secret' })
+    );
   });
 
   afterAll(async () => {
@@ -99,7 +102,9 @@ describe('Admin Communications Routes', () => {
   });
 
   it('should allow super_admin to list logs', async () => {
-    const res = await request(app).get('/api/admin/communications/logs').set('Authorization', `Bearer ${superAdminToken}`);
+    const res = await request(app)
+      .get('/api/admin/communications/logs')
+      .set('Authorization', `Bearer ${superAdminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
@@ -218,12 +223,13 @@ describe('Admin Communications Routes', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data?.batchId).toBeTruthy();
 
-      const batches = await request(app).get('/api/admin/communications/batches').set('Authorization', `Bearer ${superAdminToken}`);
+      const batches = await request(app)
+        .get('/api/admin/communications/batches')
+        .set('Authorization', `Bearer ${superAdminToken}`);
       expect(batches.status).toBe(200);
       expect(Array.isArray(batches.body.data)).toBe(true);
       expect(batches.body.data.length).toBeGreaterThan(0);
     });
-
   });
 
   describe('Delivery tracking + analytics', () => {
@@ -271,5 +277,3 @@ describe('Admin Communications Routes', () => {
     });
   });
 });
-
-

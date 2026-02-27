@@ -117,10 +117,17 @@ export interface ISkywardScraper {
  * All methods are optional (use ISkywardScraper for the base interface).
  */
 export interface ISkywardExtendedScraper extends ISkywardScraper {
-  scrapeAttendance?(user: string, pass: string): Promise<{ data: readonly ISkywardAttendanceRecord[] }>;
+  scrapeAttendance?(
+    user: string,
+    pass: string
+  ): Promise<{ data: readonly ISkywardAttendanceRecord[] }>;
   scrapeSchedule?(user: string, pass: string): Promise<{ data: readonly ISkywardScheduleEntry[] }>;
   scrapeMessages?(user: string, pass: string): Promise<{ data: readonly ISkywardMessage[] }>;
-  scrapeDocuments?(user: string, pass: string, courseId?: number): Promise<{ data: readonly ISkywardDocument[] }>;
+  scrapeDocuments?(
+    user: string,
+    pass: string,
+    courseId?: number
+  ): Promise<{ data: readonly ISkywardDocument[] }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,17 +164,11 @@ export class SkywardClient {
   // -----------------------------------------------------------------------
 
   public async getReport(): Promise<readonly ISkywardReport[]> {
-    const { data } = await this._scraper.scrapeReport(
-      this._config.username,
-      this._config.password
-    );
+    const { data } = await this._scraper.scrapeReport(this._config.username, this._config.password);
     return data;
   }
 
-  public async getGradebook(
-    courseId: number,
-    bucket: string
-  ): Promise<ISkywardGradebook> {
+  public async getGradebook(courseId: number, bucket: string): Promise<ISkywardGradebook> {
     const { data } = await this._scraper.scrapeGradebook(
       this._config.username,
       this._config.password,

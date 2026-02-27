@@ -16,7 +16,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -35,10 +37,18 @@ let mockStorage: Record<string, string> = {};
 
 const mockLocalStorage = {
   getItem: jest.fn((key: string) => mockStorage[key] ?? null),
-  setItem: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
-  removeItem: jest.fn((key: string) => { delete mockStorage[key]; }),
-  clear: jest.fn(() => { mockStorage = {}; }),
-  get length() { return Object.keys(mockStorage).length; },
+  setItem: jest.fn((key: string, value: string) => {
+    mockStorage[key] = value;
+  }),
+  removeItem: jest.fn((key: string) => {
+    delete mockStorage[key];
+  }),
+  clear: jest.fn(() => {
+    mockStorage = {};
+  }),
+  get length() {
+    return Object.keys(mockStorage).length;
+  },
   key: jest.fn(() => null),
 };
 
@@ -83,7 +93,13 @@ describe('adminCustomersApi', () => {
       const responseBody = { success: true, data: [], total: 0, page: 2, limit: 10 };
       fetchSpy.mockResolvedValue(fakeResponse(responseBody));
 
-      await adminCustomersApi.getAll({ page: 2, limit: 10, search: 'john', plan: 'pro', status: 'active' });
+      await adminCustomersApi.getAll({
+        page: 2,
+        limit: 10,
+        search: 'john',
+        plan: 'pro',
+        status: 'active',
+      });
 
       const calledUrl = fetchSpy.mock.calls[0][0] as string;
       expect(calledUrl).toContain('/admin/customers?');
@@ -101,12 +117,14 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
 
     it('fetches without query string when no params provided', async () => {
-      fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: [], total: 0, page: 1, limit: 25 }));
+      fetchSpy.mockResolvedValue(
+        fakeResponse({ success: true, data: [], total: 0, page: 1, limit: 25 })
+      );
 
       await adminCustomersApi.getAll();
 
@@ -117,7 +135,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -128,7 +146,12 @@ describe('adminCustomersApi', () => {
 
   describe('getById', () => {
     it('GETs /admin/customers/:id with admin token', async () => {
-      const customer = { id: 'cust-1', email: 'user@test.com', name: 'User', createdAt: '2024-01-01' };
+      const customer = {
+        id: 'cust-1',
+        email: 'user@test.com',
+        name: 'User',
+        createdAt: '2024-01-01',
+      };
       fetchSpy.mockResolvedValue(fakeResponse({ success: true, data: customer }));
 
       const result = await adminCustomersApi.getById('cust-1');
@@ -140,7 +163,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.id).toBe('cust-1');
@@ -166,7 +189,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -189,7 +212,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -212,7 +235,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -235,7 +258,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
   });
@@ -258,7 +281,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data).toEqual(students);
@@ -272,7 +295,7 @@ describe('adminCustomersApi', () => {
   describe('impersonate', () => {
     it('POSTs /admin/customers/:id/impersonate with reason and admin token', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { token: 'impersonation-jwt' } }),
+        fakeResponse({ success: true, data: { token: 'impersonation-jwt' } })
       );
 
       const result = await adminCustomersApi.impersonate('cust-3', 'Investigating billing issue');
@@ -285,7 +308,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.token).toBe('impersonation-jwt');
@@ -309,7 +332,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
     });
 
@@ -320,7 +343,7 @@ describe('adminCustomersApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://localhost:2801/api/admin/customers/cust-1/activity?limit=10',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
   });
@@ -332,7 +355,7 @@ describe('adminCustomersApi', () => {
   describe('getLtv', () => {
     it('GETs /admin/customers/:id/ltv with admin token', async () => {
       fetchSpy.mockResolvedValue(
-        fakeResponse({ success: true, data: { customerId: 'cust-1', ltv: 1200, currency: 'usd' } }),
+        fakeResponse({ success: true, data: { customerId: 'cust-1', ltv: 1200, currency: 'usd' } })
       );
 
       const result = await adminCustomersApi.getLtv('cust-1');
@@ -344,7 +367,7 @@ describe('adminCustomersApi', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer admin-jwt-token',
           }),
-        }),
+        })
       );
       expect(result.success).toBe(true);
       expect(result.data?.ltv).toBe(1200);

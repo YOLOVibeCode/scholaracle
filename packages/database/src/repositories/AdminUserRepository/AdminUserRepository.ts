@@ -106,11 +106,9 @@ export class AdminUserRepository implements IAdminUserReader, IAdminUserWriter {
       updateOp['$unset'] = Object.fromEntries(unsetKeys.map((k) => [k, '']));
     }
 
-    const result = await this._collection.findOneAndUpdate(
-      { _id: objectId },
-      updateOp,
-      { returnDocument: 'after' }
-    );
+    const result = await this._collection.findOneAndUpdate({ _id: objectId }, updateOp, {
+      returnDocument: 'after',
+    });
 
     if (!result || !result._id) {
       return null;

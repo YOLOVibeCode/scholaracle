@@ -1,4 +1,1 @@
-export {
-  OAuthAccountRepository,
-  type IOAuthAccountRepository,
-} from './OAuthAccountRepository';
+export { OAuthAccountRepository, type IOAuthAccountRepository } from './OAuthAccountRepository';

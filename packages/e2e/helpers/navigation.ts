@@ -22,7 +22,11 @@ async function waitForHrefNavigation(page: Page, href: string): Promise<void> {
   await page.waitForURL(href, { timeout, waitUntil: 'domcontentloaded' });
 }
 
-async function clickAndNavigate(page: Page, locator: ReturnType<Page['locator']>, href: string | null): Promise<void> {
+async function clickAndNavigate(
+  page: Page,
+  locator: ReturnType<Page['locator']>,
+  href: string | null
+): Promise<void> {
   // Click, then wait for URL change. If navigation flakes, retry with force, then finally fall back to direct goto.
   await locator.first().click();
 
@@ -54,7 +58,9 @@ export async function navigateToSidebar(page: Page, linkText: string): Promise<v
 
   // Ensure sidebar is visible (handle collapsed desktop sidebar and mobile off-canvas)
   const sidebarTrigger = page
-    .locator('[data-sidebar="trigger"], [data-testid="mobile-menu-toggle"], button[aria-label="Toggle menu"]')
+    .locator(
+      '[data-sidebar="trigger"], [data-testid="mobile-menu-toggle"], button[aria-label="Toggle menu"]'
+    )
     .first();
   const sidebarContent = page.locator('[data-slot="sidebar-content"]').first();
 
@@ -67,19 +73,26 @@ export async function navigateToSidebar(page: Page, linkText: string): Promise<v
   }
 
   // Wait for sidebar links to be available
-  await page.waitForSelector(`[data-testid="sidebar-${normalized}"]`, { timeout: 5000, state: 'visible' }).catch(async () => {
-    // Fallback: wait for any sidebar link
-    await page.waitForSelector('[data-testid^="sidebar-"]', { timeout: 5000, state: 'visible' }).catch(() => {});
-  });
+  await page
+    .waitForSelector(`[data-testid="sidebar-${normalized}"]`, { timeout: 5000, state: 'visible' })
+    .catch(async () => {
+      // Fallback: wait for any sidebar link
+      await page
+        .waitForSelector('[data-testid^="sidebar-"]', { timeout: 5000, state: 'visible' })
+        .catch(() => {});
+    });
 
   // Prefer stable test ids if present.
   const byTestId = page.locator(`[data-testid="sidebar-${normalized}"]`);
   const testIdCount = await byTestId.count();
-  
+
   if (testIdCount > 0) {
     // Ensure element is visible
-    await byTestId.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-    
+    await byTestId
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .catch(() => {});
+
     // Get the href to wait for navigation
     const href = await byTestId.getAttribute('href');
     await clickAndNavigate(page, byTestId, href);
@@ -90,7 +103,7 @@ export async function navigateToSidebar(page: Page, linkText: string): Promise<v
   const sidebar = page.locator('[role="complementary"], aside, nav, [data-slot="sidebar"]').first();
   const byTextLink = sidebar.locator(`a:has-text("${linkText}")`).first();
   const textLinkCount = await byTextLink.count();
-  
+
   if (textLinkCount > 0) {
     await byTextLink.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
     const href = await byTextLink.getAttribute('href');
