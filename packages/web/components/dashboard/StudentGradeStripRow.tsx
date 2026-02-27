@@ -119,12 +119,21 @@ export function StudentGradeStripRow({
         >
           {student.name}
         </Link>
-        <Link
-          href={`/dashboard/students/${student.id}/view`}
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          View as student
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/dashboard/students/${student.id}?tab=trends`}
+            className="text-xs font-medium text-primary hover:underline"
+            data-testid={`strip-row-trends-${student.id}`}
+          >
+            Trends
+          </Link>
+          <Link
+            href={`/dashboard/students/${student.id}/view`}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            View as student
+          </Link>
+        </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5">
         {courseGrades.length > 0 ? (

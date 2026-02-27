@@ -201,4 +201,95 @@ describe('studentsApi', () => {
       expect(result).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // getGradeHistory
+  // -------------------------------------------------------------------------
+
+  describe('getGradeHistory', () => {
+    it('GETs /students/:id/grade-history and returns response when no opts', async () => {
+      const body = {
+        studentId: 'stu-1',
+        courses: [
+          {
+            courseExternalId: 'c1',
+            courseName: 'Math',
+            snapshots: [{ date: '2025-02-01', percentGrade: 85, provider: 'canvas' }],
+          },
+        ],
+      };
+      fetchSpy.mockResolvedValue(fakeResponse(body));
+
+      const result = await studentsApi.getGradeHistory('stu-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/students/stu-1/grade-history`,
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result).toEqual(body);
+    });
+
+    it('adds course query param when courseExternalId provided', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ studentId: 'stu-1', courses: [] }));
+
+      await studentsApi.getGradeHistory('stu-1', 'course-abc');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/students/stu-1/grade-history?course=course-abc`,
+        expect.any(Object),
+      );
+    });
+
+    it('adds from, to, and term query params when opts provided', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ studentId: 'stu-1', courses: [] }));
+
+      await studentsApi.getGradeHistory('stu-1', undefined, {
+        from: '2025-01-01',
+        to: '2025-06-30',
+        term: '2025-2026 Semester 1',
+      });
+
+      const url = (fetchSpy.mock.calls[0] as unknown[])[0] as string;
+      expect(url).toContain('/students/stu-1/grade-history?');
+      expect(url).toContain('from=2025-01-01');
+      expect(url).toContain('to=2025-06-30');
+      expect(url).toContain('term=');
+      expect(url).toContain('2025-2026');
+      expect(url).toContain('Semester');
+    });
+
+    it('returns null when the request fails', async () => {
+      fetchSpy.mockRejectedValue(new Error('Network error'));
+
+      const result = await studentsApi.getGradeHistory('stu-1');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // archiveGradeHistory
+  // -------------------------------------------------------------------------
+
+  describe('archiveGradeHistory', () => {
+    it('DELETEs /students/:id/grade-history?before=<date>', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ archived: 12 }));
+
+      await studentsApi.archiveGradeHistory('stu-1', '2025-07-01');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/students/stu-1/grade-history?before=2025-07-01`,
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('encodes before date in query', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ archived: 0 }));
+
+      await studentsApi.archiveGradeHistory('stu-2', '2024-12-31');
+
+      const url = (fetchSpy.mock.calls[0] as unknown[])[0] as string;
+      expect(url).toContain('before=2024-12-31');
+    });
+  });
 });
