@@ -53,6 +53,9 @@ importers:
       '@scholaracle/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@scholaracle/database':
+        specifier: workspace:*
+        version: link:../database
       '@scholaracle/interfaces':
         specifier: workspace:*
         version: link:../interfaces

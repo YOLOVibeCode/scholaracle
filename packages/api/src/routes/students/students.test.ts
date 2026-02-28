@@ -1080,4 +1080,119 @@ describe('Students API Routes', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('GET /api/students/:id/contacts', () => {
+    it('should return 200 with owner and contacts list', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Contact Test Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const res = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThanOrEqual(1);
+      expect(res.body[0]).toMatchObject({ isOwner: true, status: 'accepted' });
+    });
+  });
+
+  describe('POST /api/students/:id/contacts', () => {
+    it('should create pending contact and return 201', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'newcontact@example.com', name: 'New Contact', role: 'parent' });
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.contact).toMatchObject({
+        email: 'newcontact@example.com',
+        status: 'pending',
+        receiveAlerts: true,
+      });
+    });
+
+    it('should return 409 when contact email already exists', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'dup@example.com', role: 'parent' });
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'dup@example.com', role: 'guardian' });
+      expect(res.status).toBe(409);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('PUT /api/students/:id/owner-alert-prefs', () => {
+    it('should update owner alert prefs and return 200', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const res = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email', 'sms'] });
+      expect(res.status).toBe(200);
+      expect(res.body.ownerAlertPrefs).toMatchObject({
+        receiveAlerts: true,
+        alertChannels: ['email', 'sms'],
+      });
+    });
+  });
+
+  describe('POST /api/students/:id/contacts/accept', () => {
+    it('should return 404 when no pending invite for email', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'nopending@example.com' });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('DELETE /api/students/:id/contacts/:email', () => {
+    it('should remove contact and return 200', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'toremove@example.com', role: 'parent' });
+      const res = await request(app)
+        .delete(`/api/students/${studentId}/contacts/toremove@example.com`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      const listRes = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const found = listRes.body.find(
+        (c: { email?: string }) => c.email === 'toremove@example.com'
+      );
+      expect(found).toBeUndefined();
+    });
+  });
 });

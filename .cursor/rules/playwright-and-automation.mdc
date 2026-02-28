@@ -1,0 +1,14 @@
+---
+description: All testable flows use Playwright; UI must be automation-friendly
+alwaysApply: true
+---
+
+# Playwright-First & Automation-Friendly UI
+
+- **All testable UX must be automatable via Playwright.** No manual-only or script-only flows for user-facing behavior. Add or extend E2E specs in `packages/e2e/tests/` for any new user journey.
+- **Prefer UI over API in E2E** when asserting user behavior: e.g. register and add student via the app (Playwright) so the full path is covered; use API only for triggers that have no UI (e.g. alert creation) or for setup when appropriate.
+- **Follow `AUTOMATION_TESTABILITY.md`** for all UI:
+  - Use `data-testid` (or equivalent stable, accessible selectors) on interactive elements so Playwright does not rely on fragile CSS or text.
+  - No native dialogs (`confirm`, `alert`, `prompt`); use custom dialog components.
+  - Keep elements mounted during loading/error where possible to avoid DOM detachment.
+- **New features:** Before merging, add or update Playwright tests that cover the happy path and critical errors. Ensure new pages/forms have the test IDs and structure described in `AUTOMATION_TESTABILITY.md`.

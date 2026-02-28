@@ -8,10 +8,12 @@ import {
   AlertRepository,
   type IDataSource,
   type IDataSourceCredentials,
+  type ISharedParent,
   type IStudentData,
 } from '@scholaracle/database';
 import { GradeRiskService } from '@scholaracle/agents';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import type { IInviteEmailSender } from '../../services/InviteEmailSender';
 import { createHash } from 'node:crypto';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
@@ -76,6 +78,8 @@ function mergeCoursesInline(courses: readonly ISourceCourse[]): readonly IMerged
 export interface IStudentsRouterConfig {
   readonly database: Db;
   readonly baseUrl?: string;
+  /** Optional sender for contact-invitation emails. */
+  readonly sendInviteEmail?: IInviteEmailSender;
 }
 
 export interface IActionAsset {
@@ -246,6 +250,7 @@ function determineActionBucket(
  * @param config - Router configuration
  * @returns Express router
  */
+// eslint-disable-next-line max-lines-per-function, complexity
 export function studentsRouter(config: IStudentsRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
@@ -329,6 +334,392 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   });
 
   /**
+   * GET /api/students/:id/contacts
+   * List owner + all contacts with status (consent-first contact list).
+   */
+  router.get('/:id/contacts', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const contacts = [
+        {
+          userId: student.userId.toString(),
+          role: 'parent' as const,
+          status: 'accepted' as const,
+          isOwner: true,
+          isAdmin: true,
+          receiveAlerts: student.ownerAlertPrefs?.receiveAlerts !== false,
+          alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
+          alertTypes: student.ownerAlertPrefs?.alertTypes,
+        },
+        ...student.sharedWith.map((sp) => ({
+          userId: sp.userId,
+          email: sp.email,
+          name: sp.name,
+          phone: sp.phone,
+          role: sp.role,
+          status: sp.status,
+          isAdmin: sp.isAdmin ?? false,
+          invitedAt: sp.invitedAt?.toISOString?.(),
+          acceptedAt: sp.acceptedAt?.toISOString?.(),
+          isOwner: false,
+          receiveAlerts: sp.receiveAlerts !== false,
+          alertChannels: sp.alertChannels ?? ['email'],
+          alertTypes: sp.alertTypes,
+        })),
+      ];
+      res.status(200).json(contacts);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/contacts
+   * Invite a new contact. Sends invitation email when sendInviteEmail is configured.
+   */
+  router.post('/:id/contacts', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      if (!student.canAdmin(userId)) {
+        res.status(403).json({ success: false, error: 'Only an admin can add contacts' });
+        return;
+      }
+      const body = req.body as {
+        email?: string;
+        name?: string;
+        phone?: string;
+        role?: string;
+        alertChannels?: readonly ('email' | 'sms')[];
+        alertTypes?: readonly string[];
+      };
+      if (!body.email || typeof body.email !== 'string' || !body.email.includes('@')) {
+        res.status(400).json({ success: false, error: 'Valid email is required' });
+        return;
+      }
+      const normalizedEmail = body.email.toLowerCase().trim();
+      const role =
+        body.role === 'guardian' || body.role === 'caregiver' ? body.role : ('parent' as const);
+      if (student.hasContact(normalizedEmail)) {
+        res.status(409).json({ success: false, error: 'This email is already a contact' });
+        return;
+      }
+      const newContact: ISharedParent = {
+        email: normalizedEmail,
+        name: body.name?.trim(),
+        phone: body.phone?.trim(),
+        role,
+        status: 'pending',
+        invitedAt: new Date(),
+        receiveAlerts: true,
+        alertChannels: body.alertChannels ?? ['email'],
+        alertTypes: body.alertTypes,
+      };
+      const newShared: readonly ISharedParent[] = [...student.sharedWith, newContact];
+      await studentRepository.update(student._id!, { sharedWith: newShared });
+      const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+      try {
+        await config.sendInviteEmail?.sendInvite({
+          to: normalizedEmail,
+          studentName: student.name,
+          studentId: student._id!.toString(),
+          inviteEmail: normalizedEmail,
+          baseUrl,
+        });
+      } catch {
+        // Log but do not fail the request
+      }
+      res.status(201).json({
+        success: true,
+        contact: {
+          email: normalizedEmail,
+          name: newContact.name,
+          phone: newContact.phone,
+          role,
+          status: 'pending',
+          invitedAt: newContact.invitedAt.toISOString(),
+          receiveAlerts: true,
+          alertChannels: newContact.alertChannels,
+          alertTypes: newContact.alertTypes,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/contacts/accept
+   * Accept a pending invite (authenticated user; email must match).
+   */
+  router.post('/:id/contacts/accept', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { email } = req.body as { email?: string };
+      if (!email) {
+        res.status(400).json({ success: false, error: 'Email is required' });
+        return;
+      }
+      const normalizedEmail = (email as string).toLowerCase().trim();
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const inviteIdx = student.sharedWith.findIndex(
+        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
+      );
+      if (inviteIdx === -1) {
+        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
+        return;
+      }
+      const updatedShared = [...student.sharedWith];
+      const current = updatedShared[inviteIdx]!;
+      updatedShared[inviteIdx] = {
+        ...current,
+        userId,
+        status: 'accepted',
+        acceptedAt: new Date(),
+        receiveAlerts: current.receiveAlerts !== false,
+        alertChannels: current.alertChannels ?? ['email'],
+      };
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      res.status(200).json({ success: true, message: 'Invite accepted' });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/contacts/decline
+   * Decline a pending invite (authenticated user; email must match).
+   */
+  router.post('/:id/contacts/decline', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { email } = req.body as { email?: string };
+      if (!email) {
+        res.status(400).json({ success: false, error: 'Email is required' });
+        return;
+      }
+      const normalizedEmail = (email as string).toLowerCase().trim();
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const inviteIdx = student.sharedWith.findIndex(
+        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
+      );
+      if (inviteIdx === -1) {
+        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
+        return;
+      }
+      const updatedShared = [...student.sharedWith];
+      updatedShared[inviteIdx] = { ...updatedShared[inviteIdx]!, status: 'declined' };
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      res.status(200).json({ success: true, message: 'Invite declined' });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * PUT /api/students/:id/contacts/:email
+   * Update contact. Owner/admin: any field. Contact: only receiveAlerts, alertChannels, alertTypes.
+   */
+  router.put('/:id/contacts/:email', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
+      const idx = student.sharedWith.findIndex((sp) => sp.email === targetEmail);
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Contact not found' });
+        return;
+      }
+      const isOwnerOrAdmin = student.canAdmin(userId);
+      const isSelf = student.sharedWith[idx]!.userId === userId;
+      const body = req.body as {
+        name?: string;
+        phone?: string;
+        role?: string;
+        receiveAlerts?: boolean;
+        alertChannels?: readonly ('email' | 'sms')[];
+        alertTypes?: readonly string[];
+      };
+      const updatedShared = [...student.sharedWith];
+      const current = updatedShared[idx]!;
+      if (isOwnerOrAdmin) {
+        updatedShared[idx] = {
+          ...current,
+          ...(body.name !== undefined && { name: body.name?.trim() }),
+          ...(body.phone !== undefined && { phone: body.phone?.trim() }),
+          ...(body.role !== undefined && {
+            role: (body.role === 'guardian' || body.role === 'caregiver' ? body.role : 'parent') as
+              | 'parent'
+              | 'guardian'
+              | 'caregiver',
+          }),
+          ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
+          ...(body.alertChannels !== undefined && { alertChannels: body.alertChannels }),
+          ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
+        };
+      } else if (isSelf) {
+        updatedShared[idx] = {
+          ...current,
+          ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
+          ...(body.alertChannels !== undefined && { alertChannels: body.alertChannels }),
+          ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
+        };
+      } else {
+        res.status(403).json({ success: false, error: 'You can only edit your own contact prefs' });
+        return;
+      }
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      res.status(200).json({ success: true });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/students/:id/contacts/:email
+   * Remove a contact. Admin can remove anyone; contact can remove themselves.
+   */
+  router.delete('/:id/contacts/:email', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
+      const isAdmin = student.canAdmin(userId);
+      if (!isAdmin) {
+        const selfEntry = student.sharedWith.find(
+          (sp) => sp.userId === userId && sp.email === targetEmail
+        );
+        if (!selfEntry) {
+          res.status(403).json({ success: false, error: 'You can only remove yourself' });
+          return;
+        }
+      }
+      const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
+      if (updatedShared.length === student.sharedWith.length) {
+        res.status(404).json({ success: false, error: 'Contact not found' });
+        return;
+      }
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      res.status(200).json({ success: true });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * PUT /api/students/:id/owner-alert-prefs
+   * Set owner's per-student alert preferences (receiveAlerts, channels, types).
+   */
+  router.put('/:id/owner-alert-prefs', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      if (student.userId.toString() !== userId) {
+        res
+          .status(403)
+          .json({ success: false, error: 'Only the account owner can set owner alert prefs' });
+        return;
+      }
+      const body = req.body as {
+        receiveAlerts?: boolean;
+        alertChannels?: readonly ('email' | 'sms')[];
+        alertTypes?: readonly string[];
+      };
+      const prefs = {
+        receiveAlerts: body.receiveAlerts ?? true,
+        alertChannels: body.alertChannels ?? ['email'],
+        alertTypes: body.alertTypes,
+      };
+      await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
+      res.status(200).json({ success: true, ownerAlertPrefs: prefs });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
    * GET /api/students/:id
    * Get student by ID.
    */
@@ -376,6 +767,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students/:id/grades
    * Get per-course grades and assignment breakdown for a student.
    */
+  // eslint-disable-next-line complexity
   router.get('/:id/grades', async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -740,6 +1132,21 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         : { userId, studentExternalId, deletedAt: null };
 
       const courseQueryParam = req.query['course'] as string | undefined;
+      const assignmentParam = req.query['assignment'] as string | undefined;
+
+      let assignmentCourseId: string | null = null;
+      if (assignmentParam) {
+        const assignmentDoc = await config.database.collection('slc_assignments').findOne({
+          userId,
+          deletedAt: null,
+          externalId: assignmentParam,
+          $or: [
+            { studentId: studentDbIdStr },
+            ...(studentExternalId ? [{ studentExternalId }] : []),
+          ],
+        });
+        assignmentCourseId = (assignmentDoc?.['courseExternalId'] as string) ?? null;
+      }
 
       const [materialDocs, courseDocs, assetDocs] = await Promise.all([
         materialsColl.find(materialFilter).toArray(),
@@ -756,10 +1163,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const assetMap = new Map<string, { assetId: string; fileSize?: number; mimeType?: string }>();
       for (const a of assetDocs) {
-        const entityId = a['entityId'] as string | undefined;
-        if (entityId) {
-          assetMap.set(entityId, {
-            assetId: a['_id']?.toString() ?? '',
+        const entityExtId = (a['entityExternalId'] ?? a['entityId']) as string | undefined;
+        if (entityExtId) {
+          assetMap.set(entityExtId, {
+            assetId: ((a['assetId'] ?? a['_id']?.toString()) as string) ?? '',
             fileSize: a['fileSize'] as number | undefined,
             mimeType: a['mimeType'] as string | undefined,
           });
@@ -787,6 +1194,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const courseExtId = (m['courseExternalId'] as string) ?? '';
         if (courseQueryParam && courseExtId !== courseQueryParam) continue;
 
+        if (assignmentParam) {
+          const rec = m['record'] as Record<string, unknown> | undefined;
+          const matAssignmentId = rec?.['assignmentExternalId'] as string | undefined;
+          const matchAssignment = matAssignmentId === assignmentParam;
+          const matchCourse = assignmentCourseId != null && courseExtId === assignmentCourseId;
+          if (!matchAssignment && !matchCourse) continue;
+        }
+
         const extId = (m['externalId'] as string) ?? '';
         const rec = m['record'] as Record<string, unknown> | undefined;
         const asset = assetMap.get(extId);
@@ -803,6 +1218,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           fileSize: asset?.fileSize ?? ((rec?.['fileSize'] ?? m['fileSize']) as number | undefined),
           assetId: asset?.assetId,
           downloadUrl: asset ? `${baseUrl}/api/assets/${asset.assetId}/download` : undefined,
+          linkAccessibility: rec?.['linkAccessibility'] as
+            | 'public'
+            | 'authenticated'
+            | 'unknown'
+            | undefined,
         };
 
         const list = grouped.get(courseExtId);
@@ -998,6 +1418,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students/:id/action-board
    * Get action board buckets for a student.
    */
+  // eslint-disable-next-line complexity
   router.get('/:id/action-board', async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -1868,12 +2289,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           userId: sp.userId,
           email: sp.email,
           name: sp.name,
+          phone: sp.phone,
           role: sp.role,
           status: sp.status,
           isAdmin: sp.isAdmin ?? false,
           invitedAt: sp.invitedAt?.toISOString(),
           acceptedAt: sp.acceptedAt?.toISOString(),
           isOwner: false,
+          receiveAlerts: sp.receiveAlerts !== false,
+          alertChannels: sp.alertChannels ?? ['email'],
+          alertTypes: sp.alertTypes,
         })),
       ];
 

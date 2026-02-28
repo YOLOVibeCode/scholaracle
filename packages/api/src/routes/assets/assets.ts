@@ -45,10 +45,34 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
   const store = config.assetStore;
   const baseUrl = config.baseUrl.replace(/\/$/, '');
 
+  router.get(
+    '/check',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const sourceId = (req.query['sourceId'] as string)?.trim();
+      const contentHash = (req.query['contentHash'] as string)?.trim();
+      if (!sourceId || !contentHash) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing query parameters: sourceId, contentHash',
+        });
+        return;
+      }
+      const existing = await assetRepo.findBySourceIdAndHash(sourceId, contentHash);
+      if (existing) {
+        const serverUrl = `${baseUrl}/api/assets/${existing.assetId}`;
+        res.status(200).json({ exists: true, assetId: existing.assetId, serverUrl });
+        return;
+      }
+      res.status(200).json({ exists: false });
+    })
+  );
+
   router.post(
     '/upload',
     connectorAuth,
     upload.single('file'),
+    // eslint-disable-next-line complexity
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       if (!userId) {
@@ -160,6 +184,19 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         res.status(404).json({ success: false, error: 'Asset not found' });
         return;
       }
+      const etag = `"${asset.contentHash}"`;
+      const lastModified =
+        asset.uploadedAt instanceof Date
+          ? asset.uploadedAt.toUTCString()
+          : new Date(asset.uploadedAt as unknown as string).toUTCString();
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', lastModified);
+      res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
+      const ifNoneMatch = req.get('If-None-Match');
+      if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === asset.contentHash)) {
+        res.status(304).end();
+        return;
+      }
       await assetRepo.updateLastAccessed(assetId);
       const { stream } = await store.get(asset.storageKey);
       res.setHeader('Content-Type', asset.mimeType);
@@ -183,6 +220,14 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         res.status(404).end();
         return;
       }
+      const etag = `"${asset.contentHash}"`;
+      const lastModified =
+        asset.uploadedAt instanceof Date
+          ? asset.uploadedAt.toUTCString()
+          : new Date(asset.uploadedAt as unknown as string).toUTCString();
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', lastModified);
+      res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
       res.setHeader('Content-Type', asset.mimeType);
       res.setHeader('Content-Length', String(asset.fileSize));
       res.status(200).end();

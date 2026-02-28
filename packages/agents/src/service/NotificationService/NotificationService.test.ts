@@ -276,5 +276,74 @@ describe('NotificationService', () => {
       expect(studentNotification.sentAt).toBeDefined();
       expect(parentNotification.sentAt).toBeDefined();
     });
+
+    it('should deliver to multiple resolved recipients and skip channels they do not have', async () => {
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+
+      const parentNotification = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'student-123',
+        userId: 'parent-456',
+        subject: 'Alert',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: 'missing_assignment',
+        channels: [NotificationChannel.EMAIL, NotificationChannel.SMS],
+      });
+
+      mockStudentGenerator.generate.mockReturnValue(
+        new Notification({
+          agentType: AgentType.STUDENT,
+          studentId: 'student-123',
+          userId: 'student-123',
+          subject: 'Test',
+          body: 'Test',
+          priority: NotificationPriority.HIGH,
+          triggerType: 'missing_assignment',
+          channels: [],
+        })
+      );
+      mockParentGenerator.generate.mockReturnValue(parentNotification);
+
+      const resolvedRecipients = [
+        { parentEmail: 'owner@example.com', parentPhone: '+15551111111' },
+        { parentEmail: 'contact2@example.com' },
+        { parentPhone: '+15552222222' },
+      ];
+
+      const deliveryResult: DeliveryResult = {
+        success: true,
+        channel: NotificationChannel.EMAIL,
+        messageId: 'id',
+        deliveredAt: new Date(),
+      };
+      mockDeliveryRouter.route.mockResolvedValue(deliveryResult);
+
+      await notificationService.processAlert(alert, resolvedRecipients);
+
+      // Student: 0 channels. Parent: 3 recipients × (email + sms where present)
+      // owner: email + sms = 2, contact2: email = 1, contact3: sms = 1 → total 4 parent deliveries
+      expect(mockDeliveryRouter.route).toHaveBeenCalledTimes(4);
+      const emailCalls = (mockDeliveryRouter.route as jest.Mock).mock.calls.filter(
+        (c: [Notification, string]) => c[1] === NotificationChannel.EMAIL
+      );
+      const smsCalls = (mockDeliveryRouter.route as jest.Mock).mock.calls.filter(
+        (c: [Notification, string]) => c[1] === NotificationChannel.SMS
+      );
+      expect(emailCalls).toHaveLength(2);
+      expect(smsCalls).toHaveLength(2);
+      const userIds = (mockDeliveryRouter.route as jest.Mock).mock.calls.map(
+        (c: [Notification, string]) => c[0].userId
+      );
+      expect(userIds).toContain('owner@example.com');
+      expect(userIds).toContain('contact2@example.com');
+      expect(userIds).toContain('+15551111111');
+      expect(userIds).toContain('+15552222222');
+    });
   });
 });

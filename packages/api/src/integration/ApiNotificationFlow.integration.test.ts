@@ -71,7 +71,7 @@ describe('API Notification Flow Integration', () => {
   });
 
   describe('POST /api/alerts → NotificationService → Delivery', () => {
-    it.skip('should process alert through complete flow: API → Service → Delivery', async () => {
+    it('should process alert through complete flow: API → Service → Delivery', async () => {
       // Arrange
       const alertData = {
         studentId: 'student-123',
@@ -110,7 +110,7 @@ describe('API Notification Flow Integration', () => {
       expect(response.body.deliveryResults.length).toBeGreaterThan(0);
     });
 
-    it.skip('should handle grade drop alert correctly', async () => {
+    it('should handle grade drop alert correctly', async () => {
       // Arrange
       const alertData = {
         studentId: 'student-456',

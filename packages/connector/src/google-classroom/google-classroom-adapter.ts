@@ -11,10 +11,12 @@ import type {
   IConnectionTestResult,
 } from '../adapter';
 import { GoogleClassroomClient } from './google-classroom-client';
+import { probeLinkAccessibilityBatch } from '../link-probe';
 import {
   transformCourseWorkToOp,
   transformCourseToOp,
   transformGradeSnapshotToOp,
+  transformMaterialToOps,
 } from './google-classroom-transformer';
 
 /**
@@ -133,6 +135,17 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
         }
       }
 
+      try {
+        const materials = await client.getCourseWorkMaterials(course.id);
+        for (const material of materials) {
+          for (const op of transformMaterialToOps(material, baseKey)) {
+            ops.push(op as unknown as ISlcDeltaOp);
+          }
+        }
+      } catch {
+        // Skip materials for this course without aborting the sync.
+      }
+
       if (totalPossible > 0) {
         ops.push(
           transformGradeSnapshotToOp(
@@ -142,6 +155,26 @@ export class GoogleClassroomAdapter implements ILmsAdapterWithTest {
             baseKey
           ) as unknown as ISlcDeltaOp
         );
+      }
+    }
+
+    // Probe link-type course materials for accessibility (batch concurrency 5).
+    const linkOps = ops.filter(
+      (o) =>
+        o.entity === 'courseMaterial' &&
+        (o.record as { type?: string; url?: string } | undefined)?.type === 'link' &&
+        (o.record as { url?: string })?.url
+    );
+    if (linkOps.length > 0) {
+      const urls = linkOps.map((o) => (o.record as { url: string }).url) as readonly string[];
+      const accessibilityByUrl = await probeLinkAccessibilityBatch(urls, 5);
+      for (const op of linkOps) {
+        const url = (op.record as { url: string }).url;
+        const acc = accessibilityByUrl.get(url) ?? 'unknown';
+        (op as { record: Record<string, unknown> }).record = {
+          ...(op.record as Record<string, unknown>),
+          linkAccessibility: acc,
+        };
       }
     }
 

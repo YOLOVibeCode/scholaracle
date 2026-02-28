@@ -3,6 +3,9 @@ import { GoogleClassroomAdapter } from './google-classroom-adapter';
 import { GoogleClassroomClient } from './google-classroom-client';
 
 jest.mock('./google-classroom-client');
+jest.mock('../link-probe', () => ({
+  probeLinkAccessibilityBatch: jest.fn().mockResolvedValue(new Map()),
+}));
 
 const MockGCClient = GoogleClassroomClient as jest.MockedClass<typeof GoogleClassroomClient>;
 
@@ -86,6 +89,7 @@ describe('GoogleClassroomAdapter', () => {
           },
         ]),
         getStudents: jest.fn().mockResolvedValue([]),
+        getCourseWorkMaterials: jest.fn().mockResolvedValue([]),
       };
       MockGCClient.mockImplementation(() => mockInstance as unknown as GoogleClassroomClient);
 

@@ -24,6 +24,7 @@ import {
   SessionRepository,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
+import { SendGridInviteEmailSender } from './services/InviteEmailSender';
 import { adminAuthRouter } from './routes/admin/auth';
 import { customersRouter } from './routes/admin/customers/customers';
 import { analyticsRouter } from './routes/admin/analytics';
@@ -228,6 +229,7 @@ async function initializeDatabase(config: IServerConfig): Promise<Db> {
  * @param database - MongoDB database instance
  * @returns Express application
  */
+// eslint-disable-next-line complexity
 export function createApp(config: IServerConfig = {}, database?: Db): Express {
   const app = express();
 
@@ -286,6 +288,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const sendGridConfig = getSendGridConfig(config);
     const sendGrid = sgMail as unknown as MailService;
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
+    const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
 
     const authService = new AuthService(
       database,
@@ -323,7 +326,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use(
       '/api/students',
       authMiddleware(authService),
-      studentsRouter({ database, baseUrl: baseUrl ?? '' })
+      studentsRouter({ database, baseUrl: baseUrl ?? '', sendInviteEmail: inviteEmailSender })
     );
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
 

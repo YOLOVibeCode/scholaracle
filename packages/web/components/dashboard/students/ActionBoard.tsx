@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
-import { studentsApi } from '@/lib/api/students';
+import { useEffect, useState } from 'react';
+import { studentsApi, type IActionItem } from '@/lib/api/students';
 import { useAsyncData } from '@/lib/hooks';
 import { LoadingSkeleton } from '@/components/common';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { ActionBucket } from './ActionBucket';
+import { AssignmentDetailDrawer } from './AssignmentDetailDrawer';
 
 export interface ActionBoardProps {
   readonly studentId: string;
@@ -14,6 +15,8 @@ export interface ActionBoardProps {
 }
 
 export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
+  const [drawerItem, setDrawerItem] = useState<IActionItem | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { data, isLoading, error, retry, refresh } = useAsyncData(
     () => studentsApi.getActionBoard(studentId),
     { retryCount: 1 }
@@ -66,10 +69,48 @@ export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
   }
 
   return (
-    <div className="space-y-4" data-testid="action-board">
-      {buckets.map((bucket) => (
-        <ActionBucket key={bucket.id} bucket={bucket} />
-      ))}
-    </div>
+    <>
+      <div className="space-y-4" data-testid="action-board">
+        {buckets.map((bucket) => (
+          <ActionBucket
+            key={bucket.id}
+            bucket={bucket}
+            onItemClick={(item) => {
+              setDrawerItem(item);
+              setDrawerOpen(true);
+            }}
+          />
+        ))}
+      </div>
+      <AssignmentDetailDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        studentId={studentId}
+        studentName={data.studentName}
+        assignment={
+          drawerItem
+            ? {
+                externalId: drawerItem.assignmentExternalId,
+                title: drawerItem.title,
+                dueAt: drawerItem.dueAt,
+                status: drawerItem.status,
+                pointsPossible: drawerItem.pointsPossible,
+                pointsEarned: drawerItem.pointsEarned,
+              }
+            : null
+        }
+        course={
+          drawerItem
+            ? {
+                externalId: drawerItem.course.externalId,
+                name: drawerItem.course.name,
+                currentGrade: drawerItem.course.currentGrade,
+                letterGrade: drawerItem.course.letterGrade,
+                riskLevel: drawerItem.course.riskLevel,
+              }
+            : null
+        }
+      />
+    </>
   );
 }

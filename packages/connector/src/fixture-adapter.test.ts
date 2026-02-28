@@ -54,4 +54,22 @@ describe('buildFixtureEnvelope', () => {
     const withoutPortal = buildFixtureEnvelope(baseParams);
     expect(withoutPortal.source.portalBaseUrl).toBeUndefined();
   });
+
+  it('returns ops with valid key and record shape for assignment and eventSeries', () => {
+    const envelope = buildFixtureEnvelope(baseParams);
+
+    const assignmentOp = envelope.ops.find((o) => o.entity === 'assignment');
+    expect(assignmentOp).toBeDefined();
+    expect(assignmentOp!.key.provider).toBe('fixture');
+    expect(assignmentOp!.key.externalId).toBe('assignment-1');
+    expect(assignmentOp!.record?.['title']).toBe('Read Chapter 1');
+    expect(assignmentOp!.record?.['status']).toBe('missing');
+
+    const seriesOp = envelope.ops.find((o) => o.entity === 'eventSeries');
+    expect(seriesOp).toBeDefined();
+    expect(seriesOp!.record?.['title']).toBe('Weekly Quiz');
+    expect((seriesOp!.record?.['recurrence'] as { rrule?: string })?.rrule).toContain(
+      'FREQ=WEEKLY'
+    );
+  });
 });

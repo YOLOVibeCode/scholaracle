@@ -1,8 +1,16 @@
-import type { ICanvasAssignment, ICanvasSubmission, ICanvasCalendarEvent } from './canvas-client';
+import type {
+  ICanvasAssignment,
+  ICanvasSubmission,
+  ICanvasCalendarEvent,
+  ICanvasFile,
+  ICanvasPage,
+} from './canvas-client';
 import {
   mapCanvasSubmissionStatus,
   transformAssignmentToOp,
   transformCalendarEventToOp,
+  transformFileToOp,
+  transformPageToOp,
 } from './canvas-transformer';
 
 const BASE_KEY = {
@@ -137,5 +145,86 @@ describe('transformCalendarEventToOp', () => {
     expect(op.record?.category).toBe('other');
     expect(op.record?.recurrence.rrule).toBe('FREQ=DAILY;COUNT=1');
     expect(op.record?.recurrence.count).toBe(1);
+  });
+});
+
+describe('transformFileToOp', () => {
+  const file: ICanvasFile = {
+    id: 100,
+    display_name: 'Syllabus.pdf',
+    filename: 'syllabus.pdf',
+    url: 'https://canvas.example.com/files/100/download',
+    size: 1024,
+    content_type: 'application/pdf',
+    created_at: '2025-09-01T00:00:00Z',
+    updated_at: '2025-09-02T00:00:00Z',
+    folder_id: 1,
+  };
+
+  it('should produce a courseMaterial upsert op with file metadata', () => {
+    const op = transformFileToOp(file, 10, BASE_KEY);
+
+    expect(op.op).toBe('upsert');
+    expect(op.entity).toBe('courseMaterial');
+    expect(op.key.externalId).toBe('canvas-file-100');
+    expect(op.key.courseExternalId).toBe('canvas-course-10');
+    expect(op.record?.title).toBe('Syllabus.pdf');
+    expect(op.record?.type).toBe('document');
+    expect(op.record?.url).toBe('https://canvas.example.com/files/100/download');
+    expect(op.record?.fileName).toBe('syllabus.pdf');
+    expect(op.record?.mimeType).toBe('application/pdf');
+    expect(op.record?.fileSize).toBe(1024);
+    expect(op.record?.postedAt).toBe('2025-09-01T00:00:00Z');
+  });
+
+  it('should map video content_type to type video', () => {
+    const videoFile = { ...file, id: 101, content_type: 'video/mp4' };
+    const op = transformFileToOp(videoFile, 10, BASE_KEY);
+    expect(op.record?.type).toBe('video');
+  });
+
+  it('should map presentation content_type to type presentation', () => {
+    const pptFile = { ...file, id: 102, content_type: 'application/vnd.ms-powerpoint' };
+    const op = transformFileToOp(pptFile, 10, BASE_KEY);
+    expect(op.record?.type).toBe('presentation');
+  });
+});
+
+describe('transformPageToOp', () => {
+  const page: ICanvasPage = {
+    page_id: 5,
+    url: 'syllabus',
+    title: 'Syllabus',
+    body: '<p>Course overview</p>',
+    published: true,
+    created_at: '2025-09-01T00:00:00Z',
+    updated_at: '2025-09-02T00:00:00Z',
+    html_url: 'https://canvas.example.com/courses/10/pages/syllabus',
+  };
+
+  it('should produce a courseMaterial upsert op with type document', () => {
+    const op = transformPageToOp(page, 10, BASE_KEY);
+
+    expect(op.op).toBe('upsert');
+    expect(op.entity).toBe('courseMaterial');
+    expect(op.key.externalId).toBe('canvas-page-5');
+    expect(op.key.courseExternalId).toBe('canvas-course-10');
+    expect(op.record?.title).toBe('Syllabus');
+    expect(op.record?.type).toBe('document');
+    expect(op.record?.url).toBe('https://canvas.example.com/courses/10/pages/syllabus');
+    expect(op.record?.extractedText).toBe('<p>Course overview</p>');
+    expect(op.record?.postedAt).toBe('2025-09-01T00:00:00Z');
+  });
+
+  it('should use page url when html_url is missing', () => {
+    const pageNoHtml = { ...page, html_url: undefined };
+    const op = transformPageToOp(pageNoHtml, 10, BASE_KEY);
+    expect(op.record?.url).toBe('syllabus');
+  });
+
+  it('should allow missing body', () => {
+    const pageNoBody = { ...page, body: undefined };
+    const op = transformPageToOp(pageNoBody, 10, BASE_KEY);
+    expect(op.record?.extractedText).toBeUndefined();
   });
 });

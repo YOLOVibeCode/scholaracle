@@ -6,6 +6,8 @@ export type {
   IGoogleStudentSubmission,
   IGoogleCourseStudent,
   IGoogleClassroomClientConfig,
+  IGoogleMaterial,
+  IGoogleMaterialAttachment,
 } from './google-classroom-client';
 export {
   googleDateToIso,
@@ -13,4 +15,5 @@ export {
   transformCourseWorkToOp,
   transformCourseToOp,
   transformGradeSnapshotToOp,
+  transformMaterialToOps,
 } from './google-classroom-transformer';
