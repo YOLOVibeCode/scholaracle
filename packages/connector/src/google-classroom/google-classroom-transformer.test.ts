@@ -4,11 +4,13 @@ import {
   transformCourseWorkToOp,
   transformCourseToOp,
   transformGradeSnapshotToOp,
+  transformMaterialToOps,
 } from './google-classroom-transformer';
 import type {
   IGoogleCourseWork,
   IGoogleStudentSubmission,
   IGoogleCourse,
+  IGoogleMaterial,
 } from './google-classroom-client';
 
 const BASE_KEY = {
@@ -156,5 +158,121 @@ describe('transformGradeSnapshotToOp', () => {
   it('should handle zero possible points', () => {
     const op = transformGradeSnapshotToOp('c-1', 0, 0, BASE_KEY);
     expect(op.record!.percentGrade).toBe(0);
+  });
+});
+
+describe('transformMaterialToOps', () => {
+  it('should produce one courseMaterial op per Drive file (type document)', () => {
+    const material: IGoogleMaterial = {
+      courseId: 'c-1',
+      id: 'mat-1',
+      title: 'Syllabus',
+      materials: [
+        {
+          driveFile: {
+            id: 'drive-1',
+            title: 'Syllabus.pdf',
+            alternateLink: 'https://drive.google.com/file/d/1/view',
+          },
+        },
+      ],
+    };
+    const ops = transformMaterialToOps(material, BASE_KEY);
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]!.entity).toBe('courseMaterial');
+    expect(ops[0]!.key.externalId).toBe('gc-material-c-1-mat-1-0');
+    expect(ops[0]!.key.courseExternalId).toBe('gc-course-c-1');
+    expect(ops[0]!.record!.type).toBe('document');
+    expect(ops[0]!.record!.url).toBe('https://drive.google.com/file/d/1/view');
+    expect(ops[0]!.record!.title).toBe('Syllabus.pdf');
+  });
+
+  it('should produce one courseMaterial op per YouTube video (type video)', () => {
+    const material: IGoogleMaterial = {
+      courseId: 'c-2',
+      id: 'mat-2',
+      title: 'Intro Video',
+      materials: [
+        {
+          youtubeVideo: {
+            id: 'yt-1',
+            title: 'Welcome',
+            alternateLink: 'https://www.youtube.com/watch?v=abc',
+          },
+        },
+      ],
+    };
+    const ops = transformMaterialToOps(material, BASE_KEY);
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]!.record!.type).toBe('video');
+    expect(ops[0]!.record!.url).toBe('https://www.youtube.com/watch?v=abc');
+    expect(ops[0]!.record!.title).toBe('Welcome');
+  });
+
+  it('should produce one courseMaterial op per link (type link)', () => {
+    const material: IGoogleMaterial = {
+      courseId: 'c-3',
+      id: 'mat-3',
+      title: 'Resources',
+      materials: [{ link: { url: 'https://example.com/resource', title: 'Resource Page' } }],
+    };
+    const ops = transformMaterialToOps(material, BASE_KEY);
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]!.record!.type).toBe('link');
+    expect(ops[0]!.record!.url).toBe('https://example.com/resource');
+    expect(ops[0]!.record!.title).toBe('Resource Page');
+  });
+
+  it('should produce one op per attachment and use material title as fallback', () => {
+    const material: IGoogleMaterial = {
+      courseId: 'c-4',
+      id: 'mat-4',
+      title: 'Week 1 Materials',
+      description: 'Read these',
+      creationTime: '2025-09-01T00:00:00Z',
+      materials: [
+        { link: { url: 'https://a.com', title: 'Link A' } },
+        { link: { url: 'https://b.com' } },
+      ],
+    };
+    const ops = transformMaterialToOps(material, BASE_KEY);
+
+    expect(ops).toHaveLength(2);
+    expect(ops[0]!.key.externalId).toBe('gc-material-c-4-mat-4-0');
+    expect(ops[0]!.record!.title).toBe('Link A');
+    expect(ops[1]!.key.externalId).toBe('gc-material-c-4-mat-4-1');
+    expect(ops[1]!.record!.title).toBe('Week 1 Materials');
+    expect(ops[1]!.record!.description).toBe('Read these');
+    expect(ops[1]!.record!.postedAt).toBe('2025-09-01T00:00:00Z');
+  });
+
+  it('should return empty array when materials is missing or empty', () => {
+    expect(
+      transformMaterialToOps({ courseId: 'c-1', id: 'm-1', title: 'Empty' }, BASE_KEY)
+    ).toEqual([]);
+    expect(
+      transformMaterialToOps(
+        { courseId: 'c-1', id: 'm-1', title: 'Empty', materials: [] },
+        BASE_KEY
+      )
+    ).toEqual([]);
+  });
+
+  it('should handle form attachment as type link', () => {
+    const material: IGoogleMaterial = {
+      courseId: 'c-1',
+      id: 'mat-form',
+      title: 'Survey',
+      materials: [{ form: { title: 'Feedback', formUrl: 'https://docs.google.com/forms/d/1' } }],
+    };
+    const ops = transformMaterialToOps(material, BASE_KEY);
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]!.record!.type).toBe('link');
+    expect(ops[0]!.record!.url).toBe('https://docs.google.com/forms/d/1');
+    expect(ops[0]!.record!.title).toBe('Feedback');
   });
 });

@@ -3,15 +3,39 @@
  */
 
 /**
- * TDD Tests for useAsyncData hook
- *
- * Following ISP: Small, focused interface for async data loading
+ * TDD Tests for useAsyncData hook.
+ * Async state updates are awaited via waitFor. User actions (retry/refresh) wrapped in act().
+ * Known React act() warnings from promise-driven setState are suppressed for this file.
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useAsyncData } from './useAsyncData';
 
+function suppressActWarnings(): () => void {
+  const orig = console.error;
+  console.error = (...args: unknown[]) => {
+    const msg = args.map((a) => (typeof a === 'string' ? a : String(a))).join('\n');
+    if (msg.includes('not wrapped in act') || msg.includes('not configured to support act')) {
+      return;
+    }
+    orig.apply(console, args);
+  };
+  return () => {
+    console.error = orig;
+  };
+}
+
 describe('useAsyncData Hook (ISP)', () => {
+  let restoreConsole: () => void;
+
+  beforeAll(() => {
+    restoreConsole = suppressActWarnings();
+  });
+
+  afterAll(() => {
+    restoreConsole();
+  });
+
   it('should return loading state initially', () => {
     const { result } = renderHook(() =>
       useAsyncData(() => Promise.resolve({ data: 'test' }))
@@ -49,7 +73,6 @@ describe('useAsyncData Hook (ISP)', () => {
   });
 
   it('should support retry', async () => {
-    // Track whether we should succeed — allows any number of React double-invokes
     let shouldSucceed = false;
     const fetchFn = jest.fn(() => {
       if (!shouldSucceed) {
@@ -66,9 +89,10 @@ describe('useAsyncData Hook (ISP)', () => {
 
     expect(result.current.error).toBe('Failed');
 
-    // Switch to success mode and retry
     shouldSucceed = true;
-    result.current.retry();
+    await act(async () => {
+      result.current.retry();
+    });
 
     await waitFor(() => {
       expect(result.current.data).toEqual({ data: 'success' });
@@ -92,8 +116,9 @@ describe('useAsyncData Hook (ISP)', () => {
 
     const callsBefore = fetchFn.mock.calls.length;
 
-    // Refresh triggers a new fetch
-    result.current.refresh();
+    await act(async () => {
+      result.current.refresh();
+    });
 
     await waitFor(() => {
       expect(fetchFn.mock.calls.length).toBeGreaterThan(callsBefore);

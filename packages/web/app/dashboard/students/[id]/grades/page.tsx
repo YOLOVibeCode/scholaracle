@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { studentsApi, type IStudentGradesResponse } from '@/lib/api/students';
+import { studentsApi, type IStudentGradesResponse, type ICourseAssignment, type ICourseGrade } from '@/lib/api/students';
 import { GradeSidebar } from '@/components/dashboard/students/GradeSidebar';
 import { AssignmentTable } from '@/components/dashboard/students/AssignmentTable';
 import { CourseGradeSummaryCard } from '@/components/dashboard/students/CourseGradeSummaryCard';
+import { AssignmentDetailDrawer } from '@/components/dashboard/students/AssignmentDetailDrawer';
 
 export default function StudentGradesPage() {
   const params = useParams();
@@ -21,6 +22,9 @@ export default function StudentGradesPage() {
   const [data, setData] = useState<IStudentGradesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [drawerAssignment, setDrawerAssignment] = useState<ICourseAssignment | null>(null);
+  const [drawerCourse, setDrawerCourse] = useState<ICourseGrade | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadGrades = useCallback(async () => {
     if (!studentId) return;
@@ -119,8 +123,31 @@ export default function StudentGradesPage() {
               <AssignmentTable
                 assignments={selectedCourse.assignments}
                 courseName={selectedCourse.courseName}
+                onAssignmentClick={(a) => {
+                  setDrawerAssignment(a);
+                  setDrawerCourse(selectedCourse);
+                  setDrawerOpen(true);
+                }}
               />
             </div>
+            <AssignmentDetailDrawer
+              open={drawerOpen}
+              onOpenChange={setDrawerOpen}
+              studentId={studentId}
+              studentName={data.studentName}
+              assignment={drawerAssignment}
+              course={
+                drawerCourse
+                  ? {
+                      externalId: drawerCourse.courseExternalId,
+                      name: drawerCourse.courseName,
+                      currentGrade: drawerCourse.grade,
+                      letterGrade: drawerCourse.letterGrade,
+                      riskLevel: drawerCourse.riskLevel,
+                    }
+                  : null
+              }
+            />
           </>
         ) : (
           <p className="text-muted-foreground">Select a course from the sidebar.</p>

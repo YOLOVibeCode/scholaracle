@@ -97,10 +97,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
-    // Layer 5: Integration (depends on feature)
+    // Layer 5: Integration (depends on feature) — includes full UX register → add student → alert [→ Mailpit]
     {
       name: 'integration',
-      testMatch: /05-integration\.spec\.ts/,
+      testMatch: /05-integration\.spec\.ts|13-full-ux-alert-email\.spec\.ts/,
       dependencies: ['feature'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 120 * 1000,
@@ -125,6 +125,14 @@ export default defineConfig({
     {
       name: 'multi-parent',
       testMatch: /08-multi-parent\.spec\.ts/,
+      dependencies: ['critical'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 90 * 1000,
+    },
+    // Blended-family contacts (consent-first: contacts API, accept, owner-alert-prefs)
+    {
+      name: 'blended-family-contacts',
+      testMatch: /12-blended-family-contacts\.spec\.ts/,
       dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,

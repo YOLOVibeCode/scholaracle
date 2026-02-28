@@ -31,6 +31,10 @@ export interface ISharedParent {
   readonly isAdmin: boolean;
   readonly invitedAt?: string;
   readonly acceptedAt?: string;
+  readonly phone?: string;
+  readonly receiveAlerts?: boolean;
+  readonly alertChannels?: readonly ('email' | 'sms')[];
+  readonly alertTypes?: readonly string[];
 }
 
 export interface IPendingInvite {
@@ -175,6 +179,8 @@ export interface ICourseMaterial {
   readonly fileSize?: number;
   readonly assetId?: string;
   readonly downloadUrl?: string;
+  /** When 'authenticated', link requires school login; show lock indicator. */
+  readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
 }
 
 export interface ICourseMaterials {
@@ -322,9 +328,15 @@ export const studentsApi = {
     );
   },
 
-  async getMaterials(id: string, courseExternalId?: string): Promise<IStudentMaterialsResponse | null> {
+  async getMaterials(
+    id: string,
+    opts?: { courseExternalId?: string; assignmentExternalId?: string }
+  ): Promise<IStudentMaterialsResponse | null> {
     try {
-      const query = courseExternalId ? `?course=${encodeURIComponent(courseExternalId)}` : '';
+      const params = new URLSearchParams();
+      if (opts?.courseExternalId) params.set('course', opts.courseExternalId);
+      if (opts?.assignmentExternalId) params.set('assignment', opts.assignmentExternalId);
+      const query = params.toString() ? `?${params.toString()}` : '';
       return await apiClient.get<IStudentMaterialsResponse>(`/students/${id}/materials${query}`);
     } catch (error) {
       console.error('Failed to load materials:', error);

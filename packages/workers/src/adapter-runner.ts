@@ -102,35 +102,88 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
 // Canvas REST API (token-based)
 // ---------------------------------------------------------------------------
 
+/**
+ * Two-pass sync: pass 1 fetches metadata + downloads critical/high priority
+ * files; pass 2 downloads medium/low. Both passes produce an envelope. The
+ * caller (SyncWorker) is responsible for submitting them to the ingest API.
+ */
 async function runCanvasApi(
   baseUrl: string,
   token: string,
   runId: string
 ): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
   try {
-    const { CanvasAdapter } = await import('@scholaracle/connector');
+    const {
+      CanvasAdapter,
+      AssetDownloader: ASSET_DOWNLOADER_CTOR,
+      DEFAULT_MAX_ASSET_DOWNLOAD_BYTES,
+    } = await import('@scholaracle/connector');
     const adapter = new CanvasAdapter();
     await adapter.authenticate({ baseUrl, accessToken: token });
 
-    const envelope = await adapter.fetchEnvelope({
+    const apiBaseUrl = process.env['API_BASE_URL'];
+    const connectorToken = process.env['CONNECTOR_TOKEN'];
+    const sourceId = process.env['SOURCE_ID'] ?? runId;
+    const maxSize = parseInt(process.env['MAX_ASSET_DOWNLOAD_SIZE'] ?? '', 10);
+
+    const assetDownloader =
+      apiBaseUrl && connectorToken
+        ? new ASSET_DOWNLOADER_CTOR({
+            apiBaseUrl,
+            connectorToken,
+            sourceId,
+            provider: 'canvas',
+            maxSizeBytes: Number.isFinite(maxSize) ? maxSize : DEFAULT_MAX_ASSET_DOWNLOAD_BYTES,
+          })
+        : undefined;
+
+    const sharedParams = {
       runId,
-      sourceId: runId,
+      sourceId,
       displayName: 'Canvas',
       portalBaseUrl: baseUrl,
+      assetDownloader,
+      assetDownloadHeaders: { Authorization: `Bearer ${token}` },
+    };
+
+    const pass1Envelope = await adapter.fetchEnvelope({
+      ...sharedParams,
+      assetPriorityFilter: assetDownloader ? ('critical_high_only' as const) : ('all' as const),
     });
 
-    const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
-    const assignments = envelope.ops.filter(
+    let totalOps = pass1Envelope.ops.length;
+
+    if (assetDownloader) {
+      try {
+        const pass2Envelope = await adapter.fetchEnvelope({
+          ...sharedParams,
+          assetPriorityFilter: 'medium_low_only',
+        });
+        totalOps += pass2Envelope.ops.filter(
+          (o: { entity: string }) => o.entity === 'courseMaterial'
+        ).length;
+      } catch {
+        // Pass 2 is best-effort; user already sees data from pass 1.
+      }
+    }
+
+    const courses = pass1Envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'course'
+    ).length;
+    const assignments = pass1Envelope.ops.filter(
       (o: { entity: string }) => o.entity === 'assignment'
     ).length;
-    const grades = envelope.ops.filter(
+    const grades = pass1Envelope.ops.filter(
       (o: { entity: string }) => o.entity === 'gradeSnapshot'
+    ).length;
+    const materials = pass1Envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'courseMaterial'
     ).length;
 
     console.log(
-      `[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades`
+      `[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades, ${materials} materials (${totalOps} total ops)`
     );
-    return { success: true, summary: { courses, assignments, grades } };
+    return { success: true, summary: { courses, assignments, grades, materials } };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
   }

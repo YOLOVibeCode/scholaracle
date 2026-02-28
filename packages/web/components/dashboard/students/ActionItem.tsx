@@ -13,6 +13,7 @@ import type { IActionItem, IActionAsset } from '@/lib/api/students';
 
 export interface ActionItemProps {
   readonly item: IActionItem;
+  readonly onItemClick?: (item: IActionItem) => void;
 }
 
 function statusBadgeClass(status: string): string {
@@ -73,16 +74,25 @@ function AssetChip({ asset }: { asset: IActionAsset }) {
   );
 }
 
-export function ActionItem({ item }: ActionItemProps) {
+export function ActionItem({ item, onItemClick }: ActionItemProps) {
   const gradeLabel =
     item.course.currentGrade != null
       ? `${item.course.currentGrade}%`
       : item.course.letterGrade ?? '—';
   const allAssets = [...item.assets, ...item.materials];
+  const Wrapper = onItemClick ? 'button' : 'div';
+  const wrapperProps = onItemClick
+    ? {
+        type: 'button' as const,
+        onClick: () => onItemClick(item),
+        className:
+          'flex w-full flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring',
+      }
+    : { className: 'flex flex-col gap-2 rounded-lg border bg-card p-3' };
 
   return (
-    <div
-      className="flex flex-col gap-2 rounded-lg border bg-card p-3"
+    <Wrapper
+      {...wrapperProps}
       data-testid={`action-item-${item.assignmentExternalId}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -111,6 +121,6 @@ export function ActionItem({ item }: ActionItemProps) {
           ))}
         </div>
       )}
-    </div>
+    </Wrapper>
   );
 }

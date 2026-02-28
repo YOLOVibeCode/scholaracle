@@ -1,5 +1,32 @@
 import type { ISlcIngestEnvelopeV1, ISlcCursor } from '@scholaracle/contracts';
 
+/** Minimal interface for asset dedup + upload (implemented by AssetDownloader). */
+export interface IAssetDownloaderLike {
+  checkOnly(
+    contentHash: string
+  ): Promise<{ exists: boolean; assetId?: string; serverUrl?: string }>;
+  downloadAndUpload(params: {
+    url: string;
+    fileName: string;
+    mimeType: string;
+    entityType: string;
+    entityExternalId: string;
+    courseExternalId?: string;
+    downloadHeaders?: Record<string, string>;
+  }): Promise<{ assetId: string; serverUrl: string; contentHash?: string } | null>;
+}
+
+/** Minimal interface for persisted file sync state (implemented by SyncState). */
+export interface ISyncStateLike {
+  get(
+    externalId: string
+  ): { contentHash: string; lastModified: string; fileSize: number } | undefined;
+  set(
+    externalId: string,
+    entry: { externalId: string; contentHash: string; lastModified: string; fileSize: number }
+  ): void;
+}
+
 /**
  * Adapter metadata — identifies the LMS provider and adapter version.
  */
@@ -46,6 +73,14 @@ export interface IFetchEnvelopeParams {
   readonly displayName: string;
   readonly portalBaseUrl?: string;
   readonly cursor?: ISlcCursor;
+  /** When set, Canvas (and others) download file assets and rewrite URLs to server. */
+  readonly assetDownloader?: IAssetDownloaderLike;
+  /** When set with assetDownloader, enables quick-reject by updated_at + size. */
+  readonly syncState?: ISyncStateLike;
+  /** Headers for authenticated file downloads (e.g. Canvas Bearer token). */
+  readonly assetDownloadHeaders?: Record<string, string>;
+  /** For two-pass sync: only download assets in this priority band. Default 'all'. */
+  readonly assetPriorityFilter?: 'all' | 'critical_high_only' | 'medium_low_only';
 }
 
 /**
