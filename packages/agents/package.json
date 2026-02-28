@@ -16,6 +16,7 @@
     "clean": "rm -rf dist coverage *.tsbuildinfo"
   },
   "dependencies": {
+    "@scholaracle/database": "workspace:*",
     "@scholaracle/interfaces": "workspace:*",
     "@scholaracle/contracts": "workspace:*",
     "@sendgrid/mail": "^8.1.0",

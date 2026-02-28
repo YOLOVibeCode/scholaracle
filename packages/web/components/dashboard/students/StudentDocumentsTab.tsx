@@ -16,6 +16,8 @@ import {
   File,
   Download,
   Search,
+  Lock,
+  ExternalLink,
 } from 'lucide-react';
 import {
   studentsApi,
@@ -215,19 +217,33 @@ function MaterialRow({ material }: { material: ICourseMaterial }) {
         {material.type}
       </Badge>
 
+      {material.linkAccessibility === 'authenticated' && (
+        <span
+          className="shrink-0 text-muted-foreground"
+          title="This link requires your school login"
+        >
+          <Lock className="h-4 w-4" aria-hidden />
+        </span>
+      )}
+
       {(material.downloadUrl ?? material.url) && (
         <Button
           variant="ghost"
           size="icon"
           asChild
           data-testid="material-download"
+          title={material.downloadUrl ? 'Download' : 'Open link'}
         >
           <a
             href={material.downloadUrl ?? material.url}
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Download className="h-4 w-4" />
+            {material.downloadUrl ? (
+              <Download className="h-4 w-4" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
           </a>
         </Button>
       )}

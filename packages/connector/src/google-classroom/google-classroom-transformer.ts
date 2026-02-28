@@ -3,12 +3,15 @@ import type {
   ISlcEntityKey,
   ISlcAssignment,
   ISlcCourse,
+  ISlcCourseMaterial,
   ISlcGradeSnapshot,
 } from '@scholaracle/contracts';
 import type {
   IGoogleCourse,
   IGoogleCourseWork,
   IGoogleStudentSubmission,
+  IGoogleMaterial,
+  IGoogleMaterialAttachment,
 } from './google-classroom-client';
 
 type BaseKey = Omit<ISlcEntityKey, 'externalId'>;
@@ -116,4 +119,90 @@ export function transformGradeSnapshotToOp(
       asOfDate: new Date().toISOString().split('T')[0]!,
     },
   };
+}
+
+const COURSE_EXTERNAL_ID_PREFIX = 'gc-course-';
+
+/** One courseMaterial op per attachment (Drive -> document, YouTube -> video, link -> link). */
+export function transformMaterialToOps(
+  material: IGoogleMaterial,
+  baseKey: BaseKey,
+  assignmentExternalId?: string
+): ISlcDeltaOp<ISlcCourseMaterial>[] {
+  const courseExternalId = `${COURSE_EXTERNAL_ID_PREFIX}${material.courseId}`;
+  const ops: ISlcDeltaOp<ISlcCourseMaterial>[] = [];
+  const attachments = material.materials ?? [];
+  const baseRecord = {
+    title: material.title,
+    courseExternalId,
+    description: material.description,
+    postedAt: material.creationTime,
+    ...(assignmentExternalId && { assignmentExternalId }),
+  };
+
+  attachments.forEach((att: IGoogleMaterialAttachment, idx: number) => {
+    const externalId = `gc-material-${material.courseId}-${material.id}-${idx}`;
+
+    if (att.driveFile) {
+      ops.push({
+        op: 'upsert',
+        entity: 'courseMaterial',
+        key: { ...baseKey, externalId, courseExternalId },
+        observedAt: new Date().toISOString(),
+        record: {
+          ...baseRecord,
+          type: 'document',
+          url: att.driveFile.alternateLink,
+          title: att.driveFile.title ?? material.title,
+        },
+      });
+      return;
+    }
+    if (att.youtubeVideo) {
+      ops.push({
+        op: 'upsert',
+        entity: 'courseMaterial',
+        key: { ...baseKey, externalId, courseExternalId },
+        observedAt: new Date().toISOString(),
+        record: {
+          ...baseRecord,
+          type: 'video',
+          url: att.youtubeVideo.alternateLink,
+          title: att.youtubeVideo.title ?? material.title,
+        },
+      });
+      return;
+    }
+    if (att.link) {
+      ops.push({
+        op: 'upsert',
+        entity: 'courseMaterial',
+        key: { ...baseKey, externalId, courseExternalId },
+        observedAt: new Date().toISOString(),
+        record: {
+          ...baseRecord,
+          type: 'link',
+          url: att.link.url,
+          title: att.link.title ?? material.title,
+        },
+      });
+      return;
+    }
+    if (att.form) {
+      ops.push({
+        op: 'upsert',
+        entity: 'courseMaterial',
+        key: { ...baseKey, externalId, courseExternalId },
+        observedAt: new Date().toISOString(),
+        record: {
+          ...baseRecord,
+          type: 'link',
+          url: att.form.formUrl,
+          title: att.form.title ?? material.title,
+        },
+      });
+    }
+  });
+
+  return ops;
 }

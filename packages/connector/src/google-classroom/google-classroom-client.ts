@@ -44,6 +44,36 @@ export interface IGoogleCourseStudent {
   };
 }
 
+/** Attachment item within a course work material (Google Classroom API Material). */
+export interface IGoogleMaterialAttachment {
+  readonly driveFile?: {
+    readonly id?: string;
+    readonly title?: string;
+    readonly alternateLink?: string;
+  };
+  readonly youtubeVideo?: {
+    readonly id?: string;
+    readonly title?: string;
+    readonly alternateLink?: string;
+  };
+  readonly link?: { readonly url?: string; readonly title?: string };
+  readonly form?: {
+    readonly title?: string;
+    readonly formUrl?: string;
+    readonly responseUrl?: string;
+  };
+}
+
+export interface IGoogleMaterial {
+  readonly courseId: string;
+  readonly id: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly materials?: readonly IGoogleMaterialAttachment[];
+  readonly creationTime?: string;
+  readonly updateTime?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Paginated response wrapper
 // ---------------------------------------------------------------------------
@@ -117,6 +147,15 @@ export class GoogleClassroomClient {
     return this._paginatedGet<IGoogleCourseStudent>(`/courses/${courseId}/students`, 'students', {
       pageSize: '100',
     });
+  }
+
+  /** List course work materials (attachments: Drive files, links, YouTube, forms). */
+  public async getCourseWorkMaterials(courseId: string): Promise<readonly IGoogleMaterial[]> {
+    return this._paginatedGet<IGoogleMaterial>(
+      `/courses/${courseId}/courseWorkMaterials`,
+      'courseWorkMaterial',
+      { pageSize: '100' }
+    );
   }
 
   private async _paginatedGet<T>(

@@ -56,6 +56,7 @@ export class NotificationService {
    * @returns Result containing notifications and delivery results
    * @throws {DeliveryError} If delivery fails for any channel
    */
+  // eslint-disable-next-line complexity
   public async processAlert(
     alert: Alert,
     resolvedRecipients?: IResolvedRecipient | readonly IResolvedRecipient[]
@@ -81,8 +82,22 @@ export class NotificationService {
           : [resolvedRecipients]
         : [{}]; // empty = use parentNotification.userId as-is
 
+      const isDefaultSingleRecipient =
+        recipients.length === 1 && !recipients[0]!.parentEmail && !recipients[0]!.parentPhone;
       for (const recipient of recipients) {
         for (const channel of parentNotification.channels) {
+          if (
+            channel === NotificationChannel.EMAIL &&
+            !recipient.parentEmail &&
+            !isDefaultSingleRecipient
+          )
+            continue;
+          if (
+            channel === NotificationChannel.SMS &&
+            !recipient.parentPhone &&
+            !isDefaultSingleRecipient
+          )
+            continue;
           const to =
             channel === NotificationChannel.EMAIL
               ? (recipient.parentEmail ?? parentNotification.userId)

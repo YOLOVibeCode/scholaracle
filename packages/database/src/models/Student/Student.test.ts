@@ -224,5 +224,173 @@ describe('Student', () => {
       // Assert
       expect(student._id).toBeUndefined();
     });
+
+    it('should set ownerAlertPrefs when provided', () => {
+      const data = {
+        userId: 'user-123',
+        name: 'Jane Doe',
+        ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['email', 'sms'] as const },
+      };
+      const student = new Student(data);
+      expect(student.ownerAlertPrefs).toEqual({
+        receiveAlerts: true,
+        alertChannels: ['email', 'sms'],
+      });
+    });
+  });
+
+  describe('hasContact', () => {
+    it('should return true when a contact with the email exists', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          { email: 'other@example.com', role: 'parent', status: 'accepted', invitedAt: new Date() },
+        ],
+      });
+      expect(student.hasContact('other@example.com')).toBe(true);
+    });
+
+    it('should be case-insensitive', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          { email: 'Other@Example.com', role: 'parent', status: 'pending', invitedAt: new Date() },
+        ],
+      });
+      expect(student.hasContact('other@example.com')).toBe(true);
+      expect(student.hasContact('OTHER@EXAMPLE.COM')).toBe(true);
+    });
+
+    it('should return false when no contact has the email', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          { email: 'a@example.com', role: 'parent', status: 'accepted', invitedAt: new Date() },
+        ],
+      });
+      expect(student.hasContact('b@example.com')).toBe(false);
+    });
+
+    it('should return false when sharedWith is empty', () => {
+      const student = new Student({ userId: 'user-123', name: 'Jane Doe' });
+      expect(student.hasContact('any@example.com')).toBe(false);
+    });
+  });
+
+  describe('getAllAlertRecipients', () => {
+    it('should return owner when ownerAlertPrefs is absent (default opted in)', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [],
+      });
+      const out = student.getAllAlertRecipients('owner@example.com', '+15551234567');
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({
+        email: 'owner@example.com',
+        phone: '+15551234567',
+        channels: ['email'],
+        isPrimary: true,
+      });
+    });
+
+    it('should exclude owner when ownerAlertPrefs.receiveAlerts is false', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [],
+        ownerAlertPrefs: { receiveAlerts: false, alertChannels: ['email'] },
+      });
+      const out = student.getAllAlertRecipients('owner@example.com');
+      expect(out).toHaveLength(0);
+    });
+
+    it('should include accepted contacts with receiveAlerts not false', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          {
+            email: 'contact@example.com',
+            name: 'Contact',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+            acceptedAt: new Date(),
+            receiveAlerts: true,
+            alertChannels: ['email', 'sms'],
+            phone: '+15559876543',
+          },
+        ],
+      });
+      const out = student.getAllAlertRecipients('owner@example.com');
+      expect(out).toHaveLength(2);
+      expect(out[0]).toMatchObject({ email: 'owner@example.com', isPrimary: true });
+      expect(out[1]).toMatchObject({
+        email: 'contact@example.com',
+        phone: '+15559876543',
+        name: 'Contact',
+        channels: ['email', 'sms'],
+        isPrimary: false,
+      });
+    });
+
+    it('should exclude pending and declined contacts', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          {
+            email: 'pending@example.com',
+            role: 'parent',
+            status: 'pending',
+            invitedAt: new Date(),
+          },
+          {
+            email: 'declined@example.com',
+            role: 'parent',
+            status: 'declined',
+            invitedAt: new Date(),
+          },
+        ],
+      });
+      const out = student.getAllAlertRecipients('owner@example.com');
+      expect(out).toHaveLength(1);
+      expect(out[0]!.email).toBe('owner@example.com');
+    });
+
+    it('should exclude accepted contact with receiveAlerts false', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [
+          {
+            email: 'optedout@example.com',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+            acceptedAt: new Date(),
+            receiveAlerts: false,
+          },
+        ],
+      });
+      const out = student.getAllAlertRecipients('owner@example.com');
+      expect(out).toHaveLength(1);
+      expect(out[0]!.email).toBe('owner@example.com');
+    });
+
+    it('should use ownerAlertPrefs.alertChannels for owner', () => {
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        sharedWith: [],
+        ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['email', 'sms'] },
+      });
+      const out = student.getAllAlertRecipients('owner@example.com', '+15550001111');
+      expect(out[0]!.channels).toEqual(['email', 'sms']);
+    });
   });
 });

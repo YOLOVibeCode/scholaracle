@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { IActionBucket as IActionBucketType } from '@/lib/api/students';
+import type { IActionBucket as IActionBucketType, IActionItem } from '@/lib/api/students';
 import { ActionItem } from './ActionItem';
 
 export interface ActionBucketProps {
   readonly bucket: IActionBucketType;
+  readonly onItemClick?: (item: IActionItem) => void;
 }
 
 type BucketId = IActionBucketType['id'];
@@ -28,7 +29,7 @@ function leftBorderClass(id: BucketId): string {
   }
 }
 
-export function ActionBucket({ bucket }: ActionBucketProps) {
+export function ActionBucket({ bucket, onItemClick }: ActionBucketProps) {
   const defaultOpen = bucket.id !== 'caught_up';
   const [open, setOpen] = useState(defaultOpen);
   const borderClass = leftBorderClass(bucket.id);
@@ -66,7 +67,7 @@ export function ActionBucket({ bucket }: ActionBucketProps) {
             <p className="text-sm text-muted-foreground">Nothing here.</p>
           ) : (
             bucket.items.map((item) => (
-              <ActionItem key={item.assignmentExternalId} item={item} />
+              <ActionItem key={item.assignmentExternalId} item={item} onItemClick={onItemClick} />
             ))
           )}
         </CardContent>

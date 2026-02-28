@@ -5,4 +5,8 @@ export type {
   IDataSourceCredentials,
   IDataSourceConfig,
   IStudentStats,
+  ISharedParent,
+  IStudentContact,
+  IAlertRecipientResolved,
+  IOwnerAlertPrefs,
 } from './Student';

@@ -8,6 +8,8 @@ import { DataTable } from '@/components/ui/data-table';
 export interface AssignmentTableProps {
   assignments: readonly ICourseAssignment[];
   courseName: string;
+  /** When set, rows are clickable and open the assignment detail drawer. */
+  onAssignmentClick?: (assignment: ICourseAssignment) => void;
 }
 
 function statusBadgeClass(status: AssignmentStatus): string {
@@ -47,7 +49,7 @@ function percentText(a: ICourseAssignment): string {
   return '—';
 }
 
-export function AssignmentTable({ assignments, courseName }: AssignmentTableProps) {
+export function AssignmentTable({ assignments, courseName, onAssignmentClick }: AssignmentTableProps) {
   const columns: ColumnDef<ICourseAssignment, unknown>[] = useMemo(
     () => [
       { accessorKey: 'title', header: 'Title', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
@@ -90,7 +92,23 @@ export function AssignmentTable({ assignments, courseName }: AssignmentTableProp
         data={assignments}
         sorting
         getRowProps={(row) => ({
-          className: row.original.status === 'missing' || row.original.isOverdue ? 'bg-red-50/50 dark:bg-red-950/20' : undefined,
+          className: [
+            row.original.status === 'missing' || row.original.isOverdue ? 'bg-red-50/50 dark:bg-red-950/20' : undefined,
+            onAssignmentClick ? 'cursor-pointer hover:bg-muted/50' : undefined,
+          ]
+            .filter(Boolean)
+            .join(' '),
+          ...(onAssignmentClick && {
+            onClick: () => onAssignmentClick(row.original),
+            role: 'button',
+            tabIndex: 0,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onAssignmentClick(row.original);
+              }
+            },
+          }),
         })}
       />
     </div>

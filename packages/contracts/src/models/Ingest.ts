@@ -342,6 +342,8 @@ export interface ISlcCourseMaterial {
   readonly title: string;
   /** Which course this material belongs to. */
   readonly courseExternalId: string;
+  /** Assignment this material is attached to (if assignment-scoped). */
+  readonly assignmentExternalId?: string;
   /** Material type. */
   readonly type:
     | 'document'
@@ -367,6 +369,8 @@ export interface ISlcCourseMaterial {
   readonly extractedText?: string;
   /** File size in bytes. */
   readonly fileSize?: number;
+  /** Whether the link is public, behind auth, or unknown. */
+  readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
 }
 
 export interface ISlcMessage {
@@ -446,6 +450,7 @@ function requireString(entity: string, field: string, value: unknown): string | 
  * Validates that a record conforms to the required fields for a given entity type.
  * Optional fields are not checked — only required fields are enforced.
  */
+// eslint-disable-next-line complexity
 export function validateEntityRecord(
   entity: SlcEntityType,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

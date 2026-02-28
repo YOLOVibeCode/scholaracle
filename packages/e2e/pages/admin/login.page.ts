@@ -39,26 +39,51 @@ export class AdminLoginPage {
   async login(email: string, password: string): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
+
+    const responsePromise = this.page.waitForResponse(
+      (r) => r.url().includes('/admin/auth/login') && r.request().method() === 'POST'
+    );
+
     await this.loginButton.click();
+
+    await responsePromise;
   }
 
   /**
    * Login and complete MFA verification using the known E2E TOTP secret.
    */
   async loginWithMFA(email: string, password: string): Promise<void> {
-    await this.login(email, password);
-    // Wait for either MFA prompt or error
-    await Promise.race([
-      this.mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
-      this.errorMessage.waitFor({ state: 'visible', timeout: 15000 }),
-      this.page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 }),
-    ]);
-    if (await this.mfaInput.isVisible().catch(() => false)) {
-      const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
-      await this.mfaInput.fill(totp);
-      await this.verifyMfaButton.click();
-      await this.page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+
+    const loginResponsePromise = this.page.waitForResponse(
+      (r) => r.url().includes('/admin/auth/login') && r.request().method() === 'POST'
+    );
+
+    await this.loginButton.click();
+
+    const loginResponse = await loginResponsePromise;
+
+    if (loginResponse.status() < 400) {
+      await this.page.waitForURL(/\/admin(\/dashboard)?$/);
+      return;
     }
+
+    await expect(this.mfaInput).toBeVisible();
+
+    const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
+
+    const mfaResponsePromise = this.page.waitForResponse(
+      (r) => r.url().includes('/admin/auth/mfa/verify') && r.request().method() === 'POST'
+    );
+
+    await this.mfaInput.fill(totp);
+    await this.verifyMfaButton.click();
+
+    const mfaResponse = await mfaResponsePromise;
+    expect(mfaResponse.status()).toBeLessThan(400);
+
+    await this.page.waitForURL(/\/admin(\/dashboard)?$/);
   }
 
   async expectError(message?: string | RegExp, timeoutMs?: number): Promise<void> {
