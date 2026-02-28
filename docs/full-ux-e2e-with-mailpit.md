@@ -50,9 +50,23 @@ curl -X POST http://localhost:2801/api/seed/demo
 # Demo user: demo@scholaracle.com / DemoPass123!
 ```
 
-## 4. Full path (manual or smoke script)
+## 4. Full path (Playwright recommended)
 
-**Option A – Smoke script (recommended)**
+**Option A – Playwright E2E (recommended, fully automated)**
+
+All testable UX is automated via Playwright. From repo root:
+
+```bash
+# Default: register → add student (UI) → trigger alert (API). Mailpit check skipped if not set.
+pnpm --filter @scholaracle/e2e test 13-full-ux-alert-email
+
+# With Mailpit: start Mailpit and API with SMTP first, then:
+MAILPIT_UI=http://localhost:2804 pnpm --filter @scholaracle/e2e test 13-full-ux-alert-email
+```
+
+Requires API and Web running (e.g. `make up` or Playwright’s webServer). When `MAILPIT_UI` is set and the API is started with `SMTP_HOST=localhost` and `SMTP_PORT=2803`, the test also asserts that Mailpit received the alert email.
+
+**Option B – Smoke script (no browser)**
 
 From repo root, with API and Mailpit running:
 
@@ -60,13 +74,13 @@ From repo root, with API and Mailpit running:
 ./scripts/e2e-smoke.sh
 ```
 
-This will: register a user, add a student, POST an alert with `userId` (parent email), and assert that Mailpit received at least one message.
+Registers via API, adds student via API, POSTs alert, then asserts Mailpit has at least one message. No UI.
 
-**Option B – Manual**
+**Option C – Manual**
 
 1. **Register:** Open http://localhost:2800/register (or 3000), create an account.
 2. **Add student:** Dashboard → Students → Add Student (name, grade).
-3. **Trigger alert:** e.g. `curl -X POST http://localhost:2801/api/alerts` with body `{ "studentId": "<id>", "type": "GRADE_DROP", "severity": "critical", "userId": "your@email.com" }` (use the student id from step 2 and your email).
+3. **Trigger alert:** e.g. `curl -X POST http://localhost:2801/api/alerts` with body `{ "studentId": "<id>", "type": "grade_drop", "severity": "critical", "userId": "your@email.com" }` (use the student id from step 2 and your email).
 4. **Check Mailpit:** Open http://localhost:2804 and confirm the alert email appears.
 
 ## Email transport

@@ -10,8 +10,15 @@ import type {
   IFetchEnvelopeParams,
   IConnectionTestResult,
 } from '../adapter';
+import { classifyAssetPriority, compareAssetPriority } from '../asset-downloader';
+import type { ICanvasFile, ICanvasPage } from './canvas-client';
 import { CanvasClient } from './canvas-client';
-import { transformAssignmentToOp, transformCalendarEventToOp } from './canvas-transformer';
+import {
+  transformAssignmentToOp,
+  transformCalendarEventToOp,
+  transformFileToOp,
+  transformPageToOp,
+} from './canvas-transformer';
 
 /**
  * Canvas LMS adapter scaffold.
@@ -80,7 +87,7 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
     }
 
     const now = new Date().toISOString();
-    const ops = await this._fetchAllOps();
+    const ops = await this._fetchAllOps(params);
 
     return {
       schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
@@ -102,9 +109,14 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
     };
   }
 
-  private async _fetchAllOps(): Promise<readonly ISlcDeltaOp[]> {
+  // eslint-disable-next-line complexity
+  private async _fetchAllOps(params: IFetchEnvelopeParams): Promise<readonly ISlcDeltaOp[]> {
     const client = this._client!;
     const ops: ISlcDeltaOp[] = [];
+    const downloader = params.assetDownloader;
+    const syncState = params.syncState;
+    const downloadHeaders = params.assetDownloadHeaders ?? {};
+    const priorityFilter = params.assetPriorityFilter ?? 'all';
 
     const baseKey = {
       provider: this.meta.provider,
@@ -116,6 +128,17 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
     const courses = await client.getCourses();
 
     for (const course of courses) {
+      let files: readonly ICanvasFile[] = [];
+      let pages: readonly ICanvasPage[] = [];
+      try {
+        [files, pages] = await Promise.all([
+          client.getFiles(course.id),
+          client.getPages(course.id),
+        ]);
+      } catch {
+        // Skip materials for this course (e.g. 403) without aborting the sync.
+      }
+
       const [assignments, submissions] = await Promise.all([
         client.getAssignments(course.id),
         client.getSubmissions(course.id),
@@ -127,6 +150,69 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
         ops.push(
           transformAssignmentToOp(assignment, submission, baseKey) as unknown as ISlcDeltaOp
         );
+      }
+
+      const filesSorted = downloader
+        ? [...files].sort((a, b) => {
+            const pa = classifyAssetPriority({
+              fileName: a.filename,
+              mimeType: a.content_type,
+              fileSize: a.size,
+              postedAt: a.created_at,
+              displayName: a.display_name,
+            });
+            const pb = classifyAssetPriority({
+              fileName: b.filename,
+              mimeType: b.content_type,
+              fileSize: b.size,
+              postedAt: b.created_at,
+              displayName: b.display_name,
+            });
+            return compareAssetPriority(pa, pb);
+          })
+        : files;
+
+      for (const file of filesSorted) {
+        let op = transformFileToOp(file, course.id, baseKey) as unknown as ISlcDeltaOp;
+        const filePriority = classifyAssetPriority({
+          fileName: file.filename,
+          mimeType: file.content_type,
+          fileSize: file.size,
+          postedAt: file.created_at,
+          displayName: file.display_name,
+        });
+        const inScope =
+          priorityFilter === 'all' ||
+          (priorityFilter === 'critical_high_only' &&
+            (filePriority === 'critical' || filePriority === 'high')) ||
+          (priorityFilter === 'medium_low_only' &&
+            (filePriority === 'medium' || filePriority === 'low'));
+
+        if (downloader && inScope) {
+          const externalId = `canvas-file-${file.id}`;
+          const serverUrl = await this._maybeDownloadAsset(
+            file,
+            externalId,
+            course.id,
+            downloader,
+            syncState,
+            downloadHeaders
+          );
+          if (serverUrl && op.record) {
+            op = {
+              ...op,
+              record: {
+                ...op.record,
+                url: serverUrl,
+                linkAccessibility: 'public',
+              },
+            } as unknown as ISlcDeltaOp;
+          }
+        }
+        ops.push(op);
+      }
+      for (const page of pages) {
+        ops.push(transformPageToOp(page, course.id, baseKey) as unknown as ISlcDeltaOp);
       }
     }
 
@@ -140,5 +226,46 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
     }
 
     return ops;
+  }
+
+  private async _maybeDownloadAsset(
+    file: ICanvasFile,
+    externalId: string,
+    courseId: string,
+    downloader: IAssetDownloader,
+    syncState: ISyncState | undefined,
+    downloadHeaders: Record<string, string>
+  ): Promise<string | null> {
+    let serverUrl: string | null = null;
+    const entry = syncState?.get(externalId);
+    const cached = entry && entry.lastModified === file.updated_at && entry.fileSize === file.size;
+    if (cached) {
+      const check = await downloader.checkOnly(entry.contentHash);
+      if (check.exists && check.serverUrl) serverUrl = check.serverUrl;
+    }
+    if (!serverUrl) {
+      const result = await downloader.downloadAndUpload({
+        url: file.url,
+        fileName: file.filename,
+        mimeType: file.content_type,
+        entityType: 'courseMaterial',
+        entityExternalId: externalId,
+        courseExternalId: `canvas-course-${courseId}`,
+        downloadHeaders,
+      });
+      const uploaded = result;
+      if (uploaded) {
+        serverUrl = uploaded.serverUrl;
+        if (uploaded.contentHash) {
+          syncState?.set(externalId, {
+            externalId,
+            contentHash: uploaded.contentHash,
+            lastModified: file.updated_at,
+            fileSize: file.size,
+          });
+        }
+      }
+    }
+    return serverUrl;
   }
 }

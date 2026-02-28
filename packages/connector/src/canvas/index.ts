@@ -23,4 +23,6 @@ export {
   mapCanvasSubmissionStatus,
   transformAssignmentToOp,
   transformCalendarEventToOp,
+  transformFileToOp,
+  transformPageToOp,
 } from './canvas-transformer';

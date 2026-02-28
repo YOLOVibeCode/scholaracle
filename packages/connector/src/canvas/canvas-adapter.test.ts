@@ -107,6 +107,8 @@ describe('CanvasAdapter', () => {
             context_code: 'course_1',
           },
         ]),
+        getFiles: jest.fn().mockResolvedValue([]),
+        getPages: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -131,7 +133,7 @@ describe('CanvasAdapter', () => {
       expect(envelope.source.displayName).toBe('My School');
       expect(envelope.source.portalBaseUrl).toBe('https://canvas.school.edu');
 
-      // 1 assignment + 1 calendar event = 2 ops
+      // 1 assignment + 1 calendar event = 2 ops (no files/pages in this mock)
       expect(envelope.ops).toHaveLength(2);
       const op0 = envelope.ops[0]!;
       const op1 = envelope.ops[1]!;
@@ -139,6 +141,194 @@ describe('CanvasAdapter', () => {
       expect(op0.record?.['title']).toBe('HW1');
       expect(op1.entity).toBe('eventSeries');
       expect(op1.record?.['title']).toBe('Exam');
+    });
+
+    it('should include courseMaterial ops for files and pages', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 7, name: 'Art', course_code: 'A101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([]),
+        getSubmissions: jest.fn().mockResolvedValue([]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([
+          {
+            id: 200,
+            display_name: 'Handout',
+            filename: 'handout.pdf',
+            url: 'https://canvas.example.com/files/200',
+            size: 500,
+            content_type: 'application/pdf',
+            created_at: '2025-09-01T00:00:00Z',
+            updated_at: '2025-09-01T00:00:00Z',
+            folder_id: 1,
+          },
+        ]),
+        getPages: jest.fn().mockResolvedValue([
+          {
+            page_id: 3,
+            url: 'overview',
+            title: 'Overview',
+            body: '<p>Welcome</p>',
+            published: true,
+            created_at: '2025-09-01T00:00:00Z',
+            updated_at: '2025-09-01T00:00:00Z',
+            html_url: 'https://canvas.example.com/courses/7/pages/overview',
+          },
+        ]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      await adapter.authenticate({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'tok',
+      });
+
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'run-1',
+        sourceId: 'src-1',
+        displayName: 'School',
+        portalBaseUrl: 'https://canvas.school.edu',
+      });
+
+      const materialOps = envelope.ops.filter((o) => o.entity === 'courseMaterial');
+      expect(materialOps).toHaveLength(2);
+      const fileOp = materialOps.find((o) => o.key.externalId === 'canvas-file-200');
+      const pageOp = materialOps.find((o) => o.key.externalId === 'canvas-page-3');
+      expect(fileOp?.record?.['title']).toBe('Handout');
+      expect(fileOp?.record?.['type']).toBe('document');
+      expect(pageOp?.record?.['title']).toBe('Overview');
+      expect(pageOp?.record?.['extractedText']).toBe('<p>Welcome</p>');
+    });
+
+    it('should rewrite file URL to serverUrl when assetDownloader is provided', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 8, name: 'Math', course_code: 'M101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([]),
+        getSubmissions: jest.fn().mockResolvedValue([]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([
+          {
+            id: 300,
+            display_name: 'Notes',
+            filename: 'notes.pdf',
+            url: 'https://canvas.school.edu/files/300/download',
+            size: 100,
+            content_type: 'application/pdf',
+            created_at: '2025-09-01T00:00:00Z',
+            updated_at: '2025-09-01T00:00:00Z',
+            folder_id: 1,
+          },
+        ]),
+        getPages: jest.fn().mockResolvedValue([]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      const serverUrl = 'https://api.scholaracle.com/api/assets/asset-uuid-1';
+      const mockDownloader = {
+        checkOnly: jest.fn().mockResolvedValue({ exists: false }),
+        downloadAndUpload: jest.fn().mockResolvedValue({
+          assetId: 'asset-uuid-1',
+          serverUrl,
+          contentHash: 'abc',
+        }),
+      };
+
+      await adapter.authenticate({
+        baseUrl: 'https://canvas.school.edu',
+        accessToken: 'tok',
+      });
+
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'run-1',
+        sourceId: 'src-1',
+        displayName: 'School',
+        portalBaseUrl: 'https://canvas.school.edu',
+        assetDownloader: mockDownloader as unknown as import('../adapter').IAssetDownloaderLike,
+      });
+
+      const fileOp = envelope.ops.find(
+        (o) => o.entity === 'courseMaterial' && o.key.externalId === 'canvas-file-300'
+      );
+      expect(fileOp).toBeDefined();
+      expect(fileOp?.record?.['url']).toBe(serverUrl);
+      expect(mockDownloader.downloadAndUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://canvas.school.edu/files/300/download',
+          fileName: 'notes.pdf',
+          entityExternalId: 'canvas-file-300',
+          courseExternalId: 'canvas-course-8',
+        })
+      );
+    });
+
+    it('should only download critical/high when assetPriorityFilter is critical_high_only', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 9, name: 'Course', course_code: 'C101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([]),
+        getSubmissions: jest.fn().mockResolvedValue([]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([
+          {
+            id: 401,
+            display_name: 'Syllabus',
+            filename: 'syllabus.pdf',
+            url: 'https://canvas.edu/files/401',
+            size: 100,
+            content_type: 'application/pdf',
+            created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+            folder_id: 1,
+          },
+          {
+            id: 402,
+            display_name: 'Old Handout',
+            filename: 'old.pdf',
+            url: 'https://canvas.edu/files/402',
+            size: 500,
+            content_type: 'application/pdf',
+            created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+            folder_id: 1,
+          },
+        ]),
+        getPages: jest.fn().mockResolvedValue([]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      const mockDownloader = {
+        checkOnly: jest.fn().mockResolvedValue({ exists: false }),
+        downloadAndUpload: jest.fn().mockResolvedValue({
+          assetId: 'aid',
+          serverUrl: 'https://api.example/assets/aid',
+          contentHash: 'h',
+        }),
+      };
+
+      await adapter.authenticate({ baseUrl: 'https://canvas.school.edu', accessToken: 'tok' });
+      await adapter.fetchEnvelope({
+        runId: 'run-1',
+        sourceId: 'src-1',
+        displayName: 'School',
+        portalBaseUrl: 'https://canvas.school.edu',
+        assetDownloader: mockDownloader as unknown as import('../adapter').IAssetDownloaderLike,
+        assetPriorityFilter: 'critical_high_only',
+      });
+
+      expect(mockDownloader.downloadAndUpload).toHaveBeenCalledTimes(1);
+      expect(mockDownloader.downloadAndUpload).toHaveBeenCalledWith(
+        expect.objectContaining({ entityExternalId: 'canvas-file-401' })
+      );
     });
 
     it('should match submissions to assignments by assignment_id', async () => {
@@ -182,6 +372,8 @@ describe('CanvasAdapter', () => {
           },
         ]),
         getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([]),
+        getPages: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 

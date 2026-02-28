@@ -1,2 +1,6 @@
 export { NotificationService } from './NotificationService';
-export type { IProcessAlertResult } from './NotificationService';
+export type {
+  IProcessAlertResult,
+  IResolvedRecipient,
+  IResolvedRecipients,
+} from './NotificationService';

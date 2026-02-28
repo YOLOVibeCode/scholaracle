@@ -30,8 +30,6 @@ export const test = base.extend<AuthFixtures>({
 
   loginAsRole: async ({ page }, use) => {
     const disableNextDevOverlay = async () => {
-      // Next.js dev overlay/devtools can render inside <nextjs-portal> and intercept pointer events.
-      // Hide it via CSS when present (dev-mode only).
       await page
         .addStyleTag({
           content: `
@@ -42,16 +40,14 @@ export const test = base.extend<AuthFixtures>({
         .catch(() => {});
     };
 
-    const login = async (role: UserRole) => {
+    const doLogin = async (role: UserRole) => {
       const user = TEST_USERS[role];
-      // Use relative URLs - baseURL from config handles localhost vs production
       const loginUrl = role === 'parent' || role === 'newUser' ? '/login' : '/admin/login';
       const isAdmin = role !== 'parent' && role !== 'newUser';
 
       await page.goto(loginUrl);
       await disableNextDevOverlay();
 
-      // Use stable data-testid selectors (admin uses input-admin-email / input-admin-password)
       const emailInput = page.locator(
         isAdmin ? '[data-testid="input-admin-email"]' : '[data-testid="input-email"]'
       );
@@ -62,42 +58,48 @@ export const test = base.extend<AuthFixtures>({
 
       await emailInput.fill(user.email);
       await passwordInput.fill(user.password);
+
+      const apiEndpoint = isAdmin ? '/admin/auth/login' : '/auth/login';
+      const responsePromise = page.waitForResponse(
+        (r) => r.url().includes(apiEndpoint) && r.request().method() === 'POST'
+      );
+
       await loginButton.first().click({ force: true });
 
-      // Wait for redirect: prefer dashboard landmark for stability
+      const loginResponse = await responsePromise;
+
       if (role === 'parent' || role === 'newUser') {
-        await page.waitForURL('/dashboard', { timeout: 15000 });
-        await page
-          .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
-          .first()
-          .waitFor({ state: 'visible', timeout: 5000 })
-          .catch(() => {});
+        expect(loginResponse.status()).toBeLessThan(400);
+        await page.waitForURL('/dashboard');
       } else {
-        // Admin login may show MFA verification prompt (seeded admins have MFA enabled)
-        const mfaInput = page.locator('[data-testid="input-mfa-code"]');
-        const adminDashboard = page
-          .locator('text=Admin Dashboard, text=Dashboard, [data-testid="admin-dashboard"]')
-          .first();
-        // Wait for either MFA input or dashboard
-        await Promise.race([
-          mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
-          page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 }),
-        ]);
-        // If MFA input visible, fill it
-        if (await mfaInput.isVisible().catch(() => false)) {
-          const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
-          await mfaInput.fill(totp);
-          await page.locator('[data-testid="button-verify-mfa"]').click();
-          await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+        if (loginResponse.status() < 400) {
+          await page.waitForURL(/\/admin(\/dashboard)?$/);
+          return;
         }
+
+        const mfaInput = page.locator('[data-testid="input-mfa-code"]');
+        await expect(mfaInput).toBeVisible();
+
+        const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
+
+        const mfaResponsePromise = page.waitForResponse(
+          (r) => r.url().includes('/admin/auth/mfa/verify') && r.request().method() === 'POST'
+        );
+
+        await mfaInput.fill(totp);
+        await page.locator('[data-testid="button-verify-mfa"]').click();
+
+        const mfaResponse = await mfaResponsePromise;
+        expect(mfaResponse.status()).toBeLessThan(400);
+
+        await page.waitForURL(/\/admin(\/dashboard)?$/);
       }
     };
 
-    await use(login);
+    await use(doLogin);
   },
 
   authenticatedPage: async ({ page, testUser }, use) => {
-    // Register the test user
     await page.goto('/register');
     await page
       .addStyleTag({
@@ -110,24 +112,25 @@ export const test = base.extend<AuthFixtures>({
     await page.fill('[data-testid="input-email"]', testUser.email);
     await page.fill('[data-testid="input-name"]', testUser.name);
     await page.fill('[data-testid="input-password"]', testUser.password);
-    // Confirm password if present
     const confirmPassword = page.locator('[data-testid="input-confirm-password"]');
     if ((await confirmPassword.count()) > 0) {
       await confirmPassword.fill(testUser.password);
     }
-    // Check terms consent (required)
     const termsCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
     if ((await termsCheckbox.count()) > 0) {
       await termsCheckbox.check({ force: true });
     }
+
+    const responsePromise = page.waitForResponse(
+      (r) => r.url().includes('/auth/register') && r.request().method() === 'POST'
+    );
+
     await page.locator('[data-testid="button-register"]').first().click({ force: true });
 
-    await page.waitForURL('/dashboard', { timeout: 15000 });
-    await page
-      .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
-      .first()
-      .waitFor({ state: 'visible', timeout: 5000 })
-      .catch(() => {});
+    const response = await responsePromise;
+    expect(response.status()).toBeLessThan(400);
+
+    await page.waitForURL('/dashboard');
 
     await use(page);
   },
@@ -150,13 +153,17 @@ export async function login(page: Page, email: string, password: string): Promis
     .catch(() => {});
   await page.fill('[data-testid="input-email"]', email);
   await page.fill('[data-testid="input-password"]', password);
+
+  const responsePromise = page.waitForResponse(
+    (r) => r.url().includes('/auth/login') && r.request().method() === 'POST'
+  );
+
   await page.locator('[data-testid="button-login"]').first().click({ force: true });
-  await page.waitForURL('/dashboard', { timeout: 15000 });
-  await page
-    .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
-    .first()
-    .waitFor({ state: 'visible', timeout: 5000 })
-    .catch(() => {});
+
+  const response = await responsePromise;
+  expect(response.status()).toBeLessThan(400);
+
+  await page.waitForURL('/dashboard');
 }
 
 /**
@@ -174,27 +181,42 @@ export async function loginAdmin(page: Page, email: string, password: string): P
     .catch(() => {});
   await page.fill('[data-testid="input-admin-email"]', email);
   await page.fill('[data-testid="input-admin-password"]', password);
+
+  const loginResponsePromise = page.waitForResponse(
+    (r) => r.url().includes('/admin/auth/login') && r.request().method() === 'POST'
+  );
+
   await page.locator('[data-testid="button-login"]').first().click({ force: true });
 
-  // Handle MFA verification if prompted (seeded admins have MFA enabled)
-  const mfaInput = page.locator('[data-testid="input-mfa-code"]');
-  await Promise.race([
-    mfaInput.waitFor({ state: 'visible', timeout: 15000 }),
-    page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 }),
-  ]);
-  if (await mfaInput.isVisible().catch(() => false)) {
-    const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
-    await mfaInput.fill(totp);
-    await page.locator('[data-testid="button-verify-mfa"]').click();
-    await page.waitForURL(/\/admin(\/dashboard)?$/, { timeout: 15000 });
+  const loginResponse = await loginResponsePromise;
+
+  if (loginResponse.status() < 400) {
+    await page.waitForURL(/\/admin(\/dashboard)?$/);
+    return;
   }
+
+  const mfaInput = page.locator('[data-testid="input-mfa-code"]');
+  await expect(mfaInput).toBeVisible();
+
+  const totp = speakeasy.totp({ secret: E2E_MFA_SECRET, encoding: 'base32' });
+
+  const mfaResponsePromise = page.waitForResponse(
+    (r) => r.url().includes('/admin/auth/mfa/verify') && r.request().method() === 'POST'
+  );
+
+  await mfaInput.fill(totp);
+  await page.locator('[data-testid="button-verify-mfa"]').click();
+
+  const mfaResponse = await mfaResponsePromise;
+  expect(mfaResponse.status()).toBeLessThan(400);
+
+  await page.waitForURL(/\/admin(\/dashboard)?$/);
 }
 
 /**
  * Logout helper function.
  */
 export async function logout(page: Page): Promise<void> {
-  // Prefer explicit logout button if present; otherwise use user menu.
   const directLogout = page.locator('[data-testid="button-logout"]');
   if ((await directLogout.count()) > 0) {
     await directLogout.first().click({ force: true });
@@ -205,7 +227,7 @@ export async function logout(page: Page): Promise<void> {
       await page.locator('[data-testid="logout-menu-item"]').first().click({ force: true });
     }
   }
-  await page.waitForURL(/\/login/, { timeout: 10000 });
+  await page.waitForURL(/\/login/);
 }
 
 /**
@@ -225,11 +247,19 @@ export async function register(
   if ((await confirmPassword.count()) > 0) {
     await confirmPassword.fill(password);
   }
-  // Check terms consent (required)
   const termsCheckbox = page.locator('[data-testid="terms-consent-checkbox"]');
   if ((await termsCheckbox.count()) > 0) {
     await termsCheckbox.check({ force: true });
   }
+
+  const responsePromise = page.waitForResponse(
+    (r) => r.url().includes('/auth/register') && r.request().method() === 'POST'
+  );
+
   await page.click('[data-testid="button-register"]');
-  await page.waitForURL('/dashboard', { timeout: 10000 });
+
+  const response = await responsePromise;
+  expect(response.status()).toBeLessThan(400);
+
+  await page.waitForURL('/dashboard');
 }

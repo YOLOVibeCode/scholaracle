@@ -143,6 +143,55 @@ describe('GoogleClassroomClient', () => {
     });
   });
 
+  describe('getCourseWorkMaterials', () => {
+    it('should call GET /v1/courses/:id/courseWorkMaterials', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        mockResponse({
+          courseWorkMaterial: [
+            {
+              courseId: 'c-1',
+              id: 'm-1',
+              title: 'Reading',
+              description: 'Chapter 1',
+              materials: [{ link: { url: 'https://example.com/read', title: 'Link' } }],
+            },
+          ],
+        })
+      );
+
+      const result = await client.getCourseWorkMaterials('c-1');
+
+      const [url] = fetchSpy.mock.calls[0];
+      expect(url).toContain('/v1/courses/c-1/courseWorkMaterials');
+      expect(result).toHaveLength(1);
+      expect(result[0]!.id).toBe('m-1');
+      expect(result[0]!.title).toBe('Reading');
+      expect(result[0]!.materials).toHaveLength(1);
+    });
+
+    it('should paginate courseWorkMaterial via nextPageToken', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          mockResponse({
+            courseWorkMaterial: [{ courseId: 'c-1', id: 'm-1', title: 'Page 1', materials: [] }],
+            nextPageToken: 'token2',
+          })
+        )
+        .mockResolvedValueOnce(
+          mockResponse({
+            courseWorkMaterial: [{ courseId: 'c-1', id: 'm-2', title: 'Page 2', materials: [] }],
+          })
+        );
+
+      const result = await client.getCourseWorkMaterials('c-1');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(2);
+      expect(result[0]!.id).toBe('m-1');
+      expect(result[1]!.id).toBe('m-2');
+    });
+  });
+
   describe('error handling', () => {
     it('should throw on non-OK response', async () => {
       fetchSpy.mockResolvedValueOnce(mockErrorResponse(401, 'Unauthorized', 'Invalid token'));

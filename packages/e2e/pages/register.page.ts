@@ -43,12 +43,20 @@ export class RegisterPage {
     if ((await this.confirmPasswordInput.count()) > 0) {
       await this.confirmPasswordInput.fill(password);
     }
-    // Check terms consent (required by the form)
     if ((await this.termsConsentCheckbox.count()) > 0) {
       await this.termsConsentCheckbox.check({ force: true });
     }
+
+    const responsePromise = this.page.waitForResponse(
+      (r) => r.url().includes('/auth/register') && r.request().method() === 'POST'
+    );
+
     await this.registerButton.click();
-    await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });
+
+    const response = await responsePromise;
+    expect(response.status()).toBeLessThan(400);
+
+    await this.page.waitForURL(/\/dashboard/);
   }
 
   async expectError(message?: string | RegExp, timeoutMs?: number): Promise<void> {

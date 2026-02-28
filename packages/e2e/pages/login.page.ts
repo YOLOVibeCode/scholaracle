@@ -37,9 +37,18 @@ export class LoginPage {
   ): Promise<void> {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
+
+    const responsePromise = this.page.waitForResponse(
+      (r) => r.url().includes('/auth/login') && r.request().method() === 'POST'
+    );
+
     await this.loginButton.click();
+
+    const response = await responsePromise;
+
     if (options?.waitForDashboard ?? true) {
-      await this.page.waitForURL(/\/dashboard/, { timeout: 10000 });
+      expect(response.status()).toBeLessThan(400);
+      await this.page.waitForURL(/\/dashboard/);
     }
   }
 

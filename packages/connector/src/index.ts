@@ -4,6 +4,23 @@ export * from './adapter';
 export * from './adapter-registry';
 export * from './fixture-adapter-wrapper';
 export * from './canvas';
+export {
+  AssetDownloader,
+  classifyAssetPriority,
+  compareAssetPriority,
+  DEFAULT_MAX_ASSET_DOWNLOAD_BYTES,
+} from './asset-downloader';
+export type {
+  IAssetDownloaderConfig,
+  IAssetDownloadParams,
+  IAssetDownloadResult,
+  IAssetCheckResult,
+  AssetPriority,
+} from './asset-downloader';
+export { SyncState } from './sync-state';
+export type { ISyncStateEntry } from './sync-state';
+export { probeLinkAccessibility, probeLinkAccessibilityBatch } from './link-probe';
+export type { LinkAccessibility } from './link-probe';
 
 // Re-export adapters and clients from additional providers.
 // Transformers/types are accessed via deep imports (e.g. '@scholaracle/connector/google-classroom')

@@ -1,6 +1,11 @@
 import { createServer } from 'http';
 import { MongoClient, type Db } from 'mongodb';
-import { MongoQueue, NotificationWorker, NotificationService } from '@scholaracle/agents';
+import {
+  MongoQueue,
+  NotificationWorker,
+  NotificationService,
+  resolveAllAlertRecipients,
+} from '@scholaracle/agents';
 import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
@@ -11,7 +16,6 @@ import type { IEmailTransport } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
 import { PushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
-import { UserRepository } from '@scholaracle/database';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
 import nodemailer from 'nodemailer';
@@ -149,17 +153,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Initialize notification service
   const notificationService = initializeNotificationService(config);
 
-  // Resolve parent userId to email/phone for delivery
-  const userRepository = new UserRepository(database);
-  const resolveParentRecipients = async (
-    userId: string
-  ): Promise<{ parentEmail?: string; parentPhone?: string }> => {
-    const user = await userRepository.findById(userId);
-    return {
-      parentEmail: user?.email,
-      parentPhone: user?.phone,
-    };
-  };
+  // Resolve all alert recipients for a student (owner + accepted contacts)
+  const resolveAll = (studentId: string): Promise<Array<{ userId: string; email: string }>> =>
+    resolveAllAlertRecipients(studentId, database);
 
   // Initialize worker
   const pollIntervalMs = config.pollIntervalMs ?? 1000;
@@ -167,7 +163,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const notificationWorker = new NotificationWorker(mongoQueue, notificationService, {
     pollIntervalMs,
     concurrency,
-    resolveParentRecipients,
+    resolveAllAlertRecipients: resolveAll,
   });
 
   // Start notification worker

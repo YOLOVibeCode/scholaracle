@@ -13,11 +13,21 @@ import type { AdminRole } from '@scholaracle/database';
 import {
   DEMO_USER,
   DEMO_STUDENTS,
+  DEMO_CONTACT_JESSICA,
+  DEMO_CONTACT_RICKY,
+  DEMO_CONTACT_JENNIFER,
+  DEMO_CONTACT_PASSWORD,
   buildDemoCourseDocs,
   buildDemoAssignmentDocs,
   buildDemoEventSeries,
   buildDemoAlerts,
+  buildDemoMaterialDocs,
+  buildDemoAssetDocs,
+  buildDemoGradeHistory,
+  buildDemoGradeSnapshots,
+  buildDemoAttendanceDocs,
 } from './demo-data';
+import type { ISharedParent } from '@scholaracle/database';
 
 export interface ISeedRouterConfig {
   readonly database: Db;
@@ -613,9 +623,75 @@ async function handleDemoSeed(
     const emmaId = emma?._id?.toString();
     const liamId = liam?._id?.toString();
 
+    // Ensure demo contact users exist (for accepted contacts)
+    for (const email of [DEMO_CONTACT_JESSICA, DEMO_CONTACT_RICKY]) {
+      const existing = await userRepository.findByEmail(email);
+      if (!existing) {
+        await authService.register(email, DEMO_CONTACT_PASSWORD, email.split('@')[0] ?? 'Demo');
+      }
+    }
+    const jessicaUser = await userRepository.findByEmail(DEMO_CONTACT_JESSICA);
+    const rickyUser = await userRepository.findByEmail(DEMO_CONTACT_RICKY);
+    const invitedAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const acceptedAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+
+    const emmaSharedWith: ISharedParent[] = [
+      {
+        userId: jessicaUser?._id?.toString(),
+        email: DEMO_CONTACT_JESSICA,
+        name: 'Jessica Demo',
+        role: 'parent',
+        status: 'accepted',
+        invitedAt,
+        acceptedAt,
+        receiveAlerts: true,
+        alertChannels: ['email', 'sms'],
+      },
+      {
+        userId: rickyUser?._id?.toString(),
+        email: DEMO_CONTACT_RICKY,
+        name: 'Ricky Demo',
+        role: 'guardian',
+        status: 'accepted',
+        invitedAt,
+        acceptedAt,
+        receiveAlerts: true,
+        alertChannels: ['email'],
+      },
+    ];
+    const liamSharedWith: ISharedParent[] = [
+      {
+        userId: jessicaUser?._id?.toString(),
+        email: DEMO_CONTACT_JESSICA,
+        name: 'Jessica Demo',
+        role: 'parent',
+        status: 'accepted',
+        invitedAt,
+        acceptedAt,
+        receiveAlerts: true,
+        alertChannels: ['email', 'sms'],
+      },
+      {
+        email: DEMO_CONTACT_JENNIFER,
+        name: 'Jennifer Demo',
+        role: 'parent',
+        status: 'pending',
+        invitedAt,
+        receiveAlerts: true,
+        alertChannels: ['email'],
+      },
+    ];
+    if (emmaId) await studentRepository.update(emmaId, { sharedWith: emmaSharedWith });
+    if (liamId) await studentRepository.update(liamId, { sharedWith: liamSharedWith });
+
     const assignmentsColl = config.database.collection('slc_assignments');
     const coursesColl = config.database.collection('slc_courses');
     const eventSeriesColl = config.database.collection('slc_event_series');
+    const materialsColl = config.database.collection('slc_course_materials');
+    const assetsColl = config.database.collection('slc_assets');
+    const gradeHistoryColl = config.database.collection('slc_grade_history');
+    const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
+    const attendanceColl = config.database.collection('slc_attendance_events');
 
     const existingAssignments = await assignmentsColl.countDocuments({ userId, provider: 'demo' });
     const baseDate = new Date();
@@ -627,6 +703,18 @@ async function handleDemoSeed(
       await assignmentsColl.insertMany(assignmentDocs);
       const eventDocs = buildDemoEventSeries(userId, baseDate);
       await eventSeriesColl.insertMany(eventDocs);
+      const materialDocs = buildDemoMaterialDocs(userId);
+      await materialsColl.insertMany(materialDocs);
+      const assetDocs = buildDemoAssetDocs(userId);
+      if (assetDocs.length > 0) {
+        await assetsColl.insertMany(assetDocs);
+      }
+      const gradeHistoryDocs = buildDemoGradeHistory(userId, baseDate);
+      await gradeHistoryColl.insertMany(gradeHistoryDocs);
+      const gradeSnapshotDocs = buildDemoGradeSnapshots(userId, baseDate);
+      await gradeSnapshotsColl.insertMany(gradeSnapshotDocs);
+      const attendanceDocs = buildDemoAttendanceDocs(userId, baseDate);
+      await attendanceColl.insertMany(attendanceDocs);
     }
 
     if (emmaId && liamId) {
@@ -690,6 +778,11 @@ async function handleDemoReset(
     await config.database.collection('slc_assignments').deleteMany({ userId });
     await config.database.collection('slc_courses').deleteMany({ userId });
     await config.database.collection('slc_event_series').deleteMany({ userId });
+    await config.database.collection('slc_course_materials').deleteMany({ userId });
+    await config.database.collection('slc_assets').deleteMany({ userId });
+    await config.database.collection('slc_grade_history').deleteMany({ userId });
+    await config.database.collection('slc_grade_snapshots').deleteMany({ userId });
+    await config.database.collection('slc_attendance_events').deleteMany({ userId });
     await config.database.collection('alerts').deleteMany({ userId });
 
     const students = await studentRepository.findByUserId(userId);
