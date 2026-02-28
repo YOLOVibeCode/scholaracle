@@ -9,6 +9,8 @@ import type {
   ILmsCredentials,
   IFetchEnvelopeParams,
   IConnectionTestResult,
+  IAssetDownloaderLike,
+  ISyncStateLike,
 } from '../adapter';
 import { classifyAssetPriority, compareAssetPriority } from '../asset-downloader';
 import type { ICanvasFile, ICanvasPage } from './canvas-client';
@@ -193,7 +195,7 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
           const serverUrl = await this._maybeDownloadAsset(
             file,
             externalId,
-            course.id,
+            String(course.id),
             downloader,
             syncState,
             downloadHeaders
@@ -232,8 +234,8 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
     file: ICanvasFile,
     externalId: string,
     courseId: string,
-    downloader: IAssetDownloader,
-    syncState: ISyncState | undefined,
+    downloader: IAssetDownloaderLike,
+    syncState: ISyncStateLike | undefined,
     downloadHeaders: Record<string, string>
   ): Promise<string | null> {
     let serverUrl: string | null = null;

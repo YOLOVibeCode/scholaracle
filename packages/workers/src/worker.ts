@@ -154,7 +154,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const notificationService = initializeNotificationService(config);
 
   // Resolve all alert recipients for a student (owner + accepted contacts)
-  const resolveAll = (studentId: string): Promise<Array<{ userId: string; email: string }>> =>
+  const resolveAll = (studentId: string): ReturnType<typeof resolveAllAlertRecipients> =>
     resolveAllAlertRecipients(studentId, database);
 
   // Initialize worker
