@@ -32,6 +32,7 @@ import { reportsRouter } from './routes/admin/reports';
 import { notesRouter } from './routes/admin/notes';
 import { subscriptionsRouter } from './routes/admin/subscriptions';
 import { paymentsRouter } from './routes/admin/payments';
+import { couponsRouter } from './routes/admin/coupons';
 import { invoicesRouter } from './routes/admin/invoices/invoices';
 import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
@@ -411,6 +412,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/customers', customersRouter({ database }));
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
     app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use('/api/admin/coupons', couponsRouter({ database }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
