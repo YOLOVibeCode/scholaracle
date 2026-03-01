@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { SubscriptionRepository, PaymentRepository } from '@scholaracle/database';
+import { SubscriptionRepository, PaymentRepository, CouponRepository } from '@scholaracle/database';
 import { SquareService } from '../../services/SquareService';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
@@ -14,6 +14,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   const router = Router();
   const subscriptionRepo = new SubscriptionRepository(deps.database);
   const paymentRepo = new PaymentRepository(deps.database);
+  const couponRepo = new CouponRepository(deps.database);
 
   /**
    * POST /api/billing/checkout
@@ -37,6 +38,43 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
    */
   router.get('/subscription', (req: Request, res: Response) => {
     void handleGetSubscription(req as IAuthenticatedRequest, res);
+  });
+
+  /**
+   * POST /api/billing/validate-coupon
+   * Validate a coupon code and return discount details.
+   */
+  router.post('/validate-coupon', async (req: Request, res: Response) => {
+    try {
+      const { code } = req.body as { code?: string };
+      if (!code) {
+        res.status(400).json({ success: false, error: 'code is required' });
+        return;
+      }
+      const result = await couponRepo.validateCode(code);
+      if (!result.valid || !result.coupon) {
+        res.json({ success: true, valid: false, error: result.error });
+        return;
+      }
+      res.json({
+        success: true,
+        valid: true,
+        coupon: {
+          code: result.coupon.code,
+          type: result.coupon.type,
+          value: result.coupon.value,
+          plan: result.coupon.plan ?? null,
+          duration: result.coupon.duration,
+          durationMonths: result.coupon.durationMonths ?? null,
+          discountLabel: result.coupon.discountLabel(),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
   });
 
   /**

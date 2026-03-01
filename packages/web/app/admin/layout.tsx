@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   X,
+  Tag,
 } from 'lucide-react';
 import { adminAuthApi } from '@/lib/api/admin/auth';
 
@@ -67,6 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/customers', icon: Users, label: 'Customers' },
     { href: '/admin/subscriptions', icon: CreditCard, label: 'Subscriptions' },
     { href: '/admin/payments', icon: FileText, label: 'Payments' },
+    { href: '/admin/coupons', icon: Tag, label: 'Coupons' },
     { href: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
     { href: '/admin/reports', icon: ClipboardList, label: 'Reports' },
     { href: '/admin/scrapers', icon: Code2, label: 'Scrapers' },

@@ -97,4 +97,21 @@ export const billingApi = {
       return [];
     }
   },
+
+  /**
+   * Validate a coupon code.
+   */
+  async validateCoupon(
+    code: string
+  ): Promise<{
+    valid: boolean;
+    coupon?: { code: string; type: string; value: number; discountLabel: string };
+    error?: string;
+  }> {
+    try {
+      return await apiClient.post('/billing/validate-coupon', { code });
+    } catch {
+      return { valid: false, error: 'Failed to validate coupon' };
+    }
+  },
 };
