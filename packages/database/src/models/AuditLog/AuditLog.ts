@@ -34,6 +34,11 @@ export type AuditAction =
   | 'admin:login'
   | 'admin:logout'
   | 'admin:mfa_setup'
+  // Coupon actions
+  | 'coupon:create'
+  | 'coupon:update'
+  | 'coupon:enable'
+  | 'coupon:disable'
   // System actions
   | 'system:config_change'
   | 'system:export';
@@ -172,6 +177,10 @@ export class AuditLog {
       'admin:login': 'Admin login',
       'admin:logout': 'Admin logout',
       'admin:mfa_setup': 'Setup MFA',
+      'coupon:create': 'Created coupon',
+      'coupon:update': 'Updated coupon',
+      'coupon:enable': 'Enabled coupon',
+      'coupon:disable': 'Disabled coupon',
       'system:config_change': 'Changed system configuration',
       'system:export': 'Exported data',
     };
