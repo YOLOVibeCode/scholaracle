@@ -6,6 +6,8 @@ import {
   IngestSourceRepository,
   IngestRunRepository,
   AlertRepository,
+  SubscriptionRepository,
+  PLAN_FEATURES,
   type IDataSource,
   type IDataSourceCredentials,
   type ISharedParent,
@@ -257,6 +259,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const ingestSourceRepository = new IngestSourceRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
+  const subscriptionRepository = new SubscriptionRepository(config.database);
 
   /**
    * GET /api/students
@@ -1660,6 +1663,26 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           error: 'Missing required field: name',
         });
         return;
+      }
+
+      const subscription = await subscriptionRepository.findByUserId(userId);
+      const currentPlan = subscription?.plan ?? 'free';
+      const planFeatures = PLAN_FEATURES[currentPlan];
+      const maxStudents = planFeatures.maxStudents;
+
+      if (maxStudents !== -1) {
+        const existingStudents = await studentRepository.findByUserId(userId);
+        if (existingStudents.length >= maxStudents) {
+          res.status(403).json({
+            success: false,
+            error: `Your ${currentPlan} plan allows up to ${maxStudents} student${maxStudents === 1 ? '' : 's'}. Upgrade to add more.`,
+            code: 'PLAN_LIMIT_REACHED',
+            currentPlan,
+            maxStudents,
+            currentCount: existingStudents.length,
+          });
+          return;
+        }
       }
 
       const student = await studentRepository.create({

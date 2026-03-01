@@ -8,6 +8,7 @@ export * from './models/Alert';
 export * from './models/AdminUser';
 export * from './models/Subscription';
 export * from './models/Payment';
+export * from './models/Coupon';
 export * from './models/CommunicationLog';
 export * from './models/CommunicationTemplate';
 export * from './models/CommunicationBatch';
@@ -33,6 +34,7 @@ export * from './repositories/CommunicationLogRepository';
 export * from './repositories/CommunicationTemplateRepository';
 export * from './repositories/CommunicationBatchRepository';
 export * from './repositories/AgendaOverrideRepository';
+export * from './repositories/CouponRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';
