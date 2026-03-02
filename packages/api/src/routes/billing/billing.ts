@@ -78,6 +78,15 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   });
 
   /**
+   * POST /api/billing/redeem-coupon
+   * Redeem a free-time coupon (trial_extension or free_plan) to start a trial subscription
+   * without going through Square checkout.
+   */
+  router.post('/redeem-coupon', (req: Request, res: Response) => {
+    void handleRedeemCoupon(req as IAuthenticatedRequest, res);
+  });
+
+  /**
    * GET /api/billing/invoices
    * Get current user's payment/invoice history (from our DB).
    */
@@ -196,6 +205,104 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get subscription',
+      });
+    }
+  }
+
+  async function handleRedeemCoupon(req: IAuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const { code, plan } = req.body as { code?: string; plan?: SubscriptionPlan };
+      if (!code) {
+        res.status(400).json({ success: false, error: 'code is required' });
+        return;
+      }
+
+      const validation = await couponRepo.validateCode(code);
+      if (!validation.valid || !validation.coupon) {
+        res.status(400).json({ success: false, error: validation.error ?? 'Invalid coupon' });
+        return;
+      }
+
+      const coupon = validation.coupon;
+
+      if (coupon.type !== 'trial_extension' && coupon.type !== 'free_plan') {
+        res.status(400).json({
+          success: false,
+          error: 'This coupon must be applied at checkout, not redeemed directly',
+        });
+        return;
+      }
+
+      if (coupon.plan && plan && coupon.plan !== plan) {
+        res.status(400).json({
+          success: false,
+          error: `This coupon is only valid for the ${coupon.plan} plan`,
+        });
+        return;
+      }
+
+      const existing = await subscriptionRepo.findByUserId(userId);
+      if (existing && existing.isActive()) {
+        res.status(409).json({
+          success: false,
+          error: 'You already have an active subscription',
+        });
+        return;
+      }
+
+      const targetPlan: SubscriptionPlan = coupon.plan ?? plan ?? 'starter';
+      const now = new Date();
+      const trialEnd = new Date(now);
+
+      if (coupon.type === 'trial_extension') {
+        trialEnd.setDate(trialEnd.getDate() + coupon.value);
+      } else {
+        const months = coupon.value === 0 ? 12 : coupon.value;
+        trialEnd.setMonth(trialEnd.getMonth() + months);
+      }
+
+      if (existing) {
+        await subscriptionRepo.update(userId, {
+          plan: targetPlan,
+          status: 'trialing',
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEnd,
+          billingCycle: 'monthly',
+        } as Parameters<typeof subscriptionRepo.update>[1]);
+      } else {
+        await subscriptionRepo.create({
+          userId,
+          plan: targetPlan,
+          status: 'trialing',
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEnd,
+          billingCycle: 'monthly',
+          trialStart: now,
+          trialEnd,
+        });
+      }
+
+      await couponRepo.recordRedemption(code, userId);
+
+      res.json({
+        success: true,
+        subscription: {
+          plan: targetPlan,
+          status: 'trialing',
+          trialEnd: trialEnd.toISOString(),
+        },
+        message: coupon.discountLabel(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to redeem coupon',
       });
     }
   }

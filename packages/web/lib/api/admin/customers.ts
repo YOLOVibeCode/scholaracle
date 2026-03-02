@@ -191,4 +191,40 @@ export const adminCustomersApi = {
       true
     );
   },
+
+  /**
+   * Set customer password directly (admin only, requires step-up).
+   */
+  async setPassword(
+    id: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> {
+    return apiClient.post<{ success: boolean; error?: string }>(
+      `/admin/customers/${id}/set-password`,
+      { password },
+      true
+    );
+  },
+
+  /**
+   * Send password reset email to customer (admin only, requires step-up).
+   */
+  async sendReset(id: string): Promise<{ success: boolean; error?: string }> {
+    return apiClient.post<{ success: boolean; error?: string }>(
+      `/admin/customers/${id}/send-reset`,
+      {},
+      true
+    );
+  },
+
+  /**
+   * Force customer to reset password on next login (admin only, requires step-up).
+   */
+  async forceReset(id: string): Promise<{ success: boolean; error?: string }> {
+    return apiClient.post<{ success: boolean; error?: string }>(
+      `/admin/customers/${id}/force-reset`,
+      {},
+      true
+    );
+  },
 };

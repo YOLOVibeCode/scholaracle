@@ -114,4 +114,27 @@ export const billingApi = {
       return { valid: false, error: 'Failed to validate coupon' };
     }
   },
+
+  /**
+   * Redeem a free-time coupon (trial_extension or free_plan) to start a trial
+   * subscription without going through Square checkout.
+   */
+  async redeemCoupon(
+    code: string,
+    plan?: string
+  ): Promise<{
+    success: boolean;
+    subscription?: { plan: string; status: string; trialEnd: string };
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      return await apiClient.post('/billing/redeem-coupon', { code, plan });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to redeem coupon',
+      };
+    }
+  },
 };

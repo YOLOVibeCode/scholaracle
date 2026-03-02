@@ -121,6 +121,25 @@ export default function AdminAnalyticsPage() {
         </div>
       )}
 
+      {overview?.squarePlusRecommendation && (
+        <Card
+          className={
+            overview.squarePlusRecommendation.considerSquarePlus
+              ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+              : ''
+          }
+          data-testid="square-plus-recommendation"
+        >
+          <CardContent className="pt-4">
+            <p className="text-sm text-muted-foreground">
+              Paying users: <strong>{overview.squarePlusRecommendation.payingUserCount}</strong>
+              {' · '}
+              {overview.squarePlusRecommendation.message}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {revenue.length > 0 && (
         <Card>
           <CardHeader>

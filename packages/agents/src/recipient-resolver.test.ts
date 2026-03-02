@@ -57,7 +57,11 @@ describe('resolveAllAlertRecipients', () => {
     };
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(2);
-    expect(out[0]).toEqual({ parentEmail: 'owner@example.com', parentPhone: '+15551234567' });
+    expect(out[0]).toEqual({
+      parentEmail: 'owner@example.com',
+      parentPhone: '+15551234567',
+      userId: 'owner-user-id',
+    });
     expect(out[1]).toEqual({ parentEmail: 'contact@example.com' });
   });
 
@@ -72,7 +76,7 @@ describe('resolveAllAlertRecipients', () => {
     };
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ parentEmail: 'owner@example.com' });
+    expect(out[0]).toEqual({ parentEmail: 'owner@example.com', userId: 'owner-user-id' });
   });
 
   it('should return only contacts that have at least one channel', async () => {

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { studentsRouter } from '../students/students';
 import { integrationsRouter } from './integrations';
@@ -47,6 +47,8 @@ describe('Integrations API Routes', () => {
       await database.collection('slc_sources').deleteMany({});
       await database.collection('generated_scrapers').deleteMany({});
       await database.collection('scraper_generation_jobs').deleteMany({});
+      await database.collection('ai_usage').deleteMany({});
+      await database.collection('subscriptions').deleteMany({});
       await database.collection('users').deleteMany({ email: 'integrations@example.com' });
 
       const registerResult = await authService.register(
@@ -56,6 +58,15 @@ describe('Integrations API Routes', () => {
       );
       if (registerResult.success && registerResult.user && registerResult.token) {
         testToken = registerResult.token;
+        const userId = registerResult.user.id;
+        if (userId) {
+          await database
+            .collection('users')
+            .updateOne(
+              { _id: new ObjectId(userId) },
+              { $set: { subscription: { plan: 'starter', status: 'active' } } }
+            );
+        }
       } else {
         throw new Error(`Failed to register test user: ${registerResult.error ?? 'Unknown error'}`);
       }

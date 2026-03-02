@@ -6,6 +6,7 @@ import {
   DeliveryError,
 } from '@scholaracle/contracts';
 import type { IEmailTransport, IEmailEnvelope } from './IEmailTransport';
+import { buildBrandedEmail } from './emailTemplate';
 
 export interface IEmailDeliveryConfig {
   readonly fromEmail: string;
@@ -37,7 +38,7 @@ export class EmailDelivery implements INotificationDelivery {
     }
 
     try {
-      const htmlBody = this._formatHtmlBody(notification.body);
+      const htmlBody = this._formatHtmlBody(notification.body, notification.subject);
       const envelope: IEmailEnvelope = {
         to,
         from: {
@@ -92,24 +93,9 @@ export class EmailDelivery implements INotificationDelivery {
     return undefined;
   }
 
-  private _formatHtmlBody(body: string): string {
+  private _formatHtmlBody(body: string, subject: string): string {
     const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const htmlBody = escapedBody.replace(/\n/g, '<br>');
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    ${htmlBody}
-  </div>
-</body>
-</html>`.trim();
+    const bodyHtml = escapedBody.replace(/\n/g, '<br>');
+    return buildBrandedEmail({ title: subject, bodyHtml });
   }
 }

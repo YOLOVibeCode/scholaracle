@@ -1,4 +1,5 @@
 import type { MailService } from '@sendgrid/mail';
+import { buildBrandedEmail } from './emailTemplate';
 
 export interface IInviteEmailSenderConfig {
   readonly apiKey: string;
@@ -14,6 +15,14 @@ export interface IInviteEmailSender {
     readonly inviteEmail: string;
     readonly baseUrl: string;
   }): Promise<void>;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /**
@@ -41,12 +50,16 @@ export class SendGridInviteEmailSender implements IInviteEmailSender {
     }
     const registerLink = `${opts.baseUrl.replace(/\/$/, '')}/register?invite=${opts.studentId}&email=${encodeURIComponent(opts.inviteEmail)}`;
     const dashboardLink = `${opts.baseUrl.replace(/\/$/, '')}/dashboard/invites`;
-    const html = `
+    const bodyHtml = `
       <p>You've been invited to receive alerts for <strong>${escapeHtml(opts.studentName)}</strong> on Scholaracle.</p>
       <p>If you already have an account, <a href="${dashboardLink}">log in and accept the invite</a>.</p>
       <p>If you don't have an account yet, <a href="${registerLink}">create one here</a> to accept the invite.</p>
       <p>Once you accept, you can choose how you'd like to receive alerts (email, SMS, or both).</p>
     `.trim();
+    const html = buildBrandedEmail({
+      title: `Invite: ${opts.studentName}`,
+      bodyHtml,
+    });
     await this._sendGrid.send({
       to: opts.to,
       from: { email: this._config.fromEmail, name: this._config.fromName },
@@ -55,12 +68,4 @@ export class SendGridInviteEmailSender implements IInviteEmailSender {
       html,
     });
   }
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

@@ -23,6 +23,8 @@ export interface IAuthResponse {
     readonly email: string;
     readonly name: string;
   };
+  /** When true, client should redirect to password reset flow. */
+  readonly forcePasswordReset?: boolean;
   readonly error?: string;
 }
 

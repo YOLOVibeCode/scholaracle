@@ -176,4 +176,79 @@ describe('AnalyticsService', () => {
       expect(Array.isArray(growth)).toBe(true);
     });
   });
+
+  describe('countPayingUsers', () => {
+    it('should count only active/trialing paid plans', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+
+      await userRepository.create({
+        email: 'p1@test.com',
+        passwordHash,
+        name: 'P1',
+        subscription: { plan: 'premium', status: 'active' },
+      });
+      await userRepository.create({
+        email: 'p2@test.com',
+        passwordHash,
+        name: 'P2',
+        subscription: { plan: 'family', status: 'active' },
+      });
+      await userRepository.create({
+        email: 'free@test.com',
+        passwordHash,
+        name: 'Free',
+        subscription: { plan: 'free', status: 'active' },
+      });
+      await userRepository.create({
+        email: 'cancelled@test.com',
+        passwordHash,
+        name: 'Cancelled',
+        subscription: { plan: 'premium', status: 'cancelled' },
+      });
+
+      const count = await analyticsService.countPayingUsers();
+      expect(count).toBe(2);
+    });
+
+    it('should return 0 when no paying users', async () => {
+      const count = await analyticsService.countPayingUsers();
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('getSquarePlusRecommendation', () => {
+    it('should recommend Square Plus when paying users >= 150', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const users = await database.collection('users');
+      for (let i = 0; i < 150; i++) {
+        await users.insertOne({
+          email: `paying${i}@test.com`,
+          passwordHash,
+          name: `Paying ${i}`,
+          subscription: { plan: 'premium', status: 'active' },
+        });
+      }
+
+      const rec = await analyticsService.getSquarePlusRecommendation();
+      expect(rec.payingUserCount).toBe(150);
+      expect(rec.threshold).toBe(150);
+      expect(rec.considerSquarePlus).toBe(true);
+      expect(rec.message).toContain('Square Plus');
+    });
+
+    it('should not recommend Square Plus when paying users < 150', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      await userRepository.create({
+        email: 'one@test.com',
+        passwordHash,
+        name: 'One',
+        subscription: { plan: 'premium', status: 'active' },
+      });
+
+      const rec = await analyticsService.getSquarePlusRecommendation();
+      expect(rec.payingUserCount).toBe(1);
+      expect(rec.considerSquarePlus).toBe(false);
+      expect(rec.message).toContain('150');
+    });
+  });
 });
