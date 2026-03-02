@@ -1,5 +1,12 @@
 import { apiClient } from '../client';
 
+export interface ISquarePlusRecommendation {
+  readonly payingUserCount: number;
+  readonly threshold: number;
+  readonly considerSquarePlus: boolean;
+  readonly message?: string;
+}
+
 export interface IAnalyticsOverview {
   readonly mrr: number;
   readonly churnRate: number;
@@ -7,6 +14,7 @@ export interface IAnalyticsOverview {
   readonly totalCustomers: number;
   readonly activeCustomers: number;
   readonly newCustomers: number;
+  readonly squarePlusRecommendation?: ISquarePlusRecommendation;
 }
 
 export interface IGrowthDataPoint {

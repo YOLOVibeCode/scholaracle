@@ -15,12 +15,12 @@ async function handleGetOverview(
   analyticsService: AnalyticsService
 ): Promise<void> {
   try {
-    const [mrr, churnRate, arpu, customerStats] = await Promise.all([
+    const [mrr, churnRate, arpu, customerStats, squarePlusRecommendation] = await Promise.all([
       analyticsService.calculateMRR(),
       analyticsService.calculateChurnRate(),
       analyticsService.calculateARPU(),
-      // Get customer statistics from UserRepository
       Promise.resolve({ totalUsers: 0, activeUsers: 0, newUsers: 0 }),
+      analyticsService.getSquarePlusRecommendation(),
     ]);
 
     res.status(200).json({
@@ -32,6 +32,7 @@ async function handleGetOverview(
         totalCustomers: customerStats.totalUsers,
         activeCustomers: customerStats.activeUsers,
         newCustomers: customerStats.newUsers,
+        squarePlusRecommendation,
       },
     });
   } catch (error) {

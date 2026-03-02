@@ -109,6 +109,16 @@ export default function AdminDashboardPage() {
               </CardContent>
             </Card>
 
+            {stats?.squarePlusRecommendation?.considerSquarePlus && (
+              <Card className="md:col-span-2 lg:col-span-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="square-plus-alert">
+                <CardContent className="pt-4">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    Square Plus: {stats.squarePlusRecommendation.message}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Churn Rate</CardTitle>

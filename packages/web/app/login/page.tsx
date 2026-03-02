@@ -30,7 +30,13 @@ function LoginForm() {
       const result = await authApi.login(email, password, rememberMe);
 
       if (result.success) {
-        router.push('/dashboard');
+        if (result.forcePasswordReset && result.user?.email) {
+          router.push(
+            `/forgot-password?required=1&email=${encodeURIComponent(result.user.email)}`
+          );
+        } else {
+          router.push('/dashboard');
+        }
       } else {
         setError(result.error ?? 'Login failed');
       }

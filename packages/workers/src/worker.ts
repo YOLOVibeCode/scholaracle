@@ -5,7 +5,9 @@ import {
   NotificationWorker,
   NotificationService,
   resolveAllAlertRecipients,
+  type INotificationServiceSmsDigestOptions,
 } from '@scholaracle/agents';
+import { UserRepository, SmsDigestPendingRepository } from '@scholaracle/database';
 import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { StudentNotificationGenerator } from '@scholaracle/agents';
@@ -75,13 +77,55 @@ function getTwilioConfig(config: IWorkerConfig): {
   };
 }
 
+/** Default UTC hour to send daily SMS digest (6 PM). */
+const SMS_DIGEST_UTC_HOUR = 18;
+
+const MAX_SMS_LENGTH = 1600;
+
+/**
+ * Flush pending SMS digest: send one combined SMS per user with digest enabled, then clear pending.
+ * Intended to run once per day at SMS_DIGEST_UTC_HOUR.
+ */
+async function flushSmsDigests(
+  database: Db,
+  twilioClient: Twilio,
+  fromNumber: string
+): Promise<void> {
+  const repo = new SmsDigestPendingRepository(database);
+  const userIds = await repo.getDistinctUserIds();
+  if (userIds.length === 0) return;
+
+  for (const userId of userIds) {
+    const items = await repo.findByUserId(userId);
+    if (items.length === 0) continue;
+    const phone = items[0]!.phone;
+    const parts = items.map((i) => `${i.subject}\n${i.body}`);
+    let body = `Scholaracle daily digest (${items.length} alert${items.length === 1 ? '' : 's'}):\n\n${parts.join('\n\n')}`;
+    if (body.length > MAX_SMS_LENGTH) {
+      body = `${body.substring(0, MAX_SMS_LENGTH - 3)}...`;
+    }
+    try {
+      await twilioClient.messages.create({
+        to: phone,
+        from: fromNumber,
+        body,
+      });
+      await repo.deleteByUserId(userId);
+    } catch (err) {
+      console.error(`[SmsDigest] Failed to send digest for user ${userId}:`, err);
+    }
+  }
+}
+
 /**
  * Initialize notification service with delivery services.
+ * When database is provided, wires SMS digest (batch alerts into one daily SMS per user).
  *
  * @param config - Worker configuration
+ * @param database - Optional DB for digest preference and pending queue
  * @returns Notification service instance
  */
-function initializeNotificationService(config: IWorkerConfig): NotificationService {
+function initializeNotificationService(config: IWorkerConfig, database?: Db): NotificationService {
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
 
@@ -126,7 +170,45 @@ function initializeNotificationService(config: IWorkerConfig): NotificationServi
   const studentGenerator = new StudentNotificationGenerator();
   const parentGenerator = new ParentNotificationGenerator();
 
-  return new NotificationService(studentGenerator, parentGenerator, deliveryRouter);
+  let smsDigestOptions: INotificationServiceSmsDigestOptions | undefined;
+  if (database) {
+    const userRepo = new UserRepository(database);
+    const smsDigestRepo = new SmsDigestPendingRepository(database);
+    smsDigestOptions = {
+      getSmsDigestPreference: async (
+        userId: string
+      ): Promise<{ enabled: true; time?: string } | null> => {
+        const user = await userRepo.findById(userId);
+        const daily = user?.preferences?.notifications?.digestSchedule?.daily?.enabled === true;
+        if (!daily) return null;
+        return {
+          enabled: true,
+          time: user.preferences?.notifications?.digestSchedule?.daily?.time,
+        };
+      },
+      enqueueSmsForDigest: async (
+        userId: string,
+        phone: string,
+        subject: string,
+        body: string
+      ): Promise<void> => {
+        await smsDigestRepo.add({
+          userId,
+          phone,
+          subject,
+          body,
+          createdAt: new Date(),
+        });
+      },
+    };
+  }
+
+  return new NotificationService(
+    studentGenerator,
+    parentGenerator,
+    deliveryRouter,
+    smsDigestOptions
+  );
 }
 
 /**
@@ -150,8 +232,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Initialize queue
   const mongoQueue = new MongoQueue(database);
 
-  // Initialize notification service
-  const notificationService = initializeNotificationService(config);
+  // Initialize notification service (with SMS digest when database is available)
+  const notificationService = initializeNotificationService(config, database);
 
   // Resolve all alert recipients for a student (owner + accepted contacts)
   const resolveAll = (studentId: string): ReturnType<typeof resolveAllAlertRecipients> =>
@@ -190,6 +272,22 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     tickIntervalMs: 60_000,
   });
   syncScheduler.start();
+
+  const twilioConfig = getTwilioConfig(config);
+  const twilioClientForDigest =
+    twilioConfig.accountSid && twilioConfig.authToken
+      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+      : null;
+  if (twilioClientForDigest && twilioConfig.fromNumber) {
+    setInterval(() => {
+      const now = new Date();
+      if (now.getUTCHours() === SMS_DIGEST_UTC_HOUR) {
+        void flushSmsDigests(database, twilioClientForDigest, twilioConfig.fromNumber).catch((e) =>
+          console.error('[SmsDigest]', e)
+        );
+      }
+    }, 60_000);
+  }
 
   // eslint-disable-next-line no-console
   console.log('Sync worker + scheduler started');

@@ -7,6 +7,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { AgendaOverrideRepository, StudentRepository, UserRepository } from '@scholaracle/database';
 import type { NotificationService } from '@scholaracle/agents';
+import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 
 export interface IAgendaRouterConfig {
   readonly database: Db;
@@ -297,7 +298,8 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
         apiKey: process.env['ANTHROPIC_API_KEY'],
         cacheTtlMs: 5 * 60 * 1000,
       });
-      if (agendaAI.isAvailable() && items.length > 0) {
+      const agendaLimit = await checkAiRateLimit(config.database, userId, 'agenda');
+      if (agendaAI.isAvailable() && items.length > 0 && agendaLimit.allowed) {
         const enhancements = await agendaAI.enhance(items);
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -313,6 +315,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
             };
           }
         }
+        await recordAiUsage(config.database, userId, 'agenda');
       }
 
       if (itemIds.length > 0) {

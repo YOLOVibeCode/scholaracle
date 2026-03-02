@@ -35,6 +35,8 @@ export * from './repositories/CommunicationTemplateRepository';
 export * from './repositories/CommunicationBatchRepository';
 export * from './repositories/AgendaOverrideRepository';
 export * from './repositories/CouponRepository';
+export * from './repositories/SmsDigestPendingRepository';
+export * from './repositories/AiUsageRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';

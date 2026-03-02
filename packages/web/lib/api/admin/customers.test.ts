@@ -373,4 +373,64 @@ describe('adminCustomersApi', () => {
       expect(result.data?.ltv).toBe(1200);
     });
   });
+
+  describe('setPassword', () => {
+    it('POSTs /admin/customers/:id/set-password with password and admin token', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true }));
+
+      const result = await adminCustomersApi.setPassword('cust-1', 'NewSecurePass123!');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost:2801/api/admin/customers/cust-1/set-password',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ password: 'NewSecurePass123!' }),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer admin-jwt-token',
+          }),
+        })
+      );
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('sendReset', () => {
+    it('POSTs /admin/customers/:id/send-reset with admin token', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true }));
+
+      const result = await adminCustomersApi.sendReset('cust-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost:2801/api/admin/customers/cust-1/send-reset',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer admin-jwt-token',
+          }),
+        })
+      );
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('forceReset', () => {
+    it('POSTs /admin/customers/:id/force-reset with admin token', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true }));
+
+      const result = await adminCustomersApi.forceReset('cust-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost:2801/api/admin/customers/cust-1/force-reset',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer admin-jwt-token',
+          }),
+        })
+      );
+      expect(result.success).toBe(true);
+    });
+  });
 });

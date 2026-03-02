@@ -25,6 +25,7 @@ import {
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
+import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { adminAuthRouter } from './routes/admin/auth';
 import { customersRouter } from './routes/admin/customers/customers';
 import { analyticsRouter } from './routes/admin/analytics';
@@ -290,6 +291,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const sendGrid = sgMail as unknown as MailService;
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
     const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
+    const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(
+      sendGridConfig,
+      sendGrid
+    );
 
     const authService = new AuthService(
       database,
@@ -409,7 +414,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         adminJwtSecret: jwtSecret ?? process.env['JWT_SECRET'] ?? '',
       })
     );
-    app.use('/api/admin/customers', customersRouter({ database }));
+    app.use(
+      '/api/admin/customers',
+      customersRouter({
+        database,
+        jwtSecret,
+        authService,
+        passwordChangedEmailSender,
+        baseUrl,
+      })
+    );
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
     app.use('/api/admin/payments', paymentsRouter({ database }));
     app.use('/api/admin/coupons', couponsRouter({ database }));

@@ -78,8 +78,8 @@ export class SquareService {
     params: ICreatePaymentLinkParams
   ): Promise<{ url: string; orderId: string }> {
     const pricing = PLAN_PRICING[params.plan];
-    const amountCents =
-      params.billingCycle === 'annual' ? pricing.annual * 100 : pricing.monthly * 100;
+    const amountDollars = params.billingCycle === 'annual' ? pricing.annual : pricing.monthly;
+    const amountCents = Math.round(amountDollars * 100);
 
     const planLabel = `${params.plan.charAt(0).toUpperCase() + params.plan.slice(1)} Plan`;
     const cycleLabel = params.billingCycle === 'annual' ? 'Annual' : 'Monthly';
