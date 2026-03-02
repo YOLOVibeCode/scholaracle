@@ -27,6 +27,7 @@ export async function resolveAllAlertRecipients(
     out.push({
       ...(hasEmail && r.email ? { parentEmail: r.email } : {}),
       ...(hasSms && r.phone ? { parentPhone: r.phone } : {}),
+      ...(r.isPrimary ? { userId: student.userId.toString() } : {}),
     });
   }
   return out.filter((o) => o.parentEmail ?? o.parentPhone);

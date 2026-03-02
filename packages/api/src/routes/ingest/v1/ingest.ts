@@ -130,6 +130,20 @@ async function generateAlertsFromIngestedAssignments(params: {
   const daysBeforeDeadline = user.preferences.alerts?.daysBeforeDeadline ?? 2;
   const now = new Date();
   const windowEnd = new Date(now.getTime() + daysBeforeDeadline * 24 * 60 * 60_000);
+  const todayYMD = now.toISOString().slice(0, 10);
+
+  const termEndDates = new Map<string, string>();
+  const termDocs = await params.database
+    .collection('slc_academic_terms')
+    .find({ userId: params.userId, deletedAt: null })
+    .toArray();
+  for (const t of termDocs) {
+    const extId = t['externalId'] as string | undefined;
+    const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
+      | string
+      | undefined;
+    if (extId && endDate) termEndDates.set(extId, endDate);
+  }
 
   // Due soon assignments (ISO string comparison works for UTC ISO format)
   const dueSoon = await params.database
@@ -149,8 +163,13 @@ async function generateAlertsFromIngestedAssignments(params: {
 
     const baseFingerprint = `${doc['provider']}|${doc['adapterId']}|${doc['externalId']}|${dueAt}`;
 
-    // Missing assignment = critical
+    // Missing assignment = critical (skip if assignment's term has ended)
     if (status === 'missing') {
+      const termExternalId = (doc['record'] as Record<string, unknown> | undefined)?.[
+        'termExternalId'
+      ] as string | undefined;
+      const endDate = termExternalId ? termEndDates.get(termExternalId) : undefined;
+      if (termExternalId && endDate && endDate < todayYMD) continue;
       const fingerprint = `missing:${baseFingerprint}`;
       const existing = await params.database.collection('alerts').findOne({
         userId: params.userId,

@@ -46,6 +46,7 @@ describe('Students API Routes', () => {
     if (database) {
       // Clean up test data before each test
       await database.collection('students').deleteMany({});
+      await database.collection('subscriptions').deleteMany({});
       await database.collection('users').deleteMany({ email: 'students@example.com' });
 
       // Re-register test user for each test
@@ -56,6 +57,22 @@ describe('Students API Routes', () => {
       );
       if (registerResult.success && registerResult.user && registerResult.token) {
         testToken = registerResult.token;
+        const userId = registerResult.user.id;
+        if (userId) {
+          const now = new Date();
+          const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+          await database.collection('subscriptions').insertOne({
+            userId,
+            plan: 'family',
+            status: 'active',
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            billingCycle: 'monthly',
+            createdAt: now,
+            updatedAt: now,
+            events: [{ type: 'created', toPlan: 'family', timestamp: now }],
+          });
+        }
       } else {
         throw new Error(`Failed to register test user: ${registerResult.error ?? 'Unknown error'}`);
       }
@@ -229,6 +246,7 @@ describe('Students API Routes', () => {
         await database.collection('slc_grade_snapshots').deleteMany({});
         await database.collection('slc_course_materials').deleteMany({});
         await database.collection('slc_assets').deleteMany({});
+        await database.collection('slc_academic_terms').deleteMany({});
       }
     });
 
@@ -423,6 +441,72 @@ describe('Students API Routes', () => {
       expect(
         buckets.every((b) => b.count === 0 && Array.isArray(b.items) && b.items.length === 0)
       ).toBe(true);
+    });
+
+    it('should put missing assignments in expired term into caught_up', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Expired Term Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_academic_terms').insertOne({
+        userId,
+        provider: 'canvas',
+        adapterId: 'canvas-browser',
+        externalId: 'canvas-term-fall-2025',
+        deletedAt: null,
+        record: {
+          title: 'Fall 2025',
+          startDate: '2025-08-01',
+          endDate: '2025-12-31',
+          type: 'semester',
+        },
+      });
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'test',
+        adapterId: 'com.test',
+        externalId: 'course-exp',
+        deletedAt: null,
+        record: { name: 'Math' },
+      });
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId: 'course-exp',
+        externalId: 'a-expired-missing',
+        deletedAt: null,
+        record: {
+          title: 'Old Missing',
+          status: 'missing',
+          dueAt: '2025-10-15T23:59:00Z',
+          termExternalId: 'canvas-term-fall-2025',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/action-board`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      const buckets = res.body.buckets as Array<{
+        id: string;
+        items: Array<{ assignmentExternalId: string }>;
+      }>;
+      const caughtUp = buckets.find((b) => b.id === 'caught_up');
+      const needsAttention = buckets.find((b) => b.id === 'needs_attention');
+      expect(caughtUp).toBeDefined();
+      expect(caughtUp!.items.some((i) => i.assignmentExternalId === 'a-expired-missing')).toBe(
+        true
+      );
+      expect(
+        needsAttention?.items.some((i) => i.assignmentExternalId === 'a-expired-missing')
+      ).toBe(false);
     });
   });
 

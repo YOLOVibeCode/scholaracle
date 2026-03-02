@@ -14,10 +14,27 @@ import {
 export interface IResolvedRecipient {
   parentEmail?: string;
   parentPhone?: string;
+  /** When set, used for SMS digest preference lookup (e.g. account owner). */
+  userId?: string;
 }
 
 /** @deprecated Use IResolvedRecipient (singular). Kept for backwards compat. */
 export type IResolvedRecipients = IResolvedRecipient;
+
+export interface ISmsDigestPreference {
+  readonly enabled: boolean;
+  readonly time?: string;
+}
+
+export interface INotificationServiceSmsDigestOptions {
+  readonly getSmsDigestPreference?: (userId: string) => Promise<ISmsDigestPreference | null>;
+  readonly enqueueSmsForDigest?: (
+    userId: string,
+    phone: string,
+    subject: string,
+    body: string
+  ) => Promise<void>;
+}
 
 export interface IProcessAlertResult {
   readonly studentNotification: Notification;
@@ -28,20 +45,59 @@ export interface IProcessAlertResult {
 /**
  * Orchestrates notification generation and delivery.
  * Generates notifications for both student and parent, then delivers through all specified channels.
+ * When SMS digest options are provided, SMS for recipients with digest enabled are queued for daily batch.
  */
 export class NotificationService {
   private readonly _studentGenerator: StudentNotificationGenerator;
   private readonly _parentGenerator: ParentNotificationGenerator;
   private readonly _deliveryRouter: DeliveryRouter;
+  private readonly _smsDigestOptions?: INotificationServiceSmsDigestOptions;
 
   constructor(
     studentGenerator: StudentNotificationGenerator,
     parentGenerator: ParentNotificationGenerator,
-    deliveryRouter: DeliveryRouter
+    deliveryRouter: DeliveryRouter,
+    smsDigestOptions?: INotificationServiceSmsDigestOptions
   ) {
     this._studentGenerator = studentGenerator;
     this._parentGenerator = parentGenerator;
     this._deliveryRouter = deliveryRouter;
+    this._smsDigestOptions = smsDigestOptions;
+  }
+
+  /**
+   * If SMS digest is enabled for this recipient, enqueue for digest and record result; return true.
+   * Otherwise return false so caller sends immediately.
+   */
+  private async _tryDeferSmsToDigest(
+    channel: NotificationChannel,
+    recipient: IResolvedRecipient,
+    parentNotification: Notification,
+    deliveryResults: DeliveryResult[]
+  ): Promise<boolean> {
+    if (
+      channel !== NotificationChannel.SMS ||
+      !recipient.userId ||
+      !recipient.parentPhone ||
+      !this._smsDigestOptions?.getSmsDigestPreference ||
+      !this._smsDigestOptions?.enqueueSmsForDigest
+    )
+      return false;
+    const pref = await this._smsDigestOptions.getSmsDigestPreference(recipient.userId);
+    if (!pref?.enabled) return false;
+    await this._smsDigestOptions.enqueueSmsForDigest(
+      recipient.userId,
+      recipient.parentPhone,
+      parentNotification.subject,
+      parentNotification.body
+    );
+    deliveryResults.push({
+      success: true,
+      channel: NotificationChannel.SMS,
+      messageId: 'digest-deferred',
+      deliveredAt: new Date(),
+    });
+    return true;
   }
 
   /**
@@ -104,6 +160,15 @@ export class NotificationService {
               : channel === NotificationChannel.SMS
                 ? (recipient.parentPhone ?? parentNotification.userId)
                 : parentNotification.userId;
+
+          const deferred = await this._tryDeferSmsToDigest(
+            channel,
+            recipient,
+            parentNotification,
+            deliveryResults
+          );
+          if (deferred) continue;
+
           const notifToSend =
             to !== parentNotification.userId
               ? new Notification({

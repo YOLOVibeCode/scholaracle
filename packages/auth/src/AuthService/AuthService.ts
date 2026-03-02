@@ -25,6 +25,8 @@ export interface IAuthResult {
     readonly email: string;
     readonly name: string;
   };
+  /** When true, client should redirect to reset-password on next login. */
+  readonly forcePasswordReset?: boolean;
   readonly error?: string;
 }
 
@@ -273,6 +275,7 @@ export class AuthService implements IAuthService {
           email: user.email,
           name: user.name,
         },
+        forcePasswordReset: user.forcePasswordReset === true,
       };
     } catch (error) {
       return {
@@ -533,7 +536,10 @@ export class AuthService implements IAuthService {
 
     try {
       const passwordHash = await UserRepo.hashPassword(newPassword);
-      await this._userRepository.update(valid.userId, { passwordHash });
+      await this._userRepository.update(valid.userId, {
+        passwordHash,
+        forcePasswordReset: false,
+      });
       await this._passwordResetTokenStore.invalidateForUser(valid.userId);
       return { success: true };
     } catch (error) {

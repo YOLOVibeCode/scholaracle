@@ -59,7 +59,14 @@ describe('Auth API Routes', () => {
     // Clean up test users, reset tokens, and refresh tokens before each test
     if (database) {
       await database.collection('users').deleteMany({
-        email: { $in: ['authtest@example.com', 'authdup@example.com', 'nonexistent@example.com'] },
+        email: {
+          $in: [
+            'authtest@example.com',
+            'authdup@example.com',
+            'nonexistent@example.com',
+            'forcereset@example.com',
+          ],
+        },
       });
       await database.collection('password_reset_tokens').deleteMany({});
       await database.collection('refresh_tokens').deleteMany({});
@@ -156,6 +163,31 @@ describe('Auth API Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('Missing required fields');
+    });
+
+    it('should return forcePasswordReset true when user is flagged', async () => {
+      await request(app).post('/api/auth/register').send({
+        email: 'forcereset@example.com',
+        password: 'password123',
+        name: 'Force Reset User',
+      });
+
+      const user = await database.collection('users').findOne({ email: 'forcereset@example.com' });
+      expect(user).not.toBeNull();
+      await database
+        .collection('users')
+        .updateOne(
+          { _id: user!._id },
+          { $set: { forcePasswordReset: true, updatedAt: new Date() } }
+        );
+
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'forcereset@example.com', password: 'password123' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.forcePasswordReset).toBe(true);
     });
   });
 

@@ -17,6 +17,7 @@ export {
   type ICustomerActivityTimelineProps,
 } from './CustomerActivityTimeline';
 export { CustomerSuspendPanel, type ICustomerSuspendPanelProps } from './CustomerSuspendPanel';
+export { CustomerPasswordPanel, type ICustomerPasswordPanelProps } from './CustomerPasswordPanel';
 export { PaymentRefundPanel, type IPaymentRefundPanelProps } from './PaymentRefundPanel';
 export {
   SubscriptionExtendTrialPanel,

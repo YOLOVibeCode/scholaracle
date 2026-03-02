@@ -15,15 +15,19 @@ export type SubscriptionStatus = 'active' | 'past_due' | 'cancelled' | 'expired'
  */
 export type BillingCycle = 'monthly' | 'annual';
 
+/** Price per student per month (psychological $9.99). */
+export const PRICE_PER_STUDENT_MONTHLY = 9.99;
+
 /**
  * Plan pricing configuration.
+ * Tiers follow $9.99/student/month; annual ≈ 10 months (2 months free).
  */
 export const PLAN_PRICING: Record<SubscriptionPlan, { monthly: number; annual: number }> = {
   free: { monthly: 0, annual: 0 },
-  starter: { monthly: 9, annual: 90 },
-  premium: { monthly: 19, annual: 190 },
-  family: { monthly: 29, annual: 290 },
-  enterprise: { monthly: 99, annual: 990 },
+  starter: { monthly: 9.99, annual: 99.99 },
+  premium: { monthly: 19.99, annual: 199.99 },
+  family: { monthly: 49.99, annual: 499.99 },
+  enterprise: { monthly: 99.99, annual: 999.99 },
 } as const;
 
 /**
@@ -47,21 +51,21 @@ export const PLAN_FEATURES: Record<
     advancedAnalytics: false,
   },
   starter: {
-    maxStudents: 2,
+    maxStudents: 1,
     emailNotifications: true,
     smsNotifications: true,
     prioritySupport: false,
     advancedAnalytics: false,
   },
   premium: {
-    maxStudents: 5,
+    maxStudents: 2,
     emailNotifications: true,
     smsNotifications: true,
     prioritySupport: true,
     advancedAnalytics: true,
   },
   family: {
-    maxStudents: 10,
+    maxStudents: 5,
     emailNotifications: true,
     smsNotifications: true,
     prioritySupport: true,

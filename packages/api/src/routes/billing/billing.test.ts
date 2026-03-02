@@ -14,6 +14,10 @@ jest.mock('@scholaracle/database', () => {
     PaymentRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserIdPayments,
     })),
+    CouponRepository: jest.fn().mockImplementation(() => ({
+      validateCode: jest.fn().mockResolvedValue({ valid: false, error: 'Coupon not found' }),
+      recordRedemption: jest.fn().mockResolvedValue(null),
+    })),
     __mockFindByUserId: mockFindByUserId,
     __mockFindByUserIdPayments: mockFindByUserIdPayments,
   };

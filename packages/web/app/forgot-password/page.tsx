@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,10 +10,17 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth';
 
 export default function ForgotPasswordPage() {
+  const searchParams = useSearchParams();
+  const requiredParam = searchParams.get('required') === '1';
+  const emailParam = searchParams.get('email') ?? '';
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (emailParam && !email) setEmail(decodeURIComponent(emailParam));
+  }, [emailParam, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +49,9 @@ export default function ForgotPasswordPage() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Forgot password</CardTitle>
           <CardDescription>
-            Enter your email and we&apos;ll send you a link to reset your password.
+            {requiredParam
+              ? 'You must reset your password. Enter your email to receive a reset link.'
+              : "Enter your email and we'll send you a link to reset your password."}
           </CardDescription>
         </CardHeader>
         <form data-testid="form-forgot-password" onSubmit={handleSubmit}>
