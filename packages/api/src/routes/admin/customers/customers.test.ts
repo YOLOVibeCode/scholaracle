@@ -9,8 +9,14 @@ import {
   UserRepository,
   StudentRepository,
   PaymentRepository,
+  PasswordResetTokenRepository,
 } from '@scholaracle/database';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+
+const noOpPasswordResetSender = { sendResetLink: async (): Promise<void> => {} };
+const mockPasswordChangedSender = {
+  sendPasswordChanged: jest.fn().mockResolvedValue(undefined),
+};
 
 describe('Admin Customer Routes', () => {
   let app: Express;
@@ -55,7 +61,25 @@ describe('Admin Customer Routes', () => {
         stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
       })
     );
-    app.use('/api/admin/customers', customersRouter({ database, jwtSecret: 'test-secret' }));
+    const passwordResetTokenStore = new PasswordResetTokenRepository(database);
+    const authServiceForReset = new AuthService(
+      database,
+      'test-secret',
+      '15m',
+      passwordResetTokenStore,
+      noOpPasswordResetSender,
+      'http://localhost:2800'
+    );
+    app.use(
+      '/api/admin/customers',
+      customersRouter({
+        database,
+        jwtSecret: 'test-secret',
+        authService: authServiceForReset,
+        passwordChangedEmailSender: mockPasswordChangedSender,
+        baseUrl: 'https://test.example.com',
+      })
+    );
   });
 
   afterAll(async () => {
@@ -69,6 +93,7 @@ describe('Admin Customer Routes', () => {
     await database.collection('payments').deleteMany({});
     await database.collection('subscriptions').deleteMany({});
     await database.collection('audit_logs').deleteMany({});
+    await database.collection('password_reset_tokens').deleteMany({});
   });
 
   describe('GET /api/admin/customers/:id/students', () => {
@@ -579,6 +604,184 @@ describe('Admin Customer Routes', () => {
         .toArray();
 
       expect(auditLogs.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('POST /api/admin/customers/:id/set-password', () => {
+    it('should require step-up when MFA is enabled', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'setpw@test.com',
+        passwordHash,
+        name: 'Set Password User',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/set-password`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ password: 'NewPass123!' });
+      expect(res.status).toBe(401);
+      expect(String(res.body.code ?? '')).toContain('MFA_STEP_UP');
+    });
+
+    it('should set customer password and create audit log', async () => {
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('OldPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'setpw2@test.com',
+        passwordHash,
+        name: 'Set Password User 2',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/set-password`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ password: 'NewPass123!' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:set_password', entityId: customer._id!.toString() })
+        .toArray();
+      expect(auditLogs.length).toBeGreaterThan(0);
+
+      const updated = await new UserRepository(database).findById(customer._id!.toString());
+      expect(updated).not.toBeNull();
+      const isValid = await UserRepository.verifyPassword('NewPass123!', updated!.passwordHash);
+      expect(isValid).toBe(true);
+    });
+
+    it('should reject password shorter than 8 characters', async () => {
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'shortpw@test.com',
+        passwordHash,
+        name: 'Short PW User',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/set-password`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ password: 'short' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/password|8/);
+    });
+
+    it('should call passwordChangedEmailSender after successful set-password', async () => {
+      mockPasswordChangedSender.sendPasswordChanged.mockClear();
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('OldPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'pwchanged@test.com',
+        passwordHash,
+        name: 'Password Changed Notify',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/set-password`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ password: 'NewPass456!' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(mockPasswordChangedSender.sendPasswordChanged).toHaveBeenCalledTimes(1);
+      expect(mockPasswordChangedSender.sendPasswordChanged).toHaveBeenCalledWith({
+        to: 'pwchanged@test.com',
+        baseUrl: 'https://test.example.com',
+      });
+    });
+  });
+
+  describe('POST /api/admin/customers/:id/send-reset', () => {
+    it('should require step-up when MFA is enabled', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'sendreset@test.com',
+        passwordHash,
+        name: 'Send Reset User',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/send-reset`)
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      expect(res.status).toBe(401);
+      expect(String(res.body.code ?? '')).toContain('MFA_STEP_UP');
+    });
+
+    it('should send reset email and create audit log', async () => {
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'sendreset2@test.com',
+        passwordHash,
+        name: 'Send Reset User 2',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/send-reset`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:send_reset', entityId: customer._id!.toString() })
+        .toArray();
+      expect(auditLogs.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('POST /api/admin/customers/:id/force-reset', () => {
+    it('should require step-up when MFA is enabled', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'forcereset@test.com',
+        passwordHash,
+        name: 'Force Reset User',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/force-reset`)
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      expect(res.status).toBe(401);
+      expect(String(res.body.code ?? '')).toContain('MFA_STEP_UP');
+    });
+
+    it('should set forcePasswordReset on customer and create audit log', async () => {
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'forcereset2@test.com',
+        passwordHash,
+        name: 'Force Reset User 2',
+      });
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customer._id!.toString()}/force-reset`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:force_reset', entityId: customer._id!.toString() })
+        .toArray();
+      expect(auditLogs.length).toBeGreaterThan(0);
+
+      const updated = await new UserRepository(database).findById(customer._id!.toString());
+      expect(updated).not.toBeNull();
+      expect(updated!.forcePasswordReset).toBe(true);
     });
   });
 });

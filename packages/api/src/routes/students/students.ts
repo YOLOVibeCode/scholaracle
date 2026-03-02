@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
+import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 
 // ---------------------------------------------------------------------------
 // Lightweight cross-source course reconciliation (inline to avoid connector dep)
@@ -98,6 +99,7 @@ export interface IActionItem {
   readonly title: string;
   readonly dueAt?: string;
   readonly status: string;
+  readonly termExternalId?: string;
   readonly pointsPossible?: number;
   readonly pointsEarned?: number;
   readonly isOverdue: boolean;
@@ -218,7 +220,8 @@ function determineActionBucket(
   assignmentDocs: ActionBoardAssignmentDoc[],
   nowMs: number,
   seventyTwoHoursMs: number,
-  sevenDaysMs: number
+  sevenDaysMs: number,
+  termEndDates?: Map<string, string>
 ): BucketId {
   const dueAt = item.dueAt ? new Date(item.dueAt).getTime() : null;
   const doc = assignmentDocs.find((d) => d.externalId === item.assignmentExternalId) as
@@ -229,7 +232,16 @@ function determineActionBucket(
     | undefined;
   const gradedAtMs = docGradedAt ? new Date(docGradedAt).getTime() : 0;
 
-  if (item.status === 'missing') return 'needs_attention';
+  if (item.status === 'missing') {
+    if (termEndDates && item.termExternalId) {
+      const endDate = termEndDates.get(item.termExternalId);
+      if (endDate) {
+        const todayYMD = new Date(nowMs).toISOString().slice(0, 10);
+        if (endDate < todayYMD) return 'caught_up';
+      }
+    }
+    return 'needs_attention';
+  }
   if (item.status === 'late') return 'needs_attention';
   if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
   if (
@@ -793,6 +805,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const studentDbIdStr = student._id?.toString() ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
+      const termsColl = config.database.collection('slc_academic_terms');
 
       const assignmentFilter = studentDbIdStr
         ? {
@@ -804,7 +817,19 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             ],
           }
         : { userId, studentExternalId, deletedAt: null };
-      const assignmentDocs = await assignmentsColl.find(assignmentFilter).toArray();
+      const [assignmentDocs, termDocs] = await Promise.all([
+        assignmentsColl.find(assignmentFilter).toArray(),
+        termsColl.find({ userId, deletedAt: null }).toArray(),
+      ]);
+
+      const termEndDates = new Map<string, string>();
+      for (const t of termDocs) {
+        const extId = t['externalId'] as string | undefined;
+        const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
+          | string
+          | undefined;
+        if (extId && endDate) termEndDates.set(extId, endDate);
+      }
 
       const materialsColl = config.database.collection('slc_course_materials');
       const materialDocs = await materialsColl.find(assignmentFilter).toArray();
@@ -950,7 +975,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             data.olderPointsEarned += pointsEarned ?? 0;
           }
         }
-        if (status === 'missing') data.missingCount += 1;
+        if (status === 'missing') {
+          const termExternalId = record?.['termExternalId'] as string | undefined;
+          const endDate = termExternalId ? termEndDates.get(termExternalId) : undefined;
+          const todayYMD = now.toISOString().slice(0, 10);
+          if (!termExternalId || !endDate || endDate >= todayYMD) data.missingCount += 1;
+        }
         if (status === 'late') data.lateCount += 1;
       }
 
@@ -1052,7 +1082,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         apiKey: process.env['ANTHROPIC_API_KEY'],
         cacheTtlMs: 5 * 60 * 1000,
       });
-      if (gradeRiskService.isAvailable() && courseGrades.length > 0) {
+      const ownerUserId = student.userId.toString();
+      const gradeRiskLimit = await checkAiRateLimit(config.database, ownerUserId, 'grade_risk');
+      if (gradeRiskService.isAvailable() && courseGrades.length > 0 && gradeRiskLimit.allowed) {
         const input = courseGrades.map((c) => ({
           courseExternalId: c.courseExternalId,
           courseName: c.courseName,
@@ -1075,6 +1107,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             if (enh.riskExplanation != null) c.riskExplanation = enh.riskExplanation;
           }
         }
+        await recordAiUsage(config.database, ownerUserId, 'grade_risk');
       }
 
       res.status(200).json({
@@ -1449,6 +1482,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
       const materialsColl = config.database.collection('slc_course_materials');
       const assetsColl = config.database.collection('slc_assets');
+      const termsColl = config.database.collection('slc_academic_terms');
 
       const assignmentFilter = studentDbIdStr
         ? {
@@ -1461,19 +1495,30 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           }
         : { userId, studentExternalId, deletedAt: null };
 
-      const [assignmentDocs, courseDocs, gradeDocs, materialDocs, assetDocs] = await Promise.all([
-        assignmentsColl.find(assignmentFilter).toArray(),
-        coursesColl.find({ userId, deletedAt: null }).toArray(),
-        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
-        materialsColl.find({ userId, deletedAt: null }).toArray(),
-        assetsColl
-          .find({
-            userId,
-            deletedAt: null,
-            entityType: { $in: ['assignment', 'courseMaterial'] },
-          })
-          .toArray(),
-      ]);
+      const [assignmentDocs, courseDocs, gradeDocs, materialDocs, assetDocs, termDocs] =
+        await Promise.all([
+          assignmentsColl.find(assignmentFilter).toArray(),
+          coursesColl.find({ userId, deletedAt: null }).toArray(),
+          gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
+          materialsColl.find({ userId, deletedAt: null }).toArray(),
+          assetsColl
+            .find({
+              userId,
+              deletedAt: null,
+              entityType: { $in: ['assignment', 'courseMaterial'] },
+            })
+            .toArray(),
+          termsColl.find({ userId, deletedAt: null }).toArray(),
+        ]);
+
+      const termEndDates = new Map<string, string>();
+      for (const t of termDocs) {
+        const extId = t['externalId'] as string | undefined;
+        const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
+          | string
+          | undefined;
+        if (extId && endDate) termEndDates.set(extId, endDate);
+      }
 
       const courseMap = new Map<string, { name: string }>();
       for (const c of courseDocs) {
@@ -1539,6 +1584,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const title = (record['title'] as string) ?? 'Assignment';
         const dueAt = record['dueAt'] as string | undefined;
         const status = (record['status'] as string) ?? 'unknown';
+        const termExternalId = record['termExternalId'] as string | undefined;
         const pointsPossible =
           typeof record['pointsPossible'] === 'number' ? record['pointsPossible'] : undefined;
         const pointsEarned =
@@ -1581,6 +1627,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           title,
           dueAt,
           status,
+          termExternalId,
           pointsPossible,
           pointsEarned,
           isOverdue,
@@ -1611,7 +1658,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           assignmentDocs as ActionBoardAssignmentDoc[],
           nowMs,
           seventyTwoHoursMs,
-          sevenDaysMs
+          sevenDaysMs,
+          termEndDates
         );
         byBucket.get(bucket)!.push(item);
       }

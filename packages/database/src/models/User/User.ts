@@ -71,6 +71,8 @@ export interface IUserData {
   readonly suspendedReason?: string;
   readonly suspendedAt?: Date;
   readonly suspendedBy?: string;
+  /** When true, client should redirect to reset-password on next login. */
+  readonly forcePasswordReset?: boolean;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -96,6 +98,8 @@ export class User {
   public readonly suspendedReason?: string;
   public readonly suspendedAt?: Date;
   public readonly suspendedBy?: string;
+  /** When true, client should redirect to reset-password on next login. */
+  public readonly forcePasswordReset: boolean;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -127,6 +131,7 @@ export class User {
     this.suspendedReason = data.suspendedReason;
     this.suspendedAt = data.suspendedAt;
     this.suspendedBy = data.suspendedBy;
+    this.forcePasswordReset = data.forcePasswordReset ?? false;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }

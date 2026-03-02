@@ -70,6 +70,7 @@ describe('EmailDelivery', () => {
       expect(envelope.subject).toBe(notification.subject);
       expect(envelope.text).toBe(notification.body);
       expect(envelope.html).toContain(notification.body);
+      expect(envelope.html).toContain('Scholarmancy');
     });
 
     it('should include messageId when transport returns one', async () => {
@@ -132,6 +133,7 @@ describe('EmailDelivery', () => {
       expect(envelope.html).toContain('John Doe');
       expect(envelope.html).toContain('92%');
       expect(envelope.html).toContain('85%');
+      expect(envelope.html).toContain('Scholarmancy');
     });
 
     it('should use userId as recipient email', async () => {

@@ -25,6 +25,7 @@ import {
   getReferenceScraper,
   normalizeToReferencePlatform,
 } from '../../services/scraper-generator/reference-scrapers';
+import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { createHash } from 'node:crypto';
 import {
   createIntegrationSchema,
@@ -685,6 +686,17 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         return;
       }
 
+      const rateLimit = await checkAiRateLimit(config.database, userId, 'scraper_generation');
+      if (!rateLimit.allowed) {
+        res.status(429).json({
+          success: false,
+          error: 'AI scraper generation limit reached for your plan',
+          limit: rateLimit.limit,
+          used: rateLimit.used,
+        });
+        return;
+      }
+
       const jobId = randomUUID();
       const now = new Date();
       await scraperGenerationJobsCollection.insertOne({
@@ -701,6 +713,8 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         error: null,
         retryCount: 0,
       });
+
+      await recordAiUsage(config.database, userId, 'scraper_generation', now);
 
       setImmediate(() => {
         processScraperGenerationJob(config.database, jobId).catch((err) => {

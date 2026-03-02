@@ -7,6 +7,7 @@ import {
   PaymentRepository,
 } from '@scholaracle/database';
 import { AdminAuthService, AuthService } from '@scholaracle/auth';
+import type { IPasswordChangedEmailSender } from '../../../services/PasswordChangedEmailSender';
 import {
   adminAuthMiddleware,
   type IAdminAuthenticatedRequest,
@@ -17,6 +18,12 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 export interface ICustomersRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  /** When provided, used for admin-triggered password reset email (send-reset). */
+  readonly authService?: AuthService;
+  /** When provided, used to send "password changed by admin" email after set-password. */
+  readonly passwordChangedEmailSender?: IPasswordChangedEmailSender;
+  /** Base URL for links in emails (e.g. password reset link after admin set-password). */
+  readonly baseUrl?: string;
 }
 
 async function handleGetCustomers(
@@ -571,6 +578,176 @@ async function handleBulkAction(
   }
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
+async function handleSetPassword(
+  req: Request,
+  res: Response,
+  userRepository: UserRepository,
+  auditLogRepository: AuditLogRepository,
+  adminId: string,
+  adminEmail: string,
+  passwordChangedEmailSender: IPasswordChangedEmailSender | undefined,
+  baseUrl: string
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, error: 'Customer ID is required' });
+      return;
+    }
+    const { password } = (req.body ?? {}) as { password?: string };
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+      res.status(400).json({
+        success: false,
+        error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      });
+      return;
+    }
+
+    const customer = await userRepository.findById(id);
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    const passwordHash = await UserRepository.hashPassword(password);
+    const updated = await userRepository.update(id, { passwordHash });
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    await auditLogRepository.create({
+      adminUserId: adminId,
+      adminEmail,
+      action: 'customer:set_password',
+      entityType: 'customer',
+      entityId: id,
+      ipAddress: req.ip ?? 'unknown',
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+    });
+
+    if (passwordChangedEmailSender && baseUrl) {
+      await passwordChangedEmailSender.sendPasswordChanged({
+        to: customer.email,
+        baseUrl,
+      });
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleSendReset(
+  req: Request,
+  res: Response,
+  userRepository: UserRepository,
+  auditLogRepository: AuditLogRepository,
+  authService: AuthService | undefined,
+  adminId: string,
+  adminEmail: string
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, error: 'Customer ID is required' });
+      return;
+    }
+
+    const customer = await userRepository.findById(id);
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    if (!authService) {
+      res.status(503).json({
+        success: false,
+        error: 'Password reset is not configured',
+      });
+      return;
+    }
+
+    const result = await authService.requestPasswordReset(customer.email);
+    if (!result.success) {
+      res.status(500).json({
+        success: false,
+        error: result.error ?? 'Failed to send reset email',
+      });
+      return;
+    }
+
+    await auditLogRepository.create({
+      adminUserId: adminId,
+      adminEmail,
+      action: 'customer:send_reset',
+      entityType: 'customer',
+      entityId: id,
+      ipAddress: req.ip ?? 'unknown',
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+    });
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+async function handleForceReset(
+  req: Request,
+  res: Response,
+  userRepository: UserRepository,
+  auditLogRepository: AuditLogRepository,
+  adminId: string,
+  adminEmail: string
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ success: false, error: 'Customer ID is required' });
+      return;
+    }
+
+    const customer = await userRepository.findById(id);
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    const updated = await userRepository.update(id, { forcePasswordReset: true });
+    if (!updated) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    await auditLogRepository.create({
+      adminUserId: adminId,
+      adminEmail,
+      action: 'customer:force_reset',
+      entityType: 'customer',
+      entityId: id,
+      ipAddress: req.ip ?? 'unknown',
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+    });
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
 export function customersRouter(config: ICustomersRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
@@ -837,6 +1014,60 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
           error: error instanceof Error ? error.message : 'Internal server error',
         });
       }
+    })
+  );
+
+  // POST /api/admin/customers/:id/set-password
+  router.post(
+    '/:id/set-password',
+    requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
+    asyncHandler(async (req: Request, res: Response) => {
+      const authReq = req as IAdminAuthenticatedRequest;
+      await handleSetPassword(
+        req,
+        res,
+        userRepository,
+        auditLogRepository,
+        authReq.adminId!,
+        authReq.adminEmail!,
+        config.passwordChangedEmailSender,
+        config.baseUrl ?? ''
+      );
+    })
+  );
+
+  // POST /api/admin/customers/:id/send-reset
+  router.post(
+    '/:id/send-reset',
+    requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
+    asyncHandler(async (req: Request, res: Response) => {
+      const authReq = req as IAdminAuthenticatedRequest;
+      await handleSendReset(
+        req,
+        res,
+        userRepository,
+        auditLogRepository,
+        config.authService,
+        authReq.adminId!,
+        authReq.adminEmail!
+      );
+    })
+  );
+
+  // POST /api/admin/customers/:id/force-reset
+  router.post(
+    '/:id/force-reset',
+    requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
+    asyncHandler(async (req: Request, res: Response) => {
+      const authReq = req as IAdminAuthenticatedRequest;
+      await handleForceReset(
+        req,
+        res,
+        userRepository,
+        auditLogRepository,
+        authReq.adminId!,
+        authReq.adminEmail!
+      );
     })
   );
 

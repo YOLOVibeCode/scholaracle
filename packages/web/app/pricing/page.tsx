@@ -9,30 +9,39 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { billingApi } from '@/lib/api/billing';
 
-const PLANS = [
+type BillingCycle = 'monthly' | 'annual';
+
+const PLANS: readonly {
+  id: string;
+  name: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  students: number;
+  description: string;
+  features: readonly string[];
+  plan: string | null;
+  popular: boolean;
+}[] = [
   {
     id: 'free',
     name: 'Free',
-    price: '$0',
-    period: 'forever',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    students: 1,
     description: 'Get started with basic monitoring',
-    features: [
-      '1 student',
-      'Email alerts',
-      '7-day history',
-    ],
-    plan: null as string | null,
+    features: ['1 student', 'Email alerts', '7-day history'],
+    plan: null,
     popular: false,
   },
   {
     id: 'starter',
     name: 'Starter',
-    price: '$9',
-    period: '/month',
-    annualPrice: '$90/yr',
-    description: 'For parents tracking one student',
+    monthlyPrice: 9.99,
+    annualPrice: 99.99,
+    students: 1,
+    description: 'One student — just $9.99/month',
     features: [
-      '2 students',
+      '1 student',
       'Email + SMS alerts',
       'LMS integration',
       '30-day history',
@@ -43,12 +52,12 @@ const PLANS = [
   {
     id: 'premium',
     name: 'Premium',
-    price: '$19',
-    period: '/month',
-    annualPrice: '$190/yr',
-    description: 'For families with multiple students',
+    monthlyPrice: 19.99,
+    annualPrice: 199.99,
+    students: 2,
+    description: 'Two students — $9.99 each',
     features: [
-      '5 students',
+      '2 students',
       'All notification channels',
       'Advanced analytics',
       'Priority support',
@@ -57,10 +66,28 @@ const PLANS = [
     plan: 'premium',
     popular: false,
   },
-] as const;
+  {
+    id: 'family',
+    name: 'Family',
+    monthlyPrice: 49.99,
+    annualPrice: 499.99,
+    students: 5,
+    description: 'Five students — $9.99 each',
+    features: [
+      '5 students',
+      'All notification channels',
+      'Advanced analytics',
+      'Priority support',
+      'Unlimited history',
+    ],
+    plan: 'family',
+    popular: false,
+  },
+];
 
 export default function PricingPage() {
   const router = useRouter();
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   const [couponCode, setCouponCode] = useState('');
   const [couponResult, setCouponResult] = useState<{
     valid: boolean;
@@ -74,8 +101,8 @@ export default function PricingPage() {
       router.push('/register');
       return;
     }
-    const couponParam = couponResult?.valid && couponCode ? `&coupon=${couponCode}` : '';
-    router.push(`/dashboard/billing?upgrade=${plan}${couponParam}`);
+    const couponParam = couponResult?.valid && couponCode ? `&coupon=${encodeURIComponent(couponCode)}` : '';
+    router.push(`/dashboard/billing?upgrade=${plan}&cycle=${billingCycle}${couponParam}`);
   };
 
   const handleValidateCoupon = async () => {
@@ -102,12 +129,48 @@ export default function PricingPage() {
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight">Simple, transparent pricing</h1>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400">
-            Choose the plan that fits your family. Start free, upgrade when you need more.
+            $9.99 per student per month. One dashboard, one bill — the primary account holder pays.
           </p>
         </div>
 
-        <div className="mt-12 grid gap-8 md:grid-cols-3" data-testid="plan-cards">
-          {PLANS.map((plan) => (
+        <div className="mx-auto mt-8 flex items-center justify-center gap-3" data-testid="billing-cycle-toggle">
+          <span className={billingCycle === 'monthly' ? 'font-medium' : 'text-muted-foreground'}>
+            Monthly
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={billingCycle === 'annual'}
+            onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'annual' : 'monthly'))}
+            className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 aria-checked:bg-blue-600"
+            data-testid="toggle-annual"
+          >
+            <span
+              className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform aria-checked:translate-x-5"
+              style={{ transform: billingCycle === 'annual' ? 'translateX(1.25rem)' : 'translateX(0)' }}
+            />
+          </button>
+          <span className={billingCycle === 'annual' ? 'font-medium' : 'text-muted-foreground'}>
+            Annual <span className="text-xs text-green-600 dark:text-green-400">(save ~17%)</span>
+          </span>
+        </div>
+
+        <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4" data-testid="plan-cards">
+          {PLANS.map((plan) => {
+            const isAnnual = billingCycle === 'annual';
+            const price =
+              plan.plan === null
+                ? 0
+                : isAnnual
+                  ? plan.annualPrice
+                  : plan.monthlyPrice;
+            const period =
+              plan.plan === null
+                ? 'forever'
+                : isAnnual
+                  ? '/year'
+                  : '/month';
+            return (
             <Card
               key={plan.id}
               className={plan.popular ? 'border-2 border-blue-500 dark:border-blue-400' : ''}
@@ -122,13 +185,10 @@ export default function PricingPage() {
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold">{plan.price}</span>
-                  <span className="text-gray-500">{plan.period}</span>
-                  {'annualPrice' in plan && plan.annualPrice && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      or {plan.annualPrice} (save ~17%)
-                    </span>
-                  )}
+                  <span className="text-4xl font-bold">
+                    {plan.plan === null ? '$0' : `$${price}`}
+                  </span>
+                  <span className="text-gray-500">{period}</span>
                 </div>
                 <ul className="space-y-3">
                   {plan.features.map((feature) => (
@@ -150,7 +210,8 @@ export default function PricingPage() {
                 </Button>
               </CardFooter>
             </Card>
-          ))}
+          );
+          })}
         </div>
 
         <div className="mx-auto mt-10 max-w-sm text-center" data-testid="coupon-section">

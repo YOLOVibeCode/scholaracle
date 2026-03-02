@@ -14,6 +14,7 @@ import {
   CustomerPaymentsTab,
   CustomerStudentsTab,
   CustomerSuspendPanel,
+  CustomerPasswordPanel,
 } from '@/components/admin';
 
 type TabType = 'overview' | 'subscription' | 'payments' | 'students' | 'notes';
@@ -28,6 +29,12 @@ export default function AdminCustomerDetailPage() {
   const [suspendReason, setSuspendReason] = useState('');
   const [isSuspending, setIsSuspending] = useState(false);
   const [isUnsuspending, setIsUnsuspending] = useState(false);
+  const [isSetPasswordOpen, setIsSetPasswordOpen] = useState(false);
+  const [setPasswordValue, setSetPasswordValue] = useState('');
+  const [setPasswordConfirm, setSetPasswordConfirm] = useState('');
+  const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+  const [isForcingReset, setIsForcingReset] = useState(false);
 
   const { data: customer, isLoading, error, retry } = useAsyncData<ICustomerDetail>(
     async () => {
@@ -110,6 +117,56 @@ export default function AdminCustomerDetailPage() {
 
   const handleImpersonate = () => {
     router.push(`/admin/impersonate/${id}`);
+  };
+
+  const handleSetPasswordSubmit = async () => {
+    if (setPasswordValue.length < 8 || setPasswordValue !== setPasswordConfirm) return;
+    setIsSettingPassword(true);
+    setToast(null);
+    try {
+      const result = await adminCustomersApi.setPassword(id, setPasswordValue);
+      if (result.success) {
+        setToast('Password updated');
+        setIsSetPasswordOpen(false);
+        setSetPasswordValue('');
+        setSetPasswordConfirm('');
+      } else {
+        setToast(result.error ?? 'Failed to set password');
+      }
+    } finally {
+      setIsSettingPassword(false);
+    }
+  };
+
+  const handleSendReset = async () => {
+    setIsSendingReset(true);
+    setToast(null);
+    try {
+      const result = await adminCustomersApi.sendReset(id);
+      if (result.success) {
+        setToast('Reset link sent to customer email');
+      } else {
+        setToast(result.error ?? 'Failed to send reset link');
+      }
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  const handleForceReset = async () => {
+    if (typeof window !== 'undefined' && !window.confirm('Require this customer to change their password on next login?')) return;
+    setIsForcingReset(true);
+    setToast(null);
+    try {
+      const result = await adminCustomersApi.forceReset(id);
+      if (result.success) {
+        setToast('Customer will be required to reset password on next login');
+      } else {
+        setToast(result.error ?? 'Failed to set force reset');
+      }
+    } finally {
+      setIsForcingReset(false);
+    }
   };
 
   return (
@@ -223,6 +280,25 @@ export default function AdminCustomerDetailPage() {
             {activeTab === 'overview' && (
               <div className="space-y-4">
                 <CustomerOverviewTab customer={customer} onSuspend={handleSuspend} onUnsuspend={handleUnsuspend} />
+                <CustomerPasswordPanel
+                  isSetPasswordOpen={isSetPasswordOpen}
+                  password={setPasswordValue}
+                  passwordConfirm={setSetPasswordConfirm}
+                  isSubmitting={isSettingPassword}
+                  onOpenSetPassword={() => setIsSetPasswordOpen(true)}
+                  onCloseSetPassword={() => {
+                    setIsSetPasswordOpen(false);
+                    setSetPasswordValue('');
+                    setSetPasswordConfirm('');
+                  }}
+                  onPasswordChange={setSetPasswordValue}
+                  onPasswordConfirmChange={setSetPasswordConfirm}
+                  onSetPasswordSubmit={handleSetPasswordSubmit}
+                  onSendReset={handleSendReset}
+                  onForceReset={handleForceReset}
+                  isSendingReset={isSendingReset}
+                  isForcingReset={isForcingReset}
+                />
                 <CustomerSuspendPanel
                   isOpen={isSuspendPanelOpen}
                   reason={suspendReason}
