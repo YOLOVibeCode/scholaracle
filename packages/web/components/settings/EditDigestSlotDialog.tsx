@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -33,13 +33,6 @@ export function EditDigestSlotDialog({
 }: EditDigestSlotDialogProps) {
   const [time, setTime] = useState(slot.time);
   const [label, setLabel] = useState(slot.label);
-
-  useEffect(() => {
-    if (open) {
-      setTime(slot.time);
-      setLabel(slot.label);
-    }
-  }, [open, slot.time, slot.label]);
 
   const handleSave = () => {
     onSave({ time, label, enabled: slot.enabled });

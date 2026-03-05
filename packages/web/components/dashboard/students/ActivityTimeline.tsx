@@ -97,7 +97,18 @@ export function ActivityTimeline({
     );
   }
 
-  let lastDate = '';
+  const dateHeaders: (string | null)[] = [];
+  let lastSeen = '';
+  for (const event of events) {
+    const date = event.occurredAt.split('T')[0]!;
+    if (date !== lastSeen) {
+      dateHeaders.push(date);
+      lastSeen = date;
+    } else {
+      dateHeaders.push(null);
+    }
+  }
+
   const containerClass = maxHeight ? `overflow-y-auto` : '';
 
   return (
@@ -107,10 +118,8 @@ export function ActivityTimeline({
       data-testid="activity-timeline"
     >
       <ul className="relative border-l-2 border-muted pl-0">
-        {events.map((event) => {
-          const dateHeader = event.occurredAt.split('T')[0];
-          const showDateHeader = dateHeader !== lastDate;
-          if (showDateHeader) lastDate = dateHeader;
+        {events.map((event, idx) => {
+          const dateHeader = dateHeaders[idx];
           const { Icon, className: iconClass } = iconAndColor(event);
           return (
             <li key={event.id} className="relative flex gap-3 pb-4 pl-5">
@@ -118,7 +127,7 @@ export function ActivityTimeline({
                 <Icon className={`h-4 w-4 ${iconClass}`} aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                {showDateHeader && (
+                {dateHeader && (
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
                     {formatDateHeader(event.occurredAt)}
                   </p>
