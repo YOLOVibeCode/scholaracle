@@ -24,27 +24,10 @@ export class DeadlineTemplate {
       assignmentUrl?: string;
     };
 
-    const {
-      studentName,
-      course,
-      assignment,
-      dueDate,
-      points,
-      gradeWeight,
-      currentGrade,
-      assignmentUrl,
-    } = relatedData;
+    const { studentName, course, assignment, dueDate, assignmentUrl } = relatedData;
 
     const formattedDate = this._formatDate(new Date(dueDate));
-    const body = this._buildBody(
-      studentName,
-      course,
-      assignment,
-      formattedDate,
-      points,
-      gradeWeight,
-      currentGrade
-    );
+    const body = `${studentName} has an assignment due in ${course}: ${assignment} (${formattedDate}). View details in your dashboard.`;
     const actions = this._buildActions(assignmentUrl);
     const subject = `${studentName} - Assignment Due ${formattedDate}`;
 
@@ -53,29 +36,6 @@ export class DeadlineTemplate {
       body,
       actions,
     };
-  }
-
-  private _buildBody(
-    studentName: string,
-    course: string,
-    assignment: string,
-    formattedDate: string,
-    points: number,
-    gradeWeight: number,
-    currentGrade: number
-  ): string {
-    // REQUIRED: Use template literals (CODING_STANDARDS.md)
-    return `${studentName} - Assignment Due ${formattedDate}
-
-Student: ${studentName}
-Course: ${course}
-Assignment: ${assignment}
-Due: ${formattedDate}
-Value: ${points} points (${gradeWeight}% of semester grade)
-
-Current grade in course: ${currentGrade}%
-
-Action: Ensure ${studentName} completes assignment before deadline.`;
   }
 
   private _buildActions(assignmentUrl?: string): ITemplateAction[] {

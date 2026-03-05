@@ -1,10 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { UserRepository } from '@scholaracle/database';
+import { UserRepository, CommunicationLogRepository } from '@scholaracle/database';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { IUserPreferences } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import { LlmClient } from '@scholaracle/agents';
 
 export interface ISettingsRouterConfig {
   readonly database: Db;
@@ -25,6 +26,11 @@ export interface INotificationSettings {
   readonly digestSchedule?: {
     readonly daily?: { readonly enabled: boolean; readonly time: string };
     readonly weekly?: { readonly enabled: boolean; readonly day: string; readonly time: string };
+    readonly digestTimes?: readonly string[];
+    readonly weekdaySlots?: readonly { readonly time: string; readonly label: string; readonly enabled: boolean }[];
+    readonly weekendSlots?: readonly { readonly time: string; readonly label: string; readonly enabled: boolean }[];
+    readonly schoolDays?: readonly string[];
+    readonly holidayMode?: 'normal' | 'pause' | 'reduced';
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -73,12 +79,55 @@ function validateQuietHours(q: INotificationSettings['quietHours']): string | un
   return undefined;
 }
 
+const VALID_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+const VALID_HOLIDAY_MODES = ['normal', 'pause', 'reduced'] as const;
+
+function validateDigestSlot(slot: { time?: string; label?: string; enabled?: boolean }): string | undefined {
+  if (slot.time !== undefined && !HHMM_REGEX.test(slot.time)) return 'Slot time must be HH:mm';
+  if (slot.label !== undefined && typeof slot.label !== 'string') return 'Slot label must be a string';
+  if (slot.enabled !== undefined && typeof slot.enabled !== 'boolean') return 'Slot enabled must be boolean';
+  return undefined;
+}
+
 function validateDigestSchedule(d: INotificationSettings['digestSchedule']): string | undefined {
   if (!d) return undefined;
   if (d.daily?.time !== undefined && !HHMM_REGEX.test(d.daily.time))
     return 'digestSchedule.daily.time must be HH:mm';
   if (d.weekly?.time !== undefined && !HHMM_REGEX.test(d.weekly.time))
     return 'digestSchedule.weekly.time must be HH:mm';
+  if (d.digestTimes !== undefined) {
+    if (!Array.isArray(d.digestTimes)) return 'digestSchedule.digestTimes must be an array';
+    if (d.digestTimes.length > 10) return 'digestSchedule.digestTimes max 10 entries';
+    for (const t of d.digestTimes) {
+      if (typeof t !== 'string' || !HHMM_REGEX.test(t))
+        return 'Each digestTimes entry must be HH:mm';
+    }
+  }
+  if (d.weekdaySlots !== undefined) {
+    if (!Array.isArray(d.weekdaySlots)) return 'digestSchedule.weekdaySlots must be an array';
+    if (d.weekdaySlots.length > 10) return 'digestSchedule.weekdaySlots max 10 entries';
+    for (let i = 0; i < d.weekdaySlots.length; i++) {
+      const err = validateDigestSlot(d.weekdaySlots[i] as { time?: string; label?: string; enabled?: boolean });
+      if (err) return `digestSchedule.weekdaySlots[${i}]: ${err}`;
+    }
+  }
+  if (d.weekendSlots !== undefined) {
+    if (!Array.isArray(d.weekendSlots)) return 'digestSchedule.weekendSlots must be an array';
+    if (d.weekendSlots.length > 10) return 'digestSchedule.weekendSlots max 10 entries';
+    for (let i = 0; i < d.weekendSlots.length; i++) {
+      const err = validateDigestSlot(d.weekendSlots[i] as { time?: string; label?: string; enabled?: boolean });
+      if (err) return `digestSchedule.weekendSlots[${i}]: ${err}`;
+    }
+  }
+  if (d.schoolDays !== undefined) {
+    if (!Array.isArray(d.schoolDays)) return 'digestSchedule.schoolDays must be an array';
+    for (const day of d.schoolDays) {
+      if (typeof day !== 'string' || !VALID_DAYS.includes(day as (typeof VALID_DAYS)[number]))
+        return 'digestSchedule.schoolDays must be mon,tue,wed,thu,fri,sat,sun';
+    }
+  }
+  if (d.holidayMode !== undefined && !VALID_HOLIDAY_MODES.includes(d.holidayMode))
+    return 'digestSchedule.holidayMode must be normal, pause, or reduced';
   return undefined;
 }
 
@@ -102,6 +151,36 @@ function defaultEnabledTypes(): Record<string, { enabled: boolean; severity: str
 
 const VALID_GRADE_DISPLAY = ['letter', 'score'] as const;
 
+const DEFAULT_WEEKDAY_SLOTS = [
+  { time: '06:30', label: 'Morning', enabled: true },
+  { time: '16:00', label: 'After School', enabled: true },
+  { time: '20:00', label: 'Evening', enabled: true },
+];
+const DEFAULT_SCHOOL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
+function buildDigestScheduleResponse(
+  d: IUserPreferences['notifications']['digestSchedule']
+): Record<string, unknown> {
+  const daily = d?.daily ?? { enabled: true, time: '07:00' };
+  const weekly = d?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' };
+  const digestTimes = d?.digestTimes ?? [];
+  let weekdaySlots = d?.weekdaySlots;
+  let weekendSlots = d?.weekendSlots;
+  if (!weekdaySlots?.length && digestTimes.length > 0) {
+    weekdaySlots = digestTimes.map((time) => ({ time, label: 'Digest', enabled: true }));
+  }
+  if (!weekdaySlots?.length) weekdaySlots = DEFAULT_WEEKDAY_SLOTS;
+  return {
+    daily,
+    weekly,
+    digestTimes,
+    weekdaySlots,
+    weekendSlots: weekendSlots ?? [],
+    schoolDays: d?.schoolDays ?? DEFAULT_SCHOOL_DAYS,
+    holidayMode: d?.holidayMode ?? 'normal',
+  };
+}
+
 function buildSettingsResponse(prefs: IUserPreferences): Record<string, unknown> {
   const notif = prefs.notifications;
   const alerts = prefs.alerts ?? {};
@@ -123,10 +202,7 @@ function buildSettingsResponse(prefs: IUserPreferences): Record<string, unknown>
         end: notif.quietHours?.end ?? '07:00',
         criticalOverride: notif.quietHours?.criticalOverride ?? true,
       },
-      digestSchedule: {
-        daily: notif.digestSchedule?.daily ?? { enabled: true, time: '07:00' },
-        weekly: notif.digestSchedule?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' },
-      },
+      digestSchedule: buildDigestScheduleResponse(notif.digestSchedule),
       tone: notif.tone ?? 'encouraging',
       frequency: notif.frequency ?? 'balanced',
     },
@@ -336,11 +412,22 @@ async function handleUpdateSettings(
             end: '07:00',
             criticalOverride: true,
           },
-        digestSchedule: notifications?.digestSchedule ??
-          notif.digestSchedule ?? {
-            daily: { enabled: true, time: '07:00' },
-            weekly: { enabled: true, day: 'sunday', time: '18:00' },
-          },
+        digestSchedule: {
+          daily: notifications?.digestSchedule?.daily ??
+            notif.digestSchedule?.daily ?? { enabled: true, time: '07:00' },
+          weekly: notifications?.digestSchedule?.weekly ??
+            notif.digestSchedule?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' },
+          digestTimes: notifications?.digestSchedule?.digestTimes ??
+            notif.digestSchedule?.digestTimes ?? [],
+          weekdaySlots: notifications?.digestSchedule?.weekdaySlots ??
+            notif.digestSchedule?.weekdaySlots ?? DEFAULT_WEEKDAY_SLOTS,
+          weekendSlots: notifications?.digestSchedule?.weekendSlots ??
+            notif.digestSchedule?.weekendSlots ?? [],
+          schoolDays: notifications?.digestSchedule?.schoolDays ??
+            notif.digestSchedule?.schoolDays ?? DEFAULT_SCHOOL_DAYS,
+          holidayMode: notifications?.digestSchedule?.holidayMode ??
+            notif.digestSchedule?.holidayMode ?? 'normal',
+        },
         tone: notifications?.tone ?? notif.tone ?? 'encouraging',
         frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
       },
@@ -501,6 +588,175 @@ async function handleUpdateAlerts(
 }
 
 /**
+ * Handle get notification history for the authenticated user.
+ * Returns the most recent communication_logs entries (capped at 50).
+ */
+async function handleGetNotificationHistory(
+  req: Request,
+  res: Response,
+  commLogRepo: CommunicationLogRepository
+): Promise<void> {
+  try {
+    const authReq = req as IAuthenticatedRequest;
+    const userId = authReq.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+    const logs = await commLogRepo.findByUserId(userId);
+    const limited = logs.slice(0, 50);
+    res.status(200).json({
+      success: true,
+      data: limited.map((log) => ({
+        id: log._id?.toString(),
+        channel: log.channel,
+        type: log.type,
+        subject: log.subject,
+        status: log.status,
+        recipientEmail: log.recipientEmail,
+        recipientPhone: log.recipientPhone,
+        sentAt: log.sentAt,
+        failedAt: log.failedAt,
+        failureReason: log.failureReason,
+        templateName: log.templateName,
+        createdAt: log.createdAt,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+export interface IHolidaySuggestionResponse {
+  readonly inHoliday: boolean;
+  readonly nextBreak?: { readonly start: string; readonly end: string; readonly name: string };
+  readonly suggestion: string;
+}
+
+/**
+ * Compute whether today is in a holiday (gap between terms) and the next break for the user.
+ * Terms are from slc_academic_terms (userId-scoped).
+ */
+async function getHolidayState(
+  database: Db,
+  userId: string
+): Promise<{ inHoliday: boolean; nextBreak?: { start: string; end: string; name: string }; termSummary: string }> {
+  const terms = await database
+    .collection('slc_academic_terms')
+    .find({ userId, deletedAt: null })
+    .toArray();
+
+  const ranges: { start: string; end: string; title: string }[] = [];
+  for (const t of terms) {
+    const record = t['record'] as Record<string, unknown> | undefined;
+    const start = record?.['startDate'] as string | undefined;
+    const end = record?.['endDate'] as string | undefined;
+    const title = (record?.['title'] as string) ?? 'Term';
+    if (start && end) ranges.push({ start, end, title });
+  }
+
+  const todayYmd = new Date().toISOString().slice(0, 10);
+  let inHoliday = false;
+  let nextBreak: { start: string; end: string; name: string } | undefined;
+
+  if (ranges.length === 0) {
+    return { inHoliday: false, termSummary: 'No academic terms on file.' };
+  }
+
+  ranges.sort((a, b) => a.start.localeCompare(b.start));
+  const firstStart = ranges[0]!.start;
+  const lastEnd = ranges[ranges.length - 1]!.end;
+
+  if (todayYmd < firstStart) {
+    inHoliday = true;
+    nextBreak = { start: todayYmd, end: firstStart, name: 'Before first term' };
+  } else if (todayYmd > lastEnd) {
+    inHoliday = true;
+    nextBreak = { start: lastEnd, end: todayYmd, name: 'After last term' };
+  } else {
+    for (let i = 0; i < ranges.length - 1; i++) {
+      const gapStart = ranges[i]!.end;
+      const gapEnd = ranges[i + 1]!.start;
+      if (todayYmd > gapStart && todayYmd < gapEnd) {
+        inHoliday = true;
+        nextBreak = { start: gapStart, end: gapEnd, name: `Break between terms` };
+        break;
+      }
+      if (!nextBreak && gapEnd > todayYmd) {
+        nextBreak = { start: gapStart, end: gapEnd, name: 'Upcoming break' };
+      }
+    }
+    if (!nextBreak && lastEnd > todayYmd) {
+      nextBreak = { start: lastEnd, end: lastEnd, name: 'After current terms' };
+    }
+  }
+
+  const termSummary = ranges.map((r) => `${r.title}: ${r.start} to ${r.end}`).join('; ');
+  return { inHoliday, nextBreak, termSummary };
+}
+
+/**
+ * Handle POST suggest-holidays: return AI suggestion for digest pause during holidays.
+ */
+async function handleSuggestHolidays(
+  req: Request,
+  res: Response,
+  database: Db
+): Promise<void> {
+  try {
+    const authReq = req as IAuthenticatedRequest;
+    const userId = authReq.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const { inHoliday, nextBreak, termSummary } = await getHolidayState(database, userId);
+
+    const apiKey = process.env['ANTHROPIC_API_KEY'];
+    let suggestion: string;
+    if (apiKey && termSummary !== 'No academic terms on file.') {
+      try {
+        const llm = new LlmClient({ apiKey });
+        const prompt = inHoliday
+          ? `The user's academic terms: ${termSummary}. Today is during a break (${nextBreak?.name ?? 'holiday'}). Suggest in 1-2 sentences whether they should pause digest emails during this break.`
+          : nextBreak
+            ? `The user's academic terms: ${termSummary}. The next break is ${nextBreak.start} to ${nextBreak.end}. Suggest in 1-2 sentences whether to enable "Pause digests during school holidays" before that date.`
+            : `The user's academic terms: ${termSummary}. No upcoming break. Suggest keeping normal digest settings.`;
+        const response = await llm.complete(
+          [{ role: 'user' as const, content: prompt }],
+          { maxTokens: 120, system: 'You are a helpful assistant for a parent/student app. Reply in plain text only, 1-2 sentences.' }
+        );
+        suggestion = response.content.trim() || (inHoliday ? 'Consider pausing digests during this break.' : 'No change needed.');
+      } catch {
+        suggestion = inHoliday
+          ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'
+          : 'No upcoming break detected. Keep normal digest settings.';
+      }
+    } else {
+      suggestion = inHoliday
+        ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'
+        : 'Add your school calendar for holiday-aware suggestions.';
+    }
+
+    const body: IHolidaySuggestionResponse = {
+      inHoliday,
+      ...(nextBreak && { nextBreak }),
+      suggestion,
+    };
+    res.status(200).json(body);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+}
+
+/**
  * Create settings router.
  *
  * @param config - Router configuration
@@ -509,6 +765,7 @@ async function handleUpdateAlerts(
 export function settingsRouter(config: ISettingsRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
+  const commLogRepo = new CommunicationLogRepository(config.database);
 
   /**
    * GET /api/settings
@@ -516,6 +773,22 @@ export function settingsRouter(config: ISettingsRouterConfig): Router {
    */
   router.get('/', (req: Request, res: Response) => {
     void handleGetSettings(req, res, userRepository);
+  });
+
+  /**
+   * GET /api/settings/notification-history
+   * Get notification/communication history for the authenticated user.
+   */
+  router.get('/notification-history', (req: Request, res: Response) => {
+    void handleGetNotificationHistory(req, res, commLogRepo);
+  });
+
+  /**
+   * POST /api/settings/suggest-holidays
+   * Get AI suggestion for pausing digests during school holidays (uses academic terms).
+   */
+  router.post('/suggest-holidays', (req: Request, res: Response) => {
+    void handleSuggestHolidays(req, res, config.database);
   });
 
   /**

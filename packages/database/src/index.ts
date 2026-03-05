@@ -36,6 +36,7 @@ export * from './repositories/CommunicationBatchRepository';
 export * from './repositories/AgendaOverrideRepository';
 export * from './repositories/CouponRepository';
 export * from './repositories/SmsDigestPendingRepository';
+export * from './repositories/EmailDigestPendingRepository';
 export * from './repositories/AiUsageRepository';
 
 // Connector / ingestion repositories

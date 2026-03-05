@@ -24,33 +24,10 @@ export class MissingAssignmentTemplate {
       assignmentUrl?: string;
     };
 
-    const {
-      studentName,
-      course,
-      assignment,
-      daysAgo,
-      points,
-      gradeImpact,
-      currentGrade,
-      assignmentUrl,
-    } = relatedData;
+    const { studentName, course, assignment, daysAgo, assignmentUrl } = relatedData;
 
-    const projectedGrade = Math.max(0, currentGrade - gradeImpact);
-
-    // REQUIRED: Use template literals (CODING_STANDARDS.md)
-    const body = `MISSING ASSIGNMENT - ACTION REQUIRED
-
-Student: ${studentName}
-Course: ${course}
-Assignment: ${assignment}
-Due: ${daysAgo} days ago
-Value: ${points} points (${gradeImpact}% of semester grade)
-
-Grade Impact:
-Current grade: ${currentGrade}%
-Projected grade if not submitted: ${projectedGrade}%
-
-Action: Ensure ${studentName} submits this assignment today.`;
+    // Concise, link-first: detail lives in dashboard (plan section 8).
+    const body = `${studentName} has a missing assignment in ${course}: ${assignment} (due ${daysAgo} days ago). View details in your dashboard.`;
 
     const actions: ITemplateAction[] = [];
 

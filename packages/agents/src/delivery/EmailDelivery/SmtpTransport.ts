@@ -20,6 +20,7 @@ export class SmtpTransport {
     const result = await this._transporter.sendMail({
       to: envelope.to,
       from: `${envelope.from.name} <${envelope.from.email}>`,
+      ...(envelope.replyTo && { replyTo: envelope.replyTo }),
       subject: envelope.subject,
       text: envelope.text,
       html: envelope.html,

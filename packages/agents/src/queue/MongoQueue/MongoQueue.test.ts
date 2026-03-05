@@ -180,6 +180,55 @@ describe('MongoQueue', () => {
       expect(update?.$set?.['lockedAt']).toBeDefined();
       expect(update?.$set?.['lockedBy']).toBeDefined();
     });
+
+    it('should only return notify jobs when options.type is "notify"', async () => {
+      const job = {
+        _id: { toString: (): string => 'job-notify' },
+        type: 'notify',
+        name: 'deliver-notification',
+        data: {},
+        status: 'processing',
+        priority: 10,
+        scheduledFor: new Date(),
+      };
+      mockCollection.findOneAndUpdate.mockResolvedValue({
+        value: job,
+      } as unknown as Awaited<ReturnType<typeof mockCollection.findOneAndUpdate>>);
+
+      const result = await mongoQueue.getNextJob({ type: 'notify' });
+
+      expect(result).toEqual(job);
+      const filter = mockCollection.findOneAndUpdate.mock.calls[0]?.[0] as {
+        status?: string;
+        type?: string;
+      };
+      expect(filter?.type).toBe('notify');
+      expect(filter?.status).toBe('pending');
+    });
+
+    it('should only return sync jobs when options.type is "sync"', async () => {
+      const job = {
+        _id: { toString: (): string => 'job-sync' },
+        type: 'sync',
+        name: 'sync-student',
+        data: {},
+        status: 'processing',
+        priority: 10,
+        scheduledFor: new Date(),
+      };
+      mockCollection.findOneAndUpdate.mockResolvedValue({
+        value: job,
+      } as unknown as Awaited<ReturnType<typeof mockCollection.findOneAndUpdate>>);
+
+      const result = await mongoQueue.getNextJob({ type: 'sync' });
+
+      expect(result).toEqual(job);
+      const filter = mockCollection.findOneAndUpdate.mock.calls[0]?.[0] as {
+        status?: string;
+        type?: string;
+      };
+      expect(filter?.type).toBe('sync');
+    });
   });
 
   describe('complete', () => {

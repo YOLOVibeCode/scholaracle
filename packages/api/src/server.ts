@@ -46,6 +46,7 @@ import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
 import { ingestV1Router } from './routes/ingest/v1';
+import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
 import { agendaRouter } from './routes/agenda';
@@ -58,6 +59,7 @@ import {
   EmailDelivery,
   SendGridTransport,
   SmtpTransport,
+  MongoQueue,
 } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
@@ -165,8 +167,18 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
       )
     : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
 
+  const dashboardBaseUrl =
+    process.env['BASE_URL'] ??
+    process.env['WEB_URL'] ??
+    process.env['NEXT_PUBLIC_APP_URL'] ??
+    '';
   const emailDelivery = new EmailDelivery(
-    { fromEmail: sendGridConfig.fromEmail, fromName: sendGridConfig.fromName },
+    {
+      fromEmail: sendGridConfig.fromEmail,
+      fromName: sendGridConfig.fromName,
+      replyTo: process.env['SENDGRID_REPLY_TO'],
+      ...(dashboardBaseUrl && { dashboardBaseUrl }),
+    },
     transport
   );
   const twilioConfigured = Boolean(
@@ -275,7 +287,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   }
 
   // Legacy alerts route (for notification creation) - POST /api/alerts
-  app.use('/api/alerts', alertsRouter(notificationService));
+  // When database exists, enqueue notify jobs and return 202; otherwise process in-process and return 201
+  const notificationQueue = database ? new MongoQueue(database) : undefined;
+  app.use('/api/alerts', alertsRouter(notificationService, { queue: notificationQueue }));
 
   if (database) {
     const baseUrl =
@@ -288,6 +302,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const sessionRepository = new SessionRepository(database);
     const oauthAccountRepository = new OAuthAccountRepository(database);
     const sendGridConfig = getSendGridConfig(config);
+    if (nodeEnv === 'production' && !sendGridConfig.apiKey) {
+      throw new Error(
+        'SENDGRID_API_KEY environment variable is required in production for invite and password reset emails'
+      );
+    }
     const sendGrid = sgMail as unknown as MailService;
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
     const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
@@ -336,6 +355,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     );
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
 
+    app.use(
+      '/api/oauth',
+      createGoogleOAuthRouter({
+        database,
+        jwtSecret: jwtSecret ?? '',
+        baseUrl,
+        authService,
+      })
+    );
+
     // Sync API — trigger and monitor data-source sync jobs (optional; mount if module exists)
     try {
       const { createSyncRouter } = require('./routes/sync/sync');
@@ -362,7 +391,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
+    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret, queue: notificationQueue }));
 
     // Asset upload (connector auth) — mount under ingest path. ASSET_STORE=local|s3; S3 uses Railway Buckets or R2/B2.
     const assetStore = createAssetStore();

@@ -613,7 +613,6 @@ export default function AdminCommunicationsPage() {
               <option value="">Channel (all)</option>
               <option value="email">email</option>
               <option value="sms">sms</option>
-              <option value="push">push</option>
               <option value="in_app">in_app</option>
               <option value="phone">phone</option>
               <option value="support_ticket">support_ticket</option>

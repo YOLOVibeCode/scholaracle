@@ -1,5 +1,12 @@
 import type { ObjectId } from 'mongodb';
 
+/** Single digest time slot: time (HH:mm), label, and whether it is enabled. */
+export interface IDigestSlot {
+  readonly time: string;
+  readonly label: string;
+  readonly enabled: boolean;
+}
+
 export interface IUserPreferences {
   readonly notifications: {
     readonly push: boolean;
@@ -18,6 +25,13 @@ export interface IUserPreferences {
         readonly day: string;
         readonly time: string;
       };
+      /** @deprecated Use weekdaySlots/weekendSlots. Kept for backward compat. */
+      readonly digestTimes?: readonly string[];
+      readonly weekdaySlots?: readonly IDigestSlot[];
+      readonly weekendSlots?: readonly IDigestSlot[];
+      /** Days considered school days (default mon–fri). Lowercase: mon,tue,wed,thu,fri,sat,sun */
+      readonly schoolDays?: readonly string[];
+      readonly holidayMode?: 'normal' | 'pause' | 'reduced';
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -156,6 +170,14 @@ export class User {
         digestSchedule: {
           daily: { enabled: true, time: '07:00' },
           weekly: { enabled: true, day: 'sunday', time: '18:00' },
+          weekdaySlots: [
+            { time: '06:30', label: 'Morning', enabled: true },
+            { time: '16:00', label: 'After School', enabled: true },
+            { time: '20:00', label: 'Evening', enabled: true },
+          ],
+          weekendSlots: [],
+          schoolDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+          holidayMode: 'normal',
         },
         tone: 'encouraging',
         frequency: 'balanced',

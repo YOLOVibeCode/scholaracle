@@ -6,13 +6,22 @@ import {
   NotificationService,
   resolveAllAlertRecipients,
   type INotificationServiceSmsDigestOptions,
+  type INotificationServiceEmailDigestOptions,
+  EmailNotificationAgent,
+  DeliveryRouter,
+  DigestInsightService,
+  LlmClient,
 } from '@scholaracle/agents';
-import { UserRepository, SmsDigestPendingRepository } from '@scholaracle/database';
+import {
+  UserRepository,
+  SmsDigestPendingRepository,
+  EmailDigestPendingRepository,
+  CommunicationLogRepository,
+  type IEmailDigestPendingItem,
+} from '@scholaracle/database';
+import { flushEmailDigests } from './digest/digest-flush';
 import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
-import { StudentNotificationGenerator } from '@scholaracle/agents';
-import { ParentNotificationGenerator } from '@scholaracle/agents';
-import { DeliveryRouter } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
 import { SMSDelivery } from '@scholaracle/agents';
@@ -23,6 +32,8 @@ import twilio from 'twilio';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
+import { ConnectorTokenService } from '@scholaracle/auth';
+import { randomUUID } from 'crypto';
 import { createAdapterRunner } from './adapter-runner';
 
 export interface IWorkerConfig {
@@ -77,8 +88,8 @@ function getTwilioConfig(config: IWorkerConfig): {
   };
 }
 
-/** Default UTC hour to send daily SMS digest (6 PM). */
-const SMS_DIGEST_UTC_HOUR = 18;
+/** Default UTC hour to send daily SMS and email digest (6 PM). */
+const DIGEST_UTC_HOUR = 18;
 
 const MAX_SMS_LENGTH = 1600;
 
@@ -104,39 +115,52 @@ async function flushSmsDigests(
     if (body.length > MAX_SMS_LENGTH) {
       body = `${body.substring(0, MAX_SMS_LENGTH - 3)}...`;
     }
+    const commLogRepo = new CommunicationLogRepository(database);
     try {
       await twilioClient.messages.create({
         to: phone,
         from: fromNumber,
         body,
       });
+      await commLogRepo.create({
+        userId,
+        channel: 'sms',
+        type: 'notification',
+        subject: `SMS Digest (${items.length} alerts)`,
+        content: body,
+        recipientPhone: phone,
+        status: 'sent',
+        sentAt: new Date(),
+        triggeredBy: 'scheduled',
+        templateName: 'sms_digest',
+      });
       await repo.deleteByUserId(userId);
     } catch (err) {
       console.error(`[SmsDigest] Failed to send digest for user ${userId}:`, err);
+      await commLogRepo.create({
+        userId,
+        channel: 'sms',
+        type: 'notification',
+        subject: `SMS Digest (${items.length} alerts)`,
+        content: body,
+        recipientPhone: phone,
+        status: 'failed',
+        failedAt: new Date(),
+        failureReason: err instanceof Error ? err.message : String(err),
+        triggeredBy: 'scheduled',
+        templateName: 'sms_digest',
+      }).catch(() => { /* best effort */ });
     }
   }
 }
 
 /**
- * Initialize notification service with delivery services.
- * When database is provided, wires SMS digest (batch alerts into one daily SMS per user).
- *
- * @param config - Worker configuration
- * @param database - Optional DB for digest preference and pending queue
- * @returns Notification service instance
+ * Create email transport from config (SendGrid or SMTP).
  */
-function initializeNotificationService(config: IWorkerConfig, database?: Db): NotificationService {
+function getEmailTransport(config: IWorkerConfig): IEmailTransport {
   const sendGridConfig = getSendGridConfig(config);
-  const twilioConfig = getTwilioConfig(config);
-
-  const twilioClient =
-    twilioConfig.accountSid && twilioConfig.authToken
-      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
-      : ({} as unknown as Twilio);
-
-  // Select email transport based on SMTP_HOST env var (same pattern as server.ts)
   const smtpHost = process.env['SMTP_HOST'];
-  const transport: IEmailTransport = smtpHost
+  return smtpHost
     ? new SmtpTransport(
         {
           host: smtpHost,
@@ -149,9 +173,43 @@ function initializeNotificationService(config: IWorkerConfig, database?: Db): No
         })
       )
     : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
+}
 
+/**
+ * Initialize notification service with delivery services.
+ * When database is provided, wires SMS and email digest (batch alerts into one daily message per user).
+ *
+ * @param config - Worker configuration
+ * @param database - Optional DB for digest preference and pending queue
+ * @param emailTransport - Optional shared email transport (for digest flush); when not provided, created internally
+ * @returns Notification service instance
+ */
+function initializeNotificationService(
+  config: IWorkerConfig,
+  database?: Db,
+  emailTransport?: IEmailTransport
+): NotificationService {
+  const sendGridConfig = getSendGridConfig(config);
+  const twilioConfig = getTwilioConfig(config);
+
+  const twilioClient =
+    twilioConfig.accountSid && twilioConfig.authToken
+      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+      : ({} as unknown as Twilio);
+
+  const transport: IEmailTransport = emailTransport ?? getEmailTransport(config);
+
+  const dashboardBaseUrl =
+    process.env['BASE_URL'] ??
+    process.env['WEB_URL'] ??
+    process.env['NEXT_PUBLIC_APP_URL'] ??
+    '';
   const emailDelivery = new EmailDelivery(
-    { fromEmail: sendGridConfig.fromEmail, fromName: sendGridConfig.fromName },
+    {
+      fromEmail: sendGridConfig.fromEmail,
+      fromName: sendGridConfig.fromName,
+      ...(dashboardBaseUrl && { dashboardBaseUrl }),
+    },
     transport
   );
   const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
@@ -167,13 +225,16 @@ function initializeNotificationService(config: IWorkerConfig, database?: Db): No
     inAppDelivery,
   ]);
 
-  const studentGenerator = new StudentNotificationGenerator();
-  const parentGenerator = new ParentNotificationGenerator();
+  const agents = [new EmailNotificationAgent()];
+
+  const dashboardBaseUrlForDigest = dashboardBaseUrl;
 
   let smsDigestOptions: INotificationServiceSmsDigestOptions | undefined;
+  let emailDigestOptions: INotificationServiceEmailDigestOptions | undefined;
   if (database) {
     const userRepo = new UserRepository(database);
     const smsDigestRepo = new SmsDigestPendingRepository(database);
+    const emailDigestRepo = new EmailDigestPendingRepository(database);
     smsDigestOptions = {
       getSmsDigestPreference: async (
         userId: string
@@ -201,14 +262,30 @@ function initializeNotificationService(config: IWorkerConfig, database?: Db): No
         });
       },
     };
+    emailDigestOptions = {
+      getEmailDigestPreference: async (userId: string) => {
+        const user = await userRepo.findById(userId);
+        const daily = user?.preferences?.notifications?.digestSchedule?.daily?.enabled === true;
+        if (!daily) return null;
+        const frequency = user?.preferences?.notifications?.frequency as
+          | 'minimal'
+          | 'balanced'
+          | 'proactive'
+          | undefined;
+        return {
+          enabled: true,
+          time: user?.preferences?.notifications?.digestSchedule?.daily?.time,
+          frequency: frequency ?? 'balanced',
+        };
+      },
+      enqueueEmailForDigest: async (item: IEmailDigestPendingItem) => {
+        await emailDigestRepo.add(item);
+      },
+      dashboardBaseUrl: dashboardBaseUrlForDigest || undefined,
+    };
   }
 
-  return new NotificationService(
-    studentGenerator,
-    parentGenerator,
-    deliveryRouter,
-    smsDigestOptions
-  );
+  return new NotificationService(agents, deliveryRouter, smsDigestOptions, emailDigestOptions);
 }
 
 /**
@@ -232,8 +309,10 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Initialize queue
   const mongoQueue = new MongoQueue(database);
 
-  // Initialize notification service (with SMS digest when database is available)
-  const notificationService = initializeNotificationService(config, database);
+  const sendGridConfig = getSendGridConfig(config);
+  const emailTransport = getEmailTransport(config);
+  // Initialize notification service (with SMS/email digest when database is available)
+  const notificationService = initializeNotificationService(config, database, emailTransport);
 
   // Resolve all alert recipients for a student (owner + accepted contacts)
   const resolveAll = (studentId: string): ReturnType<typeof resolveAllAlertRecipients> =>
@@ -256,6 +335,15 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // -----------------------------------------------------------------------
   const adapterRunner: AdapterRunnerFn = createAdapterRunner(database);
 
+  const apiBaseUrl = process.env['API_BASE_URL'] ?? process.env['BASE_URL'] ?? '';
+  const jwtSecret = process.env['JWT_SECRET'] ?? process.env['CONNECTOR_JWT_SECRET'] ?? '';
+  const connectorTokenService =
+    jwtSecret ? new ConnectorTokenService(jwtSecret, '1h') : undefined;
+  const createConnectorToken =
+    connectorTokenService && apiBaseUrl
+      ? (userId: string) => connectorTokenService.createToken(userId, randomUUID())
+      : undefined;
+
   const syncWorker = new SyncWorker(mongoQueue, database, {
     pollIntervalMs: 5000,
     concurrency: 2,
@@ -265,6 +353,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       return decryptCredentials(encrypted);
     },
     runAdapter: adapterRunner,
+    apiBaseUrl: apiBaseUrl || undefined,
+    createConnectorToken,
   });
   syncWorker.start();
 
@@ -281,13 +371,35 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   if (twilioClientForDigest && twilioConfig.fromNumber) {
     setInterval(() => {
       const now = new Date();
-      if (now.getUTCHours() === SMS_DIGEST_UTC_HOUR) {
+      if (now.getUTCHours() === DIGEST_UTC_HOUR) {
         void flushSmsDigests(database, twilioClientForDigest, twilioConfig.fromNumber).catch((e) =>
           console.error('[SmsDigest]', e)
         );
       }
     }, 60_000);
   }
+
+  const dashboardBaseUrl =
+    process.env['BASE_URL'] ??
+    process.env['WEB_URL'] ??
+    process.env['NEXT_PUBLIC_APP_URL'] ??
+    '';
+
+  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
+  const digestInsightService = anthropicApiKey
+    ? new DigestInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
+    : undefined;
+
+  setInterval(() => {
+    void flushEmailDigests(
+      database,
+      emailTransport,
+      sendGridConfig.fromEmail,
+      sendGridConfig.fromName,
+      dashboardBaseUrl,
+      digestInsightService
+    ).catch((e) => console.error('[EmailDigest]', e));
+  }, 60_000);
 
   // eslint-disable-next-line no-console
   console.log('Sync worker + scheduler started');

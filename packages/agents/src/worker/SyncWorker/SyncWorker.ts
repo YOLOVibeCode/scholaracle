@@ -59,16 +59,23 @@ export interface ISyncRun {
 // It is injected so the agents package doesn't depend on connector/playwright.
 // ---------------------------------------------------------------------------
 
+export interface IAdapterRunnerOptions {
+  readonly sourceId?: string;
+  readonly displayName?: string;
+}
+
 export type AdapterRunnerFn = (
   provider: string,
   adapterId: string,
   credentials: Record<string, string>,
   baseUrl: string,
-  runId: string
+  runId: string,
+  options?: IAdapterRunnerOptions
 ) => Promise<{
   success: boolean;
   summary: ISyncRun['result'];
   error?: string;
+  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
 }>;
 
 // ---------------------------------------------------------------------------
@@ -82,6 +89,10 @@ export interface ISyncWorkerConfig {
   readonly decryptCredentials: (encrypted: { encrypted: string; iv: string }) => string | null;
   /** The function that actually runs an adapter. Injected by the worker bootstrap. */
   readonly runAdapter: AdapterRunnerFn;
+  /** Base URL of the API (e.g. https://api.scholaracle.com). When set with createConnectorToken, envelope is submitted to ingest. */
+  readonly apiBaseUrl?: string;
+  /** Creates a connector JWT for the given userId. Required for submitting envelope to ingest. */
+  readonly createConnectorToken?: (userId: string) => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +111,8 @@ export class SyncWorker {
   private readonly _concurrency: number;
   private readonly _decrypt: ISyncWorkerConfig['decryptCredentials'];
   private readonly _runAdapter: AdapterRunnerFn;
+  private readonly _apiBaseUrl: string | undefined;
+  private readonly _createConnectorToken: ((userId: string) => string) | undefined;
   private _running = false;
   private _activeJobs = 0;
   private _loopPromise?: Promise<void>;
@@ -112,6 +125,8 @@ export class SyncWorker {
     this._concurrency = config.concurrency ?? 3;
     this._decrypt = config.decryptCredentials;
     this._runAdapter = config.runAdapter;
+    this._apiBaseUrl = config.apiBaseUrl;
+    this._createConnectorToken = config.createConnectorToken;
   }
 
   // -----------------------------------------------------------------------
@@ -182,6 +197,34 @@ export class SyncWorker {
 
       const credentials = JSON.parse(plainJson) as Record<string, string>;
 
+      const sourceId = (ds['id'] as string) ?? '';
+      const displayName = (ds['displayName'] ?? ds['pluginId'] ?? 'Source') as string;
+
+      let runId = insertedId.toString();
+      let runnerOptions: IAdapterRunnerOptions | undefined;
+
+      if (this._apiBaseUrl && this._createConnectorToken && sourceId) {
+        const token = this._createConnectorToken(data.userId);
+        const base = this._apiBaseUrl.replace(/\/$/, '');
+        const createRes = await fetch(`${base}/api/ingest/v1/runs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ sourceId }),
+        });
+        if (!createRes.ok) {
+          const errText = await createRes.text();
+          throw new Error(`Ingest run create failed: ${createRes.status} ${errText}`);
+        }
+        const createBody = (await createRes.json()) as { runId?: string };
+        if (createBody.runId) {
+          runId = createBody.runId;
+          runnerOptions = { sourceId, displayName };
+        }
+      }
+
       // 2. Run the adapter
       const startMs = Date.now();
       const result = await this._runAdapter(
@@ -189,9 +232,39 @@ export class SyncWorker {
         data.adapterId,
         credentials,
         data.baseUrl,
-        insertedId.toString()
+        runId,
+        runnerOptions
       );
       const durationMs = Date.now() - startMs;
+
+      if (result.success && result.envelope && runId !== insertedId.toString()) {
+        const token = this._createConnectorToken!(data.userId);
+        const base = this._apiBaseUrl!.replace(/\/$/, '');
+        const envRes = await fetch(`${base}/api/ingest/v1/runs/${runId}/envelope`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(result.envelope),
+        });
+        if (!envRes.ok) {
+          const errText = await envRes.text();
+          throw new Error(`Ingest envelope submit failed: ${envRes.status} ${errText}`);
+        }
+        const completeRes = await fetch(`${base}/api/ingest/v1/runs/${runId}/complete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+        });
+        if (!completeRes.ok) {
+          const errText = await completeRes.text();
+          throw new Error(`Ingest complete failed: ${completeRes.status} ${errText}`);
+        }
+      }
 
       // 3. Update run record + student last-scraped timestamp
       const now = new Date();
@@ -258,13 +331,8 @@ export class SyncWorker {
           await sleep(this._pollMs);
           continue;
         }
-        // Only pick up 'sync' jobs
-        const job = await this._queue.getNextJob();
-        if (!job || job.type !== 'sync') {
-          if (job) {
-            // Not ours — put it back
-            await this._queue.fail(job._id.toString(), new Error('Not a sync job')).catch(() => {});
-          }
+        const job = await this._queue.getNextJob({ type: 'sync' });
+        if (!job) {
           await sleep(this._pollMs);
           continue;
         }

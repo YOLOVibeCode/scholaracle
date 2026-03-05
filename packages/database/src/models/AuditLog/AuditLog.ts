@@ -13,6 +13,9 @@ export type AuditAction =
   | 'customer:bulk_suspend'
   | 'customer:bulk_unsuspend'
   | 'customer:impersonate'
+  | 'customer:set_password'
+  | 'customer:send_reset'
+  | 'customer:force_reset'
   // Payment actions
   | 'payment:view'
   | 'payment:refund'
@@ -160,6 +163,9 @@ export class AuditLog {
       'customer:bulk_suspend': 'Bulk suspended customer accounts',
       'customer:bulk_unsuspend': 'Bulk unsuspended customer accounts',
       'customer:impersonate': 'Logged in as customer',
+      'customer:set_password': 'Set customer password',
+      'customer:send_reset': 'Sent password reset link to customer',
+      'customer:force_reset': 'Forced password reset on next login',
       'payment:view': 'Viewed payment details',
       'payment:refund': 'Issued refund',
       'payment:retry': 'Retried failed payment',

@@ -14,9 +14,20 @@ export interface INotificationSettings {
   readonly digestSchedule?: {
     readonly daily?: { readonly enabled: boolean; readonly time: string };
     readonly weekly?: { readonly enabled: boolean; readonly day: string; readonly time: string };
+    readonly digestTimes?: readonly string[];
+    readonly weekdaySlots?: readonly IDigestSlotApi[];
+    readonly weekendSlots?: readonly IDigestSlotApi[];
+    readonly schoolDays?: readonly string[];
+    readonly holidayMode?: 'normal' | 'pause' | 'reduced';
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
+}
+
+export interface IDigestSlotApi {
+  readonly time: string;
+  readonly label: string;
+  readonly enabled: boolean;
 }
 
 export interface IAlertThresholds {
@@ -50,6 +61,11 @@ export interface IUserSettings {
     readonly digestSchedule?: {
       readonly daily?: { readonly enabled: boolean; readonly time: string };
       readonly weekly?: { readonly enabled: boolean; readonly day: string; readonly time: string };
+      readonly digestTimes?: readonly string[];
+      readonly weekdaySlots?: readonly IDigestSlotApi[];
+      readonly weekendSlots?: readonly IDigestSlotApi[];
+      readonly schoolDays?: readonly string[];
+      readonly holidayMode?: 'normal' | 'pause' | 'reduced';
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -69,6 +85,27 @@ export interface IUpdateSettingsRequest {
   readonly dashboard?: IDashboardSettings;
   readonly notifications?: INotificationSettings;
   readonly alerts?: IAlertThresholds;
+}
+
+export interface IHolidaySuggestion {
+  readonly inHoliday?: boolean;
+  readonly nextBreak?: { readonly start: string; readonly end: string; readonly name: string };
+  readonly suggestion: string;
+}
+
+export interface INotificationHistoryItem {
+  readonly id: string;
+  readonly channel: string;
+  readonly type: string;
+  readonly subject?: string;
+  readonly status: string;
+  readonly recipientEmail?: string;
+  readonly recipientPhone?: string;
+  readonly sentAt?: string;
+  readonly failedAt?: string;
+  readonly failureReason?: string;
+  readonly templateName?: string;
+  readonly createdAt: string;
 }
 
 export interface IUserSettingsResponse extends IUserSettings {
@@ -95,6 +132,15 @@ const defaultSettings: IUserSettings = {
     digestSchedule: {
       daily: { enabled: true, time: '07:00' },
       weekly: { enabled: true, day: 'sunday', time: '18:00' },
+      digestTimes: [],
+      weekdaySlots: [
+        { time: '06:30', label: 'Morning', enabled: true },
+        { time: '16:00', label: 'After School', enabled: true },
+        { time: '20:00', label: 'Evening', enabled: true },
+      ],
+      weekendSlots: [],
+      schoolDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      holidayMode: 'normal',
     },
     tone: 'encouraging',
     frequency: 'balanced',
@@ -145,6 +191,32 @@ export const settingsApi = {
       const err = error as { response?: { data?: { error?: string } }; message?: string };
       const message = err?.response?.data?.error ?? err?.message ?? 'Failed to unlink';
       return { success: false, error: message };
+    }
+  },
+
+  /**
+   * Get AI suggestion for holiday digest pause based on academic terms.
+   */
+  async suggestHolidays(): Promise<IHolidaySuggestion | null> {
+    try {
+      const res = await apiClient.post<IHolidaySuggestion>('/settings/suggest-holidays', {});
+      return res ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Fetch the user's notification/communication history (most recent 50).
+   */
+  async getNotificationHistory(): Promise<INotificationHistoryItem[]> {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: INotificationHistoryItem[] }>(
+        '/settings/notification-history'
+      );
+      return res.data ?? [];
+    } catch {
+      return [];
     }
   },
 
