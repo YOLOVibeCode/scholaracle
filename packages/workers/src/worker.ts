@@ -264,7 +264,9 @@ function initializeNotificationService(
       },
     };
     emailDigestOptions = {
-      getEmailDigestPreference: async (userId: string) => {
+      getEmailDigestPreference: async (
+        userId: string
+      ): Promise<{ enabled: true; time?: string; frequency: 'minimal' | 'balanced' | 'proactive' } | null> => {
         const user = await userRepo.findById(userId);
         const daily = user?.preferences?.notifications?.digestSchedule?.daily?.enabled === true;
         if (!daily) return null;
@@ -279,7 +281,7 @@ function initializeNotificationService(
           frequency: frequency ?? 'balanced',
         };
       },
-      enqueueEmailForDigest: async (item: IEmailDigestPendingItem) => {
+      enqueueEmailForDigest: async (item: IEmailDigestPendingItem): Promise<void> => {
         await emailDigestRepo.add(item);
       },
       dashboardBaseUrl: dashboardBaseUrlForDigest || undefined,
@@ -342,7 +344,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     jwtSecret ? new ConnectorTokenService(jwtSecret, '1h') : undefined;
   const createConnectorToken =
     connectorTokenService && apiBaseUrl
-      ? (userId: string) => connectorTokenService.createToken(userId, randomUUID())
+      ? (userId: string): string => connectorTokenService.createToken(userId, randomUUID())
       : undefined;
 
   const syncWorker = new SyncWorker(mongoQueue, database, {
