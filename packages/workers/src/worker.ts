@@ -8,6 +8,7 @@ import {
   type INotificationServiceSmsDigestOptions,
   type INotificationServiceEmailDigestOptions,
   EmailNotificationAgent,
+  ParentEmailNotificationAgent,
   DeliveryRouter,
   DigestInsightService,
   LlmClient,
@@ -225,7 +226,7 @@ function initializeNotificationService(
     inAppDelivery,
   ]);
 
-  const agents = [new EmailNotificationAgent()];
+  const agents = [new EmailNotificationAgent(), new ParentEmailNotificationAgent()];
 
   const dashboardBaseUrlForDigest = dashboardBaseUrl;
 

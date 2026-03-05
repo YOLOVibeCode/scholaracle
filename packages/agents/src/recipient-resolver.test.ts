@@ -11,6 +11,7 @@ let mockStudentInstance: {
     readonly isPrimary: boolean;
   }[];
   userId: { toString: () => string };
+  alertEmail?: string;
 } | null;
 let mockUserInstance: { email?: string; phone?: string } | null;
 
@@ -61,8 +62,9 @@ describe('resolveAllAlertRecipients', () => {
       parentEmail: 'owner@example.com',
       parentPhone: '+15551234567',
       userId: 'owner-user-id',
+      recipientType: 'parent',
     });
-    expect(out[1]).toEqual({ parentEmail: 'contact@example.com' });
+    expect(out[1]).toEqual({ parentEmail: 'contact@example.com', recipientType: 'parent' });
   });
 
   it('should exclude recipient with no email or phone', async () => {
@@ -76,7 +78,11 @@ describe('resolveAllAlertRecipients', () => {
     };
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ parentEmail: 'owner@example.com', userId: 'owner-user-id' });
+    expect(out[0]).toEqual({
+      parentEmail: 'owner@example.com',
+      userId: 'owner-user-id',
+      recipientType: 'parent',
+    });
   });
 
   it('should return only contacts that have at least one channel', async () => {
@@ -90,13 +96,15 @@ describe('resolveAllAlertRecipients', () => {
     };
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(2);
-    expect(out[1]).toEqual({ parentEmail: 'c@x.com', parentPhone: '+1555' });
+    expect(out[0]).toMatchObject({ recipientType: 'parent' });
+    expect(out[1]).toEqual({ parentEmail: 'c@x.com', parentPhone: '+1555', recipientType: 'parent' });
   });
 
   it('should include student alertEmail when returned by getAllAlertRecipients', async () => {
     mockUserInstance = { email: 'primary@example.com' };
     mockStudentInstance = {
       userId: { toString: () => 'owner-id' },
+      alertEmail: '29alewis@ldisd.net',
       getAllAlertRecipients: () => [
         { email: 'primary@example.com', channels: ['email'], isPrimary: true },
         { email: 'secondary1@example.com', channels: ['email'], isPrimary: false },
@@ -106,9 +114,38 @@ describe('resolveAllAlertRecipients', () => {
     };
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(4);
-    expect(out[0]).toMatchObject({ parentEmail: 'primary@example.com', userId: 'owner-id' });
-    expect(out[1]).toEqual({ parentEmail: 'secondary1@example.com' });
-    expect(out[2]).toEqual({ parentEmail: 'secondary2@example.com' });
-    expect(out[3]).toEqual({ parentEmail: '29alewis@ldisd.net' });
+    expect(out[0]).toMatchObject({
+      parentEmail: 'primary@example.com',
+      userId: 'owner-id',
+      recipientType: 'parent',
+    });
+    expect(out[1]).toEqual({
+      parentEmail: 'secondary1@example.com',
+      recipientType: 'parent',
+    });
+    expect(out[2]).toEqual({
+      parentEmail: 'secondary2@example.com',
+      recipientType: 'parent',
+    });
+    expect(out[3]).toEqual({
+      parentEmail: '29alewis@ldisd.net',
+      recipientType: 'student',
+    });
+  });
+
+  it('should tag owner and shared contacts as recipientType parent, student email as student', async () => {
+    mockUserInstance = { email: 'owner@example.com', phone: '+15550001111' };
+    mockStudentInstance = {
+      userId: { toString: () => 'user-1' },
+      alertEmail: 'student@school.edu',
+      getAllAlertRecipients: () => [
+        { email: 'owner@example.com', phone: '+15550001111', channels: ['email', 'sms'], isPrimary: true },
+        { email: 'student@school.edu', channels: ['email'], isPrimary: false },
+      ],
+    };
+    const out = await resolveAllAlertRecipients('student-id', db);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ recipientType: 'parent', parentEmail: 'owner@example.com' });
+    expect(out[1]).toMatchObject({ recipientType: 'student', parentEmail: 'student@school.edu' });
   });
 });

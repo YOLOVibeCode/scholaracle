@@ -20,6 +20,8 @@ export interface IResolvedRecipient {
   parentPhone?: string;
   /** When set, used for SMS digest preference lookup (e.g. account owner). */
   userId?: string;
+  /** Distinguishes student (alertEmail) from parents (owner + sharedWith) for routing. */
+  recipientType?: 'parent' | 'student';
 }
 
 /** @deprecated Use IResolvedRecipient (singular). Kept for backwards compat. */
@@ -325,64 +327,72 @@ export class NotificationService {
       if (!agent.handles(alert)) continue;
       const notification = agent.generate(alert);
       notifications.push(notification);
-      const basePayload = this._serializeNotification(notification);
-
-      for (const recipient of recipients) {
-        for (const channel of notification.channels) {
-          if (
-            channel === NotificationChannel.EMAIL &&
-            !recipient.parentEmail &&
-            !isDefaultSingleRecipient
-          )
-            continue;
-          if (
-            channel === NotificationChannel.SMS &&
-            !recipient.parentPhone &&
-            !isDefaultSingleRecipient
-          )
-            continue;
-
-          if (channel === NotificationChannel.SMS && recipient.userId && recipient.parentPhone) {
-            const deferred = await this._tryDeferSmsToDigestEnqueue(
-              recipient,
-              notification.subject,
-              notification.body
-            );
-            if (deferred) continue;
-          }
-
-          if (channel === NotificationChannel.EMAIL && recipient.userId && recipient.parentEmail) {
-            const deferred = await this._tryDeferEmailToDigestEnqueue(
-              alert,
-              recipient,
-              notification
-            );
-            if (deferred) continue;
-          }
-
-          const to =
-            channel === NotificationChannel.EMAIL
-              ? (recipient.parentEmail ?? notification.userId)
-              : channel === NotificationChannel.SMS
-                ? (recipient.parentPhone ?? notification.userId)
-                : notification.userId;
-
-          const payload: INotificationPayload = { ...basePayload, userId: to };
-          const jobId = await queue.add(
-            'deliver',
-            'deliver-one',
-            { notificationPayload: payload, channel },
-            { maxAttempts: 5 }
-          );
-          deliveryJobIds.push(jobId);
-        }
-      }
     }
 
     const studentNotification =
       notifications.find((n) => n.agentType === AgentType.STUDENT) ?? notifications[0];
     const parentNotification =
-      notifications.find((n) => n.agentType === AgentType.PARENT) ?? notifications[0];
+      notifications.find((n) => n.agentType === AgentType.PARENT) ?? studentNotification;
+
+    for (const recipient of recipients) {
+      const useStudent = recipient.recipientType === 'student';
+      const notification = useStudent
+        ? (studentNotification ?? parentNotification)
+        : (parentNotification ?? studentNotification);
+      if (!notification) continue;
+
+      const basePayload = this._serializeNotification(notification);
+
+      for (const channel of notification.channels) {
+        if (
+          channel === NotificationChannel.EMAIL &&
+          !recipient.parentEmail &&
+          !isDefaultSingleRecipient
+        )
+          continue;
+        if (
+          channel === NotificationChannel.SMS &&
+          !recipient.parentPhone &&
+          !isDefaultSingleRecipient
+        )
+          continue;
+
+        if (channel === NotificationChannel.SMS && recipient.userId && recipient.parentPhone) {
+          const deferred = await this._tryDeferSmsToDigestEnqueue(
+            recipient,
+            notification.subject,
+            notification.body
+          );
+          if (deferred) continue;
+        }
+
+        if (channel === NotificationChannel.EMAIL && recipient.userId && recipient.parentEmail) {
+          const deferred = await this._tryDeferEmailToDigestEnqueue(
+            alert,
+            recipient,
+            notification
+          );
+          if (deferred) continue;
+        }
+
+        const to =
+          channel === NotificationChannel.EMAIL
+            ? (recipient.parentEmail ?? notification.userId)
+            : channel === NotificationChannel.SMS
+              ? (recipient.parentPhone ?? notification.userId)
+              : notification.userId;
+
+        const payload: INotificationPayload = { ...basePayload, userId: to };
+        const jobId = await queue.add(
+          'deliver',
+          'deliver-one',
+          { notificationPayload: payload, channel },
+          { maxAttempts: 5 }
+        );
+        deliveryJobIds.push(jobId);
+      }
+    }
+
     if (studentNotification) studentNotification.markSent();
     if (parentNotification) parentNotification.markSent();
 
@@ -444,10 +454,11 @@ export class NotificationService {
       severity,
       subject: notification.subject,
       body: notification.body,
-      studentName: undefined,
+      studentName: (relatedData['studentName'] as string) ?? undefined,
       courseName: (relatedData['course'] as string) ?? undefined,
       assignmentTitle: (relatedData['title'] as string) ?? undefined,
       dashboardUrl,
+      recipientType: recipient.recipientType,
       createdAt: new Date(),
     };
     await this._emailDigestOptions.enqueueEmailForDigest(item);

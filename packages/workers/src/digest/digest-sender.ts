@@ -63,6 +63,7 @@ export class DigestSender implements IDigestSender {
         items: recipientItems,
         dashboardUrl,
         studentName: first?.studentName,
+        recipientType: first?.recipientType,
         aiInsight,
       });
       const text = `${recipientItems.length} alert(s). View your dashboard for details.`;
