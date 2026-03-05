@@ -470,7 +470,14 @@ async function applyOps(params: {
         const prev = (existing?.['record'] as Record<string, unknown> | undefined) ?? {};
         const gradeRelevant = (
           r: Record<string, unknown>
-        ): { status: unknown; pointsEarned: unknown; pointsPossible: unknown; percentScore: unknown; letterGrade: unknown; teacherFeedback: unknown } => ({
+        ): {
+          status: unknown;
+          pointsEarned: unknown;
+          pointsPossible: unknown;
+          percentScore: unknown;
+          letterGrade: unknown;
+          teacherFeedback: unknown;
+        } => ({
           status: r['status'],
           pointsEarned: r['pointsEarned'],
           pointsPossible: r['pointsPossible'],

@@ -168,10 +168,7 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
     : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
 
   const dashboardBaseUrl =
-    process.env['BASE_URL'] ??
-    process.env['WEB_URL'] ??
-    process.env['NEXT_PUBLIC_APP_URL'] ??
-    '';
+    process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
   const emailDelivery = new EmailDelivery(
     {
       fromEmail: sendGridConfig.fromEmail,

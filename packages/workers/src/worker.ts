@@ -138,19 +138,23 @@ async function flushSmsDigests(
       await repo.deleteByUserId(userId);
     } catch (err) {
       console.error(`[SmsDigest] Failed to send digest for user ${userId}:`, err);
-      await commLogRepo.create({
-        userId,
-        channel: 'sms',
-        type: 'notification',
-        subject: `SMS Digest (${items.length} alerts)`,
-        content: body,
-        recipientPhone: phone,
-        status: 'failed',
-        failedAt: new Date(),
-        failureReason: err instanceof Error ? err.message : String(err),
-        triggeredBy: 'scheduled',
-        templateName: 'sms_digest',
-      }).catch(() => { /* best effort */ });
+      await commLogRepo
+        .create({
+          userId,
+          channel: 'sms',
+          type: 'notification',
+          subject: `SMS Digest (${items.length} alerts)`,
+          content: body,
+          recipientPhone: phone,
+          status: 'failed',
+          failedAt: new Date(),
+          failureReason: err instanceof Error ? err.message : String(err),
+          triggeredBy: 'scheduled',
+          templateName: 'sms_digest',
+        })
+        .catch(() => {
+          /* best effort */
+        });
     }
   }
 }
@@ -201,10 +205,7 @@ function initializeNotificationService(
   const transport: IEmailTransport = emailTransport ?? getEmailTransport(config);
 
   const dashboardBaseUrl =
-    process.env['BASE_URL'] ??
-    process.env['WEB_URL'] ??
-    process.env['NEXT_PUBLIC_APP_URL'] ??
-    '';
+    process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
   const emailDelivery = new EmailDelivery(
     {
       fromEmail: sendGridConfig.fromEmail,
@@ -266,7 +267,11 @@ function initializeNotificationService(
     emailDigestOptions = {
       getEmailDigestPreference: async (
         userId: string
-      ): Promise<{ enabled: true; time?: string; frequency: 'minimal' | 'balanced' | 'proactive' } | null> => {
+      ): Promise<{
+        enabled: true;
+        time?: string;
+        frequency: 'minimal' | 'balanced' | 'proactive';
+      } | null> => {
         const user = await userRepo.findById(userId);
         const daily = user?.preferences?.notifications?.digestSchedule?.daily?.enabled === true;
         if (!daily) return null;
@@ -340,8 +345,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
 
   const apiBaseUrl = process.env['API_BASE_URL'] ?? process.env['BASE_URL'] ?? '';
   const jwtSecret = process.env['JWT_SECRET'] ?? process.env['CONNECTOR_JWT_SECRET'] ?? '';
-  const connectorTokenService =
-    jwtSecret ? new ConnectorTokenService(jwtSecret, '1h') : undefined;
+  const connectorTokenService = jwtSecret ? new ConnectorTokenService(jwtSecret, '1h') : undefined;
   const createConnectorToken =
     connectorTokenService && apiBaseUrl
       ? (userId: string): string => connectorTokenService.createToken(userId, randomUUID())
@@ -383,10 +387,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   }
 
   const dashboardBaseUrl =
-    process.env['BASE_URL'] ??
-    process.env['WEB_URL'] ??
-    process.env['NEXT_PUBLIC_APP_URL'] ??
-    '';
+    process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
 
   const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
   const digestInsightService = anthropicApiKey

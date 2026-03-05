@@ -56,7 +56,10 @@ async function main(): Promise<void> {
       process.exit(1);
     }
   } else if (userIdsArg) {
-    userIds = userIdsArg.split(',').map((id) => id.trim()).filter(Boolean);
+    userIds = userIdsArg
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
     if (userIds.length === 0) {
       console.error('Provide --studentId=<id> or --userIds=id1,id2,id3');
       await client.close();
@@ -69,7 +72,9 @@ async function main(): Promise<void> {
   }
 
   const fromEmail =
-    process.env['SENDGRID_FROM_EMAIL'] ?? process.env['FROM_EMAIL'] ?? 'notifications@scholaracle.com';
+    process.env['SENDGRID_FROM_EMAIL'] ??
+    process.env['FROM_EMAIL'] ??
+    'notifications@scholaracle.com';
   const fromName = process.env['SENDGRID_FROM_NAME'] ?? process.env['FROM_NAME'] ?? 'Scholaracle';
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
@@ -97,6 +102,7 @@ async function main(): Promise<void> {
   }
 
   await client.close();
+  // eslint-disable-next-line no-console
   console.log('Digest send complete for', userIds.length, 'user(s)');
 }
 

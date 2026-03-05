@@ -65,7 +65,10 @@ async function waitForSyncComplete(
 async function main(): Promise<void> {
   const studentId = getArg('studentId');
   const apiUrl =
-    getArg('apiUrl') ?? process.env['API_BASE_URL'] ?? process.env['BASE_URL'] ?? 'http://localhost:3000';
+    getArg('apiUrl') ??
+    process.env['API_BASE_URL'] ??
+    process.env['BASE_URL'] ??
+    'http://localhost:3000';
   const token = getArg('token') ?? process.env['AUTH_TOKEN'] ?? process.env['API_TOKEN'];
 
   if (!studentId) {
@@ -87,24 +90,32 @@ async function main(): Promise<void> {
   const poller = new SyncStatusPoller(apiUrl, token);
   const recipientResolver = new StudentRecipientResolver(database);
 
+  // eslint-disable-next-line no-console
   console.log('Triggering sync for student', studentId, '...');
   const { jobIds } = await trigger.triggerAllForStudent(studentId);
+  // eslint-disable-next-line no-console
   console.log('Enqueued', jobIds.length, 'job(s). Waiting for completion ...');
 
   await waitForSyncComplete(poller, studentId, jobIds.length);
+  // eslint-disable-next-line no-console
   console.log('Sync completed successfully.');
 
+  // eslint-disable-next-line no-console
   console.log('Resolving alert recipients ...');
   const userIds = await recipientResolver.resolveRecipients(studentId);
   if (userIds.length === 0) {
+    // eslint-disable-next-line no-console
     console.log('No recipient users for student; skipping digest.');
     await client.close();
     return;
   }
+  // eslint-disable-next-line no-console
   console.log('Sending digest to', userIds.length, 'recipient(s) ...');
 
   const fromEmail =
-    process.env['SENDGRID_FROM_EMAIL'] ?? process.env['FROM_EMAIL'] ?? 'notifications@scholaracle.com';
+    process.env['SENDGRID_FROM_EMAIL'] ??
+    process.env['FROM_EMAIL'] ??
+    'notifications@scholaracle.com';
   const fromName = process.env['SENDGRID_FROM_NAME'] ?? process.env['FROM_NAME'] ?? 'Scholaracle';
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
@@ -132,10 +143,12 @@ async function main(): Promise<void> {
   }
 
   await client.close();
+  // eslint-disable-next-line no-console
   console.log('Done.');
 }
 
 main().catch((e) => {
+  // eslint-disable-next-line no-console
   console.error(e);
   process.exit(1);
 });

@@ -27,8 +27,16 @@ export interface INotificationSettings {
     readonly daily?: { readonly enabled: boolean; readonly time: string };
     readonly weekly?: { readonly enabled: boolean; readonly day: string; readonly time: string };
     readonly digestTimes?: readonly string[];
-    readonly weekdaySlots?: readonly { readonly time: string; readonly label: string; readonly enabled: boolean }[];
-    readonly weekendSlots?: readonly { readonly time: string; readonly label: string; readonly enabled: boolean }[];
+    readonly weekdaySlots?: readonly {
+      readonly time: string;
+      readonly label: string;
+      readonly enabled: boolean;
+    }[];
+    readonly weekendSlots?: readonly {
+      readonly time: string;
+      readonly label: string;
+      readonly enabled: boolean;
+    }[];
     readonly schoolDays?: readonly string[];
     readonly holidayMode?: 'normal' | 'pause' | 'reduced';
   };
@@ -82,10 +90,16 @@ function validateQuietHours(q: INotificationSettings['quietHours']): string | un
 const VALID_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const VALID_HOLIDAY_MODES = ['normal', 'pause', 'reduced'] as const;
 
-function validateDigestSlot(slot: { time?: string; label?: string; enabled?: boolean }): string | undefined {
+function validateDigestSlot(slot: {
+  time?: string;
+  label?: string;
+  enabled?: boolean;
+}): string | undefined {
   if (slot.time !== undefined && !HHMM_REGEX.test(slot.time)) return 'Slot time must be HH:mm';
-  if (slot.label !== undefined && typeof slot.label !== 'string') return 'Slot label must be a string';
-  if (slot.enabled !== undefined && typeof slot.enabled !== 'boolean') return 'Slot enabled must be boolean';
+  if (slot.label !== undefined && typeof slot.label !== 'string')
+    return 'Slot label must be a string';
+  if (slot.enabled !== undefined && typeof slot.enabled !== 'boolean')
+    return 'Slot enabled must be boolean';
   return undefined;
 }
 
@@ -107,7 +121,9 @@ function validateDigestSchedule(d: INotificationSettings['digestSchedule']): str
     if (!Array.isArray(d.weekdaySlots)) return 'digestSchedule.weekdaySlots must be an array';
     if (d.weekdaySlots.length > 10) return 'digestSchedule.weekdaySlots max 10 entries';
     for (let i = 0; i < d.weekdaySlots.length; i++) {
-      const err = validateDigestSlot(d.weekdaySlots[i] as { time?: string; label?: string; enabled?: boolean });
+      const err = validateDigestSlot(
+        d.weekdaySlots[i] as { time?: string; label?: string; enabled?: boolean }
+      );
       if (err) return `digestSchedule.weekdaySlots[${i}]: ${err}`;
     }
   }
@@ -115,7 +131,9 @@ function validateDigestSchedule(d: INotificationSettings['digestSchedule']): str
     if (!Array.isArray(d.weekendSlots)) return 'digestSchedule.weekendSlots must be an array';
     if (d.weekendSlots.length > 10) return 'digestSchedule.weekendSlots max 10 entries';
     for (let i = 0; i < d.weekendSlots.length; i++) {
-      const err = validateDigestSlot(d.weekendSlots[i] as { time?: string; label?: string; enabled?: boolean });
+      const err = validateDigestSlot(
+        d.weekendSlots[i] as { time?: string; label?: string; enabled?: boolean }
+      );
       if (err) return `digestSchedule.weekendSlots[${i}]: ${err}`;
     }
   }
@@ -165,7 +183,7 @@ function buildDigestScheduleResponse(
   const weekly = d?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' };
   const digestTimes = d?.digestTimes ?? [];
   let weekdaySlots = d?.weekdaySlots;
-  let weekendSlots = d?.weekendSlots;
+  const weekendSlots = d?.weekendSlots;
   if (!weekdaySlots?.length && digestTimes.length > 0) {
     weekdaySlots = digestTimes.map((time) => ({ time, label: 'Digest', enabled: true }));
   }
@@ -417,16 +435,22 @@ async function handleUpdateSettings(
             notif.digestSchedule?.daily ?? { enabled: true, time: '07:00' },
           weekly: notifications?.digestSchedule?.weekly ??
             notif.digestSchedule?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' },
-          digestTimes: notifications?.digestSchedule?.digestTimes ??
-            notif.digestSchedule?.digestTimes ?? [],
-          weekdaySlots: notifications?.digestSchedule?.weekdaySlots ??
-            notif.digestSchedule?.weekdaySlots ?? DEFAULT_WEEKDAY_SLOTS,
-          weekendSlots: notifications?.digestSchedule?.weekendSlots ??
-            notif.digestSchedule?.weekendSlots ?? [],
-          schoolDays: notifications?.digestSchedule?.schoolDays ??
-            notif.digestSchedule?.schoolDays ?? DEFAULT_SCHOOL_DAYS,
-          holidayMode: notifications?.digestSchedule?.holidayMode ??
-            notif.digestSchedule?.holidayMode ?? 'normal',
+          digestTimes:
+            notifications?.digestSchedule?.digestTimes ?? notif.digestSchedule?.digestTimes ?? [],
+          weekdaySlots:
+            notifications?.digestSchedule?.weekdaySlots ??
+            notif.digestSchedule?.weekdaySlots ??
+            DEFAULT_WEEKDAY_SLOTS,
+          weekendSlots:
+            notifications?.digestSchedule?.weekendSlots ?? notif.digestSchedule?.weekendSlots ?? [],
+          schoolDays:
+            notifications?.digestSchedule?.schoolDays ??
+            notif.digestSchedule?.schoolDays ??
+            DEFAULT_SCHOOL_DAYS,
+          holidayMode:
+            notifications?.digestSchedule?.holidayMode ??
+            notif.digestSchedule?.holidayMode ??
+            'normal',
         },
         tone: notifications?.tone ?? notif.tone ?? 'encouraging',
         frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
@@ -643,7 +667,11 @@ export interface IHolidaySuggestionResponse {
 async function getHolidayState(
   database: Db,
   userId: string
-): Promise<{ inHoliday: boolean; nextBreak?: { start: string; end: string; name: string }; termSummary: string }> {
+): Promise<{
+  inHoliday: boolean;
+  nextBreak?: { start: string; end: string; name: string };
+  termSummary: string;
+}> {
   const terms = await database
     .collection('slc_academic_terms')
     .find({ userId, deletedAt: null })
@@ -682,7 +710,7 @@ async function getHolidayState(
       const gapEnd = ranges[i + 1]!.start;
       if (todayYmd > gapStart && todayYmd < gapEnd) {
         inHoliday = true;
-        nextBreak = { start: gapStart, end: gapEnd, name: `Break between terms` };
+        nextBreak = { start: gapStart, end: gapEnd, name: 'Break between terms' };
         break;
       }
       if (!nextBreak && gapEnd > todayYmd) {
@@ -701,11 +729,7 @@ async function getHolidayState(
 /**
  * Handle POST suggest-holidays: return AI suggestion for digest pause during holidays.
  */
-async function handleSuggestHolidays(
-  req: Request,
-  res: Response,
-  database: Db
-): Promise<void> {
+async function handleSuggestHolidays(req: Request, res: Response, database: Db): Promise<void> {
   try {
     const authReq = req as IAuthenticatedRequest;
     const userId = authReq.userId;
@@ -726,11 +750,14 @@ async function handleSuggestHolidays(
           : nextBreak
             ? `The user's academic terms: ${termSummary}. The next break is ${nextBreak.start} to ${nextBreak.end}. Suggest in 1-2 sentences whether to enable "Pause digests during school holidays" before that date.`
             : `The user's academic terms: ${termSummary}. No upcoming break. Suggest keeping normal digest settings.`;
-        const response = await llm.complete(
-          [{ role: 'user' as const, content: prompt }],
-          { maxTokens: 120, system: 'You are a helpful assistant for a parent/student app. Reply in plain text only, 1-2 sentences.' }
-        );
-        suggestion = response.content.trim() || (inHoliday ? 'Consider pausing digests during this break.' : 'No change needed.');
+        const response = await llm.complete([{ role: 'user' as const, content: prompt }], {
+          maxTokens: 120,
+          system:
+            'You are a helpful assistant for a parent/student app. Reply in plain text only, 1-2 sentences.',
+        });
+        suggestion =
+          response.content.trim() ||
+          (inHoliday ? 'Consider pausing digests during this break.' : 'No change needed.');
       } catch {
         suggestion = inHoliday
           ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'

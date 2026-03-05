@@ -1,7 +1,14 @@
 import { NotificationWorker } from './NotificationWorker';
 import { MongoQueue, type IJob } from '../../queue/MongoQueue';
 import { NotificationService } from '../../service/NotificationService';
-import { Alert, Notification, NotificationPriority, AgentType, AlertType, NotificationChannel } from '@scholaracle/contracts';
+import {
+  Alert,
+  Notification,
+  NotificationPriority,
+  AgentType,
+  AlertType,
+  NotificationChannel,
+} from '@scholaracle/contracts';
 import type { ObjectId } from 'mongodb';
 
 describe('NotificationWorker', () => {
@@ -19,8 +26,15 @@ describe('NotificationWorker', () => {
 
     mockNotificationService = {
       processAlert: jest.fn(),
-      processAlertEnqueueDeliver: jest.fn().mockResolvedValue({ notifications: [], deliveryJobIds: [] }),
-      deliverOne: jest.fn().mockResolvedValue({ success: true, channel: 'email', messageId: 'id', deliveredAt: new Date() }),
+      processAlertEnqueueDeliver: jest
+        .fn()
+        .mockResolvedValue({ notifications: [], deliveryJobIds: [] }),
+      deliverOne: jest.fn().mockResolvedValue({
+        success: true,
+        channel: 'email',
+        messageId: 'id',
+        deliveredAt: new Date(),
+      }),
     } as unknown as jest.Mocked<NotificationService>;
 
     notificationWorker = new NotificationWorker(mockMongoQueue, mockNotificationService);
@@ -269,7 +283,10 @@ describe('NotificationWorker', () => {
 
       expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledTimes(1);
       expect(mockNotificationService.processAlert).toHaveBeenCalledTimes(1);
-      expect(mockNotificationService.processAlert).toHaveBeenCalledWith(expect.any(Alert), undefined);
+      expect(mockNotificationService.processAlert).toHaveBeenCalledWith(
+        expect.any(Alert),
+        undefined
+      );
       expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
       expect(mockMongoQueue.fail).not.toHaveBeenCalled();
     });

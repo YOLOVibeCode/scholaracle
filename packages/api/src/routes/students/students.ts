@@ -542,6 +542,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         role,
         status: 'pending',
         invitedAt: new Date(),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         receiveAlerts: true,
         alertChannels: body.alertChannels ?? ['email'],
         alertTypes: body.alertTypes,
@@ -1805,10 +1806,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const assignmentFilter = {
         userId,
         deletedAt: null,
-        $or: [
-          { studentId: studentDbId },
-          ...(studentExternalId ? [{ studentExternalId }] : []),
-        ],
+        $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
       };
       const courseParam = (req.query['course'] as string)?.trim() || null;
       const assignmentParam = (req.query['assignment'] as string)?.trim() || null;
@@ -1888,7 +1886,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const events: IActivityEvent[] = [];
-      const pushIfAllowed = (e: IActivityEvent) => {
+      const pushIfAllowed = (e: IActivityEvent): void => {
         if (typeSet && !typeSet.has(e.eventType)) return;
         if (courseParam && e.courseExternalId !== courseParam) return;
         if (assignmentParam && e.assignmentExternalId !== assignmentParam) return;
@@ -1896,7 +1894,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       };
 
       for (const doc of assignmentDocs) {
-        const hist = (doc['_history'] as Array<{ observedAt: string; status?: string; pointsEarned?: number; pointsPossible?: number; percentScore?: number; letterGrade?: string; teacherFeedback?: string }>) ?? [];
+        const hist =
+          (doc['_history'] as Array<{
+            observedAt: string;
+            status?: string;
+            pointsEarned?: number;
+            pointsPossible?: number;
+            percentScore?: number;
+            letterGrade?: string;
+            teacherFeedback?: string;
+          }>) ?? [];
         const record = (doc['record'] ?? {}) as Record<string, unknown>;
         const title = (record['title'] as string) ?? '';
         const courseExtId = (doc['courseExternalId'] as string) ?? '';
@@ -1906,7 +1913,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         if (assignmentParam && extId !== assignmentParam) continue;
         for (let i = 0; i < hist.length; i++) {
           const h = hist[i]!;
-          const at = typeof h.observedAt === 'string' ? h.observedAt : new Date(h.observedAt).toISOString();
+          const at =
+            typeof h.observedAt === 'string' ? h.observedAt : new Date(h.observedAt).toISOString();
           if (fromDate && new Date(at) < fromDate) continue;
           if (toDate && new Date(at) > toDate) continue;
           const prev = hist[i - 1];
@@ -1936,7 +1944,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
                   ? `${h.pointsEarned}/${h.pointsPossible}`
                   : (h.status as string)?.replace('_', ' '),
             severity,
-            metadata: { status: h.status, percentScore: h.percentScore, pointsEarned: h.pointsEarned, pointsPossible: h.pointsPossible },
+            metadata: {
+              status: h.status,
+              percentScore: h.percentScore,
+              pointsEarned: h.pointsEarned,
+              pointsPossible: h.pointsPossible,
+            },
           });
         }
       }
@@ -1952,7 +1965,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           courseName: courseMap.get((d['courseExternalId'] as string) ?? '') ?? undefined,
           assignmentExternalId: d['assignmentExternalId'] as string | undefined,
           title: (d['title'] as string) ?? 'Course material',
-          description: et === 'material_added' ? 'Added' : et === 'material_removed' ? 'Removed' : 'Updated',
+          description:
+            et === 'material_added' ? 'Added' : et === 'material_removed' ? 'Removed' : 'Updated',
           severity: 'neutral',
           metadata: d['metadata'] as Record<string, unknown> | undefined,
         });
@@ -2013,7 +2027,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         if (toDate && new Date(at) > toDate) continue;
         const courseExtId = (g['courseExternalId'] as string) ?? '';
         if (courseParam && courseExtId !== courseParam) continue;
-        const gid = (g['_id'] as ObjectId)?.toString() ?? `snapshot-${courseExtId}-${dateStr}-${gi}`;
+        const gid =
+          (g['_id'] as ObjectId)?.toString() ?? `snapshot-${courseExtId}-${dateStr}-${gi}`;
         pushIfAllowed({
           id: gid,
           eventType: 'grade_snapshot',
@@ -2070,10 +2085,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const assignmentFilter = {
         userId,
         deletedAt: null,
-        $or: [
-          { studentId: studentDbId },
-          ...(studentExternalId ? [{ studentExternalId }] : []),
-        ],
+        $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
       };
 
       const assignmentsColl = config.database.collection('slc_assignments');
@@ -2100,7 +2112,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       >();
       for (const g of gradeDocs) {
         const gRec = g['record'] as Record<string, unknown> | undefined;
-        const courseExtId = (g['courseExternalId'] ?? gRec?.['courseExternalId']) as string | undefined;
+        const courseExtId = (g['courseExternalId'] ?? gRec?.['courseExternalId']) as
+          | string
+          | undefined;
         if (!courseExtId) continue;
         const asOf = (gRec?.['asOfDate'] as string) ?? '';
         const raw = (gRec?.['percentGrade'] ?? gRec?.['grade']) as number | undefined;
@@ -2127,9 +2141,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const courseParam = (req.query['course'] as string)?.trim() || null;
       const categoryParam = (req.query['category'] as string)?.trim();
       const categorySet =
-        categoryParam?.length > 0
-          ? new Set(categoryParam.split(',').map((c) => c.trim()))
-          : null;
+        categoryParam?.length > 0 ? new Set(categoryParam.split(',').map((c) => c.trim())) : null;
       const fromParam = (req.query['from'] as string)?.trim();
       const toParam = (req.query['to'] as string)?.trim();
       const fromDate = fromParam ? new Date(fromParam) : null;
@@ -2245,7 +2257,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or assignment external ID' });
+        res
+          .status(400)
+          .json({ success: false, error: 'Missing student ID or assignment external ID' });
         return;
       }
       const student = await studentRepository.findById(studentDbId);
@@ -2262,10 +2276,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         userId,
         externalId: assignmentExternalId,
         deletedAt: null,
-        $or: [
-          { studentId: studentDbId },
-          ...(studentExternalId ? [{ studentExternalId }] : []),
-        ],
+        $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
       });
 
       if (!doc) {
@@ -2323,7 +2334,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or assignment external ID' });
+        res
+          .status(400)
+          .json({ success: false, error: 'Missing student ID or assignment external ID' });
         return;
       }
       const student = await studentRepository.findById(studentDbId);
@@ -2343,10 +2356,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           userId,
           externalId: assignmentExternalId,
           deletedAt: null,
-          $or: [
-            { studentId: studentDbId },
-            ...(studentExternalId ? [{ studentExternalId }] : []),
-          ],
+          $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
         },
         { $set: { studentNote: note, updatedAt: new Date() } }
       );

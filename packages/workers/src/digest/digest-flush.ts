@@ -5,7 +5,11 @@
 
 import type { Db } from 'mongodb';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { EmailDigestPendingRepository, CommunicationLogRepository, UserRepository } from '@scholaracle/database';
+import {
+  EmailDigestPendingRepository,
+  CommunicationLogRepository,
+  UserRepository,
+} from '@scholaracle/database';
 import type { DigestInsightService } from '@scholaracle/agents';
 import { DigestSender } from './digest-sender';
 import {
@@ -48,8 +52,7 @@ export async function flushEmailDigests(
 
       const schedule = user.preferences?.notifications?.digestSchedule;
       const hasSlots =
-        (schedule?.weekdaySlots?.length ?? 0) > 0 ||
-        (schedule?.weekendSlots?.length ?? 0) > 0;
+        (schedule?.weekdaySlots?.length ?? 0) > 0 || (schedule?.weekendSlots?.length ?? 0) > 0;
       const shouldFlush = hasSlots
         ? getActiveSlotsForUser(user, currentHhmm, currentUtcDayKey)
         : shouldFlushLegacy(user, currentHhmm, currentHour);
@@ -60,7 +63,7 @@ export async function flushEmailDigests(
       if (holidayMode === 'pause' && inHoliday) continue;
       const itemFilter =
         holidayMode === 'reduced' && inHoliday
-          ? (item: IEmailDigestPendingItem) => item.severity === 'critical'
+          ? (item: IEmailDigestPendingItem): boolean => item.severity === 'critical'
           : undefined;
 
       const digestSender = new DigestSender(

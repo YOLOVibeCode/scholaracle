@@ -97,7 +97,11 @@ describe('resolveAllAlertRecipients', () => {
     const out = await resolveAllAlertRecipients('student-id', db);
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({ recipientType: 'parent' });
-    expect(out[1]).toEqual({ parentEmail: 'c@x.com', parentPhone: '+1555', recipientType: 'parent' });
+    expect(out[1]).toEqual({
+      parentEmail: 'c@x.com',
+      parentPhone: '+1555',
+      recipientType: 'parent',
+    });
   });
 
   it('should include student alertEmail when returned by getAllAlertRecipients', async () => {
@@ -139,7 +143,12 @@ describe('resolveAllAlertRecipients', () => {
       userId: { toString: () => 'user-1' },
       alertEmail: 'student@school.edu',
       getAllAlertRecipients: () => [
-        { email: 'owner@example.com', phone: '+15550001111', channels: ['email', 'sms'], isPrimary: true },
+        {
+          email: 'owner@example.com',
+          phone: '+15550001111',
+          channels: ['email', 'sms'],
+          isPrimary: true,
+        },
         { email: 'student@school.edu', channels: ['email'], isPrimary: false },
       ],
     };

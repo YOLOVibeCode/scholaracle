@@ -49,10 +49,10 @@ export class DigestInsightService {
       .join('\n');
 
     try {
-      const response = await this._llm.complete(
-        [{ role: 'user' as const, content: userPrompt }],
-        { maxTokens: 150, system: systemPrompt }
-      );
+      const response = await this._llm.complete([{ role: 'user' as const, content: userPrompt }], {
+        maxTokens: 150,
+        system: systemPrompt,
+      });
       const text = response.content.trim();
       return text.length > 0 ? text : undefined;
     } catch {
