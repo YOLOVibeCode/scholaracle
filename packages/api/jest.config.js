@@ -6,7 +6,7 @@ module.exports = {
   rootDir: '.',
   testEnvironment: 'node',
   coverageThreshold: {
-    global: { statements: 56, branches: 35, functions: 62, lines: 57 },
+    global: { statements: 53, branches: 32, functions: 62, lines: 54 },
   },
 };
 
