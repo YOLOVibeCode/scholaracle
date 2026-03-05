@@ -42,7 +42,10 @@ export interface ISyncTrigger {
  * Sync status poller — check if sync jobs have completed.
  */
 export interface ISyncStatusPoller {
-  getRuns(studentId: string, limit: number): Promise<ReadonlyArray<{ status: string; createdAt: string }>>;
+  getRuns(
+    studentId: string,
+    limit: number
+  ): Promise<ReadonlyArray<{ status: string; createdAt: string }>>;
 }
 
 /**

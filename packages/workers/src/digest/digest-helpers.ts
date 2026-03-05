@@ -5,26 +5,14 @@
 
 import type { Db } from 'mongodb';
 
-export const UTC_DAY_TO_KEY: readonly string[] = [
-  'sun',
-  'mon',
-  'tue',
-  'wed',
-  'thu',
-  'fri',
-  'sat',
-];
+export const UTC_DAY_TO_KEY: readonly string[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 const DIGEST_UTC_HOUR = 18;
 
 /**
  * Returns true if the given date (YYYY-MM-DD) falls in a gap between academic terms.
  */
-export async function isInHoliday(
-  database: Db,
-  userId: string,
-  dateYmd: string
-): Promise<boolean> {
+export async function isInHoliday(database: Db, userId: string, dateYmd: string): Promise<boolean> {
   const terms = await database
     .collection('slc_academic_terms')
     .find({ userId, deletedAt: null })

@@ -22,7 +22,7 @@ class TestAgent extends BaseNotificationAgent {
       userId: alert.studentId,
       subject: 'Test',
       body: 'Test body',
-      priority: this._mapSeverityToPriority(alert.severity),
+      priority: this.mapSeverityToPriority(alert.severity),
       triggerType: alert.type,
       triggerData: alert.relatedData,
       channels: [NotificationChannel.EMAIL],
@@ -47,10 +47,7 @@ describe('BaseNotificationAgent', () => {
     });
 
     it('returns true for each configured alert type', () => {
-      const agent: INotificationAgent = new TestAgent([
-        AlertType.GRADE_DROP,
-        AlertType.POSITIVE,
-      ]);
+      const agent: INotificationAgent = new TestAgent([AlertType.GRADE_DROP, AlertType.POSITIVE]);
       expect(
         agent.handles(
           new Alert({

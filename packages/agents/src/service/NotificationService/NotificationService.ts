@@ -49,9 +49,7 @@ export interface IEmailDigestPreference {
 }
 
 export interface INotificationServiceEmailDigestOptions {
-  readonly getEmailDigestPreference?: (
-    userId: string
-  ) => Promise<IEmailDigestPreference | null>;
+  readonly getEmailDigestPreference?: (userId: string) => Promise<IEmailDigestPreference | null>;
   readonly enqueueEmailForDigest?: (item: IEmailDigestPendingItem) => Promise<void>;
   readonly dashboardBaseUrl?: string;
 }
@@ -94,9 +92,7 @@ export class NotificationService {
     emailDigestOptions?: INotificationServiceEmailDigestOptions
   );
   constructor(
-    first:
-      | StudentNotificationGenerator
-      | readonly INotificationAgent[],
+    first: StudentNotificationGenerator | readonly INotificationAgent[],
     second: ParentNotificationGenerator | DeliveryRouter,
     third?: DeliveryRouter | INotificationServiceSmsDigestOptions,
     fourth?: INotificationServiceSmsDigestOptions | INotificationServiceEmailDigestOptions,
@@ -367,11 +363,7 @@ export class NotificationService {
         }
 
         if (channel === NotificationChannel.EMAIL && recipient.userId && recipient.parentEmail) {
-          const deferred = await this._tryDeferEmailToDigestEnqueue(
-            alert,
-            recipient,
-            notification
-          );
+          const deferred = await this._tryDeferEmailToDigestEnqueue(alert, recipient, notification);
           if (deferred) continue;
         }
 
