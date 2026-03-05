@@ -73,7 +73,7 @@ export class ParentEmailNotificationAgent extends BaseNotificationAgent {
       userId: alert.studentId,
       subject,
       body,
-      priority: this._mapSeverityToPriority(alert.severity),
+      priority: this.mapSeverityToPriority(alert.severity),
       triggerType: alert.type,
       triggerData: alert.relatedData,
       channels: [NotificationChannel.EMAIL],

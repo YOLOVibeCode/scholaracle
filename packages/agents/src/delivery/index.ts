@@ -1,9 +1,4 @@
-export {
-  EmailDelivery,
-  SendGridTransport,
-  SmtpTransport,
-  buildDigestEmail,
-} from './EmailDelivery';
+export { EmailDelivery, SendGridTransport, SmtpTransport, buildDigestEmail } from './EmailDelivery';
 export type {
   IEmailDeliveryConfig,
   IEmailTransport,

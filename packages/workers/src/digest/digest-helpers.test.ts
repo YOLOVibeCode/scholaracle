@@ -41,10 +41,12 @@ describe('isInHoliday', () => {
     const mockDb = {
       collection: jest.fn().mockReturnValue({
         find: jest.fn().mockReturnValue({
-          toArray: jest.fn().mockResolvedValue([
-            { record: { startDate: '2026-01-05', endDate: '2026-02-28' } },
-            { record: { startDate: '2026-03-20', endDate: '2026-05-30' } },
-          ]),
+          toArray: jest
+            .fn()
+            .mockResolvedValue([
+              { record: { startDate: '2026-01-05', endDate: '2026-02-28' } },
+              { record: { startDate: '2026-03-20', endDate: '2026-05-30' } },
+            ]),
         }),
       }),
     } as unknown as Db;
@@ -57,9 +59,9 @@ describe('isInHoliday', () => {
     const mockDb = {
       collection: jest.fn().mockReturnValue({
         find: jest.fn().mockReturnValue({
-          toArray: jest.fn().mockResolvedValue([
-            { record: { startDate: '2026-03-01', endDate: '2026-05-31' } },
-          ]),
+          toArray: jest
+            .fn()
+            .mockResolvedValue([{ record: { startDate: '2026-03-01', endDate: '2026-05-31' } }]),
         }),
       }),
     } as unknown as Db;
@@ -72,9 +74,9 @@ describe('isInHoliday', () => {
     const mockDb = {
       collection: jest.fn().mockReturnValue({
         find: jest.fn().mockReturnValue({
-          toArray: jest.fn().mockResolvedValue([
-            { record: { startDate: '2026-03-01', endDate: '2026-05-31' } },
-          ]),
+          toArray: jest
+            .fn()
+            .mockResolvedValue([{ record: { startDate: '2026-03-01', endDate: '2026-05-31' } }]),
         }),
       }),
     } as unknown as Db;

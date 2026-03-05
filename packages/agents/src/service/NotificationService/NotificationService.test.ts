@@ -394,10 +394,7 @@ describe('NotificationService', () => {
           deliveredAt: new Date(),
         }),
       } as unknown as DeliveryRouter;
-      const svc = new NotificationService(
-        [nonHandlingAgent, handlingAgent],
-        mockRouter
-      );
+      const svc = new NotificationService([nonHandlingAgent, handlingAgent], mockRouter);
       await svc.processAlert(alert);
       expect(nonHandlingAgent.handles).toHaveBeenCalledWith(alert);
       expect(handlingAgent.handles).toHaveBeenCalledWith(alert);
@@ -515,7 +512,9 @@ describe('NotificationService', () => {
 
   describe('processAlertEnqueueDeliver', () => {
     it('should enqueue deliver jobs with resolved email in payload and correct channel', async () => {
-      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
       const notif = new Notification({
         agentType: AgentType.STUDENT,
         studentId: 'student-123',
@@ -560,7 +559,9 @@ describe('NotificationService', () => {
     });
 
     it('should skip channels without recipient address (email only → only EMAIL job)', async () => {
-      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
       const notif = new Notification({
         agentType: AgentType.STUDENT,
         studentId: 'student-123',
@@ -596,7 +597,9 @@ describe('NotificationService', () => {
     });
 
     it('should enqueue one deliver job per resolved recipient', async () => {
-      const mockQueue = { add: jest.fn().mockResolvedValue('id') } as unknown as jest.Mocked<MongoQueue>;
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('id'),
+      } as unknown as jest.Mocked<MongoQueue>;
       const notif = new Notification({
         agentType: AgentType.STUDENT,
         studentId: 'student-123',
@@ -628,7 +631,8 @@ describe('NotificationService', () => {
       expect(result.deliveryJobIds).toHaveLength(2);
       expect(mockQueue.add).toHaveBeenCalledTimes(2);
       const payloads = (mockQueue.add as jest.Mock).mock.calls.map(
-        (c: [string, string, { notificationPayload: { userId: string } }]) => c[2].notificationPayload.userId
+        (c: [string, string, { notificationPayload: { userId: string } }]) =>
+          c[2].notificationPayload.userId
       );
       expect(payloads).toContain('first@example.com');
       expect(payloads).toContain('second@example.com');
@@ -650,7 +654,9 @@ describe('NotificationService', () => {
     });
 
     it('should route PARENT notification to parent recipients and STUDENT to student recipients', async () => {
-      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
       const studentNotif = new Notification({
         agentType: AgentType.STUDENT,
         studentId: 'student-123',
@@ -712,7 +718,9 @@ describe('NotificationService', () => {
     });
 
     it('should treat recipients without recipientType as parent (backward compat)', async () => {
-      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
       const studentNotif = new Notification({
         agentType: AgentType.STUDENT,
         studentId: 'stu-1',
@@ -756,7 +764,9 @@ describe('NotificationService', () => {
       expect((mockQueue.add as jest.Mock).mock.calls[0][2].notificationPayload.agentType).toBe(
         AgentType.PARENT
       );
-      expect((mockQueue.add as jest.Mock).mock.calls[0][2].notificationPayload.subject).toBe('Parent sub');
+      expect((mockQueue.add as jest.Mock).mock.calls[0][2].notificationPayload.subject).toBe(
+        'Parent sub'
+      );
     });
   });
 
@@ -804,7 +814,9 @@ describe('NotificationService', () => {
         generate: jest.fn(),
       };
       const err = new DeliveryError('SMTP failed', NotificationChannel.EMAIL, {});
-      const mockRouter = { route: jest.fn().mockRejectedValue(err) } as unknown as jest.Mocked<DeliveryRouter>;
+      const mockRouter = {
+        route: jest.fn().mockRejectedValue(err),
+      } as unknown as jest.Mocked<DeliveryRouter>;
       const svc = new NotificationService([mockAgent], mockRouter);
       const payload = {
         id: 'notif-id',
@@ -817,7 +829,9 @@ describe('NotificationService', () => {
         triggerType: 'test',
       };
 
-      await expect(svc.deliverOne(payload, NotificationChannel.EMAIL)).rejects.toThrow(DeliveryError);
+      await expect(svc.deliverOne(payload, NotificationChannel.EMAIL)).rejects.toThrow(
+        DeliveryError
+      );
     });
   });
 });

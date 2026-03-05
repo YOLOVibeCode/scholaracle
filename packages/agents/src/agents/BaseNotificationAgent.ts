@@ -22,7 +22,7 @@ export abstract class BaseNotificationAgent implements INotificationAgent {
 
   public abstract generate(alert: Alert): Notification;
 
-  protected _mapSeverityToPriority(severity: string): NotificationPriority {
+  protected mapSeverityToPriority(severity: string): NotificationPriority {
     switch (severity.toLowerCase()) {
       case 'critical':
         return NotificationPriority.CRITICAL;
