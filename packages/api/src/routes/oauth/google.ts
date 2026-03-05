@@ -34,14 +34,20 @@ function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
 }
 
-function signState(payload: { studentId: string; sourceId: string; userId: string }, secret: string): string {
+function signState(
+  payload: { studentId: string; sourceId: string; userId: string },
+  secret: string
+): string {
   const json = JSON.stringify(payload);
   const b64 = Buffer.from(json, 'utf8').toString('base64url');
   const sig = createHmac('sha256', secret).update(json).digest('base64url');
   return `${b64}.${sig}`;
 }
 
-function verifyState(state: string, secret: string): { studentId: string; sourceId: string; userId: string } | null {
+function verifyState(
+  state: string,
+  secret: string
+): { studentId: string; sourceId: string; userId: string } | null {
   const dot = state.indexOf('.');
   if (dot <= 0) return null;
   const b64 = state.slice(0, dot);
@@ -114,7 +120,10 @@ export function createGoogleOAuthRouter(config: IGoogleOAuthConfig): Router {
     const state = req.query['state'] as string | undefined;
     const errorParam = req.query['error'] as string | undefined;
     if (errorParam) {
-      res.redirect(302, `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errorParam)}`);
+      res.redirect(
+        302,
+        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errorParam)}`
+      );
       return;
     }
     if (!code || !state) {
@@ -146,7 +155,10 @@ export function createGoogleOAuthRouter(config: IGoogleOAuthConfig): Router {
     });
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
-      res.redirect(302, `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errText.slice(0, 100))}`);
+      res.redirect(
+        302,
+        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errText.slice(0, 100))}`
+      );
       return;
     }
     const tokenBody = (await tokenRes.json()) as {
@@ -157,7 +169,10 @@ export function createGoogleOAuthRouter(config: IGoogleOAuthConfig): Router {
     const accessToken = tokenBody.access_token;
     const refreshToken = tokenBody.refresh_token;
     if (!accessToken) {
-      res.redirect(302, `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=no_access_token`);
+      res.redirect(
+        302,
+        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=no_access_token`
+      );
       return;
     }
     const student = await studentRepository.findById(payload.studentId);

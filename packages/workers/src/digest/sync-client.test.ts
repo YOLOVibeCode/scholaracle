@@ -38,7 +38,9 @@ describe('SyncTrigger', () => {
     global.fetch = mockFetch as never;
 
     const trigger = new SyncTrigger('http://localhost:3000', 'token-123');
-    await expect(trigger.triggerAllForStudent('student-abc')).rejects.toThrow('Trigger sync failed 400: Bad Request');
+    await expect(trigger.triggerAllForStudent('student-abc')).rejects.toThrow(
+      'Trigger sync failed 400: Bad Request'
+    );
   });
 });
 
@@ -79,7 +81,9 @@ describe('SyncStatusPoller', () => {
     global.fetch = mockFetch as never;
 
     const poller = new SyncStatusPoller('http://localhost:3000', 'token-123');
-    await expect(poller.getRuns('student-abc', 10)).rejects.toThrow('Get runs failed 404: Not Found');
+    await expect(poller.getRuns('student-abc', 10)).rejects.toThrow(
+      'Get runs failed 404: Not Found'
+    );
   });
 });
 

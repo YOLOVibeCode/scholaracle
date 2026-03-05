@@ -51,7 +51,9 @@ export class SyncStatusPoller implements ISyncStatusPoller {
       const body = await res.text();
       throw new Error(`Get runs failed ${res.status}: ${body}`);
     }
-    const data = (await res.json()) as { runs: ReadonlyArray<{ status: string; createdAt: string }> };
+    const data = (await res.json()) as {
+      runs: ReadonlyArray<{ status: string; createdAt: string }>;
+    };
     return data.runs;
   }
 }

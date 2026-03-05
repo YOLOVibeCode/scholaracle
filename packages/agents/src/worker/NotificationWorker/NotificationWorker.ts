@@ -155,7 +155,9 @@ export class NotificationWorker {
 
   private async _processDeliverJob(job: IJob): Promise<void> {
     try {
-      const payload = job.data['notificationPayload'] as import('@scholaracle/contracts').INotificationPayload;
+      const payload = job.data[
+        'notificationPayload'
+      ] as import('@scholaracle/contracts').INotificationPayload;
       const channel = job.data['channel'] as NotificationChannel;
       if (!payload || channel == null) {
         throw new Error('Deliver job missing notificationPayload or channel');
