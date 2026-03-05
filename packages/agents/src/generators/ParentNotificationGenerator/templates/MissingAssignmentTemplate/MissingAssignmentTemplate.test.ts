@@ -84,7 +84,7 @@ describe('MissingAssignmentTemplate (Parent)', () => {
       expect(result.body).toContain('Lab Report');
     });
 
-    it('should include grade impact analysis', () => {
+    it('should use concise link-first body with dashboard CTA', () => {
       // Arrange
       const alert = new Alert({
         type: AlertType.MISSING_ASSIGNMENT,
@@ -104,34 +104,12 @@ describe('MissingAssignmentTemplate (Parent)', () => {
       // Act
       const result = template.generate(alert);
 
-      // Assert
-      expect(result.body).toContain('92%');
-      expect(result.body).toContain('5%');
-    });
-
-    it('should include action recommendations', () => {
-      // Arrange
-      const alert = new Alert({
-        type: AlertType.MISSING_ASSIGNMENT,
-        studentId: 'student-123',
-        severity: 'high',
-        relatedData: {
-          studentName: 'John Doe',
-          course: 'Math',
-          assignment: 'Homework 5',
-          daysAgo: 2,
-          points: 25,
-          gradeImpact: 5,
-          currentGrade: 92,
-        },
-      });
-
-      // Act
-      const result = template.generate(alert);
-
-      // Assert
-      expect(result.body).toContain('Action:');
-      expect(result.body).toContain('Ensure');
+      // Assert (concise body; detail in dashboard)
+      expect(result.body).toContain('John Doe');
+      expect(result.body).toContain('Math');
+      expect(result.body).toContain('Homework 5');
+      expect(result.body).toContain('2 days ago');
+      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include assignment URL in actions when provided', () => {

@@ -8,4 +8,5 @@ export type {
   SyncRunStatus,
   ISyncWorkerConfig,
   AdapterRunnerFn,
+  IAdapterRunnerOptions,
 } from './SyncWorker';

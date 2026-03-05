@@ -143,6 +143,119 @@ export interface IActionBoardResponse {
   readonly buckets: readonly IActionBucket[];
 }
 
+export type WorkflowAssignmentStatus =
+  | 'missing'
+  | 'submitted'
+  | 'graded'
+  | 'late'
+  | 'unknown'
+  | 'not_started'
+  | 'in_progress'
+  | 'excused'
+  | 'pending';
+
+export interface IWorkflowAssignment {
+  readonly externalId: string;
+  readonly title: string;
+  readonly dueAt?: string;
+  readonly assignedAt?: string;
+  readonly status: WorkflowAssignmentStatus;
+  readonly category?: string;
+  readonly pointsPossible?: number;
+  readonly pointsEarned?: number;
+  readonly percentScore?: number;
+  readonly letterGrade?: string;
+  readonly isLate: boolean;
+  readonly isMissing: boolean;
+  readonly isOverdue: boolean;
+  readonly isUpcoming: boolean;
+  readonly courseExternalId: string;
+  readonly courseName: string;
+  readonly courseGrade?: number;
+  readonly courseLetterGrade?: string;
+  readonly teacherFeedback?: string;
+  readonly submittedAt?: string;
+  readonly gradedAt?: string;
+  readonly studentNote?: string;
+}
+
+export interface IAssignmentWorkflowResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly assignments: readonly IWorkflowAssignment[];
+  readonly summary: {
+    readonly total: number;
+    readonly missing: number;
+    readonly late: number;
+    readonly graded: number;
+    readonly upcoming: number;
+  };
+}
+
+export interface IAssignmentHistoryEntry {
+  readonly observedAt: string;
+  readonly status: string;
+  readonly pointsEarned?: number;
+  readonly pointsPossible?: number;
+  readonly percentScore?: number;
+  readonly letterGrade?: string;
+  readonly teacherFeedback?: string;
+}
+
+export interface IAssignmentHistoryResponse {
+  readonly externalId: string;
+  readonly title: string;
+  readonly courseName: string;
+  readonly history: readonly IAssignmentHistoryEntry[];
+}
+
+export type ActivityEventType =
+  | 'grade_change'
+  | 'material_added'
+  | 'material_removed'
+  | 'material_updated'
+  | 'alert_created'
+  | 'comment_added'
+  | 'grade_snapshot';
+
+export interface IActivityEvent {
+  readonly id: string;
+  readonly eventType: ActivityEventType;
+  readonly occurredAt: string;
+  readonly courseExternalId?: string;
+  readonly courseName?: string;
+  readonly assignmentExternalId?: string;
+  readonly assignmentTitle?: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly severity?: 'positive' | 'negative' | 'neutral' | 'info';
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface IActivityTimelineResponse {
+  readonly studentId: string;
+  readonly events: readonly IActivityEvent[];
+  readonly hasMore: boolean;
+}
+
+export interface IActivityTimelineFilters {
+  readonly course?: string;
+  readonly assignment?: string;
+  readonly types?: readonly string[];
+  readonly from?: string;
+  readonly to?: string;
+  readonly limit?: number;
+}
+
+export interface ICommentResponse {
+  readonly id: string;
+  readonly authorEmail: string;
+  readonly authorName: string;
+  readonly authorRole: 'parent' | 'student' | 'owner';
+  readonly body: string;
+  readonly createdAt: string;
+}
+
 export interface ICreateStudentRequest {
   readonly name: string;
   readonly grade?: string;
@@ -300,6 +413,153 @@ export const studentsApi = {
     } catch (error) {
       console.error('Failed to load action board:', error);
       return null;
+    }
+  },
+
+  /**
+   * Get flat assignment workflow list for a student with optional filters.
+   */
+  async getAssignmentWorkflow(
+    id: string,
+    filters?: {
+      readonly status?: string;
+      readonly course?: string;
+      readonly category?: string;
+      readonly from?: string;
+      readonly to?: string;
+      readonly upcoming?: boolean;
+    }
+  ): Promise<IAssignmentWorkflowResponse | null> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.status) params.set('status', filters.status);
+      if (filters?.course) params.set('course', filters.course);
+      if (filters?.category) params.set('category', filters.category);
+      if (filters?.from) params.set('from', filters.from);
+      if (filters?.to) params.set('to', filters.to);
+      if (filters?.upcoming === true) params.set('upcoming', 'true');
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return await apiClient.get<IAssignmentWorkflowResponse>(`/students/${id}/assignment-workflow${query}`);
+    } catch (error) {
+      console.error('Failed to load assignment workflow:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get grade/status history for a single assignment.
+   */
+  async getAssignmentHistory(
+    studentId: string,
+    assignmentExternalId: string
+  ): Promise<IAssignmentHistoryResponse | null> {
+    try {
+      return await apiClient.get<IAssignmentHistoryResponse>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/history`
+      );
+    } catch (error) {
+      console.error('Failed to load assignment history:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Save student note ("What have you done?") for an assignment.
+   */
+  async saveAssignmentNote(
+    studentId: string,
+    assignmentExternalId: string,
+    note: string
+  ): Promise<boolean> {
+    try {
+      const res = await apiClient.put<{ success?: boolean }>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/note`,
+        { note }
+      );
+      return res?.success ?? false;
+    } catch (error) {
+      console.error('Failed to save assignment note:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Get unified activity timeline (grade changes, materials, alerts, comments, snapshots).
+   */
+  async getActivityTimeline(
+    studentId: string,
+    filters?: IActivityTimelineFilters
+  ): Promise<IActivityTimelineResponse | null> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.course) params.set('course', filters.course);
+      if (filters?.assignment) params.set('assignment', filters.assignment);
+      if (filters?.types?.length) params.set('types', filters.types.join(','));
+      if (filters?.from) params.set('from', filters.from);
+      if (filters?.to) params.set('to', filters.to);
+      if (filters?.limit != null) params.set('limit', String(filters.limit));
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return await apiClient.get<IActivityTimelineResponse>(`/students/${studentId}/activity${query}`);
+    } catch (error) {
+      console.error('Failed to load activity timeline:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get comments for an assignment (chronological).
+   */
+  async getAssignmentComments(
+    studentId: string,
+    assignmentExternalId: string
+  ): Promise<readonly ICommentResponse[]> {
+    try {
+      const list = await apiClient.get<readonly ICommentResponse[]>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`
+      );
+      return list ?? [];
+    } catch (error) {
+      console.error('Failed to load assignment comments:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Add a comment on an assignment. Body and optional authorName.
+   */
+  async addAssignmentComment(
+    studentId: string,
+    assignmentExternalId: string,
+    body: string,
+    authorName?: string
+  ): Promise<ICommentResponse | null> {
+    try {
+      return await apiClient.post<ICommentResponse>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`,
+        { body, authorName }
+      );
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Soft-delete a comment. Author or account owner only.
+   */
+  async deleteAssignmentComment(
+    studentId: string,
+    assignmentExternalId: string,
+    commentId: string
+  ): Promise<boolean> {
+    try {
+      const res = await apiClient.delete<{ success?: boolean }>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments/${encodeURIComponent(commentId)}`
+      );
+      return res?.success ?? false;
+    } catch (error) {
+      console.error('Failed to delete comment:', error);
+      return false;
     }
   },
 

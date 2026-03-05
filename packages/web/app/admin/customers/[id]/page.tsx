@@ -283,7 +283,7 @@ export default function AdminCustomerDetailPage() {
                 <CustomerPasswordPanel
                   isSetPasswordOpen={isSetPasswordOpen}
                   password={setPasswordValue}
-                  passwordConfirm={setSetPasswordConfirm}
+                  passwordConfirm={setPasswordConfirm}
                   isSubmitting={isSettingPassword}
                   onOpenSetPassword={() => setIsSetPasswordOpen(true)}
                   onCloseSetPassword={() => {

@@ -1144,6 +1144,43 @@ describe('Students API Routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
     });
+
+    it('should call sendInviteEmail when configured after successful invite', async () => {
+      const mockSendInvite = jest.fn().mockResolvedValue(undefined);
+      const appWithInvite = express();
+      appWithInvite.use(express.json());
+      appWithInvite.use(
+        '/api/students',
+        authMiddleware(authService),
+        studentsRouter({
+          database,
+          baseUrl: 'http://test.example',
+          sendInviteEmail: { sendInvite: mockSendInvite },
+        })
+      );
+
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Invite Email Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(appWithInvite)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'parent@example.com', role: 'parent' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(mockSendInvite).toHaveBeenCalledTimes(1);
+      expect(mockSendInvite).toHaveBeenCalledWith({
+        to: 'parent@example.com',
+        studentName: 'Invite Email Student',
+        studentId,
+        inviteEmail: 'parent@example.com',
+        baseUrl: 'http://test.example',
+      });
+    });
   });
 
   describe('DELETE /api/students/:id/parents/:email', () => {

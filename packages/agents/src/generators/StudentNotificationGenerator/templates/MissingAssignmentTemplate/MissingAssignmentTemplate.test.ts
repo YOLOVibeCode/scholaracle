@@ -73,7 +73,7 @@ describe('MissingAssignmentTemplate', () => {
       expect(result.body).toContain('5 days ago');
     });
 
-    it('should include points value in body', () => {
+    it('should use concise link-first body with dashboard CTA', () => {
       // Arrange
       const alert = new Alert({
         type: AlertType.MISSING_ASSIGNMENT,
@@ -90,32 +90,10 @@ describe('MissingAssignmentTemplate', () => {
       // Act
       const result = template.generate(alert);
 
-      // Assert
-      expect(result.body).toContain('25 points');
-    });
-
-    it('should use template literals for string interpolation', () => {
-      // Arrange
-      const alert = new Alert({
-        type: AlertType.MISSING_ASSIGNMENT,
-        studentId: 'student-123',
-        severity: 'high',
-        relatedData: {
-          course: 'Math',
-          assignment: 'Homework 5',
-          daysAgo: 2,
-          points: 25,
-        },
-      });
-
-      // Act
-      const result = template.generate(alert);
-
-      // Assert
+      // Assert (concise body; detail in dashboard)
       expect(result.body).toMatch(/Math.*Homework 5/);
       expect(result.body).toMatch(/2 days ago/);
-      expect(result.body).toMatch(/25 points/);
-      expect(result.body).toContain('Submit immediately.');
+      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include action button when assignmentUrl is provided', () => {

@@ -9,7 +9,24 @@
  */
 
 import type { Db } from 'mongodb';
-import type { AdapterRunnerFn } from '@scholaracle/agents';
+import type { AdapterRunnerFn, IAdapterRunnerOptions } from '@scholaracle/agents';
+
+/**
+ * Get Google access token, refreshing if needed.
+ */
+async function getGoogleAccessToken(credentials: Record<string, string>): Promise<string> {
+  let accessToken = credentials['accessToken'] ?? '';
+  const refreshToken = credentials['refreshToken'] ?? '';
+  if (refreshToken) {
+    const clientId = process.env['GOOGLE_CLASSROOM_CLIENT_ID'];
+    const clientSecret = process.env['GOOGLE_CLASSROOM_CLIENT_SECRET'];
+    if (clientId && clientSecret) {
+      const refreshed = await refreshGoogleToken(clientId, clientSecret, refreshToken);
+      if (refreshed) accessToken = refreshed;
+    }
+  }
+  return accessToken;
+}
 
 export function createAdapterRunner(_db: Db): AdapterRunnerFn {
   return async (
@@ -17,7 +34,8 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
     _adapterId: string,
     credentials: Record<string, string>,
     baseUrl: string,
-    runId: string
+    runId: string,
+    options?: IAdapterRunnerOptions
   ) => {
     console.log(`[AdapterRunner] run=${runId} provider=${provider} url=${baseUrl}`);
 
@@ -28,33 +46,18 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
         // -----------------------------------------------------------------
         case 'canvas': {
           if (credentials['accessToken']) {
-            return await runCanvasApi(baseUrl, credentials['accessToken'], runId);
-          }
-          if (credentials['googleEmail'] && credentials['googlePassword']) {
-            return await runCanvasBrowser(
-              baseUrl,
-              credentials['googleEmail'],
-              credentials['googlePassword'],
-              runId
-            );
-          }
-          if (credentials['username'] && credentials['password']) {
-            return await runCanvasBrowser(
-              baseUrl,
-              credentials['username'],
-              credentials['password'],
-              runId
-            );
+            return await runCanvasApi(baseUrl, credentials['accessToken'], runId, options);
           }
           return {
             success: false,
             summary: {},
-            error: 'Canvas requires accessToken or googleEmail+googlePassword',
+            error:
+              'Canvas requires an API access token. Browser login is not supported in this environment.',
           };
         }
 
         // -----------------------------------------------------------------
-        // Skyward — always browser-based
+        // Skyward — API (skyward-rest)
         // -----------------------------------------------------------------
         case 'skyward': {
           const username = credentials['username'] ?? '';
@@ -62,29 +65,29 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
           if (!username || !password) {
             return { success: false, summary: {}, error: 'Skyward requires username and password' };
           }
-          return await runSkywardBrowser(baseUrl, username, password, runId);
+          return await runSkywardApi(baseUrl, username, password, runId, options);
         }
 
         // -----------------------------------------------------------------
-        // Google Classroom — API token
+        // Google Classroom — OAuth token (refresh if refreshToken present)
         // -----------------------------------------------------------------
         case 'google-classroom': {
-          const token = credentials['accessToken'] ?? '';
-          if (!token) {
+          const accessToken = await getGoogleAccessToken(credentials);
+          if (!accessToken) {
             return {
               success: false,
               summary: {},
               error: 'Google Classroom requires an OAuth access token',
             };
           }
-          return await runGoogleClassroomApi(token, runId);
+          return await runGoogleClassroomApi(accessToken, runId, options);
         }
 
         // -----------------------------------------------------------------
         // OneRoster — API
         // -----------------------------------------------------------------
         case 'oneroster': {
-          return await runOneRosterApi(baseUrl, credentials, runId);
+          return await runOneRosterApi(baseUrl, credentials, runId, options);
         }
 
         default:
@@ -105,13 +108,19 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
 /**
  * Two-pass sync: pass 1 fetches metadata + downloads critical/high priority
  * files; pass 2 downloads medium/low. Both passes produce an envelope. The
- * caller (SyncWorker) is responsible for submitting them to the ingest API.
+ * caller (SyncWorker) submits the envelope to the ingest API when configured.
  */
 async function runCanvasApi(
   baseUrl: string,
   token: string,
-  runId: string
-): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
+  runId: string,
+  options?: IAdapterRunnerOptions
+): Promise<{
+  success: boolean;
+  summary: Record<string, number>;
+  error?: string;
+  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+}> {
   try {
     const {
       CanvasAdapter,
@@ -123,7 +132,7 @@ async function runCanvasApi(
 
     const apiBaseUrl = process.env['API_BASE_URL'];
     const connectorToken = process.env['CONNECTOR_TOKEN'];
-    const sourceId = process.env['SOURCE_ID'] ?? runId;
+    const sourceId = options?.sourceId ?? process.env['SOURCE_ID'] ?? runId;
     const maxSize = parseInt(process.env['MAX_ASSET_DOWNLOAD_SIZE'] ?? '', 10);
 
     const assetDownloader =
@@ -183,91 +192,100 @@ async function runCanvasApi(
     console.log(
       `[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades, ${materials} materials (${totalOps} total ops)`
     );
-    return { success: true, summary: { courses, assignments, grades, materials } };
-  } catch (err) {
-    return { success: false, summary: {}, error: (err as Error).message };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Canvas browser (Google SSO)
-// ---------------------------------------------------------------------------
-
-async function runCanvasBrowser(
-  baseUrl: string,
-  email: string,
-  password: string,
-  runId: string
-): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
-  try {
-    const canvasHarnessPath = '@scholaracle/connector/dist/harness/canvas-browser-scrape';
-    const canvasMod = (await import(canvasHarnessPath)) as {
-      scrapeCanvasViaBrowser: (
-        b: string,
-        e: string,
-        p: string
-      ) => Promise<{
-        courses: Array<{ assignments: { length: number }; files: { length: number } }>;
-      }>;
+    return {
+      success: true,
+      summary: { courses, assignments, grades, materials },
+      envelope: pass1Envelope,
     };
-    const result = await canvasMod.scrapeCanvasViaBrowser(baseUrl, email, password);
-
-    const courses = result.courses.length;
-    const assignments = result.courses.reduce(
-      (s: number, c: { assignments: { length: number }; files: { length: number } }) =>
-        s + c.assignments.length,
-      0
-    );
-    const files = result.courses.reduce(
-      (s: number, c: { assignments: { length: number }; files: { length: number } }) =>
-        s + c.files.length,
-      0
-    );
-
-    console.log(
-      `[AdapterRunner] Canvas browser (${runId}): ${courses} courses, ${assignments} assignments, ${files} files`
-    );
-    return { success: true, summary: { courses, assignments, files } };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Skyward browser
+// Skyward API (skyward-rest, no browser)
 // ---------------------------------------------------------------------------
 
-async function runSkywardBrowser(
+async function runSkywardApi(
   baseUrl: string,
   username: string,
   password: string,
-  runId: string
-): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
+  runId: string,
+  options?: IAdapterRunnerOptions
+): Promise<{
+  success: boolean;
+  summary: Record<string, number>;
+  error?: string;
+  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+}> {
   try {
-    const skywardHarnessPath = '@scholaracle/connector/dist/harness/skyward-browser-scrape';
-    const skywardMod = (await import(skywardHarnessPath)) as {
-      scrapeSkywardComplete: (
-        b: string,
-        u: string,
-        p: string
-      ) => Promise<{
-        courses: { length: number };
-        missingAssignments: { length: number };
-        attendance: { length: number };
-      }>;
-    };
-    const result = await skywardMod.scrapeSkywardComplete(baseUrl, username, password);
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { SkywardAdapter } = await import('@scholaracle/connector');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+    const skywardRestFactory = require('skyward-rest') as any; // External module type not exported
+    const adapter = new SkywardAdapter(skywardRestFactory);
+    await adapter.authenticate({ baseUrl, username, password });
 
-    const courses = result.courses.length;
-    const assignments = result.missingAssignments.length;
-    const attendance = result.attendance.length;
+    const sourceId = options?.sourceId ?? process.env['SOURCE_ID'] ?? runId;
+    const displayName = options?.displayName ?? 'Skyward';
+    const envelope = await adapter.fetchEnvelope({
+      runId,
+      sourceId,
+      displayName,
+      portalBaseUrl: baseUrl,
+    });
+
+    const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
+    const assignments = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'assignment'
+    ).length;
+    const grades = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'gradeSnapshot'
+    ).length;
+    const attendance = envelope.ops.filter(
+      (o: { entity: string }) => o.entity === 'attendanceEvent'
+    ).length;
 
     console.log(
-      `[AdapterRunner] Skyward browser (${runId}): ${courses} courses, ${assignments} missing, ${attendance} attendance`
+      `[AdapterRunner] Skyward API (${runId}): ${courses} courses, ${assignments} assignments, ${grades} grades, ${attendance} attendance`
     );
-    return { success: true, summary: { courses, assignments, attendance } };
+    return {
+      success: true,
+      summary: { courses, assignments, grades, attendance },
+      envelope,
+    };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Google OAuth token refresh
+// ---------------------------------------------------------------------------
+
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+async function refreshGoogleToken(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { access_token?: string };
+    return data.access_token ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -277,17 +295,25 @@ async function runSkywardBrowser(
 
 async function runGoogleClassroomApi(
   token: string,
-  runId: string
-): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
+  runId: string,
+  options?: IAdapterRunnerOptions
+): Promise<{
+  success: boolean;
+  summary: Record<string, number>;
+  error?: string;
+  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+}> {
   try {
     const { GoogleClassroomAdapter } = await import('@scholaracle/connector');
     const adapter = new GoogleClassroomAdapter();
     await adapter.authenticate({ baseUrl: 'https://classroom.googleapis.com', accessToken: token });
 
+    const sourceId = options?.sourceId ?? runId;
+    const displayName = options?.displayName ?? 'Google Classroom';
     const envelope = await adapter.fetchEnvelope({
       runId,
-      sourceId: runId,
-      displayName: 'Google Classroom',
+      sourceId,
+      displayName,
     });
 
     const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
@@ -295,7 +321,7 @@ async function runGoogleClassroomApi(
       (o: { entity: string }) => o.entity === 'assignment'
     ).length;
 
-    return { success: true, summary: { courses, assignments } };
+    return { success: true, summary: { courses, assignments }, envelope };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
   }
@@ -308,8 +334,14 @@ async function runGoogleClassroomApi(
 async function runOneRosterApi(
   baseUrl: string,
   credentials: Record<string, string>,
-  runId: string
-): Promise<{ success: boolean; summary: Record<string, number>; error?: string }> {
+  runId: string,
+  options?: IAdapterRunnerOptions
+): Promise<{
+  success: boolean;
+  summary: Record<string, number>;
+  error?: string;
+  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+}> {
   try {
     const { OneRosterAdapter } = await import('@scholaracle/connector');
     const adapter = new OneRosterAdapter();
@@ -320,10 +352,12 @@ async function runOneRosterApi(
       accessToken: credentials['accessToken'],
     });
 
+    const sourceId = options?.sourceId ?? runId;
+    const displayName = options?.displayName ?? 'OneRoster';
     const envelope = await adapter.fetchEnvelope({
       runId,
-      sourceId: runId,
-      displayName: 'OneRoster',
+      sourceId,
+      displayName,
       portalBaseUrl: baseUrl,
     });
 
@@ -332,7 +366,7 @@ async function runOneRosterApi(
       (o: { entity: string }) => o.entity === 'assignment'
     ).length;
 
-    return { success: true, summary: { courses, assignments } };
+    return { success: true, summary: { courses, assignments }, envelope };
   } catch (err) {
     return { success: false, summary: {}, error: (err as Error).message };
   }

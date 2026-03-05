@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { NotificationService, type IProcessAlertResult } from '@scholaracle/agents';
+import { NotificationService, type IProcessAlertResult, MongoQueue } from '@scholaracle/agents';
 import { Alert, AlertType, NotificationError } from '@scholaracle/contracts';
 
 export interface ICreateAlertRequest {
@@ -60,17 +60,26 @@ function formatNotificationResponse(result: IProcessAlertResult): Record<string,
   };
 }
 
+export interface IAlertsRouterOptions {
+  /** When set, POST /api/alerts enqueues a notify job and returns 202; otherwise processes in-process and returns 201. */
+  readonly queue?: MongoQueue;
+}
+
 /**
  * Handle alert creation request.
+ * When queue is provided, enqueues a notify job and returns 202.
+ * Otherwise processes in-process and returns 201.
  *
  * @param req - Express request
  * @param res - Express response
- * @param notificationService - Notification service
+ * @param notificationService - Notification service (used when queue is not provided)
+ * @param options - Optional queue for async processing
  */
 async function handleCreateAlert(
   req: Request,
   res: Response,
-  notificationService: NotificationService
+  notificationService: NotificationService,
+  options: IAlertsRouterOptions = {}
 ): Promise<void> {
   try {
     const alertData = req.body as ICreateAlertRequest;
@@ -91,6 +100,28 @@ async function handleCreateAlert(
       userId: alertData.userId,
       relatedData: alertData.relatedData ?? {},
     });
+
+    if (options.queue) {
+      const jobId = await options.queue.add(
+        'notify',
+        'deliver-notification',
+        {
+          alert: {
+            studentId: alert.studentId,
+            type: alert.type,
+            severity: alert.severity,
+            relatedData: alert.relatedData,
+            ...(alert.userId != null && { userId: alert.userId }),
+          },
+        },
+        { maxAttempts: 5 }
+      );
+      res.status(202).json({
+        jobId,
+        message: 'Notification queued',
+      });
+      return;
+    }
 
     const result = await notificationService.processAlert(alert);
 
@@ -119,15 +150,20 @@ async function handleCreateAlert(
 
 /**
  * Create alerts router with notification service dependency.
+ * When options.queue is provided, POST /api/alerts enqueues and returns 202; otherwise processes in-process and returns 201.
  *
- * @param notificationService - Notification service instance
+ * @param notificationService - Notification service instance (used when queue is not provided)
+ * @param options - Optional queue for async processing
  * @returns Express router
  */
-export function alertsRouter(notificationService: NotificationService): Router {
+export function alertsRouter(
+  notificationService: NotificationService,
+  options: IAlertsRouterOptions = {}
+): Router {
   const router = Router();
 
   router.post('/', (req: Request, res: Response) => {
-    void handleCreateAlert(req, res, notificationService);
+    void handleCreateAlert(req, res, notificationService, options);
   });
 
   return router;

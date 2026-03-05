@@ -16,6 +16,7 @@ export class SendGridTransport {
     const [response] = await this._mailService.send({
       to: envelope.to,
       from: envelope.from,
+      ...(envelope.replyTo && { replyTo: envelope.replyTo }),
       subject: envelope.subject,
       text: envelope.text,
       html: envelope.html,

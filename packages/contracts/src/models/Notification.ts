@@ -4,6 +4,7 @@ import { NotificationChannel } from '../enums/NotificationChannel';
 import { AgentType } from '../enums/AgentType';
 
 export interface NotificationData {
+  readonly id?: string;
   readonly agentType: AgentType;
   readonly studentId: string;
   readonly userId: string;
@@ -15,6 +16,21 @@ export interface NotificationData {
   readonly channels?: NotificationChannel[];
   readonly scheduledFor?: Date;
   readonly actions?: NotificationAction[];
+}
+
+/** Serializable payload for queue/worker; includes id for idempotency. */
+export interface INotificationPayload {
+  readonly id: string;
+  readonly agentType: AgentType;
+  readonly studentId: string;
+  readonly userId: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly priority: NotificationPriority;
+  readonly triggerType: string;
+  readonly triggerData?: unknown;
+  readonly actions?: NotificationAction[];
+  readonly channels?: NotificationChannel[];
 }
 
 export interface NotificationAction {
@@ -50,7 +66,7 @@ export class Notification {
   constructor(data: NotificationData) {
     this._validate(data);
 
-    this.id = uuidv4();
+    this.id = data.id ?? uuidv4();
     this.agentType = data.agentType;
     this.studentId = data.studentId;
     this.userId = data.userId;
@@ -84,6 +100,26 @@ export class Notification {
   public updateContent(subject: string, body: string): void {
     this.subject = subject;
     this.body = body;
+  }
+
+  /**
+   * Build a Notification from a serialized payload (e.g. from a deliver job).
+   * Used when reconstructing for DeliveryRouter.route in two-phase delivery.
+   */
+  public static fromPayload(payload: INotificationPayload): Notification {
+    return new Notification({
+      id: payload.id,
+      agentType: payload.agentType,
+      studentId: payload.studentId,
+      userId: payload.userId,
+      subject: payload.subject,
+      body: payload.body,
+      priority: payload.priority,
+      triggerType: payload.triggerType,
+      triggerData: payload.triggerData,
+      actions: payload.actions,
+      channels: payload.channels,
+    });
   }
 
   private _validate(data: NotificationData): void {

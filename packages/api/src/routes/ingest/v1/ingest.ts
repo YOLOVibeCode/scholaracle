@@ -25,12 +25,15 @@ import {
   AlertRepository,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import type { MongoQueue } from '@scholaracle/agents';
 import { decryptCredentials } from '../../../utils/credentialsCipher';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  /** When set, enqueue notify jobs after creating alerts so notifications are delivered. */
+  readonly queue?: MongoQueue;
 }
 
 function randomUserCode(): string {
@@ -120,12 +123,35 @@ function validateOp(op: ISlcDeltaOp): { valid: boolean; error?: string } {
 async function generateAlertsFromIngestedAssignments(params: {
   readonly database: Db;
   readonly userId: string;
+  readonly queue?: MongoQueue;
 }): Promise<void> {
   const userRepo = new UserRepository(params.database);
   const alertRepo = new AlertRepository(params.database);
+  const studentRepo = new StudentRepository(params.database);
 
   const user = await userRepo.findById(params.userId);
   if (!user) return;
+
+  /** Map assignment studentExternalId -> Student MongoDB _id for notify job payloads. */
+  let studentIdByExternal: Map<string, string> | undefined;
+  if (params.queue) {
+    const students = await studentRepo.findOwnedByUserId(params.userId);
+    studentIdByExternal = new Map<string, string>();
+    for (const s of students) {
+      if (s.studentId && s._id) studentIdByExternal.set(s.studentId, s._id.toString());
+    }
+    if (students.length === 1 && students[0]?._id) {
+      studentIdByExternal.set('*', students[0]._id.toString());
+    }
+  }
+
+  function resolveStudentIdForJob(studentExternalId: string): string | undefined {
+    if (!studentIdByExternal) return undefined;
+    return (
+      studentIdByExternal.get(studentExternalId) ??
+      (studentIdByExternal.has('*') ? studentIdByExternal.get('*') : undefined)
+    );
+  }
 
   const daysBeforeDeadline = user.preferences.alerts?.daysBeforeDeadline ?? 2;
   const now = new Date();
@@ -178,9 +204,10 @@ async function generateAlertsFromIngestedAssignments(params: {
       });
       if (existing) continue;
 
+      const studentExtId = (doc['studentExternalId'] as string | undefined) ?? 'unknown-student';
       await alertRepo.create({
         userId: params.userId,
-        studentId: (doc['studentExternalId'] as string | undefined) ?? 'unknown-student',
+        studentId: studentExtId,
         type: AlertType.MISSING_ASSIGNMENT,
         severity: 'critical',
         message: `Missing assignment: ${title}`,
@@ -196,7 +223,39 @@ async function generateAlertsFromIngestedAssignments(params: {
           termExternalId: doc['termExternalId'],
         },
       });
-
+      if (params.queue) {
+        const jobStudentId = resolveStudentIdForJob(studentExtId);
+        if (jobStudentId) {
+          void params.queue
+            .add(
+              'notify',
+              'deliver-notification',
+              {
+                alert: {
+                  studentId: jobStudentId,
+                  type: AlertType.MISSING_ASSIGNMENT,
+                  severity: 'critical',
+                  relatedData: {
+                    fingerprint,
+                    dueAt,
+                    title,
+                    provider: doc['provider'],
+                    adapterId: doc['adapterId'],
+                    externalId: doc['externalId'],
+                    courseExternalId: doc['courseExternalId'],
+                    institutionExternalId: doc['institutionExternalId'],
+                    termExternalId: doc['termExternalId'],
+                  },
+                  userId: params.userId,
+                },
+              },
+              { maxAttempts: 5 }
+            )
+            .catch((err: unknown) => {
+              console.error('Ingest: failed to enqueue notify job for missing assignment', err);
+            });
+        }
+      }
       continue;
     }
 
@@ -209,9 +268,10 @@ async function generateAlertsFromIngestedAssignments(params: {
     });
     if (existing) continue;
 
+    const studentExtId = (doc['studentExternalId'] as string | undefined) ?? 'unknown-student';
     await alertRepo.create({
       userId: params.userId,
-      studentId: (doc['studentExternalId'] as string | undefined) ?? 'unknown-student',
+      studentId: studentExtId,
       type: AlertType.DEADLINE,
       severity: 'warning',
       message: `Due soon: ${title}`,
@@ -227,6 +287,39 @@ async function generateAlertsFromIngestedAssignments(params: {
         termExternalId: doc['termExternalId'],
       },
     });
+    if (params.queue) {
+      const jobStudentId = resolveStudentIdForJob(studentExtId);
+      if (jobStudentId) {
+        void params.queue
+          .add(
+            'notify',
+            'deliver-notification',
+            {
+              alert: {
+                studentId: jobStudentId,
+                type: AlertType.DEADLINE,
+                severity: 'warning',
+                relatedData: {
+                  fingerprint,
+                  dueAt,
+                  title,
+                  provider: doc['provider'],
+                  adapterId: doc['adapterId'],
+                  externalId: doc['externalId'],
+                  courseExternalId: doc['courseExternalId'],
+                  institutionExternalId: doc['institutionExternalId'],
+                  termExternalId: doc['termExternalId'],
+                },
+                userId: params.userId,
+              },
+            },
+            { maxAttempts: 5 }
+          )
+          .catch((err: unknown) => {
+            console.error('Ingest: failed to enqueue notify job for deadline', err);
+          });
+      }
+    }
   }
 }
 
@@ -247,6 +340,7 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
 };
 
 const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
+const ACTIVITY_LOG_COLLECTION = 'slc_activity_log';
 
 /** Record pending student reconciliations for ops whose studentExternalId does not match an existing student. */
 async function recordPendingStudentReconciliations(params: {
@@ -327,6 +421,13 @@ async function applyOps(params: {
     };
 
     if (op.op === 'delete') {
+      let materialTitleForLog: string | undefined;
+      if (op.entity === 'courseMaterial') {
+        const existingDoc = await collection.findOne(baseFilter);
+        const rec = existingDoc?.['record'] as Record<string, unknown> | undefined;
+        materialTitleForLog =
+          (rec?.['title'] as string) || (key.externalId as string) || 'Course material';
+      }
       await collection.updateOne(
         baseFilter,
         { $set: { ...commonFields, deletedAt: new Date(op.observedAt) } },
@@ -348,12 +449,146 @@ async function applyOps(params: {
           );
         }
       }
+      if (op.entity === 'courseMaterial' && materialTitleForLog) {
+        const activityColl = params.database.collection(ACTIVITY_LOG_COLLECTION);
+        await activityColl.insertOne({
+          userId: params.userId,
+          studentExternalId: key.studentExternalId ?? undefined,
+          courseExternalId: key.courseExternalId ?? undefined,
+          eventType: 'material_removed',
+          title: materialTitleForLog,
+          metadata: { externalId: key.externalId, type: 'course_material' },
+          occurredAt: new Date(op.observedAt),
+          provider: key.provider,
+          adapterId: key.adapterId,
+        });
+      }
     } else {
-      await collection.updateOne(
-        baseFilter,
-        { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
-        { upsert: true }
-      );
+      if (op.entity === 'assignment' && op.record) {
+        const record = op.record as Record<string, unknown>;
+        const existing = await collection.findOne(baseFilter);
+        const prev = (existing?.['record'] as Record<string, unknown> | undefined) ?? {};
+        const gradeRelevant = (
+          r: Record<string, unknown>
+        ): { status: unknown; pointsEarned: unknown; pointsPossible: unknown; percentScore: unknown; letterGrade: unknown; teacherFeedback: unknown } => ({
+          status: r['status'],
+          pointsEarned: r['pointsEarned'],
+          pointsPossible: r['pointsPossible'],
+          percentScore: r['percentScore'],
+          letterGrade: r['letterGrade'],
+          teacherFeedback: r['teacherFeedback'],
+        });
+        const prevGrade = gradeRelevant(prev);
+        const nextGrade = gradeRelevant(record);
+        const changed =
+          prevGrade.status !== nextGrade.status ||
+          prevGrade.pointsEarned !== nextGrade.pointsEarned ||
+          prevGrade.pointsPossible !== nextGrade.pointsPossible ||
+          prevGrade.percentScore !== nextGrade.percentScore ||
+          prevGrade.letterGrade !== nextGrade.letterGrade ||
+          prevGrade.teacherFeedback !== nextGrade.teacherFeedback;
+
+        const historyEntry = {
+          observedAt: op.observedAt,
+          status: record['status'] ?? prev['status'],
+          pointsEarned: record['pointsEarned'],
+          pointsPossible: record['pointsPossible'],
+          percentScore: record['percentScore'],
+          letterGrade: record['letterGrade'],
+          teacherFeedback: record['teacherFeedback'],
+        };
+
+        if (changed) {
+          const updateWithHistory = {
+            $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record },
+            $push: { _history: { $each: [historyEntry], $slice: -100 } },
+          };
+          await collection.updateOne(baseFilter, updateWithHistory as never, { upsert: true });
+        } else {
+          await collection.updateOne(
+            baseFilter,
+            { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
+            { upsert: true }
+          );
+        }
+      } else if (op.entity === 'courseMaterial' && op.record) {
+        const existing = await collection.findOne(baseFilter);
+        const record = op.record as Record<string, unknown>;
+        const title =
+          (record['title'] as string) ?? (key.externalId as string) ?? 'Course material';
+        const activityColl = params.database.collection(ACTIVITY_LOG_COLLECTION);
+        if (existing) {
+          await collection.updateOne(
+            baseFilter,
+            {
+              $set: {
+                ...baseFilter,
+                ...commonFields,
+                deletedAt: null,
+                record: op.record,
+              },
+            },
+            { upsert: true }
+          );
+          const prev = (existing['record'] as Record<string, unknown>) ?? {};
+          const changed =
+            prev['title'] !== record['title'] ||
+            prev['type'] !== record['type'] ||
+            (prev['courseExternalId'] as string) !== (record['courseExternalId'] as string);
+          if (changed) {
+            await activityColl.insertOne({
+              userId: params.userId,
+              studentExternalId: key.studentExternalId ?? undefined,
+              courseExternalId: key.courseExternalId ?? undefined,
+              eventType: 'material_updated',
+              title,
+              metadata: {
+                externalId: key.externalId,
+                type: record['type'],
+                fileName: record['fileName'],
+              },
+              occurredAt: new Date(op.observedAt),
+              provider: key.provider,
+              adapterId: key.adapterId,
+            });
+          }
+        } else {
+          await collection.updateOne(
+            baseFilter,
+            {
+              $set: {
+                ...baseFilter,
+                ...commonFields,
+                deletedAt: null,
+                record: op.record,
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            { upsert: true }
+          );
+          await activityColl.insertOne({
+            userId: params.userId,
+            studentExternalId: key.studentExternalId ?? undefined,
+            courseExternalId: key.courseExternalId ?? undefined,
+            eventType: 'material_added',
+            title,
+            metadata: {
+              externalId: key.externalId,
+              type: record['type'],
+              fileName: record['fileName'],
+            },
+            occurredAt: new Date(op.observedAt),
+            provider: key.provider,
+            adapterId: key.adapterId,
+          });
+        }
+      } else {
+        await collection.updateOne(
+          baseFilter,
+          { $set: { ...baseFilter, ...commonFields, deletedAt: null, record: op.record } },
+          { upsert: true }
+        );
+      }
 
       if (op.entity === 'gradeSnapshot' && op.op === 'upsert') {
         const rec = op.record as Record<string, unknown> | undefined;
@@ -679,7 +914,11 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
       await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
       // Generate user-facing alerts from ingested tasks (value loop)
-      await generateAlertsFromIngestedAssignments({ database: config.database, userId });
+      await generateAlertsFromIngestedAssignments({
+        database: config.database,
+        userId,
+        queue: config.queue,
+      });
       res.status(200).json({
         success: true,
         committed: true,

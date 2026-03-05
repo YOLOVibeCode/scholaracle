@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, Calendar, GraduationCap } from 'lucide-react';
+import { Bell, Calendar, GraduationCap, ListTodo } from 'lucide-react';
 import { ActionBoard } from '@/components/dashboard/students/ActionBoard';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import { agendaApi, type IAgendaItem } from '@/lib/api/agenda';
@@ -211,7 +211,15 @@ export default function StudentViewDashboardPage() {
           </div>
 
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 flex flex-wrap gap-4">
+              <Link
+                href={`/dashboard/students/${studentId}/workflow`}
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                data-testid="student-view-workflow-link"
+              >
+                <ListTodo className="h-4 w-4" />
+                View workflow
+              </Link>
               <Link
                 href={`/dashboard/students/${studentId}/grades`}
                 className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
