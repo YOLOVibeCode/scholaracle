@@ -61,7 +61,7 @@ describe('DeadlineTemplate (Parent)', () => {
       expect(result.body).toContain('Lab Report');
     });
 
-    it('should include current grade in course', () => {
+    it('should use concise link-first body with dashboard CTA', () => {
       // Arrange
       const alert = new Alert({
         type: AlertType.DEADLINE,
@@ -81,57 +81,11 @@ describe('DeadlineTemplate (Parent)', () => {
       // Act
       const result = template.generate(alert);
 
-      // Assert
-      expect(result.body).toContain('92%');
-    });
-
-    it('should include grade weight percentage', () => {
-      // Arrange
-      const alert = new Alert({
-        type: AlertType.DEADLINE,
-        studentId: 'student-123',
-        severity: 'high',
-        relatedData: {
-          studentName: 'John Doe',
-          course: 'Math',
-          assignment: 'Chapter 5 Homework',
-          dueDate: '2024-11-20T23:59:00Z',
-          points: 25,
-          gradeWeight: 5,
-          currentGrade: 92,
-        },
-      });
-
-      // Act
-      const result = template.generate(alert);
-
-      // Assert
-      expect(result.body).toContain('5%');
-    });
-
-    it('should include action recommendation', () => {
-      // Arrange
-      const alert = new Alert({
-        type: AlertType.DEADLINE,
-        studentId: 'student-123',
-        severity: 'high',
-        relatedData: {
-          studentName: 'John Doe',
-          course: 'Math',
-          assignment: 'Chapter 5 Homework',
-          dueDate: '2024-11-20T23:59:00Z',
-          points: 25,
-          gradeWeight: 5,
-          currentGrade: 92,
-        },
-      });
-
-      // Act
-      const result = template.generate(alert);
-
-      // Assert
-      expect(result.body).toContain('Action:');
-      expect(result.body).toContain('Ensure');
+      // Assert (concise body; detail in dashboard)
+      expect(result.body).toContain('John Doe');
+      expect(result.body).toContain('Math');
+      expect(result.body).toContain('Chapter 5 Homework');
+      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include action links when provided', () => {

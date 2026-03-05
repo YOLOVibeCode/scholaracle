@@ -34,3 +34,7 @@ export {
   type ICourseRiskEnhancement,
   type GradeRiskLevel,
 } from './grade-risk-service';
+export {
+  DigestInsightService,
+  type IDigestInsightServiceConfig,
+} from './digest-insight-service';

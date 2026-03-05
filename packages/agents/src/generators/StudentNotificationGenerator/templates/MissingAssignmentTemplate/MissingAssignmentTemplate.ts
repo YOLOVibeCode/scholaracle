@@ -33,14 +33,9 @@ export class MissingAssignmentTemplate {
       assignmentUrl?: string;
     };
 
-    const { course, assignment, daysAgo, points, assignmentUrl } = relatedData;
+    const { course, assignment, daysAgo, assignmentUrl } = relatedData;
 
-    // REQUIRED: Use template literals (CODING_STANDARDS.md)
-    const body = `${course}: ${assignment}
-Due: ${daysAgo} days ago
-Value: ${points} points
-
-Submit immediately.`;
+    const body = `${course}: ${assignment} (due ${daysAgo} days ago). View details in your dashboard.`;
 
     const actions: ITemplateAction[] = [];
 

@@ -36,6 +36,7 @@ export class NotificationScheduler implements INotificationScheduler {
         'notify',
         'deliver-notification',
         {
+          notificationId: notification.id,
           alert: {
             studentId: alert.studentId,
             type: alert.type,

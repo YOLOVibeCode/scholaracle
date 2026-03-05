@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Save, Monitor, Link2, Unlink } from 'lucide-react';
+import { Save, Monitor, Link2, Unlink, History, Mail, MessageSquare, CheckCircle, XCircle, Clock, Pencil, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { settingsApi, type IUserSettingsResponse } from '@/lib/api/settings';
+import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
+import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 
 const ALERT_TYPE_KEYS = [
   'missing_assignment',
@@ -39,6 +40,12 @@ export default function SettingsPage() {
   const [weeklyDigestEnabled, setWeeklyDigestEnabled] = useState(true);
   const [weeklyDigestDay, setWeeklyDigestDay] = useState('sunday');
   const [weeklyDigestTime, setWeeklyDigestTime] = useState('18:00');
+  const [weekdaySlots, setWeekdaySlots] = useState<IDigestSlotApi[]>([]);
+  const [weekendSlots, setWeekendSlots] = useState<IDigestSlotApi[]>([]);
+  const [schoolDays, setSchoolDays] = useState<string[]>(['mon', 'tue', 'wed', 'thu', 'fri']);
+  const [holidayMode, setHolidayMode] = useState<'normal' | 'pause' | 'reduced'>('normal');
+  const [digestTab, setDigestTab] = useState<'weekday' | 'weekend'>('weekday');
+  const [editSlot, setEditSlot] = useState<{ group: 'weekday' | 'weekend'; index: number } | null>(null);
 
   const [tone, setTone] = useState<'formal' | 'casual' | 'encouraging'>('encouraging');
   const [frequency, setFrequency] = useState<'minimal' | 'balanced' | 'proactive'>('balanced');
@@ -58,6 +65,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [notificationHistory, setNotificationHistory] = useState<INotificationHistoryItem[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -80,6 +88,19 @@ export default function SettingsPage() {
         setWeeklyDigestEnabled(s.notifications.digestSchedule?.weekly?.enabled ?? true);
         setWeeklyDigestDay(s.notifications.digestSchedule?.weekly?.day ?? 'sunday');
         setWeeklyDigestTime(s.notifications.digestSchedule?.weekly?.time ?? '18:00');
+        const defaultWeekday = [
+          { time: '06:30', label: 'Morning', enabled: true },
+          { time: '16:00', label: 'After School', enabled: true },
+          { time: '20:00', label: 'Evening', enabled: true },
+        ];
+        setWeekdaySlots(
+          (s.notifications.digestSchedule?.weekdaySlots?.length ?? 0) > 0
+            ? [...(s.notifications.digestSchedule?.weekdaySlots ?? [])]
+            : defaultWeekday
+        );
+        setWeekendSlots([...(s.notifications.digestSchedule?.weekendSlots ?? [])]);
+        setSchoolDays([...(s.notifications.digestSchedule?.schoolDays ?? ['mon', 'tue', 'wed', 'thu', 'fri'])]);
+        setHolidayMode((s.notifications.digestSchedule?.holidayMode as 'normal' | 'pause' | 'reduced') ?? 'normal');
         setTone((s.notifications.tone as 'formal' | 'casual' | 'encouraging') ?? 'encouraging');
         setFrequency((s.notifications.frequency as 'minimal' | 'balanced' | 'proactive') ?? 'balanced');
         setGradeDrop(s.alerts.gradeDrop);
@@ -89,6 +110,7 @@ export default function SettingsPage() {
         setEmphasizeWeakSubjects(s.alerts.emphasizeWeakSubjects ?? true);
         setCelebrateWins(s.alerts.celebrateWins ?? true);
         if (s.alerts.enabledTypes) setEnabledTypes(s.alerts.enabledTypes as Record<string, { enabled: boolean; severity: string }>);
+        settingsApi.getNotificationHistory().then(setNotificationHistory).catch(() => {});
       } catch {
         // fallback handled by api
       } finally {
@@ -116,6 +138,10 @@ export default function SettingsPage() {
         digestSchedule: {
           daily: { enabled: dailyDigestEnabled, time: dailyDigestTime },
           weekly: { enabled: weeklyDigestEnabled, day: weeklyDigestDay, time: weeklyDigestTime },
+          weekdaySlots,
+          weekendSlots,
+          schoolDays,
+          holidayMode,
         },
         tone,
         frequency,
@@ -273,7 +299,9 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="notify-push">Push Notifications</Label>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Receive push notifications on your devices</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Receive push notifications on your devices (coming soon)
+                </p>
               </div>
               <input
                 id="notify-push"
@@ -282,7 +310,8 @@ export default function SettingsPage() {
                 type="checkbox"
                 checked={pushNotifications}
                 onChange={(e) => setPushNotifications(e.target.checked)}
-                disabled={isSaving || !isLoaded}
+                disabled
+                aria-label="Push notifications (coming soon)"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -365,22 +394,257 @@ export default function SettingsPage() {
 
             <div className="border-t pt-4 space-y-4">
               <h4 className="font-medium">Digest Schedule</h4>
-              <div className="flex items-center justify-between">
-                <Label>Daily Digest</Label>
-                <Switch checked={dailyDigestEnabled} onCheckedChange={setDailyDigestEnabled} disabled={isSaving || !isLoaded} />
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Choose when to receive your digest emails. School days vs weekend can have different times.
+              </p>
+
+              <div className="flex gap-2 border-b">
+                <button
+                  type="button"
+                  onClick={() => setDigestTab('weekday')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    digestTab === 'weekday'
+                      ? 'border-green-500 text-green-700 dark:text-green-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                  }`}
+                  data-testid="digest-tab-weekday"
+                >
+                  School Days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDigestTab('weekend')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    digestTab === 'weekend'
+                      ? 'border-green-500 text-green-700 dark:text-green-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                  }`}
+                  data-testid="digest-tab-weekend"
+                >
+                  Weekend
+                </button>
               </div>
-              {dailyDigestEnabled && (
-                <div className="space-y-2">
-                  <Label htmlFor="daily-time">Send at</Label>
-                  <Input
-                    id="daily-time"
-                    type="time"
-                    value={dailyDigestTime}
-                    onChange={(e) => setDailyDigestTime(e.target.value)}
-                    disabled={isSaving || !isLoaded}
-                  />
+
+              {digestTab === 'weekday' && (
+                <div className="flex flex-wrap gap-3 items-center">
+                  {weekdaySlots.map((slot, index) => {
+                    const [h, m] = slot.time.split(':').map(Number);
+                    const displayTime = h === 0 ? '12:' + String(m).padStart(2, '0') + ' AM' : h < 12 ? `${h}:${String(m).padStart(2, '0')} AM` : h === 12 ? '12:' + String(m).padStart(2, '0') + ' PM' : `${h - 12}:${String(m).padStart(2, '0')} PM`;
+                    return (
+                      <div key={`wd-${index}-${slot.time}`} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={isSaving || !isLoaded}
+                          onClick={() => {
+                            setWeekdaySlots((prev) =>
+                              prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
+                            );
+                          }}
+                          className={`flex flex-col items-center rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                            slot.enabled
+                              ? 'border-green-500 bg-green-50 text-green-700 dark:border-green-400 dark:bg-green-900/30 dark:text-green-300'
+                              : 'border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                          }`}
+                          data-testid={`digest-weekday-${slot.time}`}
+                        >
+                          <span className="text-base font-semibold">{displayTime}</span>
+                          <span className="text-xs opacity-75">{slot.label}</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Edit time"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditSlot({ group: 'weekday', index });
+                          }}
+                          disabled={isSaving || !isLoaded}
+                          className="p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          data-testid={`edit-weekday-${index}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        {weekdaySlots.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label="Remove slot"
+                            onClick={() => setWeekdaySlots((prev) => prev.filter((_, i) => i !== index))}
+                            disabled={isSaving || !isLoaded}
+                            className="p-2 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {weekdaySlots.length < 10 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWeekdaySlots((prev) => [...prev, { time: '12:00', label: 'Custom', enabled: true }])}
+                      disabled={isSaving || !isLoaded}
+                      data-testid="add-weekday-slot"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add time
+                    </Button>
+                  )}
                 </div>
               )}
+
+              {digestTab === 'weekend' && (
+                <div className="flex flex-wrap gap-3 items-center">
+                  {weekendSlots.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No weekend digest times. Add one if you want digests on weekends.</p>
+                  ) : (
+                    weekendSlots.map((slot, index) => {
+                      const [h, m] = slot.time.split(':').map(Number);
+                      const displayTime = h === 0 ? '12:' + String(m).padStart(2, '0') + ' AM' : h < 12 ? `${h}:${String(m).padStart(2, '0')} AM` : h === 12 ? '12:' + String(m).padStart(2, '0') + ' PM' : `${h - 12}:${String(m).padStart(2, '0')} PM`;
+                      return (
+                        <div key={`we-${index}-${slot.time}`} className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={isSaving || !isLoaded}
+                            onClick={() => {
+                              setWeekendSlots((prev) =>
+                                prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
+                              );
+                            }}
+                            className={`flex flex-col items-center rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                              slot.enabled
+                                ? 'border-green-500 bg-green-50 text-green-700 dark:border-green-400 dark:bg-green-900/30 dark:text-green-300'
+                                : 'border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                            data-testid={`digest-weekend-${slot.time}`}
+                          >
+                            <span className="text-base font-semibold">{displayTime}</span>
+                            <span className="text-xs opacity-75">{slot.label}</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Edit time"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditSlot({ group: 'weekend', index });
+                            }}
+                            disabled={isSaving || !isLoaded}
+                            className="p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            data-testid={`edit-weekend-${index}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Remove slot"
+                            onClick={() => setWeekendSlots((prev) => prev.filter((_, i) => i !== index))}
+                            disabled={isSaving || !isLoaded}
+                            className="p-2 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                  {weekendSlots.length < 10 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWeekendSlots((prev) => [...prev, { time: '10:00', label: 'Weekend', enabled: true }])}
+                      disabled={isSaving || !isLoaded}
+                      data-testid="add-weekend-slot"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add time
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {editSlot && (editSlot.group === 'weekday' ? weekdaySlots[editSlot.index] : weekendSlots[editSlot.index]) && (
+                <EditDigestSlotDialog
+                  open={!!editSlot}
+                  onOpenChange={(open) => !open && setEditSlot(null)}
+                  slot={
+                    editSlot.group === 'weekday'
+                      ? weekdaySlots[editSlot.index]!
+                      : weekendSlots[editSlot.index]!
+                  }
+                  onSave={(updated) => {
+                    if (editSlot.group === 'weekday') {
+                      setWeekdaySlots((prev) => prev.map((s, i) => (i === editSlot.index ? updated : s)));
+                    } else {
+                      setWeekendSlots((prev) => prev.map((s, i) => (i === editSlot.index ? updated : s)));
+                    }
+                    setEditSlot(null);
+                  }}
+                  onRemove={
+                    editSlot.group === 'weekend'
+                      ? () => {
+                          setWeekendSlots((prev) => prev.filter((_, i) => i !== editSlot.index));
+                          setEditSlot(null);
+                        }
+                      : editSlot.group === 'weekday' && weekdaySlots.length > 1
+                        ? () => {
+                            setWeekdaySlots((prev) => prev.filter((_, i) => i !== editSlot.index));
+                            setEditSlot(null);
+                          }
+                        : undefined
+                  }
+                  allowRemove={editSlot.group === 'weekend' || (editSlot.group === 'weekday' && weekdaySlots.length > 1)}
+                />
+              )}
+
+              <div className="border-t pt-4 space-y-3">
+                <h5 className="text-sm font-medium text-gray-500 dark:text-gray-400">Holidays</h5>
+                <div className="flex flex-wrap items-center gap-4">
+                  <Label htmlFor="holiday-mode">During school holidays</Label>
+                  <select
+                    id="holiday-mode"
+                    value={holidayMode}
+                    onChange={(e) => setHolidayMode(e.target.value as 'normal' | 'pause' | 'reduced')}
+                    disabled={isSaving || !isLoaded}
+                    className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                    data-testid="holiday-mode"
+                  >
+                    <option value="normal">Normal (send digests as usual)</option>
+                    <option value="pause">Pause (no digests during breaks)</option>
+                    <option value="reduced">Reduced (only critical alerts)</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void settingsApi.suggestHolidays().then((r) => r && setToast(r.suggestion))}
+                    disabled={isSaving || !isLoaded}
+                    data-testid="ai-suggest-holidays"
+                  >
+                    AI Suggest
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-3">
+                <h5 className="text-sm font-medium text-gray-500 dark:text-gray-400">Advanced</h5>
+                <div className="flex items-center justify-between">
+                  <Label>Custom Daily Digest</Label>
+                  <Switch checked={dailyDigestEnabled} onCheckedChange={setDailyDigestEnabled} disabled={isSaving || !isLoaded} />
+                </div>
+                {dailyDigestEnabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="daily-time">Send at</Label>
+                    <Input
+                      id="daily-time"
+                      type="time"
+                      value={dailyDigestTime}
+                      onChange={(e) => setDailyDigestTime(e.target.value)}
+                      disabled={isSaving || !isLoaded}
+                    />
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between">
                 <Label>Weekly Digest</Label>
                 <Switch checked={weeklyDigestEnabled} onCheckedChange={setWeeklyDigestEnabled} disabled={isSaving || !isLoaded} />
@@ -584,6 +848,63 @@ export default function SettingsPage() {
           </CardFooter>
         </Card>
       </form>
+
+      <Card data-testid="notification-history">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Notification History
+          </CardTitle>
+          <CardDescription>Recent notifications sent to you</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {notificationHistory.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No notifications sent yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {notificationHistory.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-3 rounded-md border p-3"
+                  data-testid={`history-item-${item.id}`}
+                >
+                  <div className="mt-0.5">
+                    {item.channel === 'email' ? (
+                      <Mail className="h-4 w-4 text-blue-500" />
+                    ) : (
+                      <MessageSquare className="h-4 w-4 text-green-500" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">
+                        {item.subject ?? 'Notification'}
+                      </span>
+                      {item.status === 'sent' || item.status === 'delivered' ? (
+                        <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                      ) : item.status === 'failed' ? (
+                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                      ) : (
+                        <Clock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <span>{item.channel.toUpperCase()}</span>
+                      <span>&middot;</span>
+                      <span>{item.recipientEmail ?? item.recipientPhone ?? ''}</span>
+                      <span>&middot;</span>
+                      <span>{new Date(item.sentAt ?? item.createdAt).toLocaleString()}</span>
+                    </div>
+                    {item.status === 'failed' && item.failureReason && (
+                      <p className="text-xs text-red-500 mt-1">{item.failureReason}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

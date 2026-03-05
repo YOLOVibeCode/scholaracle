@@ -52,7 +52,7 @@ describe('DeadlineTemplate', () => {
       expect(result.body).toContain('Chapter 5 Homework');
     });
 
-    it('should include due date in body', () => {
+    it('should include due date in concise body', () => {
       // Arrange
       const alert = new Alert({
         type: AlertType.DEADLINE,
@@ -69,11 +69,12 @@ describe('DeadlineTemplate', () => {
       // Act
       const result = template.generate(alert);
 
-      // Assert
-      expect(result.body).toContain('Due:');
+      // Assert (formatted date appears in "due ..." and dashboard CTA)
+      expect(result.body).toMatch(/due.*Nov/);
+      expect(result.body).toContain('View details in your dashboard');
     });
 
-    it('should include points value in body', () => {
+    it('should use concise link-first body with dashboard CTA', () => {
       // Arrange
       const alert = new Alert({
         type: AlertType.DEADLINE,
@@ -91,28 +92,9 @@ describe('DeadlineTemplate', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.body).toContain('25 points');
-    });
-
-    it('should include action instruction', () => {
-      // Arrange
-      const alert = new Alert({
-        type: AlertType.DEADLINE,
-        studentId: 'student-123',
-        severity: 'high',
-        relatedData: {
-          course: 'Math',
-          assignment: 'Chapter 5 Homework',
-          dueDate: '2024-11-20T23:59:00Z',
-          points: 25,
-        },
-      });
-
-      // Act
-      const result = template.generate(alert);
-
-      // Assert
-      expect(result.body).toContain('Complete and submit');
+      expect(result.body).toContain('Math');
+      expect(result.body).toContain('Chapter 5 Homework');
+      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include action link when assignmentUrl is provided', () => {

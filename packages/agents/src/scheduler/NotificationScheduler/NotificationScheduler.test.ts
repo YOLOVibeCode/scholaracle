@@ -56,8 +56,41 @@ describe('NotificationScheduler', () => {
       const callArgs = mockMongoQueue.add.mock.calls[0];
       expect(callArgs?.[0]).toBe('notify');
       expect(callArgs?.[1]).toBe('deliver-notification');
-      const jobData = callArgs?.[2] as { alert?: unknown };
+      const jobData = callArgs?.[2] as { notificationId?: string; alert?: unknown };
+      expect(jobData?.notificationId).toBe(notification.id);
       expect(jobData?.alert).toBeDefined();
+    });
+
+    it('should include notificationId in job data so cancel can match pending jobs', async () => {
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+      const notification = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'user-456',
+        subject: 'Test',
+        body: 'Test body',
+        priority: NotificationPriority.HIGH,
+        triggerType: 'test',
+        scheduledFor: new Date(),
+      });
+      mockMongoQueue.add.mockResolvedValue('job-id-123');
+      mockMongoQueue.cancel = jest.fn().mockResolvedValue(true);
+
+      await notificationScheduler.schedule(notification, alert);
+      await notificationScheduler.cancel(notification.id);
+
+      expect(mockMongoQueue.add).toHaveBeenCalledWith(
+        'notify',
+        'deliver-notification',
+        expect.objectContaining({ notificationId: notification.id }),
+        expect.any(Object)
+      );
+      expect(mockMongoQueue.cancel).toHaveBeenCalledWith(notification.id);
     });
 
     it('should schedule notification for future delivery', async () => {

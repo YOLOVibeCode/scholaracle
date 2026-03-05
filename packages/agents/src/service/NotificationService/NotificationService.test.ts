@@ -1,7 +1,9 @@
+import type { INotificationAgent } from '@scholaracle/interfaces';
 import { NotificationService } from './NotificationService';
 import { StudentNotificationGenerator } from '../../generators/StudentNotificationGenerator';
 import { ParentNotificationGenerator } from '../../generators/ParentNotificationGenerator';
 import { DeliveryRouter } from '../../delivery/DeliveryRouter';
+import { MongoQueue } from '../../queue/MongoQueue';
 import {
   Alert,
   AlertType,
@@ -344,6 +346,368 @@ describe('NotificationService', () => {
       expect(userIds).toContain('contact2@example.com');
       expect(userIds).toContain('+15551111111');
       expect(userIds).toContain('+15552222222');
+    });
+  });
+
+  describe('constructor (agent array) and processAlert', () => {
+    it('constructs with INotificationAgent[] and DeliveryRouter', () => {
+      const mockAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(false),
+        generate: jest.fn(),
+      };
+      const mockRouter = { route: jest.fn() } as unknown as DeliveryRouter;
+      const svc = new NotificationService([mockAgent], mockRouter);
+      expect(svc).toBeDefined();
+    });
+
+    it('calls agent.handles() for each agent and skips agents that return false', async () => {
+      const alert = new Alert({
+        type: AlertType.MISSING_ASSIGNMENT,
+        studentId: 'stu-1',
+        severity: 'high',
+        relatedData: {},
+      });
+      const handlingAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(
+          new Notification({
+            agentType: AgentType.STUDENT,
+            studentId: 'stu-1',
+            userId: 'stu-1',
+            subject: 'Test',
+            body: 'Body',
+            priority: NotificationPriority.HIGH,
+            triggerType: alert.type,
+            channels: [NotificationChannel.EMAIL],
+          })
+        ),
+      };
+      const nonHandlingAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(false),
+        generate: jest.fn(),
+      };
+      const mockRouter = {
+        route: jest.fn().mockResolvedValue({
+          success: true,
+          channel: NotificationChannel.EMAIL,
+          messageId: 'id',
+          deliveredAt: new Date(),
+        }),
+      } as unknown as DeliveryRouter;
+      const svc = new NotificationService(
+        [nonHandlingAgent, handlingAgent],
+        mockRouter
+      );
+      await svc.processAlert(alert);
+      expect(nonHandlingAgent.handles).toHaveBeenCalledWith(alert);
+      expect(handlingAgent.handles).toHaveBeenCalledWith(alert);
+      expect(nonHandlingAgent.generate).not.toHaveBeenCalled();
+      expect(handlingAgent.generate).toHaveBeenCalledWith(alert);
+      expect(mockRouter.route).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls generate() and routes notification for each agent that handles the alert', async () => {
+      const alert = new Alert({
+        type: AlertType.DEADLINE,
+        studentId: 'stu-1',
+        severity: 'high',
+        relatedData: {},
+      });
+      const notif1 = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'stu-1',
+        userId: 'stu-1',
+        subject: 'Sub1',
+        body: 'Body1',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const notif2 = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'stu-1',
+        userId: 'stu-1',
+        subject: 'Sub2',
+        body: 'Body2',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const agent1: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notif1),
+      };
+      const agent2: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notif2),
+      };
+      const mockRouter = {
+        route: jest.fn().mockResolvedValue({
+          success: true,
+          channel: NotificationChannel.EMAIL,
+          messageId: 'id',
+          deliveredAt: new Date(),
+        }),
+      } as unknown as DeliveryRouter;
+      const svc = new NotificationService([agent1, agent2], mockRouter);
+      const result = await svc.processAlert(alert);
+      expect(agent1.generate).toHaveBeenCalledWith(alert);
+      expect(agent2.generate).toHaveBeenCalledWith(alert);
+      expect(mockRouter.route).toHaveBeenCalledTimes(2);
+      expect(notif1.sentAt).toBeDefined();
+      expect(notif2.sentAt).toBeDefined();
+      expect(result.deliveryResults).toHaveLength(2);
+    });
+
+    it('multiple agents can handle the same alert', async () => {
+      const alert = new Alert({
+        type: AlertType.GRADE_DROP,
+        studentId: 'stu-1',
+        severity: 'high',
+        relatedData: {},
+      });
+      const notifA = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'stu-1',
+        userId: 'stu-1',
+        subject: 'A',
+        body: 'A',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const notifB = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'stu-1',
+        userId: 'parent-1',
+        subject: 'B',
+        body: 'B',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const agentA: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notifA),
+      };
+      const agentB: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notifB),
+      };
+      const mockRouter = {
+        route: jest.fn().mockResolvedValue({
+          success: true,
+          channel: NotificationChannel.EMAIL,
+          messageId: 'id',
+          deliveredAt: new Date(),
+        }),
+      } as unknown as DeliveryRouter;
+      const svc = new NotificationService([agentA, agentB], mockRouter);
+      const result = await svc.processAlert(alert);
+      expect(agentA.generate).toHaveBeenCalledWith(alert);
+      expect(agentB.generate).toHaveBeenCalledWith(alert);
+      expect(mockRouter.route).toHaveBeenCalledWith(notifA, NotificationChannel.EMAIL);
+      expect(mockRouter.route).toHaveBeenCalledWith(notifB, NotificationChannel.EMAIL);
+      expect(result.studentNotification).toEqual(notifA);
+      expect(result.parentNotification).toEqual(notifB);
+    });
+  });
+
+  describe('processAlertEnqueueDeliver', () => {
+    it('should enqueue deliver jobs with resolved email in payload and correct channel', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const notif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Test',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.MISSING_ASSIGNMENT,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notif),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+      const resolved = [{ parentEmail: 'parent@example.com' }];
+
+      const result = await svc.processAlertEnqueueDeliver(alert, mockQueue, resolved);
+
+      expect(result.notifications).toHaveLength(1);
+      expect(result.deliveryJobIds).toHaveLength(1);
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'deliver',
+        'deliver-one',
+        {
+          notificationPayload: expect.objectContaining({
+            userId: 'parent@example.com',
+            subject: 'Test',
+            studentId: 'student-123',
+          }),
+          channel: NotificationChannel.EMAIL,
+        },
+        { maxAttempts: 5 }
+      );
+    });
+
+    it('should skip channels without recipient address (email only → only EMAIL job)', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job-id') } as unknown as jest.Mocked<MongoQueue>;
+      const notif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Test',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.MISSING_ASSIGNMENT,
+        channels: [NotificationChannel.EMAIL, NotificationChannel.SMS],
+      });
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notif),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+      const resolved = [{ parentEmail: 'only@example.com' }];
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue, resolved);
+
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'deliver',
+        'deliver-one',
+        expect.objectContaining({ channel: NotificationChannel.EMAIL }),
+        { maxAttempts: 5 }
+      );
+    });
+
+    it('should enqueue one deliver job per resolved recipient', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('id') } as unknown as jest.Mocked<MongoQueue>;
+      const notif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Test',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.MISSING_ASSIGNMENT,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(notif),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+      const resolved = [
+        { parentEmail: 'first@example.com' },
+        { parentEmail: 'second@example.com' },
+      ];
+
+      const result = await svc.processAlertEnqueueDeliver(alert, mockQueue, resolved);
+
+      expect(result.deliveryJobIds).toHaveLength(2);
+      expect(mockQueue.add).toHaveBeenCalledTimes(2);
+      const payloads = (mockQueue.add as jest.Mock).mock.calls.map(
+        (c: [string, string, { notificationPayload: { userId: string } }]) => c[2].notificationPayload.userId
+      );
+      expect(payloads).toContain('first@example.com');
+      expect(payloads).toContain('second@example.com');
+    });
+
+    it('should throw for legacy service (no agents)', async () => {
+      const mockQueue = { add: jest.fn() } as unknown as jest.Mocked<MongoQueue>;
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.MISSING_ASSIGNMENT,
+        severity: 'high',
+        relatedData: {},
+      });
+
+      await expect(
+        notificationService.processAlertEnqueueDeliver(alert, mockQueue)
+      ).rejects.toThrow('processAlertEnqueueDeliver requires agent-based NotificationService');
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deliverOne', () => {
+    it('should reconstruct notification and route to channel, return DeliveryResult', async () => {
+      const mockAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(false),
+        generate: jest.fn(),
+      };
+      const mockRouter = {
+        route: jest.fn().mockResolvedValue({
+          success: true,
+          channel: NotificationChannel.EMAIL,
+          messageId: 'msg-1',
+          deliveredAt: new Date(),
+        }),
+      } as unknown as jest.Mocked<DeliveryRouter>;
+      const svc = new NotificationService([mockAgent], mockRouter);
+      const payload = {
+        id: 'notif-id',
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'user@example.com',
+        subject: 'Sub',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: 'test',
+        channels: [NotificationChannel.EMAIL],
+      };
+
+      const result = await svc.deliverOne(payload, NotificationChannel.EMAIL);
+
+      expect(result.success).toBe(true);
+      expect(result.channel).toBe(NotificationChannel.EMAIL);
+      expect(result.messageId).toBe('msg-1');
+      expect(mockRouter.route).toHaveBeenCalledTimes(1);
+      const [notification] = (mockRouter.route as jest.Mock).mock.calls[0];
+      expect(notification.userId).toBe('user@example.com');
+      expect(notification.subject).toBe('Sub');
+    });
+
+    it('should propagate router error', async () => {
+      const mockAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(false),
+        generate: jest.fn(),
+      };
+      const err = new DeliveryError('SMTP failed', NotificationChannel.EMAIL, {});
+      const mockRouter = { route: jest.fn().mockRejectedValue(err) } as unknown as jest.Mocked<DeliveryRouter>;
+      const svc = new NotificationService([mockAgent], mockRouter);
+      const payload = {
+        id: 'notif-id',
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'user@example.com',
+        subject: 'Sub',
+        body: 'Body',
+        priority: NotificationPriority.HIGH,
+        triggerType: 'test',
+      };
+
+      await expect(svc.deliverOne(payload, NotificationChannel.EMAIL)).rejects.toThrow(DeliveryError);
     });
   });
 });

@@ -27,29 +27,16 @@ jest.mock('@scholaracle/connector', () => {
       authenticate: mockAuthenticate,
       fetchEnvelope: mockFetchEnvelope,
     })),
+    SkywardAdapter: jest.fn().mockImplementation(() => ({
+      authenticate: mockAuthenticate,
+      fetchEnvelope: mockFetchEnvelope,
+    })),
     OneRosterAdapter: jest.fn().mockImplementation(() => ({
       authenticate: mockAuthenticate,
       fetchEnvelope: mockFetchEnvelope,
     })),
   };
 });
-
-jest.mock('@scholaracle/connector/dist/harness/canvas-browser-scrape', () => ({
-  scrapeCanvasViaBrowser: jest.fn().mockResolvedValue({
-    courses: [
-      { assignments: { length: 2 }, files: { length: 1 } },
-      { assignments: { length: 1 }, files: { length: 0 } },
-    ],
-  }),
-}));
-
-jest.mock('@scholaracle/connector/dist/harness/skyward-browser-scrape', () => ({
-  scrapeSkywardComplete: jest.fn().mockResolvedValue({
-    courses: { length: 3 },
-    missingAssignments: { length: 5 },
-    attendance: { length: 10 },
-  }),
-}));
 
 describe('createAdapterRunner', () => {
   let db: Db;
@@ -73,11 +60,11 @@ describe('createAdapterRunner', () => {
       'run-1'
     );
     expect(result.success).toBe(true);
-    expect(result.summary).toEqual({ courses: 2, assignments: 3, grades: 1 });
+    expect(result.summary).toEqual({ courses: 2, assignments: 3, grades: 1, materials: 0 });
     expect(result.error).toBeUndefined();
   });
 
-  it('should route canvas with username+password to browser harness', async () => {
+  it('should return error when canvas has username+password but no API token', async () => {
     const result = await run(
       'canvas',
       'com.instructure.canvas',
@@ -85,8 +72,8 @@ describe('createAdapterRunner', () => {
       'https://canvas.example.com',
       'run-2'
     );
-    expect(result.success).toBe(true);
-    expect(result.summary).toEqual({ courses: 2, assignments: 3, files: 1 });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('API access token');
   });
 
   it('should return error when canvas has no valid credentials', async () => {
@@ -98,10 +85,10 @@ describe('createAdapterRunner', () => {
       'run-3'
     );
     expect(result.success).toBe(false);
-    expect(result.error).toContain('accessToken');
+    expect(result.error).toMatch(/API|access token/i);
   });
 
-  it('should route skyward with username+password and return summary', async () => {
+  it('should route skyward with username+password to SkywardAdapter and return summary', async () => {
     const result = await run(
       'skyward',
       'com.skyward.sis',
@@ -110,7 +97,7 @@ describe('createAdapterRunner', () => {
       'run-4'
     );
     expect(result.success).toBe(true);
-    expect(result.summary).toEqual({ courses: 3, assignments: 5, attendance: 10 });
+    expect(result.summary).toEqual({ courses: 2, assignments: 3, grades: 1, attendance: 0 });
   });
 
   it('should return error when skyward missing credentials', async () => {
@@ -123,6 +110,23 @@ describe('createAdapterRunner', () => {
     );
     expect(result.success).toBe(false);
     expect(result.error).toContain('username');
+  });
+
+  it('should return error when Skyward fetchEnvelope fails', async () => {
+    const { SkywardAdapter } = await import('@scholaracle/connector');
+    (SkywardAdapter as jest.Mock).mockImplementationOnce(() => ({
+      authenticate: jest.fn().mockResolvedValue(undefined),
+      fetchEnvelope: jest.fn().mockRejectedValue(new Error('Network error')),
+    }));
+    const result = await run(
+      'skyward',
+      'com.skyward.sis',
+      { username: 'u', password: 'p' },
+      'https://skyward.example.com',
+      'run-5b'
+    );
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Network error');
   });
 
   it('should route google-classroom with accessToken and return summary', async () => {

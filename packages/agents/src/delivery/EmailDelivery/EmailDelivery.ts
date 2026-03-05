@@ -11,6 +11,9 @@ import { buildBrandedEmail } from './emailTemplate';
 export interface IEmailDeliveryConfig {
   readonly fromEmail: string;
   readonly fromName: string;
+  readonly replyTo?: string;
+  /** Base URL for dashboard links (e.g. https://app.scholarmancy.com). When set, immediate emails get a "View in Dashboard" button. */
+  readonly dashboardBaseUrl?: string;
 }
 
 /**
@@ -38,13 +41,18 @@ export class EmailDelivery implements INotificationDelivery {
     }
 
     try {
-      const htmlBody = this._formatHtmlBody(notification.body, notification.subject);
+      const htmlBody = this._formatHtmlBody(
+        notification.body,
+        notification.subject,
+        notification.studentId
+      );
       const envelope: IEmailEnvelope = {
         to,
         from: {
           email: this._config.fromEmail,
           name: this._config.fromName,
         },
+        ...(this._config.replyTo && { replyTo: this._config.replyTo }),
         subject: notification.subject,
         text: notification.body,
         html: htmlBody,
@@ -93,9 +101,15 @@ export class EmailDelivery implements INotificationDelivery {
     return undefined;
   }
 
-  private _formatHtmlBody(body: string, subject: string): string {
+  private _formatHtmlBody(body: string, subject: string, studentId?: string): string {
     const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const bodyHtml = escapedBody.replace(/\n/g, '<br>');
+    let bodyHtml = escapedBody.replace(/\n/g, '<br>');
+    const baseUrl = this._config.dashboardBaseUrl?.trim();
+    if (baseUrl && studentId) {
+      const path = `/dashboard/students/${encodeURIComponent(studentId)}/workflow`;
+      const dashboardUrl = `${baseUrl.replace(/\/$/, '')}${path}`.replace(/"/g, '&quot;');
+      bodyHtml += `<p style="margin-top:20px;"><a href="${dashboardUrl}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">View in Dashboard</a></p>`;
+    }
     return buildBrandedEmail({ title: subject, bodyHtml });
   }
 }

@@ -3,21 +3,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, ListTodo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { studentsApi, type IStudent } from '@/lib/api/students';
 import { StudentOverviewTab } from '@/components/dashboard/students/StudentOverviewTab';
 import { StudentDataSourcesTab } from '@/components/dashboard/students/StudentDataSourcesTab';
 import { StudentAlertsTab } from '@/components/dashboard/students/StudentAlertsTab';
+import { StudentActivityTab } from '@/components/dashboard/students/StudentActivityTab';
 import { StudentGradesTab } from '@/components/dashboard/students/StudentGradesTab';
 import { ConnectSourceWizard } from '@/components/dashboard/students/ConnectSourceWizard';
 import { ManageParentsCard } from '@/components/dashboard/students/ManageParentsCard';
 import { StudentDocumentsTab } from '@/components/dashboard/students/StudentDocumentsTab';
 import { StudentTrendsTab } from '@/components/dashboard/students/StudentTrendsTab';
 
-type TabId = 'overview' | 'sources' | 'alerts' | 'grades' | 'documents' | 'parents' | 'trends';
+type TabId = 'overview' | 'sources' | 'alerts' | 'activity' | 'grades' | 'documents' | 'parents' | 'trends';
 
-const VALID_TABS: TabId[] = ['overview', 'sources', 'alerts', 'grades', 'documents', 'parents', 'trends'];
+const VALID_TABS: TabId[] = ['overview', 'sources', 'alerts', 'activity', 'grades', 'documents', 'parents', 'trends'];
 
 export default function EditStudentPage() {
   const router = useRouter();
@@ -148,6 +149,12 @@ export default function EditStudentPage() {
             {student?.grade ? `Grade ${student.grade}` : 'Update student information'}
           </p>
         </div>
+        <Button variant="outline" size="sm" asChild data-testid="button-workflow">
+          <Link href={`/dashboard/students/${studentId}/workflow`}>
+            <ListTodo className="mr-2 h-4 w-4" />
+            Workflow
+          </Link>
+        </Button>
         <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
           <Link href={`/dashboard/students/${studentId}/view`}>
             <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -157,12 +164,13 @@ export default function EditStudentPage() {
       </div>
 
       <div role="tablist" aria-label="Student sections" className="flex gap-2" data-testid="student-tabs">
-        {(['overview', 'sources', 'alerts', 'grades', 'documents', 'parents', 'trends'] as const).map((tabId) => {
+        {(['overview', 'sources', 'alerts', 'activity', 'grades', 'documents', 'parents', 'trends'] as const).map((tabId) => {
           const isActive = activeTab === tabId;
           const labels: Record<TabId, string> = {
             overview: 'Overview',
             sources: 'Data Sources',
             alerts: 'Alerts',
+            activity: 'Activity',
             grades: 'Grades',
             documents: 'Documents',
             parents: 'Parents',
@@ -227,6 +235,12 @@ export default function EditStudentPage() {
             student={student}
             onSaveOverrides={handleSaveOverrides}
           />
+        </div>
+      )}
+
+      {activeTab === 'activity' && (
+        <div id="tabpanel-activity" role="tabpanel" aria-labelledby="tab-activity">
+          <StudentActivityTab studentId={studentId} />
         </div>
       )}
 

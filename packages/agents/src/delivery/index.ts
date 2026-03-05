@@ -1,10 +1,16 @@
-export { EmailDelivery, SendGridTransport, SmtpTransport } from './EmailDelivery';
+export {
+  EmailDelivery,
+  SendGridTransport,
+  SmtpTransport,
+  buildDigestEmail,
+} from './EmailDelivery';
 export type {
   IEmailDeliveryConfig,
   IEmailTransport,
   IEmailEnvelope,
   IEmailTransportResult,
   ISmtpTransportConfig,
+  IBuildDigestEmailOptions,
 } from './EmailDelivery';
 /** No-op stub; push notifications are not implemented. Use EmailDelivery or SMSDelivery. */
 export { PushDelivery } from './PushDelivery';
