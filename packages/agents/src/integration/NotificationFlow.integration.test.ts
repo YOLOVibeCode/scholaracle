@@ -124,10 +124,18 @@ describe('NotificationFlow Integration', () => {
     // Initialize scheduler
     notificationScheduler = new NotificationScheduler(mongoQueue);
 
+    // Resolve recipients to real email so legacy processAlert delivers to mock transport
+    const resolveAllAlertRecipients = async (
+      _studentId: string
+    ): Promise<readonly { parentEmail?: string; parentPhone?: string; userId?: string }[]> => {
+      return [{ parentEmail: 'test-recipient@example.com', parentPhone: '+15551234567' }];
+    };
+
     // Initialize worker
     notificationWorker = new NotificationWorker(mongoQueue, notificationService, {
       pollIntervalMs: 100,
       concurrency: 5,
+      resolveAllAlertRecipients,
     });
   });
 
@@ -146,7 +154,7 @@ describe('NotificationFlow Integration', () => {
   });
 
   describe('End-to-End Flow', () => {
-    it.skip('should process alert through complete flow: Alert → Schedule → Worker → Delivery', async () => {
+    it('should process alert through complete flow: Alert → Schedule → Worker → Delivery', async () => {
       // Arrange: Create a missing assignment alert
       const alert = new Alert({
         studentId: 'student-123',
@@ -278,7 +286,7 @@ describe('NotificationFlow Integration', () => {
       await notificationWorker.stop();
     });
 
-    it.skip('should handle job failures and retries', async () => {
+    it('should handle job failures and retries', async () => {
       // Arrange: Create alert
       const alert = new Alert({
         studentId: 'student-789',
@@ -333,8 +341,7 @@ describe('NotificationFlow Integration', () => {
       await notificationWorker.stop();
     });
 
-    // TODO: Flaky in CI — worker completes jobs but mockEmailTransport.send not called; fix delivery path or timing.
-    it.skip('should process multiple alerts concurrently', async () => {
+    it('should process multiple alerts concurrently', async () => {
       // Arrange: Create multiple alerts
       const alerts = [
         new Alert({
@@ -392,7 +399,7 @@ describe('NotificationFlow Integration', () => {
       const pendingJobs = await database.collection('jobs').countDocuments({
         status: 'pending',
       });
-      expect(pendingJobs).toBe(3); // 3 alerts (worker generates both student+parent notifications per job)
+      expect(pendingJobs).toBe(3);
 
       // Start worker
       notificationWorker.start();

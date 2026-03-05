@@ -99,6 +99,8 @@ export interface IStudentData {
   readonly sharedWith?: readonly ISharedParent[];
   /** Owner's per-student alert preferences (opt-out, channels). */
   readonly ownerAlertPrefs?: IOwnerAlertPrefs;
+  /** Optional email where the student receives alert notifications (same content as parents). */
+  readonly alertEmail?: string;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -117,6 +119,8 @@ export class Student {
   public readonly alertPreferences?: IStudentAlertPreferences;
   public readonly sharedWith: readonly ISharedParent[];
   public readonly ownerAlertPrefs?: IOwnerAlertPrefs;
+  /** Email where the student receives alert notifications (same content as parents). */
+  public readonly alertEmail?: string;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -131,6 +135,7 @@ export class Student {
     this.alertPreferences = data.alertPreferences;
     this.sharedWith = data.sharedWith ?? [];
     this.ownerAlertPrefs = data.ownerAlertPrefs;
+    this.alertEmail = data.alertEmail;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }
@@ -170,6 +175,13 @@ export class Student {
         name: sp.name,
         channels,
         alertTypes: sp.alertTypes,
+        isPrimary: false,
+      });
+    }
+    if (this.alertEmail?.trim()) {
+      out.push({
+        email: this.alertEmail.trim(),
+        channels: ['email'],
         isPrimary: false,
       });
     }

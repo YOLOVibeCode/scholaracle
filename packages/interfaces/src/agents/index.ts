@@ -1,3 +1,5 @@
+export { IAlertFilter } from './IAlertFilter';
+export { INotificationAgent } from './INotificationAgent';
 export { INotificationGenerator } from './INotificationGenerator';
 export { INotificationDelivery } from './INotificationDelivery';
 export { INotificationScheduler } from './INotificationScheduler';

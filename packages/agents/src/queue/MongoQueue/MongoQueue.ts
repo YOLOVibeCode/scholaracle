@@ -43,6 +43,11 @@ export interface IQueueStats {
   readonly failed: number;
 }
 
+export interface IGetNextJobOptions {
+  /** When set, only claim jobs of this type (e.g. 'notify', 'sync'). */
+  readonly type?: string;
+}
+
 /**
  * MongoDB-based job queue implementation.
  * Provides atomic job claiming, retry logic, and stalled job detection.
@@ -97,17 +102,23 @@ export class MongoQueue {
   /**
    * Claim and return next job to process (atomic operation).
    * Only returns jobs that are scheduled for now or earlier.
+   * When options.type is set, only claims jobs of that type.
    *
+   * @param options - Optional filter: type (e.g. 'notify', 'sync')
    * @returns Next job or null if none available
    */
-  public async getNextJob(): Promise<IJob | null> {
+  public async getNextJob(options?: IGetNextJobOptions): Promise<IJob | null> {
     const now = new Date();
+    const filter: Record<string, unknown> = {
+      status: 'pending',
+      scheduledFor: { $lte: now },
+    };
+    if (options?.type != null) {
+      filter['type'] = options.type;
+    }
 
     const result = await this._jobs.findOneAndUpdate(
-      {
-        status: 'pending',
-        scheduledFor: { $lte: now },
-      },
+      filter,
       {
         $set: {
           status: 'processing',

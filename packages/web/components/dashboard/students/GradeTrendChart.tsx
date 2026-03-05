@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -10,8 +10,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
 } from 'recharts';
-import { studentsApi } from '@/lib/api/students';
+import { studentsApi, type IActivityEvent } from '@/lib/api/students';
 
 interface GradeTrendChartProps {
   studentId: string;
@@ -26,6 +27,15 @@ interface ChartDataPoint {
   provider: string;
 }
 
+interface EventMarker {
+  date: string;
+  label: string;
+  grade: number;
+  eventType: string;
+  title: string;
+  fill: string;
+}
+
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -38,9 +48,18 @@ function gradeColor(grade: number): string {
   return '#ef4444';
 }
 
+function eventMarkerColor(e: IActivityEvent): string {
+  if (e.eventType === 'alert_created') return '#ef4444';
+  if (e.eventType === 'grade_change') return e.severity === 'positive' ? '#10b981' : '#ef4444';
+  if (e.eventType === 'material_added' || e.eventType === 'material_updated' || e.eventType === 'material_removed') return '#3b82f6';
+  if (e.eventType === 'comment_added') return '#8b5cf6';
+  return '#64748b';
+}
+
 export function GradeTrendChart({ studentId, courseExternalId, courseName }: GradeTrendChartProps) {
   void courseName; // reserved for future use (e.g. chart title)
   const [data, setData] = useState<ChartDataPoint[]>([]);
+  const [activityEvents, setActivityEvents] = useState<readonly IActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadHistory = useCallback(async () => {
@@ -68,6 +87,36 @@ export function GradeTrendChart({ studentId, courseExternalId, courseName }: Gra
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    if (data.length < 2) return;
+    const from = data[0]!.date;
+    const to = data[data.length - 1]!.date;
+    studentsApi
+      .getActivityTimeline(studentId, { course: courseExternalId, from, to, limit: 100 })
+      .then((res) => setActivityEvents(res?.events ?? []))
+      .catch(() => setActivityEvents([]));
+  }, [studentId, courseExternalId, data]);
+
+  const markers = useMemo((): EventMarker[] => {
+    const byDate = new Map<string, ChartDataPoint>();
+    for (const d of data) byDate.set(d.date, d);
+    const out: EventMarker[] = [];
+    for (const e of activityEvents) {
+      const eventDate = e.occurredAt.slice(0, 10);
+      const point = byDate.get(eventDate);
+      if (!point) continue;
+      out.push({
+        date: point.date,
+        label: point.label,
+        grade: point.grade,
+        eventType: e.eventType,
+        title: e.title,
+        fill: eventMarkerColor(e),
+      });
+    }
+    return out;
+  }, [data, activityEvents]);
 
   if (loading) {
     return (
@@ -126,6 +175,18 @@ export function GradeTrendChart({ studentId, courseExternalId, courseName }: Gra
             }}
             formatter={(value: number | undefined) => [value != null ? `${value}%` : '—', 'Grade']}
           />
+          {markers.map((m, i) => (
+            <ReferenceDot
+              key={`${m.date}-${m.eventType}-${i}`}
+              x={m.label}
+              y={m.grade}
+              r={6}
+              fill={m.fill}
+              stroke="var(--card)"
+              strokeWidth={1}
+              label={{ value: m.title.length > 20 ? m.title.slice(0, 17) + '…' : m.title, position: 'top', fontSize: 10, fill: m.fill }}
+            />
+          ))}
           <ReferenceLine
             y={70}
             stroke="#ef4444"

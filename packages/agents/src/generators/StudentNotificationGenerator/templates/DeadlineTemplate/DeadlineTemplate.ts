@@ -21,17 +21,12 @@ export class DeadlineTemplate {
       assignmentUrl?: string;
     };
 
-    const { course, assignment, dueDate, points, assignmentUrl } = relatedData;
+    const { course, assignment, dueDate, assignmentUrl } = relatedData;
 
     const dueDateObj = new Date(dueDate);
     const formattedDate = this._formatDate(dueDateObj);
 
-    // REQUIRED: Use template literals (CODING_STANDARDS.md)
-    const body = `${course}: ${assignment}
-Due: ${formattedDate}
-Value: ${points} points
-
-Complete and submit.`;
+    const body = `${course}: ${assignment} (due ${formattedDate}). View details in your dashboard.`;
 
     const actions: ITemplateAction[] = [];
 

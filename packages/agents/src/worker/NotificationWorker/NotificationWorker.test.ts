@@ -1,7 +1,7 @@
 import { NotificationWorker } from './NotificationWorker';
 import { MongoQueue, type IJob } from '../../queue/MongoQueue';
 import { NotificationService } from '../../service/NotificationService';
-import { Notification, NotificationPriority, AgentType, AlertType } from '@scholaracle/contracts';
+import { Alert, Notification, NotificationPriority, AgentType, AlertType, NotificationChannel } from '@scholaracle/contracts';
 import type { ObjectId } from 'mongodb';
 
 describe('NotificationWorker', () => {
@@ -12,12 +12,15 @@ describe('NotificationWorker', () => {
   beforeEach(() => {
     mockMongoQueue = {
       getNextJob: jest.fn(),
+      add: jest.fn().mockResolvedValue('deliver-job-id'),
       complete: jest.fn(),
       fail: jest.fn(),
     } as unknown as jest.Mocked<MongoQueue>;
 
     mockNotificationService = {
       processAlert: jest.fn(),
+      processAlertEnqueueDeliver: jest.fn().mockResolvedValue({ notifications: [], deliveryJobIds: [] }),
+      deliverOne: jest.fn().mockResolvedValue({ success: true, channel: 'email', messageId: 'id', deliveredAt: new Date() }),
     } as unknown as jest.Mocked<NotificationService>;
 
     notificationWorker = new NotificationWorker(mockMongoQueue, mockNotificationService);
@@ -40,7 +43,19 @@ describe('NotificationWorker', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Assert
-      expect(mockMongoQueue.getNextJob).toHaveBeenCalled();
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'notify' });
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'deliver' });
+    });
+
+    it('should only claim notify jobs via getNextJob type filter', async () => {
+      mockMongoQueue.getNextJob.mockResolvedValue(null);
+
+      notificationWorker.start();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await notificationWorker.stop();
+
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'notify' });
+      expect(mockNotificationService.processAlertEnqueueDeliver).not.toHaveBeenCalled();
     });
   });
 
@@ -89,33 +104,21 @@ describe('NotificationWorker', () => {
         updatedAt: new Date(),
       };
 
-      mockNotificationService.processAlert.mockResolvedValue({
-        studentNotification: new Notification({
-          agentType: AgentType.STUDENT,
-          studentId: 'student-123',
-          userId: 'user-456',
-          subject: 'Test',
-          body: 'Test body',
-          priority: NotificationPriority.HIGH,
-          triggerType: 'test',
-        }),
-        parentNotification: new Notification({
-          agentType: AgentType.PARENT,
-          studentId: 'student-123',
-          userId: 'parent-456',
-          subject: 'Test',
-          body: 'Test body',
-          priority: NotificationPriority.HIGH,
-          triggerType: 'test',
-        }),
-        deliveryResults: [],
+      mockNotificationService.processAlertEnqueueDeliver.mockResolvedValue({
+        notifications: [],
+        deliveryJobIds: ['d1', 'd2'],
       });
 
       // Act
       await notificationWorker.processJob(job);
 
       // Assert
-      expect(mockNotificationService.processAlert).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledWith(
+        expect.any(Alert),
+        mockMongoQueue,
+        undefined
+      );
       expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
       expect(mockMongoQueue.fail).not.toHaveBeenCalled();
     });
@@ -145,7 +148,7 @@ describe('NotificationWorker', () => {
       };
 
       const processingError = new Error('Delivery failed');
-      mockNotificationService.processAlert.mockRejectedValue(processingError);
+      mockNotificationService.processAlertEnqueueDeliver.mockRejectedValue(processingError);
 
       // Act
       await notificationWorker.processJob(job);
@@ -177,6 +180,133 @@ describe('NotificationWorker', () => {
 
       // Assert
       expect(mockMongoQueue.fail).toHaveBeenCalled();
+    });
+
+    it('should process deliver job and call deliverOne then complete', async () => {
+      const jobId = 'deliver-job-1';
+      const notificationPayload = {
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'user-456',
+        subject: 'Test',
+        body: 'Test body',
+        priority: NotificationPriority.HIGH,
+        triggerType: 'test' as const,
+      };
+      const job: IJob = {
+        _id: { toString: (): string => jobId } as unknown as ObjectId,
+        type: 'deliver',
+        name: 'deliver-one',
+        data: { notificationPayload, channel: NotificationChannel.EMAIL },
+        scheduledFor: new Date(),
+        priority: 5,
+        status: 'processing',
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await notificationWorker.processJob(job);
+
+      expect(mockNotificationService.deliverOne).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.deliverOne).toHaveBeenCalledWith(
+        notificationPayload,
+        NotificationChannel.EMAIL
+      );
+      expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
+      expect(mockMongoQueue.fail).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to processAlert when processAlertEnqueueDeliver throws agent-based error', async () => {
+      const jobId = 'job-legacy';
+      const job: IJob = {
+        _id: { toString: (): string => jobId } as unknown as ObjectId,
+        type: 'notify',
+        name: 'deliver-notification',
+        data: {
+          alert: {
+            studentId: 'student-123',
+            type: AlertType.MISSING_ASSIGNMENT,
+            severity: 'high',
+            relatedData: {},
+          },
+        },
+        scheduledFor: new Date(),
+        priority: 5,
+        status: 'processing',
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockNotificationService.processAlertEnqueueDeliver.mockRejectedValue(
+        new Error('processAlertEnqueueDeliver requires agent-based NotificationService')
+      );
+      mockNotificationService.processAlert.mockResolvedValue({
+        studentNotification: new Notification({
+          agentType: AgentType.STUDENT,
+          studentId: 'student-123',
+          userId: 'user-456',
+          subject: 'Test',
+          body: 'Test body',
+          priority: NotificationPriority.HIGH,
+          triggerType: 'test',
+        }),
+        parentNotification: new Notification({
+          agentType: AgentType.PARENT,
+          studentId: 'student-123',
+          userId: 'parent-456',
+          subject: 'Test',
+          body: 'Test body',
+          priority: NotificationPriority.HIGH,
+          triggerType: 'test',
+        }),
+        deliveryResults: [],
+      });
+
+      await notificationWorker.processJob(job);
+
+      expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.processAlert).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.processAlert).toHaveBeenCalledWith(expect.any(Alert), undefined);
+      expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
+      expect(mockMongoQueue.fail).not.toHaveBeenCalled();
+    });
+
+    it('should fail deliver job when deliverOne throws', async () => {
+      const jobId = 'deliver-job-2';
+      const job: IJob = {
+        _id: { toString: (): string => jobId } as unknown as ObjectId,
+        type: 'deliver',
+        name: 'deliver-one',
+        data: {
+          notificationPayload: {
+            agentType: AgentType.STUDENT,
+            studentId: 's1',
+            userId: 'u1',
+            subject: 'S',
+            body: 'B',
+            priority: NotificationPriority.HIGH,
+            triggerType: 'test' as const,
+          },
+          channel: NotificationChannel.EMAIL,
+        },
+        scheduledFor: new Date(),
+        priority: 5,
+        status: 'processing',
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const err = new Error('SMTP failed');
+      mockNotificationService.deliverOne.mockRejectedValue(err);
+
+      await notificationWorker.processJob(job);
+
+      expect(mockMongoQueue.fail).toHaveBeenCalledWith(jobId, err);
+      expect(mockMongoQueue.complete).not.toHaveBeenCalled();
     });
   });
 
@@ -225,31 +355,18 @@ describe('NotificationWorker', () => {
         updatedAt: new Date(),
       };
 
-      mockMongoQueue.getNextJob
-        .mockResolvedValueOnce(job1)
-        .mockResolvedValueOnce(job2)
-        .mockResolvedValue(null);
+      let notifyCallCount = 0;
+      mockMongoQueue.getNextJob.mockImplementation((opts?: { type?: string }) => {
+        if (opts?.type === 'deliver') return Promise.resolve(null);
+        notifyCallCount++;
+        if (notifyCallCount === 1) return Promise.resolve(job1);
+        if (notifyCallCount === 2) return Promise.resolve(job2);
+        return Promise.resolve(null);
+      });
 
-      mockNotificationService.processAlert.mockResolvedValue({
-        studentNotification: new Notification({
-          agentType: AgentType.STUDENT,
-          studentId: 'student-123',
-          userId: 'user-456',
-          subject: 'Test',
-          body: 'Test body',
-          priority: NotificationPriority.HIGH,
-          triggerType: 'test',
-        }),
-        parentNotification: new Notification({
-          agentType: AgentType.PARENT,
-          studentId: 'student-123',
-          userId: 'parent-456',
-          subject: 'Test',
-          body: 'Test body',
-          priority: NotificationPriority.HIGH,
-          triggerType: 'test',
-        }),
-        deliveryResults: [],
+      mockNotificationService.processAlertEnqueueDeliver.mockResolvedValue({
+        notifications: [],
+        deliveryJobIds: [],
       });
 
       // Act
@@ -261,8 +378,9 @@ describe('NotificationWorker', () => {
       await notificationWorker.stop();
 
       // Assert
-      expect(mockMongoQueue.getNextJob).toHaveBeenCalledTimes(3);
-      expect(mockNotificationService.processAlert).toHaveBeenCalledTimes(2);
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'notify' });
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'deliver' });
+      expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledTimes(2);
     });
 
     it('should wait when no jobs available', async () => {

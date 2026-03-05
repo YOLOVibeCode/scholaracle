@@ -1,0 +1,35 @@
+---
+description: Railway deployment and CORS conventions; follow when changing deploy or API server config
+globs: "Dockerfile.*,railway.json,.github/workflows/deploy.yml,RAILWAY_DEPLOYMENT.md,.env.example,packages/api/src/server.ts"
+alwaysApply: false
+---
+
+# Railway Deployment Rules
+
+**Source of truth:** [RAILWAY_DEPLOYMENT.md](/RAILWAY_DEPLOYMENT.md). Any change to how we deploy must stay consistent with that doc and these rules.
+
+## Deployment package
+
+- **Three services:** api, web, workers. Each must use its own Dockerfile via **`RAILWAY_DOCKERFILE_PATH`** in Railway:
+  - **api** → `Dockerfile.api`
+  - **web** → `Dockerfile.web`
+  - **workers** → `Dockerfile.workers`
+- **Do not** remove or rename the per-service Dockerfiles. Do not add a single default Dockerfile that would be used by more than one service without setting `RAILWAY_DOCKERFILE_PATH` per service.
+- **Deploy workflow** (`.github/workflows/deploy.yml`): runs on push to `main` and `workflow_dispatch`; runs CI then `railway up --service api`, `--service workers`, `--service web`. Requires `RAILWAY_TOKEN` secret. Keep this order and service names unless the doc is updated.
+
+## CORS
+
+- **API only:** CORS is configured in `packages/api/src/server.ts` via `cors({ origin: allowedOrigins, credentials: true })`.
+- **Origins:** `allowedOrigins` = `process.env.CORS_ORIGINS?.split(',')` or default localhost. **Do not** hardcode production origins in code; they come from env.
+- **Production:** API service in Railway must have **`CORS_ORIGINS`** set to the public web origins (e.g. `https://scholarmancy.com,https://www.scholarmancy.com`). Document any new required env in `RAILWAY_DEPLOYMENT.md` and `.env.example` comments.
+
+## Env and docs
+
+- **`.env.example`:** Must list every env var used for deployment (CORS, API URL, Dockerfile path, etc.) with a short comment. Production values for CORS and `NEXT_PUBLIC_API_URL` must be documented in comments or in `RAILWAY_DEPLOYMENT.md`.
+- **`RAILWAY_DEPLOYMENT.md`:** When adding or changing a deployment step, env var, or service, update this doc so the “Deployment package”, “Base CORS rules”, and “Environment Variables” sections stay accurate.
+
+## Checklist before merging deploy-related changes
+
+- [ ] `RAILWAY_DOCKERFILE_PATH` remains set per service (doc + Railway dashboard).
+- [ ] CORS stays env-driven; no production origins in code.
+- [ ] `RAILWAY_DEPLOYMENT.md` and `.env.example` updated if env or steps changed.

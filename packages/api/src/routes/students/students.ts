@@ -127,6 +127,102 @@ export interface IActionBoardResponse {
   readonly buckets: readonly IActionBucket[];
 }
 
+/** Assignment status for workflow (aligns with ICourseAssignment). */
+export type WorkflowAssignmentStatus =
+  | 'missing'
+  | 'submitted'
+  | 'graded'
+  | 'late'
+  | 'unknown'
+  | 'not_started'
+  | 'in_progress'
+  | 'excused'
+  | 'pending';
+
+export interface IWorkflowAssignment {
+  readonly externalId: string;
+  readonly title: string;
+  readonly dueAt?: string;
+  readonly assignedAt?: string;
+  readonly status: WorkflowAssignmentStatus;
+  readonly category?: string;
+  readonly pointsPossible?: number;
+  readonly pointsEarned?: number;
+  readonly percentScore?: number;
+  readonly letterGrade?: string;
+  readonly isLate: boolean;
+  readonly isMissing: boolean;
+  readonly isOverdue: boolean;
+  readonly isUpcoming: boolean;
+  readonly courseExternalId: string;
+  readonly courseName: string;
+  readonly courseGrade?: number;
+  readonly courseLetterGrade?: string;
+  readonly teacherFeedback?: string;
+  readonly submittedAt?: string;
+  readonly gradedAt?: string;
+  readonly studentNote?: string;
+}
+
+export interface IAssignmentWorkflowResponse {
+  readonly studentId: string;
+  readonly studentName: string;
+  readonly assignments: readonly IWorkflowAssignment[];
+  readonly summary: {
+    readonly total: number;
+    readonly missing: number;
+    readonly late: number;
+    readonly graded: number;
+    readonly upcoming: number;
+  };
+}
+
+export interface IAssignmentHistoryEntry {
+  readonly observedAt: string;
+  readonly status: string;
+  readonly pointsEarned?: number;
+  readonly pointsPossible?: number;
+  readonly percentScore?: number;
+  readonly letterGrade?: string;
+  readonly teacherFeedback?: string;
+}
+
+export interface IAssignmentHistoryResponse {
+  readonly externalId: string;
+  readonly title: string;
+  readonly courseName: string;
+  readonly history: readonly IAssignmentHistoryEntry[];
+}
+
+export type ActivityEventType =
+  | 'grade_change'
+  | 'material_added'
+  | 'material_removed'
+  | 'material_updated'
+  | 'alert_created'
+  | 'comment_added'
+  | 'grade_snapshot';
+
+export interface IActivityEvent {
+  readonly id: string;
+  readonly eventType: ActivityEventType;
+  readonly occurredAt: string;
+  readonly courseExternalId?: string;
+  readonly courseName?: string;
+  readonly assignmentExternalId?: string;
+  readonly assignmentTitle?: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly severity?: 'positive' | 'negative' | 'neutral' | 'info';
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface IActivityTimelineResponse {
+  readonly studentId: string;
+  readonly events: readonly IActivityEvent[];
+  readonly hasMore: boolean;
+}
+
 function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
 }
@@ -769,6 +865,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         stats: student.stats,
         dataSources: student.dataSources,
         alertPreferences: student.alertPreferences,
+        alertEmail: student.alertEmail,
       });
     } catch (error) {
       res.status(500).json({
@@ -1683,6 +1780,821 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   });
 
   /**
+   * GET /api/students/:id/activity
+   * Unified activity timeline: grade changes, materials, alerts, comments, grade snapshots.
+   * Query: course, assignment, types (comma), from, to, limit.
+   */
+  router.get('/:id/activity', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId } = req.params;
+      if (!studentDbId) {
+        res.status(400).json({ success: false, error: 'Missing student ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const studentExternalId = student.studentId ?? '';
+      const assignmentFilter = {
+        userId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbId },
+          ...(studentExternalId ? [{ studentExternalId }] : []),
+        ],
+      };
+      const courseParam = (req.query['course'] as string)?.trim() || null;
+      const assignmentParam = (req.query['assignment'] as string)?.trim() || null;
+      const typesParam = (req.query['types'] as string)?.trim();
+      const typeSet =
+        typesParam?.length > 0
+          ? new Set(typesParam.split(',').map((t) => t.trim().toLowerCase()))
+          : null;
+      const fromParam = (req.query['from'] as string)?.trim();
+      const toParam = (req.query['to'] as string)?.trim();
+      const fromDate = fromParam ? new Date(fromParam) : null;
+      const toDate = toParam ? new Date(toParam) : null;
+      const limit = Math.min(
+        Math.max(1, parseInt(String(req.query['limit'] ?? 100), 10) || 100),
+        500
+      );
+
+      const db = config.database;
+      const assignmentsColl = db.collection('slc_assignments');
+      const coursesColl = db.collection('slc_courses');
+      const activityLogColl = db.collection('slc_activity_log');
+      const alertsColl = db.collection('alerts');
+      const commentsColl = db.collection('slc_assignment_comments');
+      const gradeHistoryColl = db.collection('slc_grade_history');
+
+      const assignFilter = { ...assignmentFilter } as Record<string, unknown>;
+      if (courseParam) assignFilter['courseExternalId'] = courseParam;
+      if (assignmentParam) assignFilter['externalId'] = assignmentParam;
+
+      const [assignmentDocs, courseDocs, activityDocs, alertDocs, commentDocs, gradeHistoryDocs] =
+        await Promise.all([
+          assignmentsColl.find(assignFilter).toArray(),
+          coursesColl.find({ userId, deletedAt: null }).toArray(),
+          activityLogColl
+            .find({
+              userId,
+              ...(studentExternalId ? { studentExternalId } : {}),
+              ...(courseParam ? { courseExternalId: courseParam } : {}),
+              ...(assignmentParam ? { assignmentExternalId: assignmentParam } : {}),
+              ...(fromDate ? { occurredAt: { $gte: fromDate } } : {}),
+              ...(toDate ? { occurredAt: { $lte: toDate } } : {}),
+            })
+            .toArray(),
+          alertsColl
+            .find({
+              userId,
+              studentId: studentDbId,
+              ...(fromDate ? { createdAt: { $gte: fromDate } } : {}),
+              ...(toDate ? { createdAt: { $lte: toDate } } : {}),
+            })
+            .toArray(),
+          commentsColl
+            .find({
+              userId,
+              deletedAt: { $in: [null, undefined] },
+              ...(assignmentParam ? { assignmentExternalId: assignmentParam } : {}),
+              ...(fromDate ? { createdAt: { $gte: fromDate } } : {}),
+              ...(toDate ? { createdAt: { $lte: toDate } } : {}),
+            })
+            .toArray(),
+          gradeHistoryColl
+            .find({
+              userId,
+              studentExternalId: studentExternalId || null,
+              ...(courseParam ? { courseExternalId: courseParam } : {}),
+              ...(fromParam ? { date: { $gte: fromParam } } : {}),
+              ...(toParam ? { date: { $lte: toParam } } : {}),
+            })
+            .toArray(),
+        ]);
+
+      const courseMap = new Map<string, string>();
+      for (const c of courseDocs) {
+        const extId = c['externalId'] as string;
+        const rec = c['record'] as Record<string, unknown> | undefined;
+        courseMap.set(extId, (rec?.['name'] as string) ?? extId);
+      }
+
+      const events: IActivityEvent[] = [];
+      const pushIfAllowed = (e: IActivityEvent) => {
+        if (typeSet && !typeSet.has(e.eventType)) return;
+        if (courseParam && e.courseExternalId !== courseParam) return;
+        if (assignmentParam && e.assignmentExternalId !== assignmentParam) return;
+        events.push(e);
+      };
+
+      for (const doc of assignmentDocs) {
+        const hist = (doc['_history'] as Array<{ observedAt: string; status?: string; pointsEarned?: number; pointsPossible?: number; percentScore?: number; letterGrade?: string; teacherFeedback?: string }>) ?? [];
+        const record = (doc['record'] ?? {}) as Record<string, unknown>;
+        const title = (record['title'] as string) ?? '';
+        const courseExtId = (doc['courseExternalId'] as string) ?? '';
+        const courseName = courseMap.get(courseExtId) ?? courseExtId;
+        const extId = (doc['externalId'] as string) ?? '';
+        if (courseParam && courseExtId !== courseParam) continue;
+        if (assignmentParam && extId !== assignmentParam) continue;
+        for (let i = 0; i < hist.length; i++) {
+          const h = hist[i]!;
+          const at = typeof h.observedAt === 'string' ? h.observedAt : new Date(h.observedAt).toISOString();
+          if (fromDate && new Date(at) < fromDate) continue;
+          if (toDate && new Date(at) > toDate) continue;
+          const prev = hist[i - 1];
+          const prevPct = prev?.percentScore;
+          const currPct = h.percentScore;
+          const severity: 'positive' | 'negative' | 'neutral' =
+            currPct != null && prevPct != null
+              ? currPct > prevPct
+                ? 'positive'
+                : currPct < prevPct
+                  ? 'negative'
+                  : 'neutral'
+              : 'neutral';
+          pushIfAllowed({
+            id: `grade-${extId}-${at}-${i}`,
+            eventType: 'grade_change',
+            occurredAt: at,
+            courseExternalId: courseExtId || undefined,
+            courseName: courseName || undefined,
+            assignmentExternalId: extId || undefined,
+            assignmentTitle: title || undefined,
+            title: `Grade update: ${title || 'Assignment'}`,
+            description:
+              currPct != null
+                ? `${currPct}%`
+                : h.pointsEarned != null && h.pointsPossible != null
+                  ? `${h.pointsEarned}/${h.pointsPossible}`
+                  : (h.status as string)?.replace('_', ' '),
+            severity,
+            metadata: { status: h.status, percentScore: h.percentScore, pointsEarned: h.pointsEarned, pointsPossible: h.pointsPossible },
+          });
+        }
+      }
+
+      for (const d of activityDocs) {
+        const at = (d['occurredAt'] as Date).toISOString();
+        const et = (d['eventType'] as string) ?? 'material_updated';
+        pushIfAllowed({
+          id: `activity-${(d['_id'] as ObjectId)?.toString() ?? at}`,
+          eventType: et as ActivityEventType,
+          occurredAt: at,
+          courseExternalId: d['courseExternalId'] as string | undefined,
+          courseName: courseMap.get((d['courseExternalId'] as string) ?? '') ?? undefined,
+          assignmentExternalId: d['assignmentExternalId'] as string | undefined,
+          title: (d['title'] as string) ?? 'Course material',
+          description: et === 'material_added' ? 'Added' : et === 'material_removed' ? 'Removed' : 'Updated',
+          severity: 'neutral',
+          metadata: d['metadata'] as Record<string, unknown> | undefined,
+        });
+      }
+
+      for (const a of alertDocs) {
+        const at = (a['createdAt'] as Date).toISOString();
+        const rel = (a['relatedData'] as Record<string, unknown>) ?? {};
+        const courseExtId = rel['courseExternalId'] as string | undefined;
+        if (courseParam && courseExtId !== courseParam) continue;
+        const severityMap: Record<string, 'positive' | 'negative' | 'neutral' | 'info'> = {
+          critical: 'negative',
+          warning: 'negative',
+          info: 'info',
+          positive: 'positive',
+        };
+        const sev = severityMap[(a['severity'] as string) ?? 'info'] ?? 'neutral';
+        pushIfAllowed({
+          id: `alert-${(a['_id'] as ObjectId)?.toString() ?? at}`,
+          eventType: 'alert_created',
+          occurredAt: at,
+          courseExternalId: courseExtId,
+          courseName: courseExtId ? courseMap.get(courseExtId) : undefined,
+          assignmentExternalId: rel['externalId'] as string | undefined,
+          assignmentTitle: rel['title'] as string | undefined,
+          title: (a['message'] as string) ?? 'Alert',
+          description: (a['type'] as string)?.replace('_', ' '),
+          severity: sev,
+          metadata: { type: a['type'], relatedData: rel },
+        });
+      }
+
+      for (const c of commentDocs) {
+        const at = (c['createdAt'] as Date).toISOString();
+        const courseExtId = c['courseExternalId'] as string;
+        const assignExtId = c['assignmentExternalId'] as string;
+        if (courseParam && courseExtId !== courseParam) continue;
+        if (assignmentParam && assignExtId !== assignmentParam) continue;
+        pushIfAllowed({
+          id: `comment-${(c['_id'] as ObjectId)?.toString() ?? at}`,
+          eventType: 'comment_added',
+          occurredAt: at,
+          courseExternalId: courseExtId || undefined,
+          courseName: courseMap.get(courseExtId ?? '') ?? undefined,
+          assignmentExternalId: assignExtId || undefined,
+          title: `${(c['authorName'] as string) ?? 'Someone'} commented`,
+          description: (c['body'] as string)?.slice(0, 80) ?? '',
+          severity: 'neutral',
+          metadata: { authorRole: c['authorRole'] },
+        });
+      }
+
+      for (let gi = 0; gi < gradeHistoryDocs.length; gi++) {
+        const g = gradeHistoryDocs[gi]!;
+        const dateStr = g['date'] as string;
+        const at = `${dateStr}T12:00:00.000Z`;
+        if (fromDate && new Date(at) < fromDate) continue;
+        if (toDate && new Date(at) > toDate) continue;
+        const courseExtId = (g['courseExternalId'] as string) ?? '';
+        if (courseParam && courseExtId !== courseParam) continue;
+        const gid = (g['_id'] as ObjectId)?.toString() ?? `snapshot-${courseExtId}-${dateStr}-${gi}`;
+        pushIfAllowed({
+          id: gid,
+          eventType: 'grade_snapshot',
+          occurredAt: at,
+          courseExternalId: courseExtId || undefined,
+          courseName: (courseMap.get(courseExtId) ?? courseExtId) || undefined,
+          title: `Course grade: ${courseMap.get(courseExtId) ?? courseExtId} — ${(g['percentGrade'] as number) ?? '—'}%`,
+          description: (g['letterGrade'] as string) ?? undefined,
+          severity: 'neutral',
+          metadata: { percentGrade: g['percentGrade'], date: dateStr },
+        });
+      }
+
+      events.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+      const hasMore = events.length > limit;
+      const sliced = events.slice(0, limit);
+
+      res.status(200).json({
+        studentId: studentDbId,
+        events: sliced,
+        hasMore,
+      } as IActivityTimelineResponse);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/students/:id/assignment-workflow
+   * Flat list of all assignments across courses with optional query filters.
+   */
+  router.get('/:id/assignment-workflow', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId } = req.params;
+      if (!studentDbId) {
+        res.status(400).json({ success: false, error: 'Missing student ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const studentExternalId = student.studentId ?? '';
+      const assignmentFilter = {
+        userId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbId },
+          ...(studentExternalId ? [{ studentExternalId }] : []),
+        ],
+      };
+
+      const assignmentsColl = config.database.collection('slc_assignments');
+      const coursesColl = config.database.collection('slc_courses');
+      const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
+
+      const [assignmentDocs, courseDocs, gradeDocs] = await Promise.all([
+        assignmentsColl.find(assignmentFilter).toArray(),
+        coursesColl.find({ userId, deletedAt: null }).toArray(),
+        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
+      ]);
+
+      const courseMap = new Map<string, string>();
+      for (const c of courseDocs) {
+        const extId = c['externalId'] as string;
+        const rec = c['record'] as Record<string, unknown> | undefined;
+        const name = (rec?.['name'] as string) ?? extId;
+        if (extId) courseMap.set(extId, name);
+      }
+
+      const latestGradeByCourse = new Map<
+        string,
+        { percent: number; asOf: string; letterGrade?: string }
+      >();
+      for (const g of gradeDocs) {
+        const gRec = g['record'] as Record<string, unknown> | undefined;
+        const courseExtId = (g['courseExternalId'] ?? gRec?.['courseExternalId']) as string | undefined;
+        if (!courseExtId) continue;
+        const asOf = (gRec?.['asOfDate'] as string) ?? '';
+        const raw = (gRec?.['percentGrade'] ?? gRec?.['grade']) as number | undefined;
+        const percent = typeof raw === 'number' ? raw : NaN;
+        if (isNaN(percent)) continue;
+        const prev = latestGradeByCourse.get(courseExtId);
+        if (!prev || asOf >= prev.asOf) {
+          latestGradeByCourse.set(courseExtId, {
+            percent,
+            asOf,
+            letterGrade: gRec?.['letterGrade'] as string | undefined,
+          });
+        }
+      }
+
+      const now = new Date();
+      const nowMs = now.getTime();
+
+      const statusParam = (req.query['status'] as string)?.trim();
+      const statusSet =
+        statusParam?.length > 0
+          ? new Set(statusParam.split(',').map((s) => s.trim().toLowerCase()))
+          : null;
+      const courseParam = (req.query['course'] as string)?.trim() || null;
+      const categoryParam = (req.query['category'] as string)?.trim();
+      const categorySet =
+        categoryParam?.length > 0
+          ? new Set(categoryParam.split(',').map((c) => c.trim()))
+          : null;
+      const fromParam = (req.query['from'] as string)?.trim();
+      const toParam = (req.query['to'] as string)?.trim();
+      const fromDate = fromParam ? new Date(fromParam) : null;
+      const toDate = toParam ? new Date(toParam) : null;
+      const upcomingOnly = req.query['upcoming'] === 'true' || req.query['upcoming'] === '1';
+
+      const assignments: IWorkflowAssignment[] = [];
+      for (const doc of assignmentDocs) {
+        const record = (doc['record'] ?? {}) as Record<string, unknown>;
+        const externalId = (doc['externalId'] as string) ?? '';
+        const courseExternalId = (doc['courseExternalId'] as string) ?? '';
+        const title = (record['title'] as string) ?? 'Assignment';
+        const dueAt = record['dueAt'] as string | undefined;
+        const assignedAt = record['assignedAt'] as string | undefined;
+        const rawStatus = (record['status'] as string) ?? 'unknown';
+        const status = rawStatus as WorkflowAssignmentStatus;
+        const category = record['category'] as string | undefined;
+        const pointsPossible =
+          typeof record['pointsPossible'] === 'number' ? record['pointsPossible'] : undefined;
+        const pointsEarned =
+          typeof record['pointsEarned'] === 'number' ? record['pointsEarned'] : undefined;
+        const percentScore =
+          typeof record['percentScore'] === 'number' ? record['percentScore'] : undefined;
+        const letterGrade = record['letterGrade'] as string | undefined;
+        const teacherFeedback = record['teacherFeedback'] as string | undefined;
+        const submittedAt = record['submittedAt'] as string | undefined;
+        const gradedAt = record['gradedAt'] as string | undefined;
+        const isLate = Boolean(record['isLate']);
+        const isMissing = Boolean(record['isMissing']);
+        const dueMs = dueAt ? new Date(dueAt).getTime() : null;
+        const isOverdue = dueMs != null && dueMs < nowMs;
+        const isUpcoming = dueMs != null && dueMs >= nowMs;
+
+        if (statusSet != null && !statusSet.has(rawStatus.toLowerCase())) continue;
+        if (courseParam != null && courseExternalId !== courseParam) continue;
+        if (categorySet != null && category != null && !categorySet.has(category)) continue;
+        if (fromDate != null && dueAt != null && new Date(dueAt) < fromDate) continue;
+        if (toDate != null && dueAt != null && new Date(dueAt) > toDate) continue;
+        if (upcomingOnly && !isUpcoming) continue;
+
+        const courseName = courseMap.get(courseExternalId) ?? courseExternalId;
+        const gradeInfo = latestGradeByCourse.get(courseExternalId);
+
+        const studentNote = (doc['studentNote'] as string) ?? undefined;
+
+        assignments.push({
+          externalId,
+          title,
+          dueAt,
+          assignedAt,
+          status,
+          category,
+          pointsPossible,
+          pointsEarned,
+          percentScore,
+          letterGrade,
+          isLate,
+          isMissing,
+          isOverdue,
+          isUpcoming,
+          courseExternalId,
+          courseName,
+          courseGrade: gradeInfo?.percent,
+          courseLetterGrade: gradeInfo?.letterGrade,
+          teacherFeedback,
+          submittedAt,
+          gradedAt,
+          studentNote,
+        });
+      }
+
+      let missing = 0;
+      let late = 0;
+      let graded = 0;
+      let upcoming = 0;
+      for (const a of assignments) {
+        if (a.isMissing || a.status === 'missing') missing++;
+        if (a.isLate || a.status === 'late') late++;
+        if (a.status === 'graded') graded++;
+        if (a.isUpcoming) upcoming++;
+      }
+
+      res.status(200).json({
+        studentId: studentDbId,
+        studentName: student.name,
+        assignments,
+        summary: {
+          total: assignments.length,
+          missing,
+          late,
+          graded,
+          upcoming,
+        },
+      } as IAssignmentWorkflowResponse);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/students/:id/assignments/:externalId/history
+   * Grade/status change history for a single assignment (from _history array on doc).
+   */
+  router.get('/:id/assignments/:externalId/history', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId, externalId: assignmentExternalId } = req.params;
+      if (!studentDbId || !assignmentExternalId) {
+        res.status(400).json({ success: false, error: 'Missing student ID or assignment external ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const studentExternalId = student.studentId ?? '';
+      const assignmentsColl = config.database.collection('slc_assignments');
+      const coursesColl = config.database.collection('slc_courses');
+
+      const doc = await assignmentsColl.findOne({
+        userId,
+        externalId: assignmentExternalId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbId },
+          ...(studentExternalId ? [{ studentExternalId }] : []),
+        ],
+      });
+
+      if (!doc) {
+        res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+
+      const record = (doc['record'] ?? {}) as Record<string, unknown>;
+      const title = (record['title'] as string) ?? 'Assignment';
+      const courseExternalId = (doc['courseExternalId'] as string) ?? '';
+      let courseName = courseExternalId;
+      if (courseExternalId) {
+        const courseDoc = await coursesColl.findOne({
+          userId,
+          externalId: courseExternalId,
+          deletedAt: null,
+        });
+        if (courseDoc) {
+          const rec = courseDoc['record'] as Record<string, unknown> | undefined;
+          courseName = (rec?.['name'] as string) ?? courseExternalId;
+        }
+      }
+
+      const rawHistory = (doc['_history'] as IAssignmentHistoryEntry[] | undefined) ?? [];
+      const history = rawHistory.slice().sort((a, b) => {
+        const tA = new Date(a.observedAt).getTime();
+        const tB = new Date(b.observedAt).getTime();
+        return tA - tB;
+      });
+
+      res.status(200).json({
+        externalId: assignmentExternalId,
+        title,
+        courseName,
+        history,
+      } as IAssignmentHistoryResponse);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * PUT /api/students/:id/assignments/:externalId/note
+   * Set student note (e.g. "What have you done?") on an assignment.
+   */
+  router.put('/:id/assignments/:externalId/note', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId, externalId: assignmentExternalId } = req.params;
+      if (!studentDbId || !assignmentExternalId) {
+        res.status(400).json({ success: false, error: 'Missing student ID or assignment external ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const body = req.body as { note?: string };
+      const note = typeof body.note === 'string' ? body.note.trim() : '';
+
+      const studentExternalId = student.studentId ?? '';
+      const assignmentsColl = config.database.collection('slc_assignments');
+
+      const result = await assignmentsColl.updateOne(
+        {
+          userId,
+          externalId: assignmentExternalId,
+          deletedAt: null,
+          $or: [
+            { studentId: studentDbId },
+            ...(studentExternalId ? [{ studentExternalId }] : []),
+          ],
+        },
+        { $set: { studentNote: note, updatedAt: new Date() } }
+      );
+
+      if (result.matchedCount === 0) {
+        res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+
+      res.status(200).json({ success: true, note });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  const COMMENTS_COLLECTION = 'slc_assignment_comments';
+
+  /**
+   * GET /api/students/:id/assignments/:externalId/comments
+   * List comments on an assignment (chronological).
+   */
+  router.get('/:id/assignments/:externalId/comments', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId, externalId: assignmentExternalId } = req.params;
+      if (!studentDbId || !assignmentExternalId) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing student ID or assignment external ID',
+        });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const assignmentsColl = config.database.collection('slc_assignments');
+      const assignmentDoc = await assignmentsColl.findOne({
+        userId,
+        externalId: assignmentExternalId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbId },
+          ...(student.studentId ? [{ studentExternalId: student.studentId }] : []),
+        ],
+      });
+      if (!assignmentDoc) {
+        res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+      const courseExternalId =
+        (assignmentDoc['courseExternalId'] as string) ||
+        ((assignmentDoc['record'] as Record<string, unknown>)?.['courseExternalId'] as string) ||
+        '';
+      const commentsColl = config.database.collection(COMMENTS_COLLECTION);
+      const cursor = commentsColl.find(
+        {
+          userId,
+          assignmentExternalId,
+          courseExternalId,
+          deletedAt: { $in: [null, undefined] },
+        },
+        { sort: { createdAt: 1 } }
+      );
+      const docs = await cursor.toArray();
+      const list = docs.map((d) => ({
+        id: (d['_id'] as ObjectId).toString(),
+        authorEmail: d['authorEmail'] as string,
+        authorName: d['authorName'] as string,
+        authorRole: d['authorRole'] as 'parent' | 'student' | 'owner',
+        body: d['body'] as string,
+        createdAt: (d['createdAt'] as Date).toISOString(),
+      }));
+      res.status(200).json(list);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/assignments/:externalId/comments
+   * Add a comment. Body: { body: string, authorName?: string }.
+   */
+  router.post('/:id/assignments/:externalId/comments', async (req: Request, res: Response) => {
+    try {
+      const authReq = req as IAuthenticatedRequest;
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const userEmail = authReq.userEmail ?? '';
+      const { id: studentDbId, externalId: assignmentExternalId } = req.params;
+      if (!studentDbId || !assignmentExternalId) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing student ID or assignment external ID',
+        });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const assignmentsColl = config.database.collection('slc_assignments');
+      const assignmentDoc = await assignmentsColl.findOne({
+        userId,
+        externalId: assignmentExternalId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbId },
+          ...(student.studentId ? [{ studentExternalId: student.studentId }] : []),
+        ],
+      });
+      if (!assignmentDoc) {
+        res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+      const courseExternalId =
+        (assignmentDoc['courseExternalId'] as string) ||
+        ((assignmentDoc['record'] as Record<string, unknown>)?.['courseExternalId'] as string) ||
+        '';
+      const bodyPayload = req.body as { body?: string; authorName?: string };
+      const body = typeof bodyPayload.body === 'string' ? bodyPayload.body.trim() : '';
+      if (!body) {
+        res.status(400).json({ success: false, error: 'Missing or empty body' });
+        return;
+      }
+      const authorName =
+        typeof bodyPayload.authorName === 'string' && bodyPayload.authorName.trim()
+          ? bodyPayload.authorName.trim()
+          : userEmail || 'User';
+      const isOwner = student.userId.toString() === userId;
+      const sharedContact = student.sharedWith?.find((s) => s.userId === userId);
+      const authorRole: 'parent' | 'student' | 'owner' = isOwner
+        ? 'owner'
+        : sharedContact
+          ? 'parent'
+          : 'owner';
+      const commentsColl = config.database.collection(COMMENTS_COLLECTION);
+      const now = new Date();
+      const insertResult = await commentsColl.insertOne({
+        userId,
+        assignmentExternalId,
+        courseExternalId,
+        studentExternalId: student.studentId ?? undefined,
+        authorEmail: userEmail,
+        authorName,
+        authorRole,
+        body,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const id = (insertResult.insertedId as ObjectId).toString();
+      res.status(201).json({
+        id,
+        authorEmail: userEmail,
+        authorName,
+        authorRole,
+        body,
+        createdAt: now.toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/students/:id/assignments/:externalId/comments/:commentId
+   * Soft-delete a comment. Author or account owner only.
+   */
+  router.delete(
+    '/:id/assignments/:externalId/comments/:commentId',
+    async (req: Request, res: Response) => {
+      try {
+        const userId = getUserId(req);
+        if (!userId) {
+          res.status(401).json({ success: false, error: 'Unauthorized' });
+          return;
+        }
+        const { id: studentDbId, externalId: assignmentExternalId, commentId } = req.params;
+        if (!studentDbId || !assignmentExternalId || !commentId) {
+          res.status(400).json({
+            success: false,
+            error: 'Missing student ID, assignment external ID, or comment ID',
+          });
+          return;
+        }
+        const student = await studentRepository.findById(studentDbId);
+        if (!student || !student.hasAccess(userId)) {
+          res.status(404).json({ success: false, error: 'Student not found' });
+          return;
+        }
+        let commentObjectId: ObjectId;
+        try {
+          commentObjectId = new ObjectId(commentId);
+        } catch {
+          res.status(400).json({ success: false, error: 'Invalid comment ID' });
+          return;
+        }
+        const commentsColl = config.database.collection(COMMENTS_COLLECTION);
+        const doc = await commentsColl.findOne({
+          _id: commentObjectId,
+          userId,
+          assignmentExternalId,
+          deletedAt: { $in: [null, undefined] },
+        });
+        if (!doc) {
+          res.status(404).json({ success: false, error: 'Comment not found' });
+          return;
+        }
+        const isAuthor = (doc['userId'] as string) === userId;
+        const isOwner = student.userId.toString() === userId;
+        if (!isAuthor && !isOwner) {
+          res.status(403).json({ success: false, error: 'Not allowed to delete this comment' });
+          return;
+        }
+        const now = new Date();
+        await commentsColl.updateOne(
+          { _id: commentObjectId },
+          { $set: { deletedAt: now, updatedAt: now } }
+        );
+        res.status(200).json({ success: true });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Internal server error',
+        });
+      }
+    }
+  );
+
+  /**
    * POST /api/students
    * Create a new student.
    */
@@ -1795,6 +2707,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         stats: student.stats,
         dataSources: student.dataSources,
         alertPreferences: student.alertPreferences,
+        alertEmail: student.alertEmail,
       });
     } catch (error) {
       res.status(500).json({
@@ -2438,7 +3351,20 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       await studentRepository.update(student._id!, { sharedWith: newShared });
 
-      // TODO: Send invite email via SendGrid
+      const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+      if (config.sendInviteEmail) {
+        void config.sendInviteEmail
+          .sendInvite({
+            to: normalizedEmail,
+            studentName: student.name,
+            studentId: student._id!.toString(),
+            inviteEmail: normalizedEmail,
+            baseUrl,
+          })
+          .catch((err: unknown) => {
+            console.error('[students] invite email failed', err);
+          });
+      }
 
       res.status(201).json({
         success: true,
