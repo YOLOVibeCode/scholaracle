@@ -51,6 +51,8 @@ export interface IBuildDigestEmailOptions {
   readonly items: readonly IEmailDigestPendingItem[];
   readonly dashboardUrl?: string;
   readonly studentName?: string;
+  /** When 'student', tone is direct and omits student name; when 'parent', includes student name and monitoring language. */
+  readonly recipientType?: 'parent' | 'student';
   /** AI-generated insight paragraph to include above the alert list. */
   readonly aiInsight?: string;
 }
@@ -59,13 +61,15 @@ export interface IBuildDigestEmailOptions {
  * Builds a single branded digest email with summary, compact alert rows, and View Dashboard CTA.
  */
 export function buildDigestEmail(opts: IBuildDigestEmailOptions): { subject: string; html: string } {
-  const { items, dashboardUrl, studentName, aiInsight } = opts;
+  const { items, dashboardUrl, studentName, recipientType, aiInsight } = opts;
   const n = items.length;
+  const isStudent = recipientType === 'student';
   const summaryLine =
     n === 0
       ? 'You have no new alerts.'
       : `You have ${n} new alert${n === 1 ? '' : 's'} since your last digest.`;
-  const studentLabel = studentName ? ` for ${escapeHtml(studentName)}` : '';
+  const studentLabel =
+    !isStudent && studentName ? ` for ${escapeHtml(studentName)}` : '';
 
   const alertRows = items.map((item) => {
     const borderColor = severityBorderColor(item.severity);
