@@ -542,6 +542,7 @@ async function applyOps(params: {
             prev['title'] !== record['title'] ||
             prev['type'] !== record['type'] ||
             (prev['courseExternalId'] as string) !== (record['courseExternalId'] as string);
+          // eslint-disable-next-line max-depth
           if (changed) {
             await activityColl.insertOne({
               userId: params.userId,
