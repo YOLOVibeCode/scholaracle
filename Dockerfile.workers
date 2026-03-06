@@ -27,8 +27,9 @@ COPY packages/e2e/package.json ./packages/e2e/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Install Chromium for Skyward browser scraper (connector depends on playwright)
-RUN npx playwright install --with-deps chromium
+    # Install Chromium for Skyward browser scraper (connector depends on playwright)
+    # Use pnpm exec since playwright is in the workspace
+    RUN pnpm exec playwright install --with-deps chromium
 
 # Development stage
 FROM base AS development
