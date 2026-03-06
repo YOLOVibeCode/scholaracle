@@ -62,6 +62,8 @@ export interface ILmsCredentials {
   readonly apiKey?: string;
   readonly username?: string;
   readonly password?: string;
+  /** For browser-based scrapers: 'direct' (username/password) or 'google_sso'. Defaults to 'direct'. */
+  readonly loginMethod?: 'direct' | 'google_sso';
 }
 
 /**
