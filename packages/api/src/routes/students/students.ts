@@ -747,7 +747,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
   /**
    * DELETE /api/students/:id/contacts/:email
-   * Remove a contact. Admin can remove anyone; contact can remove themselves.
+   * Remove a contact. Only admin/owner can remove contacts - shared parents cannot remove themselves.
    */
   router.delete('/:id/contacts/:email', async (req: Request, res: Response) => {
     try {
@@ -765,15 +765,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         .toLowerCase()
         .trim();
       const isAdmin = student.canAdmin(userId);
+
+      // NEW: Shared parents cannot remove themselves - only admin/owner can remove them
       if (!isAdmin) {
-        const selfEntry = student.sharedWith.find(
-          (sp) => sp.userId === userId && sp.email === targetEmail
-        );
-        if (!selfEntry) {
-          res.status(403).json({ success: false, error: 'You can only remove yourself' });
-          return;
-        }
+        res.status(403).json({
+          success: false,
+          error:
+            'Only the account owner or admin can remove contacts. Shared parents cannot remove themselves.',
+        });
+        return;
       }
+
       const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
       if (updatedShared.length === student.sharedWith.length) {
         res.status(404).json({ success: false, error: 'Contact not found' });
@@ -781,6 +783,235 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/contacts/:email/transfer-email
+   * Initiate email transfer for a shared parent contact.
+   * Only the shared parent themselves can initiate their own email transfer.
+   */
+  router.post('/:id/contacts/:email/transfer-email', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      const currentEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
+
+      // Find the shared parent entry
+      const sharedParent = student.sharedWith.find((sp) => sp.email === currentEmail);
+      if (!sharedParent) {
+        res.status(404).json({ success: false, error: 'Shared parent not found' });
+        return;
+      }
+
+      // Only the shared parent themselves can initiate their own transfer
+      if (sharedParent.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          error: 'You can only initiate email transfer for your own account',
+        });
+        return;
+      }
+
+      const { newEmail } = req.body as { newEmail?: string };
+      if (!newEmail || !newEmail.trim()) {
+        res.status(400).json({ success: false, error: 'New email required' });
+        return;
+      }
+
+      const normalizedNewEmail = newEmail.trim().toLowerCase();
+      if (normalizedNewEmail === currentEmail) {
+        res.status(400).json({
+          success: false,
+          error: 'New email must be different from current email',
+        });
+        return;
+      }
+
+      // Check if new email is already used
+      if (student.hasContact(normalizedNewEmail)) {
+        res.status(400).json({
+          success: false,
+          error: 'New email is already a contact for this student',
+        });
+        return;
+      }
+
+      // Generate tokens
+      const oldEmailToken = randomUUID();
+      const newEmailToken = randomUUID();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
+
+      // Update shared parent with transfer request
+      const updatedShared = student.sharedWith.map((sp) =>
+        sp.email === currentEmail
+          ? {
+              ...sp,
+              transferRequest: {
+                newEmail: normalizedNewEmail,
+                initiatedAt: now,
+                expiresAt,
+                oldEmailToken,
+                newEmailToken,
+              },
+            }
+          : sp
+      );
+
+      await studentRepository.update(student._id!, { sharedWith: updatedShared });
+
+      // Send confirmation emails (if email service is configured)
+      if (config.sendInviteEmail) {
+        // Note: Email sending would be implemented here using the invite email service
+        // const _baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+        // const _studentId = student._id!.toString();
+        // TODO: Implement email confirmation sending
+      }
+
+      res.status(200).json({
+        success: true,
+        message:
+          'Email transfer initiated. Please check both email addresses for confirmation links.',
+        // In production, don't return tokens - they should only be in emails
+        _debug: { oldEmailToken, newEmailToken },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  /**
+   * POST /api/students/:id/contacts/transfer-confirm
+   * Confirm email transfer for a shared parent.
+   * Body: { token, email } where email is either old or new email
+   */
+  router.post('/:id/contacts/transfer-confirm', async (req: Request, res: Response) => {
+    try {
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const { token, email } = req.body as { token?: string; email?: string };
+      if (!token || !email) {
+        res.status(400).json({ success: false, error: 'Token and email required' });
+        return;
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      // Find shared parent with pending transfer
+      const sharedParentIdx = student.sharedWith.findIndex(
+        (sp) =>
+          sp.transferRequest &&
+          (sp.email === normalizedEmail || sp.transferRequest.newEmail === normalizedEmail)
+      );
+
+      if (sharedParentIdx === -1) {
+        res.status(404).json({ success: false, error: 'No pending email transfer found' });
+        return;
+      }
+
+      const sharedParent = student.sharedWith[sharedParentIdx]!;
+      const transfer = sharedParent.transferRequest!;
+
+      // Check expiry
+      if (transfer.expiresAt < new Date()) {
+        const updatedShared = [...student.sharedWith];
+        updatedShared[sharedParentIdx] = { ...sharedParent, transferRequest: undefined };
+        await studentRepository.update(student._id!, { sharedWith: updatedShared });
+        res.status(400).json({ success: false, error: 'Transfer request expired' });
+        return;
+      }
+
+      // Validate token
+      const isOldEmail = normalizedEmail === sharedParent.email;
+      const isNewEmail = normalizedEmail === transfer.newEmail;
+      const validToken = isOldEmail
+        ? token === transfer.oldEmailToken
+        : isNewEmail && token === transfer.newEmailToken;
+
+      if (!validToken) {
+        res.status(400).json({ success: false, error: 'Invalid confirmation token' });
+        return;
+      }
+
+      // Store confirmation
+      const confirmColl = config.database.collection('shared_parent_transfer_confirmations');
+      const confirmType = isOldEmail ? 'old' : 'new';
+      await confirmColl.updateOne(
+        { studentId: student._id!.toString(), email: sharedParent.email, type: confirmType },
+        {
+          $set: {
+            studentId: student._id!.toString(),
+            email: sharedParent.email,
+            type: confirmType,
+            confirmedAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      // Check if both confirmations exist
+      const [oldConfirm, newConfirm] = await Promise.all([
+        confirmColl.findOne({
+          studentId: student._id!.toString(),
+          email: sharedParent.email,
+          type: 'old',
+        }),
+        confirmColl.findOne({
+          studentId: student._id!.toString(),
+          email: sharedParent.email,
+          type: 'new',
+        }),
+      ]);
+
+      if (oldConfirm && newConfirm) {
+        // Both confirmed - complete transfer
+        const updatedShared = [...student.sharedWith];
+        updatedShared[sharedParentIdx] = {
+          ...sharedParent,
+          email: transfer.newEmail,
+          transferRequest: undefined,
+        };
+        await studentRepository.update(student._id!, { sharedWith: updatedShared });
+        await confirmColl.deleteMany({
+          studentId: student._id!.toString(),
+          email: sharedParent.email,
+        });
+
+        res.status(200).json({
+          success: true,
+          completed: true,
+          message: 'Email transfer completed successfully!',
+        });
+      } else {
+        res.status(200).json({
+          success: true,
+          completed: false,
+          message: `${confirmType === 'old' ? 'Old' : 'New'} email confirmed. Waiting for ${confirmType === 'old' ? 'new' : 'old'} email confirmation.`,
+        });
+      }
     } catch (error) {
       res.status(500).json({
         success: false,

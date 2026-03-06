@@ -65,6 +65,14 @@ export interface ISharedParent {
   readonly alertChannels?: readonly ('email' | 'sms')[];
   /** Alert types to receive (undefined = all). */
   readonly alertTypes?: readonly string[];
+  /** Email transfer request. When populated, a transfer is pending for this account. */
+  readonly transferRequest?: {
+    readonly newEmail: string;
+    readonly initiatedAt: Date;
+    readonly expiresAt: Date;
+    readonly oldEmailToken: string;
+    readonly newEmailToken: string;
+  };
 }
 
 /** Alias for shared parent / contact. */
