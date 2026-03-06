@@ -87,6 +87,14 @@ export interface IUserData {
   readonly suspendedBy?: string;
   /** When true, client should redirect to reset-password on next login. */
   readonly forcePasswordReset?: boolean;
+  /** Email transfer request. When populated, a transfer is pending for this account. */
+  readonly emailTransferRequest?: {
+    readonly newEmail: string;
+    readonly initiatedAt: Date;
+    readonly expiresAt: Date;
+    readonly oldEmailToken: string;
+    readonly newEmailToken: string;
+  };
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -114,6 +122,14 @@ export class User {
   public readonly suspendedBy?: string;
   /** When true, client should redirect to reset-password on next login. */
   public readonly forcePasswordReset: boolean;
+  /** Email transfer request. When populated, a transfer is pending for this account. */
+  public readonly emailTransferRequest?: {
+    readonly newEmail: string;
+    readonly initiatedAt: Date;
+    readonly expiresAt: Date;
+    readonly oldEmailToken: string;
+    readonly newEmailToken: string;
+  };
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -146,6 +162,7 @@ export class User {
     this.suspendedAt = data.suspendedAt;
     this.suspendedBy = data.suspendedBy;
     this.forcePasswordReset = data.forcePasswordReset ?? false;
+    this.emailTransferRequest = data.emailTransferRequest;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }
