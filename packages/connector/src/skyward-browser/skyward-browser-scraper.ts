@@ -129,17 +129,27 @@ export class SkywardBrowserScraper {
         await this.page.waitForTimeout(1000);
       }
 
-      const hasGoogleLogin =
-        (await this.page
-          .locator(
-            'input[value="Login with Google"], button:has-text("Login with Google"), a:has-text("Login with Google"), #bGoogleLogin, [onclick*="google"]'
-          )
-          .count()) > 0;
+      // Default to direct password login unless explicitly specified
+      // Google SSO must be explicitly requested via loginMethod parameter
+      const method = loginMethod ?? 'direct';
 
-      const method = loginMethod ?? (hasGoogleLogin ? 'google_sso' : 'direct');
       if (method === 'google_sso') {
+        const hasGoogleLogin =
+          (await this.page
+            .locator(
+              'input[value="Login with Google"], button:has-text("Login with Google"), a:has-text("Login with Google"), #bGoogleLogin, [onclick*="google"]'
+            )
+            .count()) > 0;
+
+        if (!hasGoogleLogin) {
+          return {
+            success: false,
+            message: 'Google SSO requested but no Google login button found on page',
+          };
+        }
         return this.authenticateViaGoogle(username, password);
       }
+
       return this.authenticateViaPassword(url, username, password);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
