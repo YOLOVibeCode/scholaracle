@@ -23,11 +23,19 @@ import {
   StudentRepository,
   UserRepository,
   AlertRepository,
+  getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 import type { MongoQueue } from '@scholaracle/agents';
 import { decryptCredentials } from '../../../utils/credentialsCipher';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
+import {
+  mergeCourses,
+  reconcileAssignments,
+  type IAssignmentForReconciliation,
+  type IAssignmentMatch,
+  type ISourceCourse,
+} from '@scholaracle/connector';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -120,6 +128,119 @@ function validateOp(op: ISlcDeltaOp): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
+/** Run assignment reconciliation (Canvas missing vs Skyward graded) and persist to slc_assignment_reconciliation. */
+async function runAssignmentReconciliation(params: {
+  readonly database: Db;
+  readonly userId: string;
+}): Promise<readonly IAssignmentMatch[]> {
+  const courseDocs = await params.database
+    .collection('slc_courses')
+    .find({ userId: params.userId, deletedAt: null })
+    .toArray();
+  const sources: ISourceCourse[] = courseDocs.map((c) => {
+    const rec = (c['record'] as Record<string, unknown>) ?? {};
+    return {
+      externalId: (c['externalId'] as string) ?? '',
+      sourceId: (c['sourceId'] as string) ?? '',
+      provider: (c['provider'] as string) ?? '',
+      title: (rec['title'] as string) ?? (rec['name'] as string) ?? '',
+      teacherName: rec['teacherName'] as string | undefined,
+      period: rec['period'] as string | undefined,
+    };
+  });
+  const merged = mergeCourses(sources);
+  const extIdToMergedId = new Map<string, string>();
+  for (const group of merged) {
+    for (const src of group.sources) {
+      extIdToMergedId.set(src.externalId, group.mergedId);
+    }
+  }
+
+  const assignmentDocs = await params.database
+    .collection('slc_assignments')
+    .find({ userId: params.userId, deletedAt: null })
+    .toArray();
+
+  const toForReconciliation = (doc: Record<string, unknown>): IAssignmentForReconciliation => {
+    const rec = (doc['record'] as Record<string, unknown>) ?? {};
+    const courseExtId = (doc['courseExternalId'] as string) ?? '';
+    const mergedCourseId = extIdToMergedId.get(courseExtId) ?? courseExtId;
+    return {
+      externalId: (doc['externalId'] as string) ?? '',
+      title: (rec['title'] as string) ?? '',
+      courseExternalId: courseExtId,
+      mergedCourseId,
+      status: (rec['status'] as string) ?? '',
+      dueAt: rec['dueAt'] as string | undefined,
+      pointsPossible: rec['pointsPossible'] as number | undefined,
+      pointsEarned: rec['pointsEarned'] as number | undefined,
+      category: rec['category'] as string | undefined,
+      observedAt: (doc['observedAt'] as string) ?? undefined,
+      provider: (doc['provider'] as string) ?? '',
+      assignedAt: rec['assignedAt'] as string | undefined,
+    };
+  };
+
+  const LMS_PROVIDERS = ['canvas', 'google_classroom'] as const;
+
+  const lms = assignmentDocs
+    .filter(
+      (d) =>
+        LMS_PROVIDERS.includes(d['provider'] as string as 'canvas' | 'google_classroom') &&
+        (d['record'] as Record<string, unknown>)?.['status'] === 'missing'
+    )
+    .map((d) => toForReconciliation(d as Record<string, unknown>));
+  const sis = assignmentDocs
+    .filter(
+      (d) =>
+        (d['provider'] as string) === 'skyward' &&
+        ['graded', 'submitted'].includes(
+          (d['record'] as Record<string, unknown>)?.['status'] as string
+        )
+    )
+    .map((d) => toForReconciliation(d as Record<string, unknown>));
+
+  const matches = reconcileAssignments(lms, sis);
+  const now = new Date();
+
+  // Log reconciliation summary to activity log
+  const matched = matches.filter((m) => m.skywardExternalId !== null);
+  const unmatched = matches.filter((m) => m.skywardExternalId === null);
+  const flaggedForReview = matches.filter((m) => m.requiresReview === true);
+  const avgConfidence =
+    matched.length > 0
+      ? matched.reduce((sum, m) => sum + (m.aggregateScore ?? 0), 0) / matched.length
+      : 0;
+
+  await params.database.collection(ACTIVITY_LOG_COLLECTION).insertOne({
+    activityId: randomUUID(),
+    userId: params.userId,
+    studentExternalId: null,
+    courseExternalId: null,
+    assignmentExternalId: null,
+    eventType: 'reconciliation_summary',
+    timestamp: now,
+    metadata: {
+      totalLms: lms.length,
+      totalSis: sis.length,
+      matched: matched.length,
+      unmatched: unmatched.length,
+      flaggedForReview: flaggedForReview.length,
+      avgConfidence: avgConfidence.toFixed(3),
+    },
+    createdAt: now,
+  });
+
+  await params.database
+    .collection(ASSIGNMENT_RECONCILIATION_COLLECTION)
+    .updateOne(
+      { userId: params.userId },
+      { $set: { userId: params.userId, matches: [...matches], updatedAt: now } },
+      { upsert: true }
+    );
+  return matches;
+}
+
 async function generateAlertsFromIngestedAssignments(params: {
   readonly database: Db;
   readonly userId: string;
@@ -131,6 +252,11 @@ async function generateAlertsFromIngestedAssignments(params: {
 
   const user = await userRepo.findById(params.userId);
   if (!user) return;
+
+  const reconciliationMatches = await runAssignmentReconciliation({
+    database: params.database,
+    userId: params.userId,
+  });
 
   /** Map assignment studentExternalId -> Student MongoDB _id for notify job payloads. */
   let studentIdByExternal: Map<string, string> | undefined;
@@ -171,6 +297,8 @@ async function generateAlertsFromIngestedAssignments(params: {
     if (extId && endDate) termEndDates.set(extId, endDate);
   }
 
+  const semesterStartYmd = await getCurrentSemesterStart(params.database, params.userId, now);
+
   // Due soon assignments (ISO string comparison works for UTC ISO format)
   const dueSoon = await params.database
     .collection('slc_assignments')
@@ -189,13 +317,28 @@ async function generateAlertsFromIngestedAssignments(params: {
 
     const baseFingerprint = `${doc['provider']}|${doc['adapterId']}|${doc['externalId']}|${dueAt}`;
 
-    // Missing assignment = critical (skip if assignment's term has ended)
+    // Missing assignment = critical (skip if assignment's term has ended or before current semester)
     if (status === 'missing') {
       const termExternalId = (doc['record'] as Record<string, unknown> | undefined)?.[
         'termExternalId'
       ] as string | undefined;
       const endDate = termExternalId ? termEndDates.get(termExternalId) : undefined;
       if (termExternalId && endDate && endDate < todayYMD) continue;
+      const assignmentDateYmd = (dueAt ?? (doc['observedAt'] as string | undefined))?.slice(0, 10);
+      if (assignmentDateYmd && assignmentDateYmd < semesterStartYmd) continue;
+      // Skip MISSING_ASSIGNMENT when LMS assignment (Canvas/Google Classroom) is matched to a Skyward graded/submitted assignment
+      const LMS_PROVIDERS = ['canvas', 'google_classroom'];
+      if (LMS_PROVIDERS.includes(doc['provider'] as string)) {
+        const match = reconciliationMatches.find(
+          (m) => m.canvasExternalId === (doc['externalId'] as string)
+        );
+        if (
+          match?.skywardExternalId &&
+          (match.skywardStatus === 'graded' || match.skywardStatus === 'submitted')
+        ) {
+          continue;
+        }
+      }
       const fingerprint = `missing:${baseFingerprint}`;
       const existing = await params.database.collection('alerts').findOne({
         userId: params.userId,
@@ -341,6 +484,7 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
 
 const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
 const ACTIVITY_LOG_COLLECTION = 'slc_activity_log';
+const ASSIGNMENT_RECONCILIATION_COLLECTION = 'slc_assignment_reconciliation';
 
 /** Record pending student reconciliations for ops whose studentExternalId does not match an existing student. */
 async function recordPendingStudentReconciliations(params: {
@@ -388,6 +532,53 @@ async function recordPendingStudentReconciliations(params: {
 }
 
 const ENTITIES_WITH_ASSETS = ['course', 'courseMaterial', 'assignment', 'message'] as const;
+
+async function logDataQuality(params: {
+  readonly database: Db;
+  readonly userId: string;
+  readonly ops: readonly ISlcDeltaOp[];
+}): Promise<void> {
+  const assignmentOps = params.ops.filter((op) => op.entity === 'assignment' && op.op === 'upsert');
+  if (assignmentOps.length === 0) return;
+
+  const assignmentsWithoutDate = assignmentOps.filter((op) => {
+    const record = op.record as ISlcAssignment | undefined;
+    return !record?.dueAt;
+  });
+
+  if (assignmentsWithoutDate.length > 0) {
+    console.warn(
+      `[Ingest] Data quality: ${assignmentsWithoutDate.length} of ${assignmentOps.length} assignments for user ${params.userId} have no dueAt`
+    );
+
+    const courseGroups = new Map<string, number>();
+    for (const op of assignmentsWithoutDate) {
+      const record = op.record as ISlcAssignment | undefined;
+      const courseId = record?.courseExternalId ?? 'unknown';
+      courseGroups.set(courseId, (courseGroups.get(courseId) ?? 0) + 1);
+    }
+
+    const coll = params.database.collection(ACTIVITY_LOG_COLLECTION);
+    const now = new Date();
+
+    for (const [courseId, count] of courseGroups.entries()) {
+      await coll.insertOne({
+        activityId: randomUUID(),
+        userId: params.userId,
+        studentExternalId: null,
+        courseExternalId: courseId,
+        assignmentExternalId: null,
+        eventType: 'data_quality_warning',
+        timestamp: now,
+        metadata: {
+          message: `${count} assignment(s) in this course have no due date — date-based filtering unavailable`,
+          count,
+        },
+        createdAt: now,
+      });
+    }
+  }
+}
 
 async function applyOps(params: {
   readonly database: Db;
@@ -894,6 +1085,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         sourceId: envelope.source?.sourceId,
         ops: envelope.ops,
       });
+
+      await logDataQuality({
+        database: config.database,
+        userId,
+        ops: envelope.ops,
+      });
+
       const sourceId = envelope.source?.sourceId ?? '';
       if (sourceId) {
         await recordPendingStudentReconciliations({

@@ -108,6 +108,9 @@ importers:
       '@scholaracle/auth':
         specifier: workspace:^
         version: link:../auth
+      '@scholaracle/connector':
+        specifier: workspace:*
+        version: link:../connector
       '@scholaracle/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -272,12 +275,27 @@ importers:
 
   packages/connector:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.74.0
+        version: 0.74.0(zod@4.1.13)
+      '@google/generative-ai':
+        specifier: ^0.24.0
+        version: 0.24.1
       '@scholaracle/contracts':
         specifier: workspace:*
         version: link:../contracts
       axios:
         specifier: ^1.13.5
         version: 1.13.5
+      mongodb:
+        specifier: ^6.3.0
+        version: 6.21.0
+      openai:
+        specifier: ^6.22.0
+        version: 6.26.0
+      playwright:
+        specifier: ^1.58.2
+        version: 1.58.2
       skyward-rest:
         specifier: ^1.0.1
         version: 1.0.1
@@ -291,9 +309,6 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.26)(ts-node@10.9.2)
-      playwright:
-        specifier: ^1.58.2
-        version: 1.58.2
       ts-jest:
         specifier: ^29.1.1
         version: 29.4.6(@babel/core@7.28.5)(jest@29.7.0)(typescript@5.9.3)
@@ -528,9 +543,6 @@ importers:
       nodemailer:
         specifier: ^6.9.0
         version: 6.10.1
-      skyward-rest:
-        specifier: ^1.0.1
-        version: 1.0.1
       twilio:
         specifier: ^5.0.0
         version: 5.10.7
@@ -2013,6 +2025,11 @@ packages:
       - supports-color
     dev: false
     optional: true
+
+  /@google/generative-ai@0.24.1:
+    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+    engines: {node: '>=18.0.0'}
+    dev: false
 
   /@grpc/grpc-js@1.14.2:
     resolution: {integrity: sha512-QzVUtEFyu05UNx2xr0fCQmStUO17uVQhGNowtxs00IgTZT6/W2PBLfUkj30s0FKJ29VtTa3ArVNIhNP6akQhqA==}
@@ -10275,6 +10292,19 @@ packages:
       mimic-function: 5.0.1
     dev: true
 
+  /openai@6.26.0:
+    resolution: {integrity: sha512-zd23dbWTjiJ6sSAX6s0HrCZi41JwTA1bQVs0wLQPZ2/5o2gxOJA5wh7yOAUgwYybfhDXyhwlpeQf7Mlgx8EOCA==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+    dev: false
+
   /optionator@0.8.3:
     resolution: {integrity: sha512-+IW9pACdk3XWmmTXG8m3upGUJst5XRGzxMRjXzAuJ1XnIFNvfhjjIuYkDvysnPQ7qzqVzLt78BCruntqRhWQbA==}
     engines: {node: '>= 0.8.0'}
@@ -10477,6 +10507,7 @@ packages:
     resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
     engines: {node: '>=18'}
     hasBin: true
+    dev: false
 
   /playwright@1.57.0:
     resolution: {integrity: sha512-ilYQj1s8sr2ppEJ2YVadYBN0Mb3mdo9J0wQ+UuDhzYqURwSoW4n1Xs5vs7ORwgDGmyEh33tRMeS8KhdkMoLXQw==}
@@ -10496,6 +10527,7 @@ packages:
       playwright-core: 1.58.2
     optionalDependencies:
       fsevents: 2.3.2
+    dev: false
 
   /pngjs@5.0.0:
     resolution: {integrity: sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==}
