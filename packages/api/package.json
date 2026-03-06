@@ -23,6 +23,7 @@
     "@aws-sdk/s3-request-presigner": "^3.994.0",
     "@scholaracle/agents": "workspace:*",
     "@scholaracle/auth": "workspace:^",
+    "@scholaracle/connector": "workspace:*",
     "@scholaracle/contracts": "workspace:*",
     "@scholaracle/database": "workspace:^",
     "@scholaracle/interfaces": "workspace:*",

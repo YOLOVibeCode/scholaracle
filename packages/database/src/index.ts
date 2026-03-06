@@ -44,6 +44,9 @@ export * from './repositories/IngestDeviceAuthRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
 
+// Helpers (semester / term filtering)
+export { getCurrentSemesterStart } from './helpers/getCurrentSemesterStart';
+
 // Auth
 export * from './repositories/PasswordResetTokenRepository';
 export * from './repositories/RefreshTokenRepository';

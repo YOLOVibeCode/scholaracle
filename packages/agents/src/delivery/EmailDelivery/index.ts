@@ -4,5 +4,5 @@ export type { IEmailTransport, IEmailEnvelope, IEmailTransportResult } from './I
 export { SendGridTransport } from './SendGridTransport';
 export { SmtpTransport } from './SmtpTransport';
 export type { ISmtpTransportConfig } from './SmtpTransport';
-export { buildDigestEmail } from './digestEmailTemplate';
-export type { IBuildDigestEmailOptions } from './digestEmailTemplate';
+export { buildDigestEmail, gradeBarColorForPercent, renderGradeBar } from './digestEmailTemplate';
+export type { IBuildDigestEmailOptions, IGradeBlock } from './digestEmailTemplate';

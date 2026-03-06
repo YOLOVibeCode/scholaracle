@@ -65,6 +65,8 @@ describe('Worker', () => {
       insertOne: jest.fn(),
       findOneAndUpdate: jest.fn(),
       updateOne: jest.fn(),
+      find: jest.fn().mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+      findOne: jest.fn().mockResolvedValue(null),
     } as unknown as jest.Mocked<Collection>;
 
     mockDb = {

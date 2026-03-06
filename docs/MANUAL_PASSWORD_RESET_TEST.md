@@ -2,6 +2,14 @@
 
 Use this to verify the password reset flow in the browser.
 
+## Production (Railway)
+
+For password reset emails to contain a valid link in production, the **API** service must have:
+
+- **BASE_URL** = `https://scholarmancy.com` (or your web app URL)
+
+Set it in Railway: Project → API service → Variables → Add `BASE_URL` = `https://scholarmancy.com`. Without this, reset links point to `http://localhost:2800` and will not work.
+
 ## Prerequisites
 
 - App running: `pnpm dev` (Web on **2800**, API on **2801** per PORT_POLICY).
