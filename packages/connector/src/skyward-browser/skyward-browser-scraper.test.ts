@@ -61,10 +61,10 @@ describe('SkywardBrowserScraper', () => {
         'secret'
       );
 
-      expect(mockPage.goto).toHaveBeenCalledWith(
-        'https://skyward.example.com',
-        expect.objectContaining({ waitUntil: 'networkidle' })
-      );
+      expect(mockPage.goto).toHaveBeenCalledWith('https://skyward.example.com', {
+        timeout: 20000,
+        waitUntil: 'domcontentloaded',
+      });
       expect(sharedLoc.fill).toHaveBeenCalledWith('parent@example.com');
       expect(sharedLoc.fill).toHaveBeenCalledWith('secret');
       expect(sharedLoc.click).toHaveBeenCalled();

@@ -103,6 +103,37 @@ describe('mergeCourses', () => {
     expect(merged[0]!.teacherName).toBe('Dr. Newton');
   });
 
+  it('should prioritize Skyward (SIS) grade over Canvas (LMS) even when Canvas grade is higher', () => {
+    const courses: ISourceCourse[] = [
+      makeSource({
+        provider: 'canvas',
+        title: 'Algebra 1',
+        teacherName: 'Noah Chang',
+        period: 'p04',
+        grade: 85.84, // Higher Canvas grade
+      }),
+      makeSource({
+        provider: 'skyward',
+        title: 'ALGEBRA 1',
+        teacherName: 'Noah Chang',
+        period: '4',
+        grade: 76, // Lower Skyward grade (but authoritative)
+        letterGrade: 'C',
+      }),
+    ];
+
+    const merged = mergeCourses(courses);
+
+    expect(merged).toHaveLength(1);
+    const algebra = merged[0]!;
+    expect(algebra.sources).toHaveLength(2);
+    expect(algebra.bestGrade).toBe(76); // Skyward grade takes precedence
+    expect(algebra.bestLetterGrade).toBe('C');
+    expect(algebra.sources.find((s) => s.provider === 'skyward')?.sourceId).toBe(
+      algebra.primarySourceId
+    );
+  });
+
   it('should split when both teacher AND period differ', () => {
     const courses: ISourceCourse[] = [
       makeSource({
@@ -130,7 +161,7 @@ describe('mergeCourses', () => {
     }
   });
 
-  it('should pick the best (highest) grade across sources', () => {
+  it('should use Skyward grade when it is higher than Canvas', () => {
     const courses: ISourceCourse[] = [
       makeSource({
         provider: 'canvas',

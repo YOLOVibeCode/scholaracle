@@ -57,7 +57,8 @@ describe('SkywardBrowserAdapter', () => {
       expect(mockScraper.authenticate).toHaveBeenCalledWith(
         'https://skyward.example.com',
         'user',
-        'pass'
+        'pass',
+        undefined // loginMethod parameter (defaults to 'direct' in implementation)
       );
       expect(adapter.isAuthenticated()).toBe(true);
     });
