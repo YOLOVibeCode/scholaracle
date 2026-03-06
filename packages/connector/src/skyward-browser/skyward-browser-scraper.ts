@@ -114,12 +114,20 @@ export class SkywardBrowserScraper {
 
     try {
       const url = baseUrl.replace(/\/$/, '');
-      await this.page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
+      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
-      await this.page
-        .locator('select')
-        .selectOption({ label: 'Family/Student Access' })
-        .catch(() => {});
+      // Wait for page to be interactive
+      await this.page.waitForTimeout(2000);
+
+      // Select Family/Student Access if dropdown exists (use value instead of label for reliability)
+      const dropdown = this.page.locator('select[name="cUserRole"], #cUserRole, select').first();
+      if ((await dropdown.count()) > 0) {
+        await dropdown.selectOption({ value: 'family/student' }).catch(() => {
+          // Fallback to label if value doesn't work
+          dropdown.selectOption({ label: 'Family/Student Access' }).catch(() => {});
+        });
+        await this.page.waitForTimeout(1000);
+      }
 
       const hasGoogleLogin =
         (await this.page
@@ -148,6 +156,10 @@ export class SkywardBrowserScraper {
       return { success: false, message: 'Browser not initialized' };
     }
 
+    // Wait for login fields to be visible
+    await this.page.waitForSelector('input[name="login"], #login', { timeout: 10000 });
+
+    // Fill login credentials
     await this.page.locator('input[name="login"], #login').fill(username);
     await this.page.locator('input[name="password"], #password').fill(password);
 
@@ -156,7 +168,8 @@ export class SkywardBrowserScraper {
       popup = p;
     });
 
-    await this.page.locator('#bLogin').click({ timeout: 10000 });
+    // Click login button - it might be hidden initially, so use force: true
+    await this.page.locator('#bLogin').click({ timeout: 10000, force: true });
     await this.page.waitForTimeout(5000);
 
     if (popup !== null) {
