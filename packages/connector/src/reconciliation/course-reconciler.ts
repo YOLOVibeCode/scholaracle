@@ -127,6 +127,23 @@ function buildMergedId(
   return hashKey(`${matchKey}|${teacher}|${period}`);
 }
 
+/**
+ * Source hierarchy for grade precedence (authoritative → least):
+ * 1. SIS systems (Skyward, Aeries) - Official grades of record
+ * 2. LMS systems (Canvas, Google Classroom) - Working/projected grades
+ */
+const SOURCE_PRIORITY: Record<string, number> = {
+  skyward: 10, // SIS - highest priority
+  aeries: 10, // SIS - highest priority
+  canvas: 5, // LMS - lower priority
+  google_classroom: 5, // LMS - lower priority
+  oneroster: 5, // Generic LMS - lower priority
+};
+
+function getSourcePriority(provider: string): number {
+  return SOURCE_PRIORITY[provider] ?? 1;
+}
+
 function buildMergedCourse(
   subGroup: readonly IAnnotatedCourse[],
   matchKey: string,
@@ -135,22 +152,29 @@ function buildMergedCourse(
   const first = subGroup[0]!;
   const sources = subGroup.map((a) => a.source);
 
-  let bestGrade: number | undefined;
-  let bestLetterGrade: string | undefined;
+  // Find primary source: SIS (Skyward/Aeries) takes precedence over LMS
+  // Within same priority tier, prefer sources with grades
+  const primarySource =
+    subGroup
+      .filter((a) => a.source.grade != null)
+      .sort((a, b) => {
+        const priorityDiff =
+          getSourcePriority(b.source.provider) - getSourcePriority(a.source.provider);
+        if (priorityDiff !== 0) return priorityDiff;
+        // Within same priority, prefer higher grade as tiebreaker
+        return (b.source.grade ?? 0) - (a.source.grade ?? 0);
+      })[0] ?? first;
 
-  for (const a of subGroup) {
-    if (a.source.grade != null && (bestGrade == null || a.source.grade > bestGrade)) {
-      bestGrade = a.source.grade;
-      bestLetterGrade = a.source.letterGrade;
-    }
-  }
+  // Use primary source's grade as the authoritative grade
+  const bestGrade = primarySource.source.grade;
+  let bestLetterGrade = primarySource.source.letterGrade;
+
+  // Fallback to any letter grade if primary doesn't have one
   if (bestLetterGrade == null) {
     bestLetterGrade = firstDefined(subGroup, (a) =>
       a.source.letterGrade != null ? a.source.letterGrade : undefined
     );
   }
-
-  const primarySource = subGroup.find((a) => a.source.grade != null) ?? first;
 
   return {
     mergedId: buildMergedId(matchKey, subGroup, wasSplit),
