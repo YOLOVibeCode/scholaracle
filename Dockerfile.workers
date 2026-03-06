@@ -1,6 +1,7 @@
 # Dockerfile for Workers Service
 # Uses BuildKit for better caching and performance.
 # Uses node:20-slim + Playwright Chromium for Skyward browser-based scraping.
+# Updated: 2026-03-06
 
 # syntax=docker/dockerfile:1.4
 
