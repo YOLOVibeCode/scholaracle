@@ -4,6 +4,14 @@
 
 import type { IEmailDigestPendingItem } from '@scholaracle/database';
 
+/** Single course grade block for the digest email grade bar. */
+export interface IGradeBlock {
+  readonly courseName: string;
+  readonly percentGrade: number;
+  readonly letterGrade: string;
+  readonly courseUrl: string;
+}
+
 const HEADER_BG = '#1a1a1a';
 const BODY_COLOR = '#333333';
 const FOOTER_COLOR = '#6b7280';
@@ -12,6 +20,13 @@ const BORDER_CRITICAL = '#ef4444';
 const BORDER_WARNING = '#f59e0b';
 const BORDER_POSITIVE = '#10b981';
 const BORDER_INFO = '#3b82f6';
+
+/** Grade bar colors: F &lt;70, D 70-79, C 80-84, B 85-92, A 93+. */
+const GRADE_COLOR_F = '#ef4444';
+const GRADE_COLOR_D = '#f59e0b';
+const GRADE_COLOR_C = '#3b82f6';
+const GRADE_COLOR_B = '#10b981';
+const GRADE_COLOR_A = '#047857';
 
 function escapeHtml(s: string): string {
   return s
@@ -32,6 +47,28 @@ function severityBorderColor(severity: string): string {
     default:
       return BORDER_INFO;
   }
+}
+
+/** Returns background color for a percent grade (F &lt;70, D 70-79, C 80-84, B 85-92, A 93+). */
+export function gradeBarColorForPercent(percent: number): string {
+  if (percent < 70) return GRADE_COLOR_F;
+  if (percent < 80) return GRADE_COLOR_D;
+  if (percent < 85) return GRADE_COLOR_C;
+  if (percent < 93) return GRADE_COLOR_B;
+  return GRADE_COLOR_A;
+}
+
+/** Renders the grade bar HTML: horizontal row of clickable blocks (course name small, letter grade bold). */
+export function renderGradeBar(grades: readonly IGradeBlock[]): string {
+  if (grades.length === 0) return '';
+  const blocks = grades.map((g) => {
+    const bg = gradeBarColorForPercent(g.percentGrade);
+    return `<a href="${escapeHtml(g.courseUrl)}" style="display:inline-block;width:60px;margin:0 4px 8px 0;padding:8px 6px;background:${bg};color:#ffffff;text-decoration:none;border-radius:6px;text-align:center;vertical-align:top;">
+  <div style="font-size:16px;font-weight:700;margin-bottom:4px;">${escapeHtml(g.letterGrade)}</div>
+  <div style="font-size:10px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(g.courseName)}">${escapeHtml(g.courseName)}</div>
+</a>`;
+  });
+  return `<div style="margin:0 0 16px;">${blocks.join('')}</div>`;
 }
 
 function formatRelativeTime(createdAt: Date): string {
@@ -55,6 +92,8 @@ export interface IBuildDigestEmailOptions {
   readonly recipientType?: 'parent' | 'student';
   /** AI-generated insight paragraph to include above the alert list. */
   readonly aiInsight?: string;
+  /** Grade blocks for the top-of-email grade bar (course name, letter grade, link to course). */
+  readonly grades?: readonly IGradeBlock[];
 }
 
 /**
@@ -64,7 +103,7 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
   subject: string;
   html: string;
 } {
-  const { items, dashboardUrl, studentName, recipientType, aiInsight } = opts;
+  const { items, dashboardUrl, studentName, recipientType, aiInsight, grades } = opts;
   const n = items.length;
   const isStudent = recipientType === 'student';
   const summaryLine =
@@ -72,6 +111,8 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
       ? 'You have no new alerts.'
       : `You have ${n} new alert${n === 1 ? '' : 's'} since your last digest.`;
   const studentLabel = !isStudent && studentName ? ` for ${escapeHtml(studentName)}` : '';
+
+  const gradeBarBlock = grades && grades.length > 0 ? renderGradeBar(grades) : '';
 
   const alertRows = items.map((item) => {
     const borderColor = severityBorderColor(item.severity);
@@ -105,6 +146,7 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
 
   const bodyHtml = `
   <p style="margin:0 0 16px;">${escapeHtml(summaryLine)}</p>
+  ${gradeBarBlock}
   ${insightBlock}
   ${alertRows.join('')}
   ${ctaBlock}

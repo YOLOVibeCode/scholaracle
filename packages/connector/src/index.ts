@@ -42,6 +42,17 @@ export type {
   ISkywardClientConfig,
   SkywardScraperFactory,
 } from './skyward';
+export { SkywardBrowserAdapter } from './skyward-browser';
+export type { SkywardBrowserScraperFactory, IAiClient } from './skyward-browser';
+export { createAiClient } from './ai/create-ai-client';
+export type { AiProvider } from './ai/create-ai-client';
+export { useStrategy, computeFingerprint, MongoStrategyStore } from './strategy';
+export type {
+  IExtractionStrategy,
+  ISelectorStep,
+  IStrategyAttempt,
+  IStrategyStore,
+} from './strategy';
 export { AeriesAdapter, AeriesClient } from './aeries';
 export type {
   IAeriesClientConfig,
@@ -68,6 +79,7 @@ export {
   groupBySubject,
   mergeCourses,
   titleSimilarity,
+  reconcileAssignments,
 } from './reconciliation';
 export type {
   SubjectArea,
@@ -76,6 +88,10 @@ export type {
   IReconciledCourse,
   ISourceCourse,
   IMergedCourse,
+  MatchStrategy,
+  MatchConfidence,
+  IAssignmentForReconciliation,
+  IAssignmentMatch,
 } from './reconciliation';
 export type {
   IOneRosterOrg,

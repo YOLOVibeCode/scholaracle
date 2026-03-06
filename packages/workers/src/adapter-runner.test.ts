@@ -27,7 +27,7 @@ jest.mock('@scholaracle/connector', () => {
       authenticate: mockAuthenticate,
       fetchEnvelope: mockFetchEnvelope,
     })),
-    SkywardAdapter: jest.fn().mockImplementation(() => ({
+    SkywardBrowserAdapter: jest.fn().mockImplementation(() => ({
       authenticate: mockAuthenticate,
       fetchEnvelope: mockFetchEnvelope,
     })),
@@ -35,6 +35,8 @@ jest.mock('@scholaracle/connector', () => {
       authenticate: mockAuthenticate,
       fetchEnvelope: mockFetchEnvelope,
     })),
+    createAiClient: jest.fn(),
+    MongoStrategyStore: jest.fn().mockImplementation(() => ({})),
   };
 });
 
@@ -88,7 +90,7 @@ describe('createAdapterRunner', () => {
     expect(result.error).toMatch(/API|access token/i);
   });
 
-  it('should route skyward with username+password to SkywardAdapter and return summary', async () => {
+  it('should route skyward with username+password to SkywardBrowserAdapter and return summary', async () => {
     const result = await run(
       'skyward',
       'com.skyward.sis',
@@ -113,8 +115,8 @@ describe('createAdapterRunner', () => {
   });
 
   it('should return error when Skyward fetchEnvelope fails', async () => {
-    const { SkywardAdapter } = await import('@scholaracle/connector');
-    (SkywardAdapter as jest.Mock).mockImplementationOnce(() => ({
+    const { SkywardBrowserAdapter } = await import('@scholaracle/connector');
+    (SkywardBrowserAdapter as jest.Mock).mockImplementationOnce(() => ({
       authenticate: jest.fn().mockResolvedValue(undefined),
       fetchEnvelope: jest.fn().mockRejectedValue(new Error('Network error')),
     }));
