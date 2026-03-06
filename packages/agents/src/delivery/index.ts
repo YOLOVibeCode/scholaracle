@@ -6,6 +6,7 @@ export type {
   IEmailTransportResult,
   ISmtpTransportConfig,
   IBuildDigestEmailOptions,
+  IGradeBlock,
 } from './EmailDelivery';
 /** No-op stub; push notifications are not implemented. Use EmailDelivery or SMSDelivery. */
 export { PushDelivery } from './PushDelivery';

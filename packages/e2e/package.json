@@ -4,7 +4,8 @@
   "private": true,
   "description": "End-to-end tests for Scholaracle",
   "scripts": {
-    "test": "playwright test",
+    "test": "echo 'E2E tests skipped in unit test run. Use: pnpm run test:e2e'",
+    "test:e2e": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",

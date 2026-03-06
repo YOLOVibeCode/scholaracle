@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 /**
  * Server-side adapter runner.
  *
@@ -28,7 +29,7 @@ async function getGoogleAccessToken(credentials: Record<string, string>): Promis
   return accessToken;
 }
 
-export function createAdapterRunner(_db: Db): AdapterRunnerFn {
+export function createAdapterRunner(db: Db): AdapterRunnerFn {
   return async (
     provider: string,
     _adapterId: string,
@@ -57,7 +58,7 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
         }
 
         // -----------------------------------------------------------------
-        // Skyward — API (skyward-rest)
+        // Skyward — browser-based scraper (Playwright)
         // -----------------------------------------------------------------
         case 'skyward': {
           const username = credentials['username'] ?? '';
@@ -65,7 +66,7 @@ export function createAdapterRunner(_db: Db): AdapterRunnerFn {
           if (!username || !password) {
             return { success: false, summary: {}, error: 'Skyward requires username and password' };
           }
-          return await runSkywardApi(baseUrl, username, password, runId, options);
+          return await runSkywardBrowser(db, baseUrl, username, password, runId, options);
         }
 
         // -----------------------------------------------------------------
@@ -203,10 +204,11 @@ async function runCanvasApi(
 }
 
 // ---------------------------------------------------------------------------
-// Skyward API (skyward-rest, no browser)
+// Skyward browser (Playwright)
 // ---------------------------------------------------------------------------
 
-async function runSkywardApi(
+async function runSkywardBrowser(
+  database: Db,
   baseUrl: string,
   username: string,
   password: string,
@@ -219,11 +221,16 @@ async function runSkywardApi(
   envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
 }> {
   try {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    const { SkywardAdapter } = await import('@scholaracle/connector');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
-    const skywardRestFactory = require('skyward-rest') as any; // External module type not exported
-    const adapter = new SkywardAdapter(skywardRestFactory);
+    const { SkywardBrowserAdapter, createAiClient, MongoStrategyStore } =
+      await import('@scholaracle/connector');
+    const aiProvider = process.env['AI_PROVIDER'] as 'openai' | 'anthropic' | 'gemini' | undefined;
+    const aiApiKey = process.env['AI_API_KEY'];
+    const aiClient =
+      aiProvider && aiApiKey && ['openai', 'anthropic', 'gemini'].includes(aiProvider)
+        ? createAiClient(aiProvider, aiApiKey)
+        : undefined;
+    const strategyStore = new MongoStrategyStore(database);
+    const adapter = new SkywardBrowserAdapter(undefined, aiClient, strategyStore);
     await adapter.authenticate({ baseUrl, username, password });
 
     const sourceId = options?.sourceId ?? process.env['SOURCE_ID'] ?? runId;
@@ -247,7 +254,7 @@ async function runSkywardApi(
     ).length;
 
     console.log(
-      `[AdapterRunner] Skyward API (${runId}): ${courses} courses, ${assignments} assignments, ${grades} grades, ${attendance} attendance`
+      `[AdapterRunner] Skyward browser (${runId}): ${courses} courses, ${assignments} assignments, ${grades} grades, ${attendance} attendance`
     );
     return {
       success: true,
