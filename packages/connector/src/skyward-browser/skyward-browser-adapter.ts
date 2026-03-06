@@ -60,7 +60,8 @@ export class SkywardBrowserAdapter implements ILmsAdapterWithTest {
       const result = await scraper.authenticate(
         credentials.baseUrl,
         credentials.username,
-        credentials.password
+        credentials.password,
+        credentials.loginMethod // Pass through loginMethod from credentials
       );
       if (!result.success) {
         await scraper.close();
