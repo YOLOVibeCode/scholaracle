@@ -3793,5 +3793,140 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
     }
   });
 
+  /**
+   * POST /api/students/:id/send-digest
+   * Manually trigger a digest email for a student.
+   * Body: { recipients?: 'all' | string[] }
+   */
+  router.post('/:id/send-digest', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      // Only owner or admin can send digests
+      if (!student.canAdmin(userId)) {
+        res
+          .status(403)
+          .json({ success: false, error: 'Only account owner or admin can send digests' });
+        return;
+      }
+
+      const { recipients } = req.body as { recipients?: 'all' | string[] };
+
+      // Get all potential recipients
+      const owner = await config.database.collection('users').findOne({ _id: student.userId });
+      const allRecipients: Array<{ email: string; name?: string; role: string }> = [];
+
+      // Add owner if opted in
+      if (owner && student.ownerAlertPrefs?.receiveAlerts !== false) {
+        allRecipients.push({
+          email: owner.email as string,
+          name: owner.name as string,
+          role: 'owner',
+        });
+      }
+
+      // Add shared parents if opted in
+      for (const parent of student.sharedWith) {
+        if (parent.status === 'accepted' && parent.receiveAlerts !== false) {
+          allRecipients.push({
+            email: parent.email,
+            name: parent.name,
+            role: parent.role,
+          });
+        }
+      }
+
+      // Filter recipients if specific emails requested
+      let targetRecipients = allRecipients;
+      if (recipients && recipients !== 'all') {
+        const requestedEmails = Array.isArray(recipients) ? recipients : [recipients];
+        targetRecipients = allRecipients.filter((r) =>
+          requestedEmails.some((e) => e.toLowerCase() === r.email.toLowerCase())
+        );
+      }
+
+      if (targetRecipients.length === 0) {
+        res.status(400).json({ success: false, error: 'No recipients found or all opted out' });
+        return;
+      }
+
+      // Create a notification alert
+      const alert = {
+        userId: student.userId,
+        studentId: student._id,
+        studentName: student.name,
+        type: 'manual_digest',
+        severity: 'info',
+        title: 'Grade System Updated - Skyward Now Primary',
+        message:
+          "Your student's grades now show official Skyward (SIS) grades as the primary grades. Canvas grades remain visible for reference.",
+        metadata: {
+          manualTrigger: true,
+          triggeredBy: userId,
+          recipients: targetRecipients.map((r) => r.email),
+        },
+        createdAt: new Date(),
+        read: false,
+      };
+
+      const alertResult = await config.database.collection('slc_alerts').insertOne(alert);
+
+      // Add to digest queue for each recipient
+      const digestItems = targetRecipients.map((recipient) => ({
+        userId: student.userId.toString(),
+        alertId: alertResult.insertedId.toString(),
+        studentId: student._id!.toString(),
+        studentName: student.name,
+        recipientEmail: recipient.email,
+        createdAt: new Date(),
+      }));
+
+      await config.database.collection('email_digest_pending').insertMany(digestItems);
+
+      // Optionally trigger immediate delivery (create a flush job)
+      const flushJob = {
+        type: 'flush_email_digests',
+        status: 'pending',
+        createdAt: new Date(),
+        scheduledFor: new Date(),
+        attempts: 0,
+        maxAttempts: 3,
+        name: `Manual digest - ${student.name}`,
+        data: {
+          userId: student.userId.toString(),
+          immediate: true,
+        },
+      };
+
+      await config.database.collection('jobs').insertOne(flushJob);
+
+      res.status(200).json({
+        success: true,
+        message: `Digest queued for ${targetRecipients.length} recipient(s)`,
+        recipients: targetRecipients.map((r) => ({
+          email: r.email,
+          name: r.name,
+          role: r.role,
+        })),
+        jobId: flushJob._id?.toString(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
   return router;
 }
