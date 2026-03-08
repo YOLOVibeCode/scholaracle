@@ -297,6 +297,103 @@ function initializeNotificationService(
 }
 
 /**
+ * Process immediate flush jobs - checks for pending flush_email_digests jobs
+ * with immediate: true flag and processes them right away.
+ */
+async function processImmediateFlushJobs(
+  database: Db,
+  transport: IEmailTransport,
+  fromEmail: string,
+  fromName: string,
+  dashboardBaseUrl: string,
+  insightService?: DigestInsightService
+): Promise<void> {
+  try {
+    // Find pending immediate flush jobs
+    const result = await database.collection('jobs').findOneAndUpdate(
+      {
+        type: 'flush_email_digests',
+        status: 'pending',
+        'data.immediate': true,
+      },
+      {
+        $set: {
+          status: 'processing',
+          lastAttemptAt: new Date(),
+        },
+        $inc: { attempts: 1 },
+      }
+    );
+
+    if (!result) {
+      return; // No immediate jobs to process
+    }
+
+    const jobData = result as unknown as {
+      _id: string;
+      data?: { userId?: string };
+    };
+    const userId = jobData.data?.userId;
+
+    if (!userId) {
+      // Mark job as failed
+      await database.collection('jobs').updateOne(
+        { _id: jobData._id as unknown as never },
+        {
+          $set: {
+            status: 'failed',
+            error: 'Missing userId in job data',
+            completedAt: new Date(),
+          },
+        }
+      );
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(`[ImmediateFlush] Processing digest for user ${userId}`);
+
+    // Use DigestSender to send the digest for this specific user
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { DigestSender } = await import('./digest/digest-sender');
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { EmailDigestPendingRepository, CommunicationLogRepository } =
+      await import('@scholaracle/database');
+
+    const repo = new EmailDigestPendingRepository(database);
+    const commLogRepo = new CommunicationLogRepository(database);
+    const digestSender = new DigestSender(
+      database,
+      transport,
+      fromEmail,
+      fromName,
+      dashboardBaseUrl,
+      repo,
+      commLogRepo,
+      insightService
+    );
+
+    await digestSender.sendDigestForUser(userId);
+
+    // Mark job as completed
+    await database.collection('jobs').updateOne(
+      { _id: jobData._id as unknown as never },
+      {
+        $set: {
+          status: 'completed',
+          completedAt: new Date(),
+        },
+      }
+    );
+
+    // eslint-disable-next-line no-console
+    console.log(`[ImmediateFlush] ✅ Digest sent for user ${userId}`);
+  } catch (error) {
+    console.error('[ImmediateFlush] Error:', error);
+  }
+}
+
+/**
  * Start the notification worker.
  *
  * @param config - Worker configuration
@@ -394,6 +491,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     ? new DigestInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
     : undefined;
 
+  // Scheduled digest flush (runs every 60 seconds)
   setInterval(() => {
     void flushEmailDigests(
       database,
@@ -404,6 +502,18 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       digestInsightService
     ).catch((e) => console.error('[EmailDigest]', e));
   }, 60_000);
+
+  // Immediate digest flush job processor (checks every 5 seconds for immediate jobs)
+  setInterval(() => {
+    void processImmediateFlushJobs(
+      database,
+      emailTransport,
+      sendGridConfig.fromEmail,
+      sendGridConfig.fromName,
+      dashboardBaseUrl,
+      digestInsightService
+    ).catch((e) => console.error('[ImmediateFlush]', e));
+  }, 5_000);
 
   // eslint-disable-next-line no-console
   console.log('Sync worker + scheduler started');
