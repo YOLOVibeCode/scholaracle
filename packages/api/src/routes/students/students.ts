@@ -3823,14 +3823,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const { recipients } = req.body as { recipients?: 'all' | string[] };
 
       // Get all potential recipients
-      const owner = await config.database.collection('users').findOne({ _id: student.userId });
+      const owner = await config.database
+        .collection('users')
+        .findOne({ _id: new ObjectId(student.userId) });
       const allRecipients: Array<{ email: string; name?: string; role: string }> = [];
 
       // Add owner if opted in
       if (owner && student.ownerAlertPrefs?.receiveAlerts !== false) {
         allRecipients.push({
-          email: owner.email as string,
-          name: owner.name as string,
+          email: owner['email'] as string,
+          name: owner['name'] as string,
           role: 'owner',
         });
       }
@@ -3908,7 +3910,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         },
       };
 
-      await config.database.collection('jobs').insertOne(flushJob);
+      const jobResult = await config.database.collection('jobs').insertOne(flushJob);
 
       res.status(200).json({
         success: true,
@@ -3918,7 +3920,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           name: r.name,
           role: r.role,
         })),
-        jobId: flushJob._id?.toString(),
+        jobId: jobResult.insertedId?.toString(),
       });
     } catch (error) {
       res.status(500).json({
