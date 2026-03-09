@@ -227,7 +227,7 @@ To complete this transfer, please confirm from BOTH email
 addresses by clicking the links below.
 
 Confirm from old email:
-https://app.scholaracle.com/api/account/email-transfer/confirm-old?token=abc123&userId=xyz
+https://scholarmancy.com/api/account/email-transfer/confirm-old?token=abc123&userId=xyz
 
 This link expires in 48 hours.
 ```

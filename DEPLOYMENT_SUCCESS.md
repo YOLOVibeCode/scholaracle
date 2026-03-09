@@ -48,7 +48,7 @@ $ curl https://api.scholarmancy.com/api/health
 ```
 NODE_ENV=production
 SENDGRID_API_KEY=SG.t-... (configured)
-SENDGRID_FROM_EMAIL=notifications@scholaracle.com
+SENDGRID_FROM_EMAIL=notifications@scholarmancy.com
 SENDGRID_FROM_NAME=Scholaracle
 # SMTP_HOST not set → uses SendGrid transport ✅
 ```
