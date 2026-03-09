@@ -79,7 +79,7 @@ ISP-based email transport refactoring with SMTP support. **Backward compatible**
 ```
 NODE_ENV=production
 SENDGRID_API_KEY=SG.t-... (exists)
-SENDGRID_FROM_EMAIL=notifications@scholaracle.com
+SENDGRID_FROM_EMAIL=notifications@scholarmancy.com
 SENDGRID_FROM_NAME=Scholaracle
 ```
 
