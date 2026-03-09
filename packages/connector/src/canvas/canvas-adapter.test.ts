@@ -230,7 +230,7 @@ describe('CanvasAdapter', () => {
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
-      const serverUrl = 'https://api.scholaracle.com/api/assets/asset-uuid-1';
+      const serverUrl = 'https://api.scholarmancy.com/api/assets/asset-uuid-1';
       const mockDownloader = {
         checkOnly: jest.fn().mockResolvedValue({ exists: false }),
         downloadAndUpload: jest.fn().mockResolvedValue({

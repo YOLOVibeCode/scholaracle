@@ -66,7 +66,7 @@ function getSendGridConfig(config: IWorkerConfig): {
     fromEmail:
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
-      'notifications@scholaracle.com',
+      'notifications@scholarmancy.com',
     fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
   };
 }
