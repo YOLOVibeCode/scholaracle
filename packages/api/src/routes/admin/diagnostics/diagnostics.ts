@@ -189,5 +189,167 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
     }
   });
 
+  /**
+   * POST /api/admin/diagnostics/create-sample-digest
+   * Create sample digest alerts with grade data for testing
+   */
+  router.post('/create-sample-digest', async (req: Request, res: Response) => {
+    try {
+      const { userId, studentId } = req.body as { userId?: string; studentId?: string };
+
+      if (!userId || !studentId) {
+        res.status(400).json({ success: false, error: 'userId and studentId are required' });
+        return;
+      }
+
+      // Create various types of alerts
+      const now = new Date();
+      const alerts = [
+        {
+          userId: new ObjectId(userId),
+          studentId: new ObjectId(studentId),
+          studentName: 'Ava Lewis',
+          type: 'grade_drop',
+          severity: 'warning',
+          title: 'Grade Drop: English',
+          message:
+            'Grade has dropped from 85% to 76% in English. Recent missing assignments may be affecting the grade.',
+          metadata: {
+            courseName: 'English',
+            oldGrade: 85,
+            newGrade: 76,
+          },
+          createdAt: new Date(now.getTime() - 2 * 3600000), // 2 hours ago
+          read: false,
+        },
+        {
+          userId: new ObjectId(userId),
+          studentId: new ObjectId(studentId),
+          studentName: 'Ava Lewis',
+          type: 'assignment_due',
+          severity: 'info',
+          title: 'Due Tomorrow: Math Homework Ch. 12',
+          message: 'Assignment "Chapter 12 Practice Problems" is due tomorrow at 11:59 PM.',
+          metadata: {
+            courseName: 'Algebra 1',
+            assignmentTitle: 'Chapter 12 Practice Problems',
+            dueDate: new Date(now.getTime() + 24 * 3600000).toISOString(),
+          },
+          createdAt: new Date(now.getTime() - 1 * 3600000), // 1 hour ago
+          read: false,
+        },
+        {
+          userId: new ObjectId(userId),
+          studentId: new ObjectId(studentId),
+          studentName: 'Ava Lewis',
+          type: 'missing_assignment',
+          severity: 'critical',
+          title: 'Missing Assignment: Science Lab Report',
+          message:
+            'Lab Report #3 was due 3 days ago and is still missing. This assignment is worth 50 points.',
+          metadata: {
+            courseName: 'Science',
+            assignmentTitle: 'Lab Report #3',
+            pointsWorth: 50,
+          },
+          createdAt: new Date(now.getTime() - 30 * 60000), // 30 min ago
+          read: false,
+        },
+        {
+          userId: new ObjectId(userId),
+          studentId: new ObjectId(studentId),
+          studentName: 'Ava Lewis',
+          type: 'grade_improvement',
+          severity: 'positive',
+          title: 'Great Work: History Grade Up',
+          message:
+            'History grade improved from 82% to 89% after recent test. Keep up the good work!',
+          metadata: {
+            courseName: 'History',
+            oldGrade: 82,
+            newGrade: 89,
+          },
+          createdAt: new Date(now.getTime() - 4 * 3600000), // 4 hours ago
+          read: false,
+        },
+      ];
+
+      // Insert alerts
+      const alertResults = await config.database.collection('slc_alerts').insertMany(alerts);
+      const alertIds = Object.values(alertResults.insertedIds);
+
+      // Create digest pending items for all recipients
+      const digestItems = [];
+      let alertIndex = 0;
+      for (const alertId of alertIds) {
+        const alert = alerts[alertIndex];
+        alertIndex++;
+        if (alert) {
+          // Owner
+          digestItems.push({
+            userId,
+            alertId: alertId.toString(),
+            studentId,
+            studentName: 'Ava Lewis',
+            recipientEmail: 'rvegajr@noctusoft.com',
+            recipientType: 'parent',
+            severity: alert.severity,
+            alertType: alert.type,
+            subject: alert.title,
+            body: alert.message,
+            courseName: (alert.metadata as { courseName?: string }).courseName,
+            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
+            createdAt: alert.createdAt,
+          });
+          // Shared parents
+          digestItems.push({
+            userId,
+            alertId: alertId.toString(),
+            studentId,
+            studentName: 'Ava Lewis',
+            recipientEmail: 'rmlewis1976@gmail.com',
+            recipientType: 'parent',
+            severity: alert.severity,
+            alertType: alert.type,
+            subject: alert.title,
+            body: alert.message,
+            courseName: (alert.metadata as { courseName?: string }).courseName,
+            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
+            createdAt: alert.createdAt,
+          });
+          digestItems.push({
+            userId,
+            alertId: alertId.toString(),
+            studentId,
+            studentName: 'Ava Lewis',
+            recipientEmail: 'jdenise11@hotmail.com',
+            recipientType: 'parent',
+            severity: alert.severity,
+            alertType: alert.type,
+            subject: alert.title,
+            body: alert.message,
+            courseName: (alert.metadata as { courseName?: string }).courseName,
+            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
+            createdAt: alert.createdAt,
+          });
+        }
+      }
+
+      await config.database.collection('email_digest_pending').insertMany(digestItems);
+
+      res.status(200).json({
+        success: true,
+        message: `Created ${alerts.length} sample alerts and queued ${digestItems.length} digest items`,
+        alertCount: alerts.length,
+        digestItemCount: digestItems.length,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
   return router;
 }
