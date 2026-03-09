@@ -118,6 +118,7 @@ export class SyncScheduler {
     dataSources: ReadonlyArray<{
       pluginId: string;
       config?: { institutionUrl?: string };
+      baseUrl?: string;
       enabled?: boolean;
     }>
   ): Promise<string[]> {
@@ -127,7 +128,7 @@ export class SyncScheduler {
       if (ds.enabled === false) continue;
       const provider = ds.pluginId.split('::')[0] ?? ds.pluginId;
       const adapterId = ds.pluginId;
-      const baseUrl = ds.config?.institutionUrl ?? '';
+      const baseUrl = ds.config?.institutionUrl ?? ds.baseUrl ?? '';
       const jid = await this.triggerNow({
         studentId,
         dataSourceIndex: i,
