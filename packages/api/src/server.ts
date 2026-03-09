@@ -40,6 +40,7 @@ import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
 import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
+import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
 import { billingRouter } from './routes/billing';
@@ -460,6 +461,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/analytics', analyticsRouter({ database }));
     app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
+    app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database }));
     app.use('/api/admin', notesRouter({ database }));
 
     // Webhook ingestion (delivery tracking)
