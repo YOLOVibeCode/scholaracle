@@ -18,6 +18,9 @@ export interface IDataSource {
   readonly enabled: boolean;
   readonly credentials?: IDataSourceCredentials;
   readonly config?: IDataSourceConfig;
+  /** Portal / institution base URL (may also appear under config.institutionUrl). */
+  readonly baseUrl?: string;
+  readonly provider?: string;
   readonly schedule?: string;
   readonly dataTypes?: readonly string[];
   readonly lastScraped?: Date;
