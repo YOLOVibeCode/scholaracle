@@ -1,0 +1,1 @@
+export { createDiagnosticsRouter } from './diagnostics';
