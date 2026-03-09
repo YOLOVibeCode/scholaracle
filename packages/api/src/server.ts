@@ -346,10 +346,26 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       })
     );
     app.use('/api/sessions', sessionsRouter({ database, authService }));
+
+    // Create SyncScheduler once (if available) to be shared by students and sync routes
+    let syncScheduler: import('@scholaracle/agents').SyncScheduler | undefined;
+    try {
+      const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
+      const syncQueue = new MongoQueue(database);
+      syncScheduler = new SyncScheduler(syncQueue, database);
+    } catch {
+      // Agents package not available — sync routes will be skipped
+    }
+
     app.use(
       '/api/students',
       authMiddleware(authService),
-      studentsRouter({ database, baseUrl: baseUrl ?? '', sendInviteEmail: inviteEmailSender })
+      studentsRouter({
+        database,
+        baseUrl: baseUrl ?? '',
+        sendInviteEmail: inviteEmailSender,
+        syncScheduler,
+      })
     );
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
 
@@ -363,19 +379,18 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       })
     );
 
-    // Sync API — trigger and monitor data-source sync jobs (optional; mount if module exists)
-    try {
-      const { createSyncRouter } = require('./routes/sync/sync');
-      const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
-      const syncQueue = new MongoQueue(database);
-      const syncScheduler = new SyncScheduler(syncQueue, database);
-      app.use(
-        '/api/sync',
-        authMiddleware(authService),
-        createSyncRouter({ database, syncScheduler })
-      );
-    } catch {
-      // Sync route or agents not available — skip /api/sync
+    // Sync API — trigger and monitor data-source sync jobs (uses syncScheduler created above)
+    if (syncScheduler) {
+      try {
+        const { createSyncRouter } = require('./routes/sync/sync');
+        app.use(
+          '/api/sync',
+          authMiddleware(authService),
+          createSyncRouter({ database, syncScheduler })
+        );
+      } catch {
+        // Sync route not available — skip /api/sync
+      }
     }
 
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
