@@ -83,6 +83,8 @@ export interface IStudentsRouterConfig {
   readonly baseUrl?: string;
   /** Optional sender for contact-invitation emails. */
   readonly sendInviteEmail?: IInviteEmailSender;
+  /** Optional sync scheduler for enqueuing sync jobs when triggers are called. */
+  readonly syncScheduler?: import('@scholaracle/agents').SyncScheduler;
 }
 
 export interface IActionAsset {
@@ -3463,6 +3465,25 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const lastCursor = await ingestRunRepository.findLastCommittedCursor(userId, sourceId);
       const runId = randomUUID();
       const run = await ingestRunRepository.startRun({ userId, sourceId, runId, lastCursor });
+
+      // Also enqueue a sync job if syncScheduler is available (for internal adapters)
+      if (config.syncScheduler) {
+        const dsIndex = student.dataSources.findIndex((ds) => ds.id === sourceId);
+        if (dsIndex >= 0) {
+          const ds = student.dataSources[dsIndex];
+          if (ds) {
+            const provider = ds.pluginId.split('::')[0] ?? ds.pluginId;
+            await config.syncScheduler.triggerNow({
+              studentId,
+              dataSourceIndex: dsIndex,
+              provider,
+              adapterId: ds.pluginId,
+              baseUrl: ds.config?.institutionUrl ?? '',
+              userId,
+            });
+          }
+        }
+      }
 
       res.status(201).json({
         runId: run.runId,
