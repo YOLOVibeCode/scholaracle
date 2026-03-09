@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   const fromEmail =
     process.env['SENDGRID_FROM_EMAIL'] ??
     process.env['FROM_EMAIL'] ??
-    'notifications@scholaracle.com';
+    'notifications@scholarmancy.com';
   const fromName = process.env['SENDGRID_FROM_NAME'] ?? process.env['FROM_NAME'] ?? 'Scholaracle';
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
