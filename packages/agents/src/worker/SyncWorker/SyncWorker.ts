@@ -89,7 +89,7 @@ export interface ISyncWorkerConfig {
   readonly decryptCredentials: (encrypted: { encrypted: string; iv: string }) => string | null;
   /** The function that actually runs an adapter. Injected by the worker bootstrap. */
   readonly runAdapter: AdapterRunnerFn;
-  /** Base URL of the API (e.g. https://api.scholaracle.com). When set with createConnectorToken, envelope is submitted to ingest. */
+  /** Base URL of the API (e.g. https://api.scholarmancy.com). When set with createConnectorToken, envelope is submitted to ingest. */
   readonly apiBaseUrl?: string;
   /** Creates a connector JWT for the given userId. Required for submitting envelope to ingest. */
   readonly createConnectorToken?: (userId: string) => string;
