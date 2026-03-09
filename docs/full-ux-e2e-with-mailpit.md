@@ -47,7 +47,7 @@ To get a pre-built user and students with grades:
 
 ```bash
 curl -X POST http://localhost:2801/api/seed/demo
-# Demo user: demo@scholaracle.com / DemoPass123!
+# Demo user: demo@scholarmancy.com / DemoPass123!
 ```
 
 ## 4. Full path (Playwright recommended)
