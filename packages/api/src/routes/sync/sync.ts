@@ -95,6 +95,7 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
       id?: string;
       pluginId: string;
       config?: { institutionUrl?: string };
+      baseUrl?: string;
       enabled?: boolean;
     }>;
     const ds = dataSources[idx];
@@ -106,7 +107,7 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
       dataSourceIndex: idx,
       provider,
       adapterId: ds.pluginId,
-      baseUrl: ds.config?.institutionUrl ?? '',
+      baseUrl: ds.config?.institutionUrl ?? ds.baseUrl ?? '',
       userId,
     });
 

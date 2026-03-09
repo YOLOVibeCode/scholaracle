@@ -3478,7 +3478,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               dataSourceIndex: dsIndex,
               provider,
               adapterId: ds.pluginId,
-              baseUrl: ds.config?.institutionUrl ?? '',
+              baseUrl: ds.config?.institutionUrl ?? ds.baseUrl ?? '',
               userId,
             });
           }
