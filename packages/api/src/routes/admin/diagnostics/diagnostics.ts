@@ -351,5 +351,115 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
     }
   });
 
+  /**
+   * GET /api/admin/diagnostics/sync-status
+   * Check sync jobs and runs status for diagnostics
+   */
+  router.get('/sync-status', async (_req: Request, res: Response) => {
+    try {
+      const db = config.database;
+
+      // Check jobs collection
+      const recentJobs = await db
+        .collection('jobs')
+        .find({ type: 'sync' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
+
+      const jobStats = {
+        pending: await db.collection('jobs').countDocuments({ type: 'sync', status: 'pending' }),
+        processing: await db
+          .collection('jobs')
+          .countDocuments({ type: 'sync', status: 'processing' }),
+        completed: await db
+          .collection('jobs')
+          .countDocuments({ type: 'sync', status: 'completed' }),
+        failed: await db.collection('jobs').countDocuments({ type: 'sync', status: 'failed' }),
+      };
+
+      // Check sync_runs collection
+      const recentSyncRuns = await db
+        .collection('sync_runs')
+        .find({})
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .toArray();
+
+      // Check slc_runs collection
+      const recentSlcRuns = await db
+        .collection('slc_runs')
+        .find({})
+        .sort({ startedAt: -1 })
+        .limit(10)
+        .toArray();
+
+      // Check for stuck jobs (processing for >5 minutes)
+      const stuckJobs = await db
+        .collection('jobs')
+        .find({
+          type: 'sync',
+          status: 'processing',
+          lockedAt: { $lt: new Date(Date.now() - 5 * 60 * 1000) },
+        })
+        .toArray();
+
+      res.status(200).json({
+        success: true,
+        jobStats,
+        recentJobs: recentJobs.map((j) => ({
+          id: j._id,
+          name: j['name'],
+          status: j['status'],
+          studentId: j['data']?.['studentId'],
+          provider: j['data']?.['provider'],
+          createdAt: j['createdAt'],
+          scheduledFor: j['scheduledFor'],
+          attempts: j['attempts'] || 0,
+          lockedAt: j['lockedAt'],
+          error: j['error'],
+        })),
+        recentSyncRuns: recentSyncRuns.map((r) => ({
+          id: r._id,
+          jobId: r['jobId'],
+          status: r['status'],
+          studentId: r['studentId'],
+          provider: r['provider'],
+          createdAt: r['createdAt'],
+          completedAt: r['completedAt'],
+          error: r['error'],
+        })),
+        recentSlcRuns: recentSlcRuns.map((r) => ({
+          runId: r['runId'],
+          status: r['status'],
+          sourceId: r['sourceId'],
+          startedAt: r['startedAt'],
+          committedAt: r['committedAt'],
+          error: r['error'],
+        })),
+        stuckJobs: stuckJobs.length,
+        diagnosis: {
+          jobsCreated: recentJobs.length > 0,
+          syncWorkerProcessing: recentSyncRuns.length > 0,
+          hasPendingJobs: jobStats.pending > 0,
+          hasStuckJobs: stuckJobs.length > 0,
+          issue:
+            jobStats.pending > 0 && recentSyncRuns.length === 0
+              ? 'Jobs are pending but SyncWorker has never processed any - workers service may not be running'
+              : stuckJobs.length > 0
+                ? 'Jobs are stuck in processing - workers may have crashed'
+                : recentJobs.length === 0
+                  ? 'No sync jobs found - syncScheduler.triggerNow() may not be called'
+                  : 'System appears healthy',
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
   return router;
 }
