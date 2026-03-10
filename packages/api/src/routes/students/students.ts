@@ -1137,6 +1137,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
       const termsColl = config.database.collection('slc_academic_terms');
+      const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
 
       const assignmentFilter = studentDbIdStr
         ? {
@@ -1148,9 +1149,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             ],
           }
         : { userId, studentExternalId, deletedAt: null };
-      const [assignmentDocs, termDocs] = await Promise.all([
+      const [assignmentDocs, termDocs, gradeSnapshotDocs] = await Promise.all([
         assignmentsColl.find(assignmentFilter).toArray(),
         termsColl.find({ userId, deletedAt: null }).toArray(),
+        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
       ]);
 
       const termEndDates = new Map<string, string>();
@@ -1171,11 +1173,18 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           materialCountByCourse.set(courseId, (materialCountByCourse.get(courseId) ?? 0) + 1);
       }
 
-      const courseIds = [
-        ...new Set(
-          assignmentDocs.map((d) => d['courseExternalId'] as string).filter(Boolean) as string[]
-        ),
-      ];
+      // Collect courseIds from both assignments AND grade snapshots for complete merging
+      const assignmentCourseIds = assignmentDocs
+        .map((d) => d['courseExternalId'] as string)
+        .filter(Boolean);
+      const snapshotCourseIds = gradeSnapshotDocs
+        .map((g) => {
+          const rec = g['record'] as Record<string, unknown> | undefined;
+          return ((g['courseExternalId'] ?? rec?.['courseExternalId']) as string) || '';
+        })
+        .filter(Boolean);
+      const courseIds = [...new Set([...assignmentCourseIds, ...snapshotCourseIds])];
+
       const courseMap = new Map<string, string>();
       const courseSourceInfo = new Map<
         string,
@@ -1342,13 +1351,48 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }>;
       }> = [];
 
+      // Build SIS grade snapshot lookup: prefer sourceType='sis' snapshots, pick latest asOfDate
+      const sisGradeByCourse = new Map<
+        string,
+        { percent: number; letter?: string; asOf: string }
+      >();
+      const lmsGradeByCourse = new Map<
+        string,
+        { percent: number; letter?: string; asOf: string }
+      >();
+      for (const snap of gradeSnapshotDocs) {
+        const rec = snap['record'] as Record<string, unknown> | undefined;
+        if (!rec) continue;
+        const rawCourseId = (snap['courseExternalId'] ?? rec['courseExternalId']) as
+          | string
+          | undefined;
+        if (!rawCourseId) continue;
+        const courseExtId = extIdToMergedId.get(rawCourseId) ?? rawCourseId;
+        const asOf = (rec['asOfDate'] as string) ?? '';
+        const rawPct = rec['percentGrade'] ?? rec['grade'];
+        const percent = typeof rawPct === 'number' ? rawPct : NaN;
+        if (isNaN(percent)) continue;
+        const letter = rec['letterGrade'] as string | undefined;
+        const sourceType = (rec['sourceType'] as string) ?? (snap['provider'] as string) ?? '';
+        const isSis = sourceType === 'sis' || ['skyward', 'aeries'].includes(sourceType);
+        const target = isSis ? sisGradeByCourse : lmsGradeByCourse;
+        const prev = target.get(courseExtId);
+        if (!prev || asOf >= prev.asOf) {
+          target.set(courseExtId, { percent, letter: letter ?? undefined, asOf });
+        }
+      }
+
       for (const [courseExternalId, data] of courseData) {
         const totalAssignments = data.assignments.length;
-        const grade =
+        // Prefer SIS grade snapshot (Skyward/Aeries), then LMS snapshot, then computed
+        const sisSnap = sisGradeByCourse.get(courseExternalId);
+        const lmsSnap = lmsGradeByCourse.get(courseExternalId);
+        const computedGrade =
           data.totalPointsPossible > 0
             ? Math.round((data.totalPointsEarned / data.totalPointsPossible) * 1000) / 10
             : 0;
-        const letterGrade = percentToLetter(grade);
+        const grade = sisSnap?.percent ?? lmsSnap?.percent ?? computedGrade;
+        const letterGrade = sisSnap?.letter ?? lmsSnap?.letter ?? percentToLetter(grade);
         const trend = trendFromScores(
           data.recentPointsPossible,
           data.recentPointsEarned,
