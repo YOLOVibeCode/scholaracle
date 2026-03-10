@@ -461,5 +461,73 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
     }
   });
 
+  /**
+   * GET /api/admin/diagnostics/student-data/:studentId
+   * Query SLC collections for a student's academic data
+   */
+  router.get('/student-data/:studentId', async (req: Request, res: Response) => {
+    try {
+      const { studentId } = req.params;
+      const db = config.database;
+
+      const [courses, grades, assignments, attendance] = await Promise.all([
+        db
+          .collection('slc_courses')
+          .find({ 'key.studentExternalId': studentId })
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .toArray(),
+        db
+          .collection('slc_grade_snapshots')
+          .find({ 'key.studentExternalId': studentId })
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .toArray(),
+        db
+          .collection('slc_assignments')
+          .find({ 'key.studentExternalId': studentId })
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .toArray(),
+        db
+          .collection('slc_attendance_events')
+          .find({ 'key.studentExternalId': studentId })
+          .sort({ updatedAt: -1 })
+          .limit(50)
+          .toArray(),
+      ]);
+
+      res.status(200).json({
+        success: true,
+        studentId,
+        counts: {
+          courses: courses.length,
+          grades: grades.length,
+          assignments: assignments.length,
+          attendance: attendance.length,
+        },
+        courses: courses.map((c) => ({
+          title: c['record']?.['title'],
+          externalId: c['key']?.['externalId'],
+          provider: c['key']?.['provider'],
+          updatedAt: c['updatedAt'],
+        })),
+        grades: grades.map((g) => ({
+          courseExternalId: g['record']?.['courseExternalId'],
+          letterGrade: g['record']?.['letterGrade'],
+          percentage: g['record']?.['percentage'],
+          asOfDate: g['record']?.['asOfDate'],
+          provider: g['key']?.['provider'],
+          updatedAt: g['updatedAt'],
+        })),
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
   return router;
 }
