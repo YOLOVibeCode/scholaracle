@@ -85,10 +85,17 @@ export class SkywardBrowserScraper {
   async launch(options?: ISkywardScraperOptions): Promise<void> {
     this.browser = await chromium.launch({
       headless: options?.headless ?? true,
+      args: [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+      ],
     });
     this.context = await this.browser.newContext();
     this.page = await this.context.newPage();
-    this.page.setDefaultTimeout(options?.timeout ?? 20000);
+    this.page.setDefaultTimeout(options?.timeout ?? 30000);
     this.aiClient = options?.aiClient;
     this.strategyStore = options?.strategyStore;
   }
