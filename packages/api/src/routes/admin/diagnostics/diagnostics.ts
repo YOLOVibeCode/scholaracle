@@ -470,28 +470,33 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
       const { studentId } = req.params;
       const db = config.database;
 
+      const student = await db.collection('students').findOne({ _id: new ObjectId(studentId!) });
+      const sourceIds = ((student?.['dataSources'] ?? []) as Array<{ id: string }>).map(
+        (ds) => ds.id
+      );
+
+      const sourceFilter =
+        sourceIds.length > 0
+          ? { $or: [{ sourceId: { $in: sourceIds } }, { 'key.studentExternalId': studentId }] }
+          : { 'key.studentExternalId': studentId };
+
       const [courses, grades, assignments, attendance] = await Promise.all([
-        db
-          .collection('slc_courses')
-          .find({ 'key.studentExternalId': studentId })
-          .sort({ updatedAt: -1 })
-          .limit(50)
-          .toArray(),
+        db.collection('slc_courses').find(sourceFilter).sort({ updatedAt: -1 }).limit(50).toArray(),
         db
           .collection('slc_grade_snapshots')
-          .find({ 'key.studentExternalId': studentId })
+          .find(sourceFilter)
           .sort({ updatedAt: -1 })
           .limit(50)
           .toArray(),
         db
           .collection('slc_assignments')
-          .find({ 'key.studentExternalId': studentId })
+          .find(sourceFilter)
           .sort({ updatedAt: -1 })
           .limit(50)
           .toArray(),
         db
           .collection('slc_attendance_events')
-          .find({ 'key.studentExternalId': studentId })
+          .find(sourceFilter)
           .sort({ updatedAt: -1 })
           .limit(50)
           .toArray(),
