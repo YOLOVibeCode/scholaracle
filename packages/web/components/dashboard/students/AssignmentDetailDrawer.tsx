@@ -21,7 +21,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
-import { studentsApi, type ICourseMaterial } from '@/lib/api/students';
+import { studentsApi, type ICourseMaterial, type IAttachment } from '@/lib/api/students';
+import { getAttachmentIcon, getFileExtension } from '@/lib/attachment-utils';
 
 const MATERIAL_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   document: FileText,
@@ -39,6 +40,7 @@ export interface AssignmentDetailDrawerAssignment {
   readonly status: string;
   readonly pointsPossible?: number;
   readonly pointsEarned?: number;
+  readonly attachments?: readonly IAttachment[];
 }
 
 export interface AssignmentDetailDrawerCourse {
@@ -167,7 +169,20 @@ export function AssignmentDetailDrawer({
           </div>
         )}
 
-        <div className="min-w-0 flex-1 space-y-2 overflow-auto">
+        <div className="min-w-0 flex-1 space-y-4 overflow-auto">
+          {assignment.attachments && assignment.attachments.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Student submissions</h3>
+              <ul className="space-y-1">
+                {assignment.attachments.map((att, i) => (
+                  <li key={`${att.name}-${i}`}>
+                    <AttachmentRow attachment={att} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <h3 className="text-sm font-semibold">Related materials</h3>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
@@ -185,6 +200,35 @@ export function AssignmentDetailDrawer({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function AttachmentRow({ attachment }: { attachment: IAttachment }) {
+  const Icon = getAttachmentIcon(attachment.type);
+  const ext = getFileExtension(attachment.name);
+
+  return (
+    <div
+      className="flex items-center gap-3 rounded-md border bg-background px-3 py-2"
+      data-testid="drawer-attachment-row"
+    >
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{attachment.name}</p>
+        {ext && <p className="text-xs text-muted-foreground">{ext}</p>}
+      </div>
+      {attachment.url && (
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Download"
+        >
+          <Download className="h-4 w-4" />
+        </a>
+      )}
+    </div>
   );
 }
 
