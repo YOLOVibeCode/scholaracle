@@ -62,6 +62,12 @@ export interface IStudentAlert {
 
 export type AssignmentStatus = 'missing' | 'submitted' | 'graded' | 'late' | 'unknown';
 
+export interface IAttachment {
+  readonly name: string;
+  readonly url?: string;
+  readonly type?: string;
+}
+
 export interface ICourseAssignment {
   readonly externalId: string;
   readonly title: string;
@@ -71,15 +77,24 @@ export interface ICourseAssignment {
   readonly pointsEarned?: number;
   readonly isOverdue: boolean;
   readonly weight?: number;
+  readonly attachments?: readonly IAttachment[];
 }
 
 export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical';
+export type GradeSource = 'sis' | 'lms' | 'computed' | 'none';
 
 export interface ICourseGrade {
   readonly courseExternalId: string;
   readonly courseName: string;
   readonly grade: number;
   readonly letterGrade: string;
+  readonly officialGrade?: number | null;
+  readonly gradeSource?: GradeSource;
+  readonly gradeBreakdown?: {
+    readonly sisGrade?: number;
+    readonly lmsGrade?: number;
+    readonly computedGrade?: number;
+  };
   readonly totalAssignments: number;
   readonly gradedAssignments: number;
   readonly missingAssignments: number;
