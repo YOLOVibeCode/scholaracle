@@ -118,7 +118,8 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
     const borderColor = severityBorderColor(item.severity);
     const oneLiner =
       [item.courseName, item.assignmentTitle].filter(Boolean).join(': ') || item.subject;
-    const snippet = item.body.slice(0, 120) + (item.body.length > 120 ? '…' : '');
+    const body = item.body || '';
+    const snippet = body.slice(0, 120) + (body.length > 120 ? '…' : '');
     const timeStr = formatRelativeTime(item.createdAt);
     return `
     <div style="border-left:4px solid ${borderColor}; padding:10px 12px; margin:8px 0; background:#f9fafb; border-radius:0 6px 6px 0;">
