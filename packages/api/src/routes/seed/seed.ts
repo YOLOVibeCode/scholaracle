@@ -871,5 +871,86 @@ export function seedRouter(config: ISeedRouterConfig): Router {
     }
   });
 
+  /**
+   * POST /api/seed/add-parent
+   * Add a parent with accepted status directly to a student (dev/test only).
+   * Body: { studentId: string, email: string, name: string, role?: string, userId?: string }
+   */
+  router.post('/add-parent', async (req: Request, res: Response) => {
+    if (!isDemoAllowed()) {
+      res.status(403).json({ success: false, error: 'Not allowed in production' });
+      return;
+    }
+
+    const { studentId, email, name, role, userId } = req.body as {
+      studentId?: string;
+      email?: string;
+      name?: string;
+      role?: string;
+      userId?: string;
+    };
+
+    if (!studentId || !email) {
+      res.status(400).json({ success: false, error: 'Missing studentId or email' });
+      return;
+    }
+
+    try {
+      const studentRepository = new StudentRepository(config.database);
+      const student = await studentRepository.findById(studentId);
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const parentRole = (role === 'guardian' || role === 'caregiver' ? role : 'parent') as
+        | 'parent'
+        | 'guardian'
+        | 'caregiver';
+
+      const existingIdx = student.sharedWith.findIndex((sp) => sp.email === normalizedEmail);
+      if (existingIdx >= 0) {
+        // Update existing
+        const updated = [...student.sharedWith];
+        updated[existingIdx] = {
+          email: normalizedEmail,
+          name: name || updated[existingIdx]!.name,
+          userId,
+          role: parentRole,
+          status: 'accepted',
+          invitedAt: updated[existingIdx]!.invitedAt || new Date(),
+          acceptedAt: new Date(),
+        };
+        await studentRepository.update(student._id!, { sharedWith: updated });
+      } else {
+        // Add new
+        const newShared = [
+          ...student.sharedWith,
+          {
+            email: normalizedEmail,
+            name,
+            userId,
+            role: parentRole,
+            status: 'accepted' as const,
+            invitedAt: new Date(),
+            acceptedAt: new Date(),
+          },
+        ];
+        await studentRepository.update(student._id!, { sharedWith: newShared });
+      }
+
+      res.json({
+        success: true,
+        message: `Parent ${email} added to student ${student.name}`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   return router;
 }
