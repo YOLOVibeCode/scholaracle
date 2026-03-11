@@ -485,7 +485,9 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
 const ACTIVITY_LOG_COLLECTION = 'slc_activity_log';
 const ASSIGNMENT_RECONCILIATION_COLLECTION = 'slc_assignment_reconciliation';
 
-/** Auto-create Student records for new studentExternalId values encountered in ops. */
+/** Auto-create Student records for new studentExternalId values encountered in ops.
+ *  Matches by studentExternalId (not composite key) so that the same student
+ *  from different platforms (Canvas, Skyward) merges into ONE record. */
 async function autoCreateStudentsFromOps(params: {
   readonly database: Db;
   readonly userId: string;
@@ -495,69 +497,76 @@ async function autoCreateStudentsFromOps(params: {
   readonly adapterId: string;
   readonly portalBaseUrl?: string;
 }): Promise<void> {
-  // Extract unique (institutionExternalId, studentExternalId) pairs
-  const studentKeys = new Set<string>();
+  // Extract unique studentExternalId values (with their institutionExternalId)
+  const studentExtIds = new Map<string, string | undefined>();
   for (const op of params.ops) {
     const studentExtId = op.key?.studentExternalId;
     const institutionExtId = op.key?.institutionExternalId;
     if (typeof studentExtId === 'string' && studentExtId.trim()) {
-      // Create composite key: institution:student to prevent cross-institution collisions
-      const compositeKey = institutionExtId ? `${institutionExtId}:${studentExtId}` : studentExtId;
-      studentKeys.add(compositeKey);
+      if (!studentExtIds.has(studentExtId)) {
+        studentExtIds.set(
+          studentExtId,
+          typeof institutionExtId === 'string' ? institutionExtId : undefined
+        );
+      }
     }
   }
-  if (studentKeys.size === 0) return;
+  if (studentExtIds.size === 0) return;
 
   const studentRepo = new StudentRepository(params.database);
   const students = await studentRepo.findByUserId(params.userId);
-  const studentsByCompositeKey = new Map(
-    students.map((s) => [s.studentId, s]).filter(([id]) => id) as Array<
-      [string, (typeof students)[0]]
-    >
-  );
 
-  // Extract student profile names from ops
+  // Build lookup by studentExternalId — handle both new format ("ava-lewis")
+  // and legacy composite ("institution:student") stored in studentId.
+  const studentsByExtId = new Map<string, (typeof students)[0]>();
+  for (const s of students) {
+    if (!s.studentId) continue;
+    const parts = s.studentId.split(':', 2);
+    const extId = parts.length === 2 ? parts[1]! : s.studentId;
+    studentsByExtId.set(extId, s);
+  }
+
+  // Extract student profile names from ops (keyed by studentExternalId)
   const profileNames = new Map<string, string>();
   for (const op of params.ops) {
     if (op.entity === 'studentProfile' && op.op === 'upsert') {
       const studentExtId = op.key?.studentExternalId;
-      const institutionExtId = op.key?.institutionExternalId;
       const name = (op.record?.['name'] as string | undefined) ?? '';
       if (studentExtId && name) {
-        const compositeKey = institutionExtId
-          ? `${institutionExtId}:${studentExtId}`
-          : studentExtId;
-        profileNames.set(compositeKey, name);
+        profileNames.set(studentExtId, name);
       }
     }
   }
 
-  const newDataSource = {
-    id: params.sourceId,
-    pluginId: params.adapterId,
-    enabled: true,
-    provider: params.provider,
-    baseUrl: params.portalBaseUrl,
-  };
+  for (const [studentExtId, institutionExtId] of studentExtIds) {
+    const newDataSource = {
+      id: params.sourceId,
+      pluginId: params.adapterId,
+      enabled: true,
+      provider: params.provider,
+      baseUrl: params.portalBaseUrl,
+      institutionExternalId: institutionExtId,
+    };
 
-  for (const compositeKey of studentKeys) {
-    const existing = studentsByCompositeKey.get(compositeKey);
+    const existing = studentsByExtId.get(studentExtId);
 
     if (existing) {
-      // Update existing student to add this data source if not present
       const hasSource = existing.dataSources.some((ds) => ds.id === params.sourceId);
       if (!hasSource) {
         await studentRepo.update(existing._id!, {
           dataSources: [...existing.dataSources, newDataSource],
         });
       }
+      // Migrate legacy composite studentId to plain studentExternalId
+      if (existing.studentId && existing.studentId.includes(':')) {
+        await studentRepo.update(existing._id!, { studentId: studentExtId });
+      }
     } else {
-      // Auto-create student with composite key as studentId
-      const studentName = profileNames.get(compositeKey) ?? compositeKey;
+      const studentName = profileNames.get(studentExtId) ?? studentExtId;
       await studentRepo.create({
         userId: params.userId,
         name: studentName,
-        studentId: compositeKey,
+        studentId: studentExtId,
         dataSources: [newDataSource],
       });
     }
