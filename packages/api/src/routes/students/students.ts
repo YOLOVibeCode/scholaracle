@@ -54,13 +54,32 @@ function normalizeTitle(raw: string): string {
     .toLowerCase();
 }
 
+function findCanonicalKey(key: string, groups: Map<string, ISourceCourse[]>): string | undefined {
+  if (key.length < 4) return undefined;
+  for (const existing of groups.keys()) {
+    if (existing === key) return existing;
+    if (existing.length >= 4 && (existing.startsWith(key) || key.startsWith(existing))) {
+      const canonical = key.length >= existing.length ? key : existing;
+      if (canonical !== existing) {
+        const members = groups.get(existing) ?? [];
+        groups.delete(existing);
+        groups.set(canonical, members);
+      }
+      return canonical;
+    }
+  }
+  return undefined;
+}
+
 function mergeCoursesInline(courses: readonly ISourceCourse[]): readonly IMergedCourse[] {
   const groups = new Map<string, ISourceCourse[]>();
   for (const c of courses) {
     const key = normalizeTitle(c.title);
-    const list = groups.get(key) ?? [];
+    const mergedInto = findCanonicalKey(key, groups);
+    const target = mergedInto ?? key;
+    const list = groups.get(target) ?? [];
     list.push(c);
-    groups.set(key, list);
+    groups.set(target, list);
   }
   const result: IMergedCourse[] = [];
   for (const [key, members] of groups) {
@@ -1132,23 +1151,31 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
 
-      const studentExternalId = student.studentId ?? '';
       const studentDbIdStr = student._id?.toString() ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
       const termsColl = config.database.collection('slc_academic_terms');
       const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
 
-      const assignmentFilter = studentDbIdStr
-        ? {
-            userId,
-            deletedAt: null,
-            $or: [
-              { studentId: studentDbIdStr },
-              ...(studentExternalId ? [{ studentExternalId }] : []),
-            ],
-          }
-        : { userId, studentExternalId, deletedAt: null };
+      // Parse composite studentId (format: "institution:student" or legacy "student")
+      // This ensures multi-tenant isolation while supporting backwards compatibility
+      const studentIdParts = (student.studentId ?? '').split(':', 2);
+      const studentExternalId =
+        studentIdParts.length === 2 ? studentIdParts[1]! : (student.studentId ?? '');
+      const institutionExternalId = studentIdParts.length === 2 ? studentIdParts[0]! : undefined;
+
+      // Build query with institution scoping for multi-tenant safety
+      const assignmentFilter: Record<string, unknown> = {
+        userId,
+        deletedAt: null,
+        $or: [
+          { studentId: studentDbIdStr },
+          // Match by studentExternalId + institutionExternalId for proper scoping
+          ...(institutionExternalId
+            ? [{ studentExternalId, institutionExternalId }]
+            : [{ studentExternalId }]),
+        ],
+      };
       const [assignmentDocs, termDocs, gradeSnapshotDocs] = await Promise.all([
         assignmentsColl.find(assignmentFilter).toArray(),
         termsColl.find({ userId, deletedAt: null }).toArray(),
@@ -1250,6 +1277,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             pointsEarned?: number;
             isOverdue: boolean;
             weight?: number;
+            attachments?: Array<{ name: string; url?: string; type?: string }>;
           }>;
           recentPointsPossible: number;
           recentPointsEarned: number;
@@ -1274,6 +1302,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           typeof record?.['pointsEarned'] === 'number' ? record!['pointsEarned'] : undefined;
         const title = (record?.['title'] as string) ?? 'Assignment';
         const externalId = (doc['externalId'] as string) ?? '';
+        const attachments =
+          (record?.['attachments'] as Array<{ name: string; url?: string; type?: string }>) ??
+          undefined;
 
         if (!courseData.has(courseExternalId)) {
           courseData.set(courseExternalId, {
@@ -1300,6 +1331,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           pointsPossible,
           pointsEarned,
           isOverdue,
+          attachments,
         });
 
         if (status === 'graded' && pointsPossible != null && pointsPossible > 0) {
@@ -1327,8 +1359,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const courseGrades: Array<{
         courseExternalId: string;
         courseName: string;
-        grade: number;
-        letterGrade: string;
+        officialGrade: number | null;
+        letterGrade: string | null;
+        gradeSource: 'sis' | 'lms' | 'computed' | 'none';
+        gradeBreakdown?: {
+          sisGrade?: number;
+          lmsGrade?: number;
+          computedGrade?: number;
+        };
         totalAssignments: number;
         gradedAssignments: number;
         missingAssignments: number;
@@ -1348,6 +1386,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           pointsEarned?: number;
           isOverdue: boolean;
           weight?: number;
+          attachments?: Array<{ name: string; url?: string; type?: string }>;
         }>;
       }> = [];
 
@@ -1387,12 +1426,42 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         // Prefer SIS grade snapshot (Skyward/Aeries), then LMS snapshot, then computed
         const sisSnap = sisGradeByCourse.get(courseExternalId);
         const lmsSnap = lmsGradeByCourse.get(courseExternalId);
-        const computedGrade =
-          data.totalPointsPossible > 0
-            ? Math.round((data.totalPointsEarned / data.totalPointsPossible) * 1000) / 10
-            : 0;
-        const grade = sisSnap?.percent ?? lmsSnap?.percent ?? computedGrade;
-        const letterGrade = sisSnap?.letter ?? lmsSnap?.letter ?? percentToLetter(grade);
+
+        // Only compute grade if there are actually graded assignments with points
+        const hasGradedWork = data.totalPointsPossible > 0 && data.gradedCount > 0;
+        const computedGrade = hasGradedWork
+          ? Math.round((data.totalPointsEarned / data.totalPointsPossible) * 1000) / 10
+          : null;
+
+        // Determine official grade and source
+        let officialGrade: number | null;
+        let gradeSource: 'sis' | 'lms' | 'computed' | 'none';
+
+        if (sisSnap?.percent != null) {
+          officialGrade = sisSnap.percent;
+          gradeSource = 'sis';
+        } else if (lmsSnap?.percent != null) {
+          officialGrade = lmsSnap.percent;
+          gradeSource = 'lms';
+        } else if (computedGrade != null) {
+          officialGrade = computedGrade;
+          gradeSource = 'computed';
+        } else {
+          officialGrade = null;
+          gradeSource = 'none';
+        }
+
+        const letterGrade =
+          officialGrade != null
+            ? (sisSnap?.letter ?? lmsSnap?.letter ?? percentToLetter(officialGrade))
+            : null;
+
+        const gradeBreakdown = {
+          ...(sisSnap?.percent != null && { sisGrade: sisSnap.percent }),
+          ...(lmsSnap?.percent != null && { lmsGrade: lmsSnap.percent }),
+          ...(computedGrade != null && { computedGrade }),
+        };
+
         const trend = trendFromScores(
           data.recentPointsPossible,
           data.recentPointsEarned,
@@ -1400,7 +1469,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           data.olderPointsEarned
         );
         const { level: riskLevel, explanation: riskExplanation } = riskFromGradeAndMissing(
-          grade,
+          officialGrade ?? 100, // If no grade, assume OK for risk calculation
           data.missingCount,
           totalAssignments
         );
@@ -1423,8 +1492,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         courseGrades.push({
           courseExternalId,
           courseName,
-          grade,
+          officialGrade,
           letterGrade,
+          gradeSource,
+          gradeBreakdown: Object.keys(gradeBreakdown).length > 0 ? gradeBreakdown : undefined,
           totalAssignments,
           gradedAssignments: data.gradedCount,
           missingAssignments: data.missingCount,
@@ -1446,7 +1517,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const overallGPA =
         student.stats?.currentGPA ??
         (courseGrades.length > 0
-          ? courseGrades.reduce((s, c) => s + c.grade, 0) / courseGrades.length
+          ? courseGrades
+              .filter((c) => c.officialGrade != null)
+              .reduce((s, c, _i, arr) => s + (c.officialGrade ?? 0) / arr.length, 0)
           : 0);
       const atRiskCourses = courseGrades.filter((c) =>
         ['medium', 'high', 'critical'].includes(c.riskLevel)
@@ -1460,19 +1533,21 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const ownerUserId = student.userId.toString();
       const gradeRiskLimit = await checkAiRateLimit(config.database, ownerUserId, 'grade_risk');
       if (gradeRiskService.isAvailable() && courseGrades.length > 0 && gradeRiskLimit.allowed) {
-        const input = courseGrades.map((c) => ({
-          courseExternalId: c.courseExternalId,
-          courseName: c.courseName,
-          grade: c.grade,
-          letterGrade: c.letterGrade,
-          totalAssignments: c.totalAssignments,
-          gradedAssignments: c.gradedAssignments,
-          missingAssignments: c.missingAssignments,
-          lateAssignments: c.lateAssignments,
-          recentTrend: c.recentTrend,
-          riskLevel: c.riskLevel,
-          riskExplanation: c.riskExplanation,
-        }));
+        const input = courseGrades
+          .filter((c) => c.officialGrade != null)
+          .map((c) => ({
+            courseExternalId: c.courseExternalId,
+            courseName: c.courseName,
+            grade: c.officialGrade!,
+            letterGrade: c.letterGrade ?? 'N/A',
+            totalAssignments: c.totalAssignments,
+            gradedAssignments: c.gradedAssignments,
+            missingAssignments: c.missingAssignments,
+            lateAssignments: c.lateAssignments,
+            recentTrend: c.recentTrend,
+            riskLevel: c.riskLevel,
+            riskExplanation: c.riskExplanation,
+          }));
         const riskResult = await gradeRiskService.analyze(student.name, input, overallGPA);
         aiOverview = riskResult.aiOverview;
         for (const c of courseGrades) {
