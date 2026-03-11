@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { ICourseAssignment, AssignmentStatus } from '@/lib/api/students';
+import type { ICourseAssignment, IAttachment, AssignmentStatus } from '@/lib/api/students';
 import { DataTable } from '@/components/ui/data-table';
+import { Paperclip } from 'lucide-react';
+import { AttachmentPreviewDialog } from './AttachmentPreviewDialog';
 
 export interface AssignmentTableProps {
   assignments: readonly ICourseAssignment[];
@@ -50,6 +52,16 @@ function percentText(a: ICourseAssignment): string {
 }
 
 export function AssignmentTable({ assignments, courseName, onAssignmentClick }: AssignmentTableProps) {
+  const [dialogAttachments, setDialogAttachments] = useState<readonly IAttachment[]>([]);
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const openAttachments = (title: string, attachments: readonly IAttachment[]) => {
+    setDialogTitle(title);
+    setDialogAttachments(attachments);
+    setDialogOpen(true);
+  };
+
   const columns: ColumnDef<ICourseAssignment, unknown>[] = useMemo(
     () => [
       { accessorKey: 'title', header: 'Title', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
@@ -73,8 +85,36 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
         header: () => <div className="text-right">%</div>,
         cell: ({ row }) => <div className="text-right tabular-nums">{percentText(row.original)}</div>,
       },
+      {
+        id: 'attachments',
+        header: '',
+        cell: ({ row }) => {
+          const atts = row.original.attachments;
+          if (!atts || atts.length === 0) return null;
+          return (
+            <button
+              type="button"
+              className="relative inline-flex items-center rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={`${atts.length} attachment${atts.length !== 1 ? 's' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                openAttachments(row.original.title, atts);
+              }}
+            >
+              <Paperclip className="h-4 w-4" />
+              {atts.length > 1 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {atts.length}
+                </span>
+              )}
+            </button>
+          );
+        },
+        size: 40,
+      },
     ],
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   if (assignments.length === 0) {
@@ -110,6 +150,13 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
             },
           }),
         })}
+      />
+
+      <AttachmentPreviewDialog
+        attachments={dialogAttachments}
+        assignmentTitle={dialogTitle}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
       />
     </div>
   );

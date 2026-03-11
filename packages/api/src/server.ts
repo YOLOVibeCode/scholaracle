@@ -408,11 +408,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
     // Asset upload (connector auth) — mount under ingest path. ASSET_STORE=local|s3; S3 uses Railway Buckets or R2/B2.
     const assetStore = createAssetStore();
+    const assetBaseUrl =
+      process.env['ASSET_BASE_URL'] ??
+      (process.env['RAILWAY_PUBLIC_DOMAIN']
+        ? `https://${process.env['RAILWAY_PUBLIC_DOMAIN']}`
+        : baseUrl);
     const assetsConfig = {
       database,
       jwtSecret: jwtSecret ?? '',
       assetStore,
-      baseUrl,
+      baseUrl: assetBaseUrl,
       authService,
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));

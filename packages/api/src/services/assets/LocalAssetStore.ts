@@ -1,7 +1,7 @@
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, unlink, access } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Readable } from 'node:stream';
 import type { IAssetStore, IAssetMetadata } from './IAssetStore';
 
@@ -12,9 +12,9 @@ export class LocalAssetStore implements IAssetStore {
   constructor(private readonly baseDir: string) {}
 
   async put(key: string, stream: Readable, _metadata: IAssetMetadata): Promise<void> {
-    await mkdir(this.baseDir, { recursive: true });
-    const path = join(this.baseDir, key);
-    const dest = createWriteStream(path);
+    const filePath = join(this.baseDir, key);
+    await mkdir(dirname(filePath), { recursive: true });
+    const dest = createWriteStream(filePath);
     await pipeline(stream, dest);
   }
 

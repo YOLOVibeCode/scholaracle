@@ -14,6 +14,7 @@ export async function createIndexes(database: Db): Promise<void> {
   // Students collection indexes
   const studentsCollection = database.collection('students');
   await studentsCollection.createIndex({ userId: 1 });
+  await studentsCollection.createIndex({ userId: 1, studentId: 1 }, { unique: true, sparse: true });
   await studentsCollection.createIndex({ 'dataSources.id': 1 });
   await studentsCollection.createIndex({ 'dataSources.pluginId': 1 });
 
