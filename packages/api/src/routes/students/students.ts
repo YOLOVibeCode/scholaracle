@@ -1157,29 +1157,40 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const termsColl = config.database.collection('slc_academic_terms');
       const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
 
-      // Parse composite studentId (format: "institution:student" or legacy "student")
-      // This ensures multi-tenant isolation while supporting backwards compatibility
-      const studentIdParts = (student.studentId ?? '').split(':', 2);
-      const studentExternalId =
-        studentIdParts.length === 2 ? studentIdParts[1]! : (student.studentId ?? '');
-      const institutionExternalId = studentIdParts.length === 2 ? studentIdParts[0]! : undefined;
+      // studentId is either plain "ava-lewis" (new) or legacy "institution:student"
+      const rawStudentId = student.studentId ?? '';
+      const legacyParts = rawStudentId.split(':', 2);
+      const studentExternalId = legacyParts.length === 2 ? legacyParts[1]! : rawStudentId;
 
-      // Build query with institution scoping for multi-tenant safety
+      // Collect all institutionExternalId values from the student's data sources
+      const institutionIds = (student.dataSources ?? [])
+        .map((ds) => ds.institutionExternalId ?? ds.baseUrl)
+        .filter((v): v is string => Boolean(v));
+
+      // Build query that spans ALL data sources for this student
+      const studentOrClauses: Record<string, unknown>[] = [{ studentId: studentDbIdStr }];
+      if (institutionIds.length > 0) {
+        for (const instId of institutionIds) {
+          studentOrClauses.push({ studentExternalId, institutionExternalId: instId });
+        }
+      } else if (studentExternalId) {
+        studentOrClauses.push({ studentExternalId });
+      }
       const assignmentFilter: Record<string, unknown> = {
         userId,
         deletedAt: null,
-        $or: [
-          { studentId: studentDbIdStr },
-          // Match by studentExternalId + institutionExternalId for proper scoping
-          ...(institutionExternalId
-            ? [{ studentExternalId, institutionExternalId }]
-            : [{ studentExternalId }]),
-        ],
+        $or: studentOrClauses,
+      };
+
+      const studentScopeFilter: Record<string, unknown> = {
+        userId,
+        deletedAt: null,
+        $or: studentOrClauses,
       };
       const [assignmentDocs, termDocs, gradeSnapshotDocs] = await Promise.all([
         assignmentsColl.find(assignmentFilter).toArray(),
         termsColl.find({ userId, deletedAt: null }).toArray(),
-        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
+        gradeSnapshotsColl.find(studentScopeFilter).toArray(),
       ]);
 
       const termEndDates = new Map<string, string>();
