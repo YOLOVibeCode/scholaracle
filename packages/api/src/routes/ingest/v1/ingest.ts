@@ -482,52 +482,85 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
   studentProfile: 'slc_student_profiles',
 };
 
-const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
 const ACTIVITY_LOG_COLLECTION = 'slc_activity_log';
 const ASSIGNMENT_RECONCILIATION_COLLECTION = 'slc_assignment_reconciliation';
 
-/** Record pending student reconciliations for ops whose studentExternalId does not match an existing student. */
-async function recordPendingStudentReconciliations(params: {
+/** Auto-create Student records for new studentExternalId values encountered in ops. */
+async function autoCreateStudentsFromOps(params: {
   readonly database: Db;
   readonly userId: string;
   readonly sourceId: string;
-  readonly runId: string;
   readonly ops: readonly ISlcDeltaOp[];
+  readonly provider: string;
+  readonly adapterId: string;
+  readonly portalBaseUrl?: string;
 }): Promise<void> {
-  const externalIds = new Set<string>();
+  // Extract unique (institutionExternalId, studentExternalId) pairs
+  const studentKeys = new Set<string>();
   for (const op of params.ops) {
-    const id = op.key?.studentExternalId;
-    if (typeof id === 'string' && id.trim()) externalIds.add(id.trim());
+    const studentExtId = op.key?.studentExternalId;
+    const institutionExtId = op.key?.institutionExternalId;
+    if (typeof studentExtId === 'string' && studentExtId.trim()) {
+      // Create composite key: institution:student to prevent cross-institution collisions
+      const compositeKey = institutionExtId ? `${institutionExtId}:${studentExtId}` : studentExtId;
+      studentKeys.add(compositeKey);
+    }
   }
-  if (externalIds.size === 0) return;
+  if (studentKeys.size === 0) return;
 
   const studentRepo = new StudentRepository(params.database);
   const students = await studentRepo.findByUserId(params.userId);
-  const knownIds = new Set(students.map((s) => s.studentId).filter(Boolean) as string[]);
-  const coll = params.database.collection(PENDING_RECONCILIATION_COLLECTION);
-  const now = new Date();
+  const studentsByCompositeKey = new Map(
+    students.map((s) => [s.studentId, s]).filter(([id]) => id) as Array<
+      [string, (typeof students)[0]]
+    >
+  );
 
-  for (const studentExternalId of externalIds) {
-    if (knownIds.has(studentExternalId)) continue;
-    await coll.updateOne(
-      {
+  // Extract student profile names from ops
+  const profileNames = new Map<string, string>();
+  for (const op of params.ops) {
+    if (op.entity === 'studentProfile' && op.op === 'upsert') {
+      const studentExtId = op.key?.studentExternalId;
+      const institutionExtId = op.key?.institutionExternalId;
+      const name = (op.record?.['name'] as string | undefined) ?? '';
+      if (studentExtId && name) {
+        const compositeKey = institutionExtId
+          ? `${institutionExtId}:${studentExtId}`
+          : studentExtId;
+        profileNames.set(compositeKey, name);
+      }
+    }
+  }
+
+  const newDataSource = {
+    id: params.sourceId,
+    pluginId: params.adapterId,
+    enabled: true,
+    provider: params.provider,
+    baseUrl: params.portalBaseUrl,
+  };
+
+  for (const compositeKey of studentKeys) {
+    const existing = studentsByCompositeKey.get(compositeKey);
+
+    if (existing) {
+      // Update existing student to add this data source if not present
+      const hasSource = existing.dataSources.some((ds) => ds.id === params.sourceId);
+      if (!hasSource) {
+        await studentRepo.update(existing._id!, {
+          dataSources: [...existing.dataSources, newDataSource],
+        });
+      }
+    } else {
+      // Auto-create student with composite key as studentId
+      const studentName = profileNames.get(compositeKey) ?? compositeKey;
+      await studentRepo.create({
         userId: params.userId,
-        sourceId: params.sourceId,
-        studentExternalId,
-      },
-      {
-        $set: {
-          userId: params.userId,
-          sourceId: params.sourceId,
-          studentExternalId,
-          displayName: studentExternalId,
-          runId: params.runId,
-          updatedAt: now,
-        },
-        $setOnInsert: { createdAt: now },
-      },
-      { upsert: true }
-    );
+        name: studentName,
+        studentId: compositeKey,
+        dataSources: [newDataSource],
+      });
+    }
   }
 }
 
@@ -1094,12 +1127,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
       const sourceId = envelope.source?.sourceId ?? '';
       if (sourceId) {
-        await recordPendingStudentReconciliations({
+        await autoCreateStudentsFromOps({
           database: config.database,
           userId,
           sourceId,
-          runId,
           ops: envelope.ops,
+          provider: envelope.run?.provider ?? 'unknown',
+          adapterId: envelope.run?.adapterId ?? 'unknown',
+          portalBaseUrl: envelope.source?.portalBaseUrl,
         });
       }
       await runRepo.markUploaded(userId, runId);
