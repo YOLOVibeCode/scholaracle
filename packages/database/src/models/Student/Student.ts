@@ -20,6 +20,8 @@ export interface IDataSource {
   readonly config?: IDataSourceConfig;
   /** Portal / institution base URL (may also appear under config.institutionUrl). */
   readonly baseUrl?: string;
+  /** Institution external ID used in SLC ops (e.g. "ldisd.instructure.com"). */
+  readonly institutionExternalId?: string;
   readonly provider?: string;
   readonly schedule?: string;
   readonly dataTypes?: readonly string[];
