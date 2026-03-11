@@ -166,6 +166,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
     config.authService != null
       ? connectorOrUserAuthMiddleware(connectorTokenService, config.authService, {
           database: config.database,
+          jwtSecret: config.jwtSecret,
         })
       : connectorAuth;
 
@@ -180,7 +181,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         return;
       }
       const asset = await assetRepo.findByAssetId(assetId);
-      if (!asset || asset.userId !== userId) {
+      if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
         res.status(404).json({ success: false, error: 'Asset not found' });
         return;
       }
@@ -216,7 +217,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         return;
       }
       const asset = await assetRepo.findByAssetId(assetId);
-      if (!asset || asset.userId !== userId) {
+      if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
         res.status(404).end();
         return;
       }

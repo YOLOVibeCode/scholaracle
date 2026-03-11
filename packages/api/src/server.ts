@@ -363,6 +363,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       studentsRouter({
         database,
         baseUrl: baseUrl ?? '',
+        jwtSecret,
         sendInviteEmail: inviteEmailSender,
         syncScheduler,
       })

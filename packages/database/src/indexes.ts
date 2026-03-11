@@ -135,6 +135,44 @@ export async function createIndexes(database: Db): Promise<void> {
   );
   await oauthAccountsCollection.createIndex({ userId: 1 });
 
+  // SLC entity collection indexes (used by grades endpoint, materials, digest)
+  const slcAssignments = database.collection('slc_assignments');
+  await slcAssignments.createIndex({
+    userId: 1,
+    deletedAt: 1,
+    studentExternalId: 1,
+    institutionExternalId: 1,
+  });
+  await slcAssignments.createIndex({ userId: 1, deletedAt: 1, studentId: 1 });
+  await slcAssignments.createIndex({ userId: 1, courseExternalId: 1 });
+
+  const slcGradeSnapshots = database.collection('slc_grade_snapshots');
+  await slcGradeSnapshots.createIndex({
+    userId: 1,
+    deletedAt: 1,
+    studentExternalId: 1,
+    institutionExternalId: 1,
+  });
+  await slcGradeSnapshots.createIndex({ userId: 1, deletedAt: 1, studentId: 1 });
+
+  const slcCourseMaterials = database.collection('slc_course_materials');
+  await slcCourseMaterials.createIndex({
+    userId: 1,
+    deletedAt: 1,
+    studentExternalId: 1,
+    institutionExternalId: 1,
+  });
+
+  const slcCourses = database.collection('slc_courses');
+  await slcCourses.createIndex({ userId: 1, externalId: 1 });
+
+  const slcAcademicTerms = database.collection('slc_academic_terms');
+  await slcAcademicTerms.createIndex({ userId: 1, deletedAt: 1 });
+
+  const slcAssets = database.collection('slc_assets');
+  await slcAssets.createIndex({ userId: 1, entityType: 1, entityExternalId: 1 });
+  await slcAssets.createIndex({ userId: 1, sourceId: 1, contentHash: 1 });
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }
