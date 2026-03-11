@@ -117,7 +117,7 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
   const alertRows = items.map((item) => {
     const borderColor = severityBorderColor(item.severity);
     const oneLiner =
-      [item.courseName, item.assignmentTitle].filter(Boolean).join(': ') || item.subject;
+      [item.courseName, item.assignmentTitle].filter(Boolean).join(': ') || item.subject || 'Alert';
     const body = item.body || '';
     const snippet = body.slice(0, 120) + (body.length > 120 ? '…' : '');
     const timeStr = formatRelativeTime(item.createdAt);
