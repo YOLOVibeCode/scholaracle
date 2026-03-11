@@ -834,5 +834,42 @@ export function seedRouter(config: ISeedRouterConfig): Router {
     void handleDemoReset(req, res, config);
   });
 
+  /**
+   * POST /api/seed/set-password
+   * Set password for a user (dev/test only).
+   * Body: { email: string, password: string }
+   */
+  router.post('/set-password', async (req: Request, res: Response) => {
+    if (!isDemoAllowed()) {
+      res.status(403).json({ success: false, error: 'Not allowed in production' });
+      return;
+    }
+
+    const { email, password } = req.body as { email?: string; password?: string };
+    if (!email || !password) {
+      res.status(400).json({ success: false, error: 'Missing email or password' });
+      return;
+    }
+
+    try {
+      const userRepository = new UserRepository(config.database);
+      const user = await userRepository.findByEmail(email);
+      if (!user) {
+        res.status(404).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      const passwordHash = await UserRepository.hashPassword(password);
+      await userRepository.update(user._id!.toString(), { passwordHash });
+
+      res.json({ success: true, message: `Password set for ${email}` });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   return router;
 }
