@@ -21,6 +21,7 @@ import { encryptCredentials } from '../../utils/credentialsCipher';
 import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
+import { signAssetUrl } from '../../services/assets/signedUrl';
 
 // ---------------------------------------------------------------------------
 // Lightweight cross-source course reconciliation (inline to avoid connector dep)
@@ -100,6 +101,8 @@ function mergeCoursesInline(courses: readonly ISourceCourse[]): readonly IMerged
 export interface IStudentsRouterConfig {
   readonly database: Db;
   readonly baseUrl?: string;
+  /** JWT secret for signing asset download URLs. */
+  readonly jwtSecret?: string;
   /** Optional sender for contact-invitation emails. */
   readonly sendInviteEmail?: IInviteEmailSender;
   /** Optional sync scheduler for enqueuing sync jobs when triggers are called. */
@@ -315,20 +318,30 @@ type ActionBoardAssignmentDoc = {
 
 type BucketId = 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
 
-function buildActionAsset(doc: ActionBoardAssetDoc, baseUrl: string): IActionAsset {
+function buildActionAsset(
+  doc: ActionBoardAssetDoc,
+  baseUrl: string,
+  jwtSecret?: string
+): IActionAsset {
   const entityType = (doc.entityType ?? '') as string;
   const matRecord = doc.record as Record<string, unknown> | undefined;
   const materialType =
     entityType === 'courseMaterial'
       ? ((matRecord?.['type'] as string) ?? 'document')
       : 'attachment';
+  const aid = (doc.assetId as string) ?? '';
   return {
-    assetId: (doc.assetId as string) ?? '',
+    assetId: aid,
     fileName: (doc.fileName as string) ?? 'file',
     materialType,
     mimeType: (doc.mimeType as string) ?? 'application/octet-stream',
     fileSize: (doc.fileSize as number) ?? 0,
-    downloadUrl: baseUrl ? `${baseUrl.replace(/\/$/, '')}/api/assets/${doc.assetId as string}` : '',
+    downloadUrl:
+      baseUrl && aid
+        ? jwtSecret
+          ? signAssetUrl(baseUrl, aid, jwtSecret)
+          : `${baseUrl.replace(/\/$/, '')}/api/assets/${aid}`
+        : '',
   };
 }
 
@@ -1187,10 +1200,52 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         deletedAt: null,
         $or: studentOrClauses,
       };
-      const [assignmentDocs, termDocs, gradeSnapshotDocs] = await Promise.all([
-        assignmentsColl.find(assignmentFilter).toArray(),
-        termsColl.find({ userId, deletedAt: null }).toArray(),
-        gradeSnapshotsColl.find(studentScopeFilter).toArray(),
+      const materialsColl = config.database.collection('slc_course_materials');
+      const [assignmentDocs, termDocs, gradeSnapshotDocs, materialDocs] = await Promise.all([
+        assignmentsColl
+          .find(assignmentFilter)
+          .project({
+            courseExternalId: 1,
+            externalId: 1,
+            'record.title': 1,
+            'record.dueAt': 1,
+            'record.status': 1,
+            'record.pointsPossible': 1,
+            'record.pointsEarned': 1,
+            'record.termExternalId': 1,
+            'record.attachments': 1,
+            'record.category': 1,
+            'record.letterGrade': 1,
+            provider: 1,
+            sourceId: 1,
+          })
+          .toArray(),
+        termsColl
+          .find({ userId, deletedAt: null })
+          .project({
+            externalId: 1,
+            'record.endDate': 1,
+          })
+          .toArray(),
+        gradeSnapshotsColl
+          .find(studentScopeFilter)
+          .project({
+            courseExternalId: 1,
+            'record.courseExternalId': 1,
+            'record.asOfDate': 1,
+            'record.percentGrade': 1,
+            'record.grade': 1,
+            'record.letterGrade': 1,
+            'record.sourceType': 1,
+            provider: 1,
+          })
+          .toArray(),
+        materialsColl
+          .find(assignmentFilter)
+          .project({
+            courseExternalId: 1,
+          })
+          .toArray(),
       ]);
 
       const termEndDates = new Map<string, string>();
@@ -1201,9 +1256,6 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           | undefined;
         if (extId && endDate) termEndDates.set(extId, endDate);
       }
-
-      const materialsColl = config.database.collection('slc_course_materials');
-      const materialDocs = await materialsColl.find(assignmentFilter).toArray();
       const materialCountByCourse = new Map<string, number>();
       for (const doc of materialDocs) {
         const courseId = (doc['courseExternalId'] as string) ?? '';
@@ -1231,6 +1283,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (courseIds.length > 0) {
         const courseDocs = await coursesColl
           .find({ userId, externalId: { $in: courseIds } })
+          .project({
+            externalId: 1,
+            provider: 1,
+            sourceId: 1,
+            'record.title': 1,
+            'record.name': 1,
+            'record.teacherName': 1,
+            'record.period': 1,
+          })
           .toArray();
         for (const c of courseDocs) {
           const extId = c['externalId'] as string;
@@ -1714,7 +1775,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           description: (rec?.['description'] ?? m['description']) as string | undefined,
           fileSize: asset?.fileSize ?? ((rec?.['fileSize'] ?? m['fileSize']) as number | undefined),
           assetId: asset?.assetId,
-          downloadUrl: asset ? `${baseUrl}/api/assets/${asset.assetId}/download` : undefined,
+          downloadUrl:
+            asset && config.jwtSecret
+              ? signAssetUrl(baseUrl, asset.assetId, config.jwtSecret)
+              : asset
+                ? `${baseUrl}/api/assets/${asset.assetId}`
+                : undefined,
           linkAccessibility: rec?.['linkAccessibility'] as
             | 'public'
             | 'authenticated'
@@ -2071,7 +2137,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               : 'none';
 
         const assignmentAssets = (assetByEntity.get(`assignment:${externalId}`) ?? []).map((a) =>
-          buildActionAsset(a as ActionBoardAssetDoc, baseUrl)
+          buildActionAsset(a as ActionBoardAssetDoc, baseUrl, config.jwtSecret)
         );
         const courseMats = materialsByCourse.get(courseExternalId) ?? [];
         const courseMaterials: IActionAsset[] = [];
@@ -2079,7 +2145,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           const mid = m['externalId'] as string;
           const matAssets = assetByEntity.get(`courseMaterial:${mid}`) ?? [];
           courseMaterials.push(
-            ...matAssets.map((a) => buildActionAsset(a as ActionBoardAssetDoc, baseUrl))
+            ...matAssets.map((a) =>
+              buildActionAsset(a as ActionBoardAssetDoc, baseUrl, config.jwtSecret)
+            )
           );
         }
 
