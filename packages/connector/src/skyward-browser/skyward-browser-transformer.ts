@@ -388,7 +388,11 @@ export function transformSkywardExtract(
     ops.push({
       op: 'upsert',
       entity: 'assignment',
-      key: { ...baseKey, externalId: `skyward-missing-${i}`, courseExternalId: courseExtId },
+      key: {
+        ...baseKey,
+        externalId: `skyward-missing-${slugify(ma.title)}-${ma.period}-${dueDateIso ?? 'nodate'}`,
+        courseExternalId: courseExtId,
+      },
       observedAt: now,
       record: {
         title: ma.title,
@@ -426,6 +430,7 @@ export function transformSkywardExtract(
         status: a.status,
         pointsEarned: a.pointsEarned ? parseFloat(a.pointsEarned) : undefined,
         pointsPossible: a.pointsPossible ? parseFloat(a.pointsPossible) : undefined,
+        category: a.category || undefined,
         courseExternalId: courseExtId,
         termExternalId: termExtId,
       },
@@ -442,7 +447,10 @@ export function transformSkywardExtract(
     ops.push({
       op: 'upsert',
       entity: 'attendanceEvent',
-      key: { ...baseKey, externalId: `skyward-attendance-${i}` },
+      key: {
+        ...baseKey,
+        externalId: `skyward-attendance-${parseDate(a.date)}-${a.period || 'all'}`,
+      },
       observedAt: now,
       record: {
         date: parseDate(a.date),
