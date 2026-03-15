@@ -4,6 +4,8 @@ import type {
   ICanvasCalendarEvent,
   ICanvasFile,
   ICanvasPage,
+  ICanvasAssignmentGroup,
+  ICanvasRubric,
 } from './canvas-client';
 import {
   mapCanvasSubmissionStatus,
@@ -11,6 +13,7 @@ import {
   transformCalendarEventToOp,
   transformFileToOp,
   transformPageToOp,
+  transformRubricToOp,
 } from './canvas-transformer';
 
 const BASE_KEY = {
@@ -226,5 +229,92 @@ describe('transformPageToOp', () => {
     const pageNoBody = { ...page, body: undefined };
     const op = transformPageToOp(pageNoBody, 10, BASE_KEY);
     expect(op.record?.extractedText).toBeUndefined();
+  });
+});
+
+describe('transformAssignmentToOp with assignmentGroup', () => {
+  const group: ICanvasAssignmentGroup = {
+    id: 5,
+    name: 'Homework',
+    position: 1,
+    group_weight: 30,
+  };
+
+  it('should populate category and categoryWeight from assignment group', () => {
+    const assignment: ICanvasAssignment = {
+      id: 42,
+      name: 'HW 3',
+      course_id: 10,
+      due_at: '2025-10-15T23:59:00Z',
+      points_possible: 100,
+      submission_types: ['online_text_entry'],
+      has_submitted_submissions: false,
+      assignment_group_id: 5,
+    };
+    const op = transformAssignmentToOp(assignment, undefined, BASE_KEY, group);
+    expect(op.record?.category).toBe('Homework');
+    expect(op.record?.categoryWeight).toBe(30);
+  });
+
+  it('should leave category/categoryWeight undefined when no group provided', () => {
+    const assignment: ICanvasAssignment = {
+      id: 42,
+      name: 'HW 3',
+      course_id: 10,
+      due_at: null,
+      points_possible: 100,
+      submission_types: ['online_text_entry'],
+      has_submitted_submissions: false,
+    };
+    const op = transformAssignmentToOp(assignment, undefined, BASE_KEY);
+    expect(op.record?.category).toBeUndefined();
+    expect(op.record?.categoryWeight).toBeUndefined();
+  });
+});
+
+describe('transformRubricToOp', () => {
+  const rubric: ICanvasRubric = {
+    id: 77,
+    title: 'Essay Rubric',
+    points_possible: 20,
+    data: [
+      {
+        description: 'Thesis',
+        points: 10,
+        ratings: [
+          { description: 'Excellent', points: 10 },
+          { description: 'Good', points: 7 },
+          { description: 'Needs Work', points: 3 },
+        ],
+      },
+      {
+        description: 'Evidence',
+        points: 10,
+        ratings: [
+          { description: 'Strong', points: 10 },
+          { description: 'Adequate', points: 5 },
+        ],
+      },
+    ],
+  };
+
+  it('should produce a courseMaterial op with type rubric', () => {
+    const op = transformRubricToOp(rubric, 10, BASE_KEY);
+    expect(op.op).toBe('upsert');
+    expect(op.entity).toBe('courseMaterial');
+    expect(op.key.externalId).toBe('canvas-rubric-77');
+    expect(op.key.courseExternalId).toBe('canvas-course-10');
+    expect(op.record?.title).toBe('Essay Rubric');
+    expect(op.record?.type).toBe('rubric');
+    expect(op.record?.description).toContain('Thesis');
+    expect(op.record?.description).toContain('Evidence');
+    expect(op.record?.description).toContain('Excellent');
+  });
+
+  it('should handle rubric with no data', () => {
+    const emptyRubric: ICanvasRubric = { id: 88, title: 'Empty', points_possible: 0 };
+    const op = transformRubricToOp(emptyRubric, 10, BASE_KEY);
+    expect(op.record?.type).toBe('rubric');
+    expect(op.record?.title).toBe('Empty');
   });
 });
