@@ -68,6 +68,14 @@ export interface IAttachment {
   readonly type?: string;
 }
 
+export interface IRubricScore {
+  readonly criterion: string;
+  readonly score?: number;
+  readonly possiblePoints?: number;
+  readonly rating?: string;
+  readonly comments?: string;
+}
+
 export interface ICourseAssignment {
   readonly externalId: string;
   readonly title: string;
@@ -77,6 +85,9 @@ export interface ICourseAssignment {
   readonly pointsEarned?: number;
   readonly isOverdue: boolean;
   readonly weight?: number;
+  readonly category?: string;
+  readonly categoryWeight?: number;
+  readonly rubricScores?: readonly IRubricScore[];
   readonly attachments?: readonly IAttachment[];
 }
 

@@ -89,6 +89,7 @@ describe('transformSkywardAssignmentToOp', () => {
     expect(op.record!.pointsPossible).toBe(100);
     expect(op.record!.pointsEarned).toBe(88);
     expect(op.record!.status).toBe('graded');
+    expect(op.record!.category).toBe('Major');
   });
 
   it('should handle null points', () => {
@@ -175,7 +176,9 @@ describe('transformGradebookToAssignmentOps', () => {
     const ops = transformGradebookToAssignmentOps(gradebook, 97776, BASE_KEY);
     expect(ops).toHaveLength(2);
     expect(ops[0]!.record!.title).toBe('Test 1');
+    expect(ops[0]!.record!.category).toBe('Major');
     expect(ops[1]!.record!.title).toBe('Quiz 1');
+    expect(ops[1]!.record!.category).toBe('Minor');
   });
 });
 

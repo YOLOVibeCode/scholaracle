@@ -14,6 +14,10 @@ export interface IEmailDigestPendingItem {
   readonly dashboardUrl?: string;
   /** When set, digest tone is adjusted for parent vs student. */
   readonly recipientType?: 'parent' | 'student';
+  /** Deep-link fields for clickable email content. */
+  readonly studentId?: string;
+  readonly courseExternalId?: string;
+  readonly assignmentExternalId?: string;
   readonly createdAt: Date;
 }
 
@@ -54,6 +58,9 @@ export class EmailDigestPendingRepository {
       assignmentTitle: d.assignmentTitle,
       dashboardUrl: d.dashboardUrl,
       recipientType: d.recipientType,
+      studentId: d.studentId,
+      courseExternalId: d.courseExternalId,
+      assignmentExternalId: d.assignmentExternalId,
       createdAt: d.createdAt,
     }));
   }

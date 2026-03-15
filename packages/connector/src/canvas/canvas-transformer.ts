@@ -11,6 +11,8 @@ import type {
   ICanvasCalendarEvent,
   ICanvasFile,
   ICanvasPage,
+  ICanvasAssignmentGroup,
+  ICanvasRubric,
 } from './canvas-client';
 
 type BaseKey = Omit<ISlcEntityKey, 'externalId'>;
@@ -47,7 +49,8 @@ export function mapCanvasSubmissionStatus(
 export function transformAssignmentToOp(
   assignment: ICanvasAssignment,
   submission: ICanvasSubmission | undefined,
-  baseKey: BaseKey
+  baseKey: BaseKey,
+  assignmentGroup?: ICanvasAssignmentGroup
 ): ISlcDeltaOp<ISlcAssignment> {
   return {
     op: 'upsert',
@@ -64,6 +67,8 @@ export function transformAssignmentToOp(
       status: mapCanvasSubmissionStatus(submission, assignment),
       pointsPossible: assignment.points_possible,
       pointsEarned: submission?.score ?? undefined,
+      category: assignmentGroup?.name ?? undefined,
+      categoryWeight: assignmentGroup?.group_weight ?? undefined,
     },
   };
 }
@@ -156,6 +161,39 @@ export function transformPageToOp(
       postedAt: page.created_at,
       extractedText: page.body,
       ...(assignmentExternalId && { assignmentExternalId }),
+    },
+  };
+}
+
+/**
+ * Transforms a Canvas rubric into an ISlcDeltaOp (courseMaterial with type 'rubric').
+ */
+export function transformRubricToOp(
+  rubric: ICanvasRubric,
+  courseId: number,
+  baseKey: BaseKey
+): ISlcDeltaOp<ISlcCourseMaterial> {
+  const criteriaText = rubric.data
+    ?.map((c) => {
+      const ratings = c.ratings?.map((r) => `${r.description} (${r.points}pts)`).join(', ') ?? '';
+      return `${c.description} [${c.points}pts]: ${ratings}`;
+    })
+    .join('\n');
+
+  return {
+    op: 'upsert',
+    entity: 'courseMaterial',
+    key: {
+      ...baseKey,
+      externalId: `canvas-rubric-${rubric.id}`,
+      courseExternalId: `canvas-course-${courseId}`,
+    },
+    observedAt: new Date().toISOString(),
+    record: {
+      title: rubric.title,
+      courseExternalId: `canvas-course-${courseId}`,
+      type: 'rubric',
+      description: criteriaText,
     },
   };
 }
