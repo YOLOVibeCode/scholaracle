@@ -78,6 +78,8 @@ export class DigestSender implements IDigestSender {
         recipientType: first?.recipientType,
         aiInsight,
         grades,
+        baseUrl: this._dashboardBaseUrl?.replace(/\/$/, '') ?? undefined,
+        studentId: first?.studentId,
       });
       const text = `${recipientItems.length} alert(s). View your dashboard for details.`;
 

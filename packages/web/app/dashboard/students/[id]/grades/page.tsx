@@ -18,6 +18,7 @@ export default function StudentGradesPage() {
   const pathname = usePathname();
   const studentId = params.id as string;
   const courseParam = searchParams.get('course');
+  const assignmentParam = searchParams.get('assignment');
 
   const [data, setData] = useState<IStudentGradesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ export default function StudentGradesPage() {
   const [drawerAssignment, setDrawerAssignment] = useState<ICourseAssignment | null>(null);
   const [drawerCourse, setDrawerCourse] = useState<ICourseGrade | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false);
 
   const loadGrades = useCallback(async () => {
     if (!studentId) return;
@@ -44,6 +46,22 @@ export default function StudentGradesPage() {
   useEffect(() => {
     void loadGrades();
   }, [loadGrades]);
+
+  useEffect(() => {
+    if (!data || !assignmentParam || deepLinkHandled) return;
+    const courseGrades = data.courseGrades ?? [];
+    for (const course of courseGrades) {
+      const match = course.assignments.find((a) => a.externalId === assignmentParam);
+      if (match) {
+        setDrawerAssignment(match);
+        setDrawerCourse(course);
+        setDrawerOpen(true);
+        setDeepLinkHandled(true);
+        return;
+      }
+    }
+    setDeepLinkHandled(true);
+  }, [data, assignmentParam, deepLinkHandled]);
 
   const courseGrades = data?.courseGrades ?? [];
   const selectedId = courseParam ?? (courseGrades[0]?.courseExternalId ?? null);
