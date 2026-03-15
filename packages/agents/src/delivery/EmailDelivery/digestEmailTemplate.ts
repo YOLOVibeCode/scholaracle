@@ -94,6 +94,29 @@ export interface IBuildDigestEmailOptions {
   readonly aiInsight?: string;
   /** Grade blocks for the top-of-email grade bar (course name, letter grade, link to course). */
   readonly grades?: readonly IGradeBlock[];
+  /** Base URL for the web app (e.g. https://scholarmancy.com). Used to build deep links for alert items. */
+  readonly baseUrl?: string;
+  /** Student MongoDB _id. Used with baseUrl to build deep links when items lack studentId. */
+  readonly studentId?: string;
+}
+
+function buildAlertDeepLink(
+  item: IEmailDigestPendingItem,
+  baseUrl?: string,
+  fallbackStudentId?: string
+): string {
+  const base = baseUrl?.replace(/\/$/, '');
+  if (!base) return '';
+  const sid = item.studentId ?? fallbackStudentId;
+  if (!sid) return '';
+
+  if (item.assignmentExternalId && item.courseExternalId) {
+    return `${base}/dashboard/students/${sid}/grades?course=${encodeURIComponent(item.courseExternalId)}&assignment=${encodeURIComponent(item.assignmentExternalId)}`;
+  }
+  if (item.courseExternalId) {
+    return `${base}/dashboard/students/${sid}/grades?course=${encodeURIComponent(item.courseExternalId)}`;
+  }
+  return `${base}/dashboard/students/${sid}/grades`;
 }
 
 /**
@@ -103,7 +126,8 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
   subject: string;
   html: string;
 } {
-  const { items, dashboardUrl, studentName, recipientType, aiInsight, grades } = opts;
+  const { items, dashboardUrl, studentName, recipientType, aiInsight, grades, baseUrl, studentId } =
+    opts;
   const n = items.length;
   const isStudent = recipientType === 'student';
   const summaryLine =
@@ -122,13 +146,18 @@ export function buildDigestEmail(opts: IBuildDigestEmailOptions): {
     const snippet = body.slice(0, 120) + (body.length > 120 ? '…' : '');
     const timeStr = formatRelativeTime(item.createdAt);
     const alertTypeLabel = (item.alertType || 'alert').replace(/_/g, ' ');
+    const deepLink = buildAlertDeepLink(item, baseUrl, studentId);
+    const openTag = deepLink
+      ? `<a href="${escapeHtml(deepLink)}" style="display:block;text-decoration:none;color:inherit;border-left:4px solid ${borderColor};padding:10px 12px;margin:8px 0;background:#f9fafb;border-radius:0 6px 6px 0;">`
+      : `<div style="border-left:4px solid ${borderColor};padding:10px 12px;margin:8px 0;background:#f9fafb;border-radius:0 6px 6px 0;">`;
+    const closeTag = deepLink ? '</a>' : '</div>';
     return `
-    <div style="border-left:4px solid ${borderColor}; padding:10px 12px; margin:8px 0; background:#f9fafb; border-radius:0 6px 6px 0;">
+    ${openTag}
       <div style="font-size:11px; color:#6b7280; text-transform:uppercase; margin-bottom:4px;">${escapeHtml(alertTypeLabel)}</div>
-      <div style="font-weight:600; margin-bottom:2px;">${escapeHtml(oneLiner)}</div>
+      <div style="font-weight:600; margin-bottom:2px; color:#111827;">${escapeHtml(oneLiner)}</div>
       <div style="font-size:13px; color:#4b5563;">${escapeHtml(snippet)}</div>
-      <div style="font-size:11px; color:#9ca3af; margin-top:4px;">${timeStr}</div>
-    </div>`;
+      <div style="font-size:11px; color:#9ca3af; margin-top:4px;">${timeStr}${deepLink ? ' · <span style="color:#2563eb;">View details →</span>' : ''}</div>
+    ${closeTag}`;
   });
 
   const ctaBlock = dashboardUrl

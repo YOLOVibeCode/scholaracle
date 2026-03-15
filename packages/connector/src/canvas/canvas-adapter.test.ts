@@ -109,6 +109,8 @@ describe('CanvasAdapter', () => {
         ]),
         getFiles: jest.fn().mockResolvedValue([]),
         getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -178,6 +180,8 @@ describe('CanvasAdapter', () => {
             html_url: 'https://canvas.example.com/courses/7/pages/overview',
           },
         ]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -227,6 +231,8 @@ describe('CanvasAdapter', () => {
           },
         ]),
         getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -303,6 +309,8 @@ describe('CanvasAdapter', () => {
           },
         ]),
         getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -374,6 +382,8 @@ describe('CanvasAdapter', () => {
         getCalendarEvents: jest.fn().mockResolvedValue([]),
         getFiles: jest.fn().mockResolvedValue([]),
         getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([]),
       };
       MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
 
@@ -392,6 +402,94 @@ describe('CanvasAdapter', () => {
       // Second assignment matched to submission → graded
       expect(second.record?.['status']).toBe('graded');
       expect(second.record?.['pointsEarned']).toBe(28);
+    });
+
+    it('should populate category and categoryWeight from assignment groups', async () => {
+      const mockInstance = {
+        getCourses: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 1, name: 'Math', course_code: 'M101', enrollment_term_id: 1, time_zone: 'UTC' },
+          ]),
+        getAssignments: jest.fn().mockResolvedValue([
+          {
+            id: 10,
+            name: 'Quiz',
+            course_id: 1,
+            due_at: null,
+            points_possible: 20,
+            submission_types: [],
+            has_submitted_submissions: false,
+            assignment_group_id: 5,
+          },
+        ]),
+        getSubmissions: jest.fn().mockResolvedValue([]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([]),
+        getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest
+          .fn()
+          .mockResolvedValue([{ id: 5, name: 'Tests', position: 1, group_weight: 40 }]),
+        getRubrics: jest.fn().mockResolvedValue([]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      await adapter.authenticate({ baseUrl: 'https://x.edu', accessToken: 'tok' });
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'r',
+        sourceId: 's',
+        displayName: 'd',
+      });
+
+      const assignmentOp = envelope.ops.find((o) => o.entity === 'assignment');
+      expect(assignmentOp?.record?.['category']).toBe('Tests');
+      expect(assignmentOp?.record?.['categoryWeight']).toBe(40);
+    });
+
+    it('should emit rubric courseMaterial ops', async () => {
+      const mockInstance = {
+        getCourses: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            name: 'English',
+            course_code: 'E101',
+            enrollment_term_id: 1,
+            time_zone: 'UTC',
+          },
+        ]),
+        getAssignments: jest.fn().mockResolvedValue([]),
+        getSubmissions: jest.fn().mockResolvedValue([]),
+        getCalendarEvents: jest.fn().mockResolvedValue([]),
+        getFiles: jest.fn().mockResolvedValue([]),
+        getPages: jest.fn().mockResolvedValue([]),
+        getAssignmentGroups: jest.fn().mockResolvedValue([]),
+        getRubrics: jest.fn().mockResolvedValue([
+          {
+            id: 77,
+            title: 'Essay Rubric',
+            points_possible: 20,
+            data: [
+              { description: 'Thesis', points: 10, ratings: [{ description: 'Good', points: 10 }] },
+            ],
+          },
+        ]),
+      };
+      MockCanvasClient.mockImplementation(() => mockInstance as unknown as CanvasClient);
+
+      await adapter.authenticate({ baseUrl: 'https://x.edu', accessToken: 'tok' });
+      const envelope = await adapter.fetchEnvelope({
+        runId: 'r',
+        sourceId: 's',
+        displayName: 'd',
+      });
+
+      const rubricOp = envelope.ops.find(
+        (o) => o.entity === 'courseMaterial' && o.key.externalId === 'canvas-rubric-77'
+      );
+      expect(rubricOp).toBeDefined();
+      expect(rubricOp?.record?.['title']).toBe('Essay Rubric');
+      expect(rubricOp?.record?.['type']).toBe('rubric');
+      expect(rubricOp?.key.courseExternalId).toBe('canvas-course-1');
     });
   });
 });

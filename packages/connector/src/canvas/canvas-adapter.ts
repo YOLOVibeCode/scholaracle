@@ -20,6 +20,7 @@ import {
   transformCalendarEventToOp,
   transformFileToOp,
   transformPageToOp,
+  transformRubricToOp,
 } from './canvas-transformer';
 
 /**
@@ -141,17 +142,34 @@ export class CanvasAdapter implements ILmsAdapterWithTest {
         // Skip materials for this course (e.g. 403) without aborting the sync.
       }
 
-      const [assignments, submissions] = await Promise.all([
+      const [assignments, submissions, assignmentGroups] = await Promise.all([
         client.getAssignments(course.id),
         client.getSubmissions(course.id),
+        client.getAssignmentGroups(course.id),
       ]);
+
+      const groupMap = new Map(assignmentGroups.map((g) => [g.id, g]));
 
       for (const assignment of assignments) {
         const submission = submissions.find((s) => s.assignment_id === assignment.id);
+        const group = assignment.assignment_group_id
+          ? groupMap.get(assignment.assignment_group_id)
+          : undefined;
         // ISlcAssignment lacks index signature for Record<string, unknown> compat
         ops.push(
-          transformAssignmentToOp(assignment, submission, baseKey) as unknown as ISlcDeltaOp
+          transformAssignmentToOp(assignment, submission, baseKey, group) as unknown as ISlcDeltaOp
         );
+      }
+
+      // Fetch rubrics and emit as courseMaterial ops
+      let rubrics: Awaited<ReturnType<typeof client.getRubrics>> = [];
+      try {
+        rubrics = await client.getRubrics(course.id);
+      } catch {
+        // Skip rubrics for this course (e.g. 403) without aborting the sync.
+      }
+      for (const rubric of rubrics) {
+        ops.push(transformRubricToOp(rubric, course.id, baseKey) as unknown as ISlcDeltaOp);
       }
 
       const filesSorted = downloader

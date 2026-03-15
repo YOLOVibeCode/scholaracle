@@ -451,6 +451,9 @@ export class NotificationService {
       assignmentTitle: (relatedData['title'] as string) ?? undefined,
       dashboardUrl,
       recipientType: recipient.recipientType,
+      studentId: notification.studentId,
+      courseExternalId: (relatedData['courseExternalId'] as string) ?? undefined,
+      assignmentExternalId: (relatedData['assignmentExternalId'] as string) ?? undefined,
       createdAt: new Date(),
     };
     await this._emailDigestOptions.enqueueEmailForDigest(item);

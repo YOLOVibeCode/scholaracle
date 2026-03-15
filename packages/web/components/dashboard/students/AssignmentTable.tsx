@@ -55,6 +55,7 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
   const [dialogAttachments, setDialogAttachments] = useState<readonly IAttachment[]>([]);
   const [dialogTitle, setDialogTitle] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const openAttachments = (title: string, attachments: readonly IAttachment[]) => {
     setDialogTitle(title);
@@ -62,9 +63,55 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
     setDialogOpen(true);
   };
 
+  const categories = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const a of assignments) {
+      if (a.category) {
+        seen.set(a.category, (seen.get(a.category) ?? 0) + 1);
+      }
+    }
+    return Array.from(seen.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => {
+        const weight = assignments.find((a) => a.category === name && a.categoryWeight != null)?.categoryWeight;
+        return { name, count, weight };
+      });
+  }, [assignments]);
+
+  const hasCategories = categories.length > 0;
+
+  const filteredAssignments = useMemo(() => {
+    if (!selectedCategory) return assignments;
+    return assignments.filter((a) => a.category === selectedCategory);
+  }, [assignments, selectedCategory]);
+
   const columns: ColumnDef<ICourseAssignment, unknown>[] = useMemo(
     () => [
       { accessorKey: 'title', header: 'Title', cell: ({ row }) => <span className="font-medium">{row.original.title}</span> },
+      ...(hasCategories
+        ? [
+            {
+              accessorKey: 'category' as const,
+              header: 'Category',
+              cell: ({ row }: { row: { original: ICourseAssignment } }) => {
+                const cat = row.original.category;
+                if (!cat) return <span className="text-muted-foreground">—</span>;
+                return (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                      {cat}
+                    </span>
+                    {row.original.categoryWeight != null && (
+                      <span className="text-[10px] text-muted-foreground/70">
+                        {row.original.categoryWeight}%
+                      </span>
+                    )}
+                  </span>
+                );
+              },
+            },
+          ]
+        : []),
       { accessorKey: 'dueAt', header: 'Due date', cell: ({ row }) => <span className="text-muted-foreground">{formatDueDate(row.original.dueAt)}</span> },
       {
         accessorKey: 'status',
@@ -114,7 +161,7 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [hasCategories],
   );
 
   if (assignments.length === 0) {
@@ -127,9 +174,41 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
 
   return (
     <div data-testid="assignment-table">
+      {hasCategories && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5" data-testid="category-filter">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(null)}
+            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+              selectedCategory === null
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            All ({assignments.length})
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.name}
+              type="button"
+              onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                selectedCategory === cat.name
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {cat.name}
+              {cat.weight != null && <span className="ml-0.5 opacity-70">({cat.weight}%)</span>}
+              <span className="ml-1 opacity-60">{cat.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <DataTable
         columns={columns}
-        data={assignments}
+        data={filteredAssignments}
         sorting
         getRowProps={(row) => ({
           className: [

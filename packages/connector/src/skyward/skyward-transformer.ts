@@ -46,7 +46,7 @@ export function mapSkywardAssignmentStatus(
 export function transformSkywardAssignmentToOp(
   assignment: ISkywardAssignment,
   _courseTitle: string,
-  _category: string,
+  category: string,
   courseId: number,
   baseKey: BaseKey
 ): ISlcDeltaOp<ISlcAssignment> {
@@ -65,6 +65,7 @@ export function transformSkywardAssignmentToOp(
       status: mapSkywardAssignmentStatus(assignment),
       pointsPossible: assignment.points.total ?? undefined,
       pointsEarned: assignment.points.earned ?? undefined,
+      category: category || undefined,
     },
   };
 }
