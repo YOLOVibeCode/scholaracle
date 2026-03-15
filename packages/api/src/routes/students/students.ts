@@ -1349,6 +1349,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             pointsEarned?: number;
             isOverdue: boolean;
             weight?: number;
+            category?: string;
+            categoryWeight?: number;
+            rubricScores?: ReadonlyArray<{
+              criterion: string;
+              score?: number;
+              possiblePoints?: number;
+              rating?: string;
+              comments?: string;
+            }>;
             attachments?: Array<{ name: string; url?: string; type?: string }>;
           }>;
           recentPointsPossible: number;
@@ -1377,6 +1386,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const attachments =
           (record?.['attachments'] as Array<{ name: string; url?: string; type?: string }>) ??
           undefined;
+        const category = (record?.['category'] as string) ?? undefined;
+        const categoryWeight =
+          typeof record?.['categoryWeight'] === 'number' ? record!['categoryWeight'] : undefined;
+        const rubricScores =
+          (record?.['rubricScores'] as ReadonlyArray<{
+            criterion: string;
+            score?: number;
+            possiblePoints?: number;
+            rating?: string;
+            comments?: string;
+          }>) ?? undefined;
 
         if (!courseData.has(courseExternalId)) {
           courseData.set(courseExternalId, {
@@ -1403,6 +1423,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           pointsPossible,
           pointsEarned,
           isOverdue,
+          category,
+          categoryWeight,
+          rubricScores,
           attachments,
         });
 
@@ -1458,6 +1481,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           pointsEarned?: number;
           isOverdue: boolean;
           weight?: number;
+          category?: string;
+          categoryWeight?: number;
+          rubricScores?: ReadonlyArray<{
+            criterion: string;
+            score?: number;
+            possiblePoints?: number;
+            rating?: string;
+            comments?: string;
+          }>;
           attachments?: Array<{ name: string; url?: string; type?: string }>;
         }>;
       }> = [];
