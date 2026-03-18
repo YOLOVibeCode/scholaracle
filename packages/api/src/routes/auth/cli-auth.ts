@@ -85,7 +85,7 @@ export function cliAuthRouter(config: ICliAuthRouterConfig): Router {
           expiresAt,
         });
 
-        const verificationUrl = `${baseUrl}/cli-auth`;
+        const verificationUrl = `${baseUrl}/cli-auth?code=${userCode}`;
 
         res.json({
           success: true,
