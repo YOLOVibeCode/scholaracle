@@ -12,6 +12,7 @@ const publicRoutes = [
   '/terms',
   '/support',
   '/pricing',
+  '/cli-auth',
 ];
 const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
 

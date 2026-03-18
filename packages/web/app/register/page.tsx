@@ -173,8 +173,8 @@ export default function RegisterPage() {
                   data-testid="sms-consent-checkbox"
                 />
                 <Label htmlFor="smsConsent" className="text-sm font-normal cursor-pointer">
-                  I agree to receive SMS text message alerts about assignments and deadlines. Message and data
-                  rates may apply. Reply STOP to opt out, HELP for help.
+                  I agree to receive SMS text message alerts about assignments and deadlines. Standard message
+                  and data rates may apply. Reply STOP to opt out, HELP for support.
                 </Label>
               </div>
             </div>

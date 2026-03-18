@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,9 +9,11 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth';
 import { apiClient } from '@/lib/api/client';
 
-export default function CliAuthPage() {
+function CliAuthForm() {
   const router = useRouter();
-  const [code, setCode] = useState('');
+  const searchParams = useSearchParams();
+  const prefillCode = searchParams.get('code') ?? '';
+  const [code, setCode] = useState(prefillCode);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -71,7 +73,10 @@ export default function CliAuthPage() {
           <CardContent>
             <Button
               className="w-full"
-              onClick={() => router.push(`/login?redirect=${encodeURIComponent('/cli-auth')}`)}
+              onClick={() => {
+                const redirectPath = code ? `/cli-auth?code=${encodeURIComponent(code)}` : '/cli-auth';
+                router.push(`/login?redirect=${encodeURIComponent(redirectPath)}`);
+              }}
             >
               Sign In
             </Button>
@@ -135,5 +140,13 @@ export default function CliAuthPage() {
         </form>
       </Card>
     </div>
+  );
+}
+
+export default function CliAuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <CliAuthForm />
+    </Suspense>
   );
 }
