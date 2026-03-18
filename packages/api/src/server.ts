@@ -7,6 +7,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { healthRouter } from './routes/health';
 import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
+import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
@@ -345,6 +346,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         authService,
       })
     );
+    app.use('/api/auth/cli', cliAuthRouter({ database, authService, baseUrl }));
     app.use('/api/sessions', sessionsRouter({ database, authService }));
 
     // Create SyncScheduler once (if available) to be shared by students and sync routes
