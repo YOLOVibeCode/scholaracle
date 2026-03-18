@@ -18,6 +18,7 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const redirectTo = searchParams.get('redirect');
   const sessionExpired = searchParams.get('reason') === 'session_expired';
   const resetSuccess = searchParams.get('reset') === 'success';
 
@@ -35,7 +36,8 @@ function LoginForm() {
             `/forgot-password?required=1&email=${encodeURIComponent(result.user.email)}`
           );
         } else {
-          router.push('/dashboard');
+          const dest = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard';
+          router.push(dest);
         }
       } else {
         setError(result.error ?? 'Login failed');

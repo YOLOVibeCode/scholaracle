@@ -1,18 +1,16 @@
 /**
- * CLI Device Authorization helper.
+ * CLI Authorization helper — supports two modes:
+ *
+ * 1. Direct login (automated / CI):
+ *    Set SCHOLARACLE_EMAIL + SCHOLARACLE_PASSWORD env vars, or pass --email / --password flags.
+ *    Calls /api/auth/login directly — no browser needed.
+ *
+ * 2. Device flow (interactive):
+ *    Falls back to browser-based device code approval when credentials aren't provided.
  *
  * Usage in scripts:
  *   import { getCliToken } from './cli-auth';
  *   const token = await getCliToken('https://api.scholarmancy.com');
- *
- * Flow:
- *   1. Checks ~/.scholaracle/cli-token.json for a cached token
- *   2. If valid, returns it
- *   3. Otherwise, initiates device auth flow:
- *      - Requests a device code from the API
- *      - Opens the browser to the approval page
- *      - Polls until approved
- *      - Caches the token locally
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -27,6 +25,12 @@ interface ICachedToken {
   apiBaseUrl: string;
   token: string;
   issuedAt: string;
+}
+
+interface ILoginResponse {
+  success: boolean;
+  token?: string;
+  error?: string;
 }
 
 interface IDeviceRequestResponse {
@@ -99,6 +103,37 @@ async function httpJson<T>(url: string, options?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+function getCredentials(): { email: string; password: string } | null {
+  const email =
+    process.argv.find((a) => a.startsWith('--email='))?.slice('--email='.length) ??
+    process.env['SCHOLARACLE_EMAIL'];
+  const password =
+    process.argv.find((a) => a.startsWith('--password='))?.slice('--password='.length) ??
+    process.env['SCHOLARACLE_PASSWORD'];
+
+  if (email && password) return { email, password };
+  return null;
+}
+
+async function directLogin(apiBaseUrl: string, email: string, password: string): Promise<string> {
+  // eslint-disable-next-line no-console
+  console.log(`Logging in as ${email}...`);
+
+  const result = await httpJson<ILoginResponse>(`${apiBaseUrl}/api/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!result.success || !result.token) {
+    throw new Error(`Login failed: ${result.error ?? 'invalid credentials'}`);
+  }
+
+  saveCachedToken(apiBaseUrl, result.token);
+  // eslint-disable-next-line no-console
+  console.log('Authenticated! Token cached at ~/.scholaracle/cli-token.json\n');
+  return result.token;
+}
+
 export async function getCliToken(apiBaseUrl: string): Promise<string> {
   // 1. Check cache
   const cached = loadCachedToken(apiBaseUrl);
@@ -108,7 +143,13 @@ export async function getCliToken(apiBaseUrl: string): Promise<string> {
     return cached;
   }
 
-  // 2. Request device code
+  // 2. Try direct login if credentials are available
+  const creds = getCredentials();
+  if (creds) {
+    return directLogin(apiBaseUrl, creds.email, creds.password);
+  }
+
+  // 3. Fall back to device flow
   // eslint-disable-next-line no-console
   console.log('Requesting CLI authorization...\n');
   const reqResult = await httpJson<IDeviceRequestResponse>(`${apiBaseUrl}/api/auth/cli/request`, {
