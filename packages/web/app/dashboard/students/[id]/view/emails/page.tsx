@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
 import { Mail, CheckCircle, XCircle, Clock, Eye, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,7 +46,10 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-export default function EmailHistoryPage() {
+export default function StudentEmailHistoryPage() {
+  const params = useParams();
+  const studentId = params.id as string;
+
   const [emails, setEmails] = useState<readonly IEmailHistoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -53,12 +57,13 @@ export default function EmailHistoryPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [resending, setResending] = useState(false);
+  const [canResend, setCanResend] = useState(false);
 
   // Preview state
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<IEmailHistoryDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const fetchEmails = useCallback(async () => {
     setIsLoading(true);
@@ -68,11 +73,13 @@ export default function EmailHistoryPage() {
         status: statusFilter || undefined,
         page,
         limit: 25,
+        studentId,
       });
       if (res.success && res.data) {
         setEmails(res.data);
         setTotal(res.total ?? 0);
         setTotalPages(res.totalPages ?? 1);
+        setCanResend(res.canResend ?? false);
       } else {
         setError('Failed to load email history');
       }
@@ -81,7 +88,7 @@ export default function EmailHistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, page]);
+  }, [statusFilter, page, studentId]);
 
   useEffect(() => {
     void fetchEmails();
@@ -125,7 +132,7 @@ export default function EmailHistoryPage() {
           Email History
         </h1>
         <p className="text-muted-foreground mt-1">
-          View digest emails sent to you and other recipients.
+          Digest emails sent about this student.
         </p>
       </div>
 
@@ -172,10 +179,7 @@ export default function EmailHistoryPage() {
           <CardContent className="py-12">
             <div className="text-center">
               <Mail className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">No emails sent yet.</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Digest emails will appear here after they are sent.
-              </p>
+              <p className="text-muted-foreground">No emails sent yet for this student.</p>
             </div>
           </CardContent>
         </Card>
@@ -221,15 +225,17 @@ export default function EmailHistoryPage() {
                         <Eye className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void handleResend(email.id)}
-                      title="Resend email"
-                      disabled={resending}
-                    >
-                      <RefreshCw className={`h-4 w-4 ${resending ? 'animate-spin' : ''}`} />
-                    </Button>
+                    {canResend && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleResend(email.id)}
+                        title="Resend email"
+                        disabled={resending}
+                      >
+                        <RefreshCw className={`h-4 w-4 ${resending ? 'animate-spin' : ''}`} />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -296,7 +302,7 @@ export default function EmailHistoryPage() {
               <pre className="text-sm whitespace-pre-wrap">{detail.content}</pre>
             </div>
           ) : null}
-          {detail && (
+          {detail && canResend && (
             <div className="flex justify-end pt-2">
               <Button
                 variant="outline"
