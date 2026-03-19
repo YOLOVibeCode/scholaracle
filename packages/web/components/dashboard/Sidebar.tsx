@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail } from 'lucide-react';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import {
   Sidebar as SidebarComponent,
@@ -24,6 +24,7 @@ const parentMenuItems = [
   { title: 'Integrations', url: '/dashboard/integrations', icon: Plug },
   { title: 'Billing', url: '/dashboard/billing', icon: CreditCard },
   { title: 'Account', url: '/dashboard/account', icon: UserCircle },
+  { title: 'Email History', url: '/dashboard/email-history', icon: Mail },
   { title: 'Settings', url: '/dashboard/settings', icon: Settings },
 ];
 
