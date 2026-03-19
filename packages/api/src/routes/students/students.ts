@@ -4113,41 +4113,173 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
 
-      // Create a notification alert
-      const alert = {
-        userId: student.userId,
-        studentId: student._id,
-        studentName: student.name,
-        type: 'manual_digest',
-        severity: 'info',
-        title: 'Grade System Updated - Skyward Now Primary',
-        message:
-          "Your student's grades now show official Skyward (SIS) grades as the primary grades. Canvas grades remain visible for reference.",
-        metadata: {
-          manualTrigger: true,
-          triggeredBy: userId,
-          recipients: targetRecipients.map((r) => r.email),
-        },
-        createdAt: new Date(),
-        read: false,
-      };
+      // Build full digest items from live grade data
+      const gradeSnapshots = await config.database
+        .collection('slc_grade_snapshots')
+        .find({ userId: student.userId.toString(), deletedAt: null })
+        .toArray();
+      const courseDocs = await config.database
+        .collection('slc_courses')
+        .find({ userId: student.userId.toString(), deletedAt: null })
+        .toArray();
+      const assignmentDocs = await config.database
+        .collection('slc_assignments')
+        .find({ userId: student.userId.toString(), deletedAt: null })
+        .toArray();
 
-      const alertResult = await config.database.collection('slc_alerts').insertOne(alert);
+      // Build course name lookup
+      const courseNameByExtId = new Map<string, string>();
+      for (const c of courseDocs) {
+        const extId = (c['externalId'] ?? c['courseExternalId']) as string | undefined;
+        const title = (c['record'] as Record<string, unknown> | undefined)?.['title'] as
+          | string
+          | undefined;
+        if (extId && title) courseNameByExtId.set(extId, title);
+      }
 
-      // Add to digest queue for each recipient
-      const digestItems = targetRecipients.map((recipient) => ({
-        userId: student.userId.toString(),
-        alertId: alertResult.insertedId.toString(),
-        studentId: student._id!.toString(),
-        studentName: student.name,
-        recipientEmail: recipient.email,
-        recipientType: recipient.role === 'owner' ? 'parent' : (recipient.role as string),
-        alertType: alert.type,
-        severity: alert.severity,
-        subject: alert.title,
-        body: alert.message,
-        createdAt: new Date(),
-      }));
+      // Build SIS grade map (prefer SIS providers)
+      const SIS_PROVIDERS = new Set(['skyward', 'aeries']);
+      const gradeByCourse = new Map<
+        string,
+        { percent: number; courseName: string; isSis: boolean }
+      >();
+      for (const snap of gradeSnapshots) {
+        const courseExtId = (snap['courseExternalId'] ??
+          (snap['record'] as Record<string, unknown> | undefined)?.['courseExternalId']) as
+          | string
+          | undefined;
+        const percent = (snap['record'] as Record<string, unknown> | undefined)?.[
+          'percentGrade'
+        ] as number | undefined;
+        if (!courseExtId || percent == null) continue;
+        const provider = (snap['provider'] as string) ?? '';
+        const isSis = SIS_PROVIDERS.has(provider);
+        const existing = gradeByCourse.get(courseExtId);
+        if (!existing || (isSis && !existing.isSis)) {
+          gradeByCourse.set(courseExtId, {
+            percent,
+            courseName: courseNameByExtId.get(courseExtId) ?? courseExtId,
+            isSis,
+          });
+        }
+      }
+
+      // Count missing assignments per course
+      const missingByCourse = new Map<string, number>();
+      for (const a of assignmentDocs) {
+        const rec = a['record'] as Record<string, unknown> | undefined;
+        const status = rec?.['status'] as string | undefined;
+        const courseExtId = (a['courseExternalId'] as string) ?? '';
+        if (status === 'missing' && courseExtId) {
+          missingByCourse.set(courseExtId, (missingByCourse.get(courseExtId) ?? 0) + 1);
+        }
+      }
+
+      // Generate digest items from live data
+      const digestItems: Array<Record<string, unknown>> = [];
+      const now = new Date();
+      const studentIdStr = student._id!.toString();
+      const userIdStr = student.userId.toString();
+
+      for (const [courseExtId, grade] of gradeByCourse) {
+        const missing = missingByCourse.get(courseExtId) ?? 0;
+        const name = grade.courseName;
+
+        // Failing grade alert (< 70%)
+        if (grade.percent < 70) {
+          for (const recipient of targetRecipients) {
+            digestItems.push({
+              userId: userIdStr,
+              studentId: studentIdStr,
+              studentName: student.name,
+              recipientEmail: recipient.email,
+              recipientType: recipient.role === 'owner' ? 'parent' : recipient.role,
+              alertType: 'failing_grade',
+              severity: 'critical',
+              subject: `Failing Grade: ${name}`,
+              body: `${student.name} has a ${grade.percent}% in ${name}${missing > 0 ? ` with ${missing} missing assignment${missing === 1 ? '' : 's'}` : ''}. This requires immediate attention.`,
+              courseName: name,
+              courseExternalId: courseExtId,
+              createdAt: now,
+            });
+          }
+        }
+        // Below passing alert (70-74%)
+        else if (grade.percent < 75) {
+          for (const recipient of targetRecipients) {
+            digestItems.push({
+              userId: userIdStr,
+              studentId: studentIdStr,
+              studentName: student.name,
+              recipientEmail: recipient.email,
+              recipientType: recipient.role === 'owner' ? 'parent' : recipient.role,
+              alertType: 'grade_drop',
+              severity: 'warning',
+              subject: `Below Passing: ${name}`,
+              body: `${student.name}'s grade in ${name} is ${grade.percent}%, below the 75% passing threshold${missing > 0 ? `. ${missing} missing assignment${missing === 1 ? '' : 's'}.` : '.'}`,
+              courseName: name,
+              courseExternalId: courseExtId,
+              createdAt: now,
+            });
+          }
+        }
+        // Missing assignments alert (passing but has missing work)
+        else if (missing > 2) {
+          for (const recipient of targetRecipients) {
+            digestItems.push({
+              userId: userIdStr,
+              studentId: studentIdStr,
+              studentName: student.name,
+              recipientEmail: recipient.email,
+              recipientType: recipient.role === 'owner' ? 'parent' : recipient.role,
+              alertType: 'missing_assignment',
+              severity: 'warning',
+              subject: `Missing Assignments: ${name}`,
+              body: `${student.name} has ${missing} missing assignment${missing === 1 ? '' : 's'} in ${name} (current grade: ${grade.percent}%).`,
+              courseName: name,
+              courseExternalId: courseExtId,
+              createdAt: now,
+            });
+          }
+        }
+        // Strong performance (>= 90%)
+        else if (grade.percent >= 90) {
+          for (const recipient of targetRecipients) {
+            digestItems.push({
+              userId: userIdStr,
+              studentId: studentIdStr,
+              studentName: student.name,
+              recipientEmail: recipient.email,
+              recipientType: recipient.role === 'owner' ? 'parent' : recipient.role,
+              alertType: 'grade_improvement',
+              severity: 'positive',
+              subject: `Strong Performance: ${name}`,
+              body: `${student.name} is excelling in ${name} with a ${grade.percent}%. Keep up the great work!`,
+              courseName: name,
+              courseExternalId: courseExtId,
+              createdAt: now,
+            });
+          }
+        }
+      }
+
+      if (digestItems.length === 0) {
+        // At minimum, send a status update
+        for (const recipient of targetRecipients) {
+          digestItems.push({
+            userId: userIdStr,
+            studentId: studentIdStr,
+            studentName: student.name,
+            recipientEmail: recipient.email,
+            recipientType: recipient.role === 'owner' ? 'parent' : recipient.role,
+            alertType: 'status_update',
+            severity: 'info',
+            subject: 'Academic Status Update',
+            body: `${student.name}'s grades are all within normal range. No action items at this time.`,
+            createdAt: now,
+          });
+        }
+      }
 
       await config.database.collection('email_digest_pending').insertMany(digestItems);
 
