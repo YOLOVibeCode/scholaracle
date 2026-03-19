@@ -110,13 +110,10 @@ function buildAlertDeepLink(
   const sid = item.studentId ?? fallbackStudentId;
   if (!sid) return '';
 
-  if (item.assignmentExternalId && item.courseExternalId) {
-    return `${base}/dashboard/students/${sid}/grades?course=${encodeURIComponent(item.courseExternalId)}&assignment=${encodeURIComponent(item.assignmentExternalId)}`;
+  if (item.assignmentExternalId) {
+    return `${base}/dashboard/students/${sid}/view/todo?highlight=${encodeURIComponent(item.assignmentExternalId)}`;
   }
-  if (item.courseExternalId) {
-    return `${base}/dashboard/students/${sid}/grades?course=${encodeURIComponent(item.courseExternalId)}`;
-  }
-  return `${base}/dashboard/students/${sid}/grades`;
+  return `${base}/dashboard/students/${sid}/view/todo`;
 }
 
 /**

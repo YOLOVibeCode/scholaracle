@@ -1,20 +1,26 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { CommunicationLogRepository } from '@scholaracle/database';
+import { CommunicationLogRepository, StudentRepository } from '@scholaracle/database';
 import type { CommunicationStatus } from '@scholaracle/database';
+import type { IEmailTransport } from '@scholaracle/agents';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 
 export interface IEmailHistoryRouterConfig {
   readonly database: Db;
+  readonly transport: IEmailTransport;
+  readonly fromEmail: string;
+  readonly fromName: string;
 }
 
 export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
   const router = Router();
   const commLogRepo = new CommunicationLogRepository(config.database);
+  const studentRepo = new StudentRepository(config.database);
 
   /**
    * GET /api/email-history
-   * List email communication logs for the authenticated user (paginated).
+   * List email communication logs (paginated).
+   * Optional ?studentId= to filter by student (shows all parents' emails for that student).
    */
   router.get('/', (req: Request, res: Response) => {
     void (async (): Promise<void> => {
@@ -29,13 +35,32 @@ export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
         const page = Math.max(1, parseInt(req.query['page'] as string, 10) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(req.query['limit'] as string, 10) || 25));
         const status = (req.query['status'] as CommunicationStatus) || undefined;
+        const studentId = (req.query['studentId'] as string) || undefined;
 
-        const result = await commLogRepo.findByUserIdPaginated(userId, {
-          status,
-          channel: 'email',
-          page,
-          limit,
-        });
+        let canResend = true;
+
+        let result;
+        if (studentId) {
+          const student = await studentRepo.findById(studentId);
+          if (!student || !student.hasAccess(userId)) {
+            res.status(404).json({ success: false, error: 'Student not found' });
+            return;
+          }
+          canResend = student.canAdmin(userId);
+          result = await commLogRepo.findByStudentPaginated(studentId, {
+            status,
+            channel: 'email',
+            page,
+            limit,
+          });
+        } else {
+          result = await commLogRepo.findByUserIdPaginated(userId, {
+            status,
+            channel: 'email',
+            page,
+            limit,
+          });
+        }
 
         const data = result.logs.map((log) => ({
           id: log._id?.toString() ?? '',
@@ -57,6 +82,7 @@ export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
           page,
           limit,
           totalPages: Math.ceil(result.total / limit),
+          canResend,
         });
       } catch {
         res.status(500).json({ success: false, error: 'Failed to fetch email history' });
@@ -78,7 +104,19 @@ export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
           return;
         }
 
-        const log = await commLogRepo.findByIdAndUserId(req.params['id'] ?? '', userId);
+        // Try user-owned first, then check if user has access via student
+        let log = await commLogRepo.findByIdAndUserId(req.params['id'] ?? '', userId);
+        if (!log) {
+          // Check if this is a student-scoped log the user has access to
+          const fullLog = await commLogRepo.findById(req.params['id'] ?? '');
+          if (fullLog?.relatedEntityId) {
+            const student = await studentRepo.findById(fullLog.relatedEntityId);
+            if (student && student.hasAccess(userId)) {
+              log = fullLog;
+            }
+          }
+        }
+
         if (!log) {
           res.status(404).json({ success: false, error: 'Email not found' });
           return;
@@ -103,6 +141,93 @@ export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
         });
       } catch {
         res.status(500).json({ success: false, error: 'Failed to fetch email detail' });
+      }
+    })();
+  });
+
+  /**
+   * POST /api/email-history/:id/resend
+   * Resend an email. Only account owners or admin shared parents can resend.
+   */
+  router.post('/:id/resend', (req: Request, res: Response) => {
+    void (async (): Promise<void> => {
+      try {
+        const authReq = req as IAuthenticatedRequest;
+        const userId = authReq.userId;
+        if (!userId) {
+          res.status(401).json({ success: false, error: 'Unauthorized' });
+          return;
+        }
+
+        // Find the original log
+        let log = await commLogRepo.findByIdAndUserId(req.params['id'] ?? '', userId);
+        let canResend = true;
+
+        if (!log) {
+          // Check student-scoped access
+          const fullLog = await commLogRepo.findById(req.params['id'] ?? '');
+          if (fullLog?.relatedEntityId) {
+            const student = await studentRepo.findById(fullLog.relatedEntityId);
+            if (student && student.hasAccess(userId)) {
+              canResend = student.canAdmin(userId);
+              log = fullLog;
+            }
+          }
+        }
+
+        if (!log) {
+          res.status(404).json({ success: false, error: 'Email not found' });
+          return;
+        }
+
+        if (!canResend) {
+          res.status(403).json({ success: false, error: 'Only account owners can resend emails' });
+          return;
+        }
+
+        if (!log.htmlContent && !log.content) {
+          res.status(400).json({ success: false, error: 'No email content available to resend' });
+          return;
+        }
+
+        const recipientEmail = log.recipientEmail;
+        if (!recipientEmail) {
+          res.status(400).json({ success: false, error: 'No recipient email found' });
+          return;
+        }
+
+        // Send the email
+        await config.transport.send({
+          to: recipientEmail,
+          from: { email: config.fromEmail, name: config.fromName },
+          subject: log.subject ?? 'Scholarmancy Digest (Resent)',
+          text: log.content ?? '',
+          html: log.htmlContent ?? log.content ?? '',
+        });
+
+        // Create a new comm log for the resend
+        await commLogRepo.create({
+          userId: log.userId,
+          channel: 'email',
+          type: 'notification',
+          subject: log.subject ?? 'Scholarmancy Digest (Resent)',
+          content: log.content ?? '',
+          htmlContent: log.htmlContent,
+          recipientEmail,
+          status: 'sent',
+          sentAt: new Date(),
+          triggeredBy: 'user_action',
+          templateName: 'email_digest_resend',
+          relatedEntityType: log.relatedEntityType,
+          relatedEntityId: log.relatedEntityId,
+        });
+
+        res.json({ success: true, message: `Email resent to ${recipientEmail}` });
+      } catch (err) {
+        res.status(500).json({
+          success: false,
+          error: err instanceof Error ? err.message : 'Failed to resend email',
+        });
       }
     })();
   });
