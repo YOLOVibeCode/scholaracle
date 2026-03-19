@@ -8,9 +8,24 @@ import {
   type CommunicationType,
 } from '../../models/CommunicationLog';
 
+export interface IPaginatedLogs {
+  readonly logs: readonly CommunicationLog[];
+  readonly total: number;
+}
+
 export interface ICommunicationLogReader {
   findById(id: string): Promise<CommunicationLog | null>;
+  findByIdAndUserId(id: string, userId: string): Promise<CommunicationLog | null>;
   findByUserId(userId: string): Promise<readonly CommunicationLog[]>;
+  findByUserIdPaginated(
+    userId: string,
+    options: {
+      status?: CommunicationStatus;
+      channel?: CommunicationChannel;
+      page: number;
+      limit: number;
+    }
+  ): Promise<IPaginatedLogs>;
   filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]>;
   filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]>;
 }
@@ -80,6 +95,42 @@ export class CommunicationLogRepository
    * @param userId - User ID
    * @returns Array of logs
    */
+  public async findByIdAndUserId(id: string, userId: string): Promise<CommunicationLog | null> {
+    const objectId = new ObjectId(id);
+    const document = await this._collection.findOne({ _id: objectId, userId });
+    if (!document || !document._id) return null;
+    return new CommunicationLog(document, document._id);
+  }
+
+  public async findByUserIdPaginated(
+    userId: string,
+    options: {
+      status?: CommunicationStatus;
+      channel?: CommunicationChannel;
+      page: number;
+      limit: number;
+    }
+  ): Promise<IPaginatedLogs> {
+    const filter: Record<string, unknown> = { userId };
+    if (options.status) filter['status'] = options.status;
+    if (options.channel) filter['channel'] = options.channel;
+
+    const [documents, total] = await Promise.all([
+      this._collection
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((options.page - 1) * options.limit)
+        .limit(options.limit)
+        .toArray(),
+      this._collection.countDocuments(filter),
+    ]);
+
+    return {
+      logs: documents.map((doc) => new CommunicationLog(doc, doc._id)),
+      total,
+    };
+  }
+
   public async findByUserId(userId: string): Promise<readonly CommunicationLog[]> {
     const documents = await this._collection.find({ userId }).sort({ createdAt: -1 }).toArray();
 
