@@ -19,6 +19,8 @@ export interface IEmailDigestPendingItem {
   readonly courseExternalId?: string;
   readonly assignmentExternalId?: string;
   readonly createdAt: Date;
+  /** When true, the email is generated and stored in history but not actually sent. */
+  readonly preview?: boolean;
 }
 
 const COLLECTION_NAME = 'email_digest_pending';
@@ -62,6 +64,7 @@ export class EmailDigestPendingRepository {
       courseExternalId: d.courseExternalId,
       assignmentExternalId: d.assignmentExternalId,
       createdAt: d.createdAt,
+      preview: d.preview,
     }));
   }
 

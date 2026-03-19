@@ -23,6 +23,7 @@ const STATUS_FILTERS = [
   { label: 'Sent', value: 'sent' },
   { label: 'Delivered', value: 'delivered' },
   { label: 'Failed', value: 'failed' },
+  { label: 'Preview', value: 'preview' },
 ] as const;
 
 function StatusIcon({ status }: { status: string }) {
@@ -31,6 +32,9 @@ function StatusIcon({ status }: { status: string }) {
   }
   if (status === 'failed' || status === 'bounced') {
     return <XCircle className="h-4 w-4 text-red-500 shrink-0" />;
+  }
+  if (status === 'preview') {
+    return <Eye className="h-4 w-4 text-blue-500 shrink-0" />;
   }
   return <Clock className="h-4 w-4 text-yellow-500 shrink-0" />;
 }
