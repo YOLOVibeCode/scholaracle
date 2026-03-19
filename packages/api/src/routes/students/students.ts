@@ -4141,6 +4141,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentId: student._id!.toString(),
         studentName: student.name,
         recipientEmail: recipient.email,
+        recipientType: recipient.role === 'owner' ? 'parent' : (recipient.role as string),
+        alertType: alert.type,
+        severity: alert.severity,
+        subject: alert.title,
+        body: alert.message,
         createdAt: new Date(),
       }));
 
