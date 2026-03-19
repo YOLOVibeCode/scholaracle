@@ -103,6 +103,8 @@ export class DigestSender implements IDigestSender {
           sentAt: new Date(),
           triggeredBy: 'scheduled',
           templateName: 'email_digest',
+          relatedEntityType: 'student',
+          relatedEntityId: first?.studentId,
         });
       } catch (err) {
         console.error(`[EmailDigest] Failed to send digest to ${recipientEmail}:`, err);
@@ -120,6 +122,8 @@ export class DigestSender implements IDigestSender {
             failureReason: err instanceof Error ? err.message : String(err),
             triggeredBy: 'scheduled',
             templateName: 'email_digest',
+            relatedEntityType: 'student',
+            relatedEntityId: first?.studentId,
           })
           .catch(() => {});
       }

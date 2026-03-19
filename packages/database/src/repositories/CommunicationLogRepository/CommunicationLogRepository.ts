@@ -26,6 +26,15 @@ export interface ICommunicationLogReader {
       limit: number;
     }
   ): Promise<IPaginatedLogs>;
+  findByStudentPaginated(
+    studentId: string,
+    options: {
+      status?: CommunicationStatus;
+      channel?: CommunicationChannel;
+      page: number;
+      limit: number;
+    }
+  ): Promise<IPaginatedLogs>;
   filterByChannel(channel: CommunicationChannel): Promise<readonly CommunicationLog[]>;
   filterByType(type: CommunicationType): Promise<readonly CommunicationLog[]>;
 }
@@ -112,6 +121,38 @@ export class CommunicationLogRepository
     }
   ): Promise<IPaginatedLogs> {
     const filter: Record<string, unknown> = { userId };
+    if (options.status) filter['status'] = options.status;
+    if (options.channel) filter['channel'] = options.channel;
+
+    const [documents, total] = await Promise.all([
+      this._collection
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((options.page - 1) * options.limit)
+        .limit(options.limit)
+        .toArray(),
+      this._collection.countDocuments(filter),
+    ]);
+
+    return {
+      logs: documents.map((doc) => new CommunicationLog(doc, doc._id)),
+      total,
+    };
+  }
+
+  public async findByStudentPaginated(
+    studentId: string,
+    options: {
+      status?: CommunicationStatus;
+      channel?: CommunicationChannel;
+      page: number;
+      limit: number;
+    }
+  ): Promise<IPaginatedLogs> {
+    const filter: Record<string, unknown> = {
+      relatedEntityType: 'student',
+      relatedEntityId: studentId,
+    };
     if (options.status) filter['status'] = options.status;
     if (options.channel) filter['channel'] = options.channel;
 
