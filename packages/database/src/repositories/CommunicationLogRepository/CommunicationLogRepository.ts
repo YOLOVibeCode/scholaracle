@@ -18,6 +18,10 @@ export interface ICommunicationLogReader {
 export interface ICommunicationLogWriter {
   create(logData: ICommunicationLogData): Promise<CommunicationLog>;
   updateDeliveryStatus(id: string, status: CommunicationStatus): Promise<boolean>;
+  updateDeliveryStatusByProviderId(
+    providerId: string,
+    status: CommunicationStatus
+  ): Promise<boolean>;
 }
 
 export interface ICommunicationLogRepository
@@ -106,6 +110,30 @@ export class CommunicationLogRepository
     }
 
     const result = await this._collection.updateOne({ _id: objectId }, { $set: updateDoc });
+
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Update delivery status by external provider ID (e.g. Twilio MessageSid).
+   *
+   * @param providerId - External provider message ID
+   * @param status - New status
+   * @returns True if updated, false if not found
+   */
+  public async updateDeliveryStatusByProviderId(
+    providerId: string,
+    status: CommunicationStatus
+  ): Promise<boolean> {
+    const updateDoc: Record<string, unknown> = { status };
+
+    if (status === 'delivered') {
+      updateDoc['deliveredAt'] = new Date();
+    } else if (status === 'failed') {
+      updateDoc['failedAt'] = new Date();
+    }
+
+    const result = await this._collection.updateOne({ providerId }, { $set: updateDoc });
 
     return result.modifiedCount > 0;
   }
