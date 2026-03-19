@@ -44,7 +44,7 @@ import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
-import { twilioWebhookRouter } from './routes/webhooks/twilio';
+import { twilioWebhookRouter, twilioTestRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
@@ -520,6 +520,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // Twilio webhooks (inbound SMS, delivery status callbacks)
     const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
     app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
+
+    // Twilio test endpoints (dev/staging only - no signature validation)
+    if (nodeEnv !== 'production') {
+      app.use('/api/webhooks/twilio/test', twilioTestRouter({ database }));
+    }
 
     // Square billing (optional — only registers if access token and location are configured)
     const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
