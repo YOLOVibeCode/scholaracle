@@ -3,4 +3,5 @@ export type {
   ICommunicationLogReader,
   ICommunicationLogWriter,
   ICommunicationLogRepository,
+  IPaginatedLogs,
 } from './CommunicationLogRepository';
