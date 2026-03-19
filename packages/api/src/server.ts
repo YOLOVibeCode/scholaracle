@@ -160,9 +160,14 @@ function getTwilioConfig(config: IServerConfig): {
  * Initialize notification service with delivery services.
  *
  * @param config - Server configuration
- * @returns Notification service instance
+ * @returns Notification service and email infrastructure
  */
-function initializeNotificationService(config: IServerConfig): NotificationService {
+function initializeNotificationService(config: IServerConfig): {
+  notificationService: NotificationService;
+  emailTransport: IEmailTransport;
+  fromEmail: string;
+  fromName: string;
+} {
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
 
@@ -226,7 +231,12 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
   const studentGenerator = new StudentNotificationGenerator();
   const parentGenerator = new ParentNotificationGenerator();
 
-  return new NotificationService(studentGenerator, parentGenerator, deliveryRouter);
+  return {
+    notificationService: new NotificationService(studentGenerator, parentGenerator, deliveryRouter),
+    emailTransport: transport,
+    fromEmail: sendGridConfig.fromEmail,
+    fromName: sendGridConfig.fromName,
+  };
 }
 
 /**
@@ -304,7 +314,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
 
-  const notificationService = initializeNotificationService(config);
+  const { notificationService, emailTransport, fromEmail, fromName } =
+    initializeNotificationService(config);
 
   app.use('/api/health', healthRouter);
 
@@ -427,7 +438,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Email history API routes
-    app.use('/api/email-history', authMiddleware(authService), emailHistoryRouter({ database }));
+    app.use(
+      '/api/email-history',
+      authMiddleware(authService),
+      emailHistoryRouter({
+        database,
+        transport: emailTransport,
+        fromEmail,
+        fromName,
+      })
+    );
     // Settings API routes
     app.use(
       '/api/settings',

@@ -186,6 +186,7 @@ export interface IWorkflowAssignment {
   readonly submittedAt?: string;
   readonly gradedAt?: string;
   readonly studentNote?: string;
+  readonly studentStatus?: string;
 }
 
 export interface IAssignmentWorkflowResponse {
@@ -2649,6 +2650,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const gradeInfo = latestGradeByCourse.get(courseExternalId);
 
         const studentNote = (doc['studentNote'] as string) ?? undefined;
+        const studentStatus = (doc['studentStatus'] as string) ?? undefined;
 
         assignments.push({
           externalId,
@@ -2673,6 +2675,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           submittedAt,
           gradedAt,
           studentNote,
+          studentStatus,
         });
       }
 
@@ -2830,6 +2833,69 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       res.status(200).json({ success: true, note });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    }
+  });
+
+  const VALID_STUDENT_STATUSES = new Set(['not_started', 'working_on_it', 'need_help', 'done']);
+
+  /**
+   * PUT /api/students/:id/assignments/:externalId/status
+   * Set student progress status on an assignment.
+   */
+  router.put('/:id/assignments/:externalId/status', async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const { id: studentDbId, externalId: assignmentExternalId } = req.params;
+      if (!studentDbId || !assignmentExternalId) {
+        res
+          .status(400)
+          .json({ success: false, error: 'Missing student ID or assignment external ID' });
+        return;
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+
+      const body = req.body as { status?: string | null };
+      const status = body.status === null || body.status === '' ? null : body.status;
+      if (status !== null && (typeof status !== 'string' || !VALID_STUDENT_STATUSES.has(status))) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`,
+        });
+        return;
+      }
+
+      const studentExternalId = student.studentId ?? '';
+      const assignmentsColl = config.database.collection('slc_assignments');
+
+      const result = await assignmentsColl.updateOne(
+        {
+          userId,
+          externalId: assignmentExternalId,
+          deletedAt: null,
+          $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
+        },
+        { $set: { studentStatus: status, updatedAt: new Date() } }
+      );
+
+      if (result.matchedCount === 0) {
+        res.status(404).json({ success: false, error: 'Assignment not found' });
+        return;
+      }
+
+      res.status(200).json({ success: true, studentStatus: status });
     } catch (error) {
       res.status(500).json({
         success: false,
