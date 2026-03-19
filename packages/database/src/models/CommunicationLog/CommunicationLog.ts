@@ -44,6 +44,7 @@ export interface ICommunicationLogData {
   // Content
   readonly subject?: string;
   readonly content: string;
+  readonly htmlContent?: string;
   readonly templateId?: string;
   readonly templateName?: string;
 
@@ -83,6 +84,7 @@ export class CommunicationLog {
   public readonly type: CommunicationType;
   public readonly subject?: string;
   public readonly content: string;
+  public readonly htmlContent?: string;
   public readonly templateId?: string;
   public readonly templateName?: string;
   public readonly recipientEmail?: string;
@@ -109,6 +111,7 @@ export class CommunicationLog {
     this.type = data.type;
     this.subject = data.subject;
     this.content = data.content;
+    this.htmlContent = data.htmlContent;
     this.templateId = data.templateId;
     this.templateName = data.templateName;
     this.recipientEmail = data.recipientEmail;
