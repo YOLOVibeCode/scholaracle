@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail, CheckSquare } from 'lucide-react';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
 import {
   Sidebar as SidebarComponent,
@@ -32,10 +32,12 @@ function getStudentMenuItems(studentId: string) {
   const base = `/dashboard/students/${studentId}/view`;
   return [
     { title: 'Dashboard', url: base, icon: LayoutDashboard },
+    { title: 'To Do', url: `${base}/todo`, icon: CheckSquare },
     { title: 'Workflow', url: `/dashboard/students/${studentId}/workflow`, icon: ListTodo },
     { title: 'Agenda', url: `${base}/agenda`, icon: Calendar },
     { title: 'Alerts', url: `${base}/alerts`, icon: Bell },
     { title: 'Courses', url: `${base}/courses`, icon: BookOpen },
+    { title: 'Emails', url: `${base}/emails`, icon: Mail },
     { title: 'Back to my dashboard', url: '/dashboard', icon: Home },
   ];
 }

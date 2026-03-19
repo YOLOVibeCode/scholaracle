@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Mail, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
+import { Mail, CheckCircle, XCircle, Clock, Eye, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,7 @@ export default function EmailHistoryPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   // Preview state
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -99,6 +100,20 @@ export default function EmailHistoryPage() {
       // best-effort
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleResend = async (id: string) => {
+    setResending(true);
+    try {
+      const res = await emailHistoryApi.resend(id);
+      if (res.success) {
+        void fetchEmails();
+      }
+    } catch {
+      // best-effort
+    } finally {
+      setResending(false);
     }
   };
 
@@ -195,16 +210,27 @@ export default function EmailHistoryPage() {
                       <p className="text-xs text-red-500 mt-1">{email.failureReason}</p>
                     )}
                   </div>
-                  {email.hasHtmlContent && (
+                  <div className="flex gap-1">
+                    {email.hasHtmlContent && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void openPreview(email.id)}
+                        title="Preview email"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => void openPreview(email.id)}
-                      title="Preview email"
+                      onClick={() => void handleResend(email.id)}
+                      title="Resend email"
+                      disabled={resending}
                     >
-                      <Eye className="h-4 w-4" />
+                      <RefreshCw className={`h-4 w-4 ${resending ? 'animate-spin' : ''}`} />
                     </Button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -270,6 +296,19 @@ export default function EmailHistoryPage() {
               <pre className="text-sm whitespace-pre-wrap">{detail.content}</pre>
             </div>
           ) : null}
+          {detail && (
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleResend(detail.id)}
+                disabled={resending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${resending ? 'animate-spin' : ''}`} />
+                Resend
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

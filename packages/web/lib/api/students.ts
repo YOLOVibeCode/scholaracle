@@ -203,7 +203,10 @@ export interface IWorkflowAssignment {
   readonly submittedAt?: string;
   readonly gradedAt?: string;
   readonly studentNote?: string;
+  readonly studentStatus?: string;
 }
+
+export type StudentStatus = 'not_started' | 'working_on_it' | 'need_help' | 'done';
 
 export interface IAssignmentWorkflowResponse {
   readonly studentId: string;
@@ -505,6 +508,26 @@ export const studentsApi = {
       return res?.success ?? false;
     } catch (error) {
       console.error('Failed to save assignment note:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Set student progress status on an assignment.
+   */
+  async updateAssignmentStatus(
+    studentId: string,
+    assignmentExternalId: string,
+    status: StudentStatus | null
+  ): Promise<boolean> {
+    try {
+      const res = await apiClient.put<{ success?: boolean }>(
+        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+        { status }
+      );
+      return res?.success ?? false;
+    } catch (error) {
+      console.error('Failed to update assignment status:', error);
       return false;
     }
   },
