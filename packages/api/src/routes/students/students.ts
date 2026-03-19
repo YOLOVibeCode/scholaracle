@@ -4137,7 +4137,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
 
-      const { recipients } = req.body as { recipients?: 'all' | string[] };
+      const { recipients, send: shouldSend = true } = req.body as {
+        recipients?: 'all' | string[];
+        send?: boolean;
+      };
+      const isPreview = shouldSend === false;
 
       // Get all potential recipients
       const owner = await config.database
@@ -4347,7 +4351,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       }
 
-      await config.database.collection('email_digest_pending').insertMany(digestItems);
+      // Tag items with preview flag if send is disabled
+      const finalItems = isPreview
+        ? digestItems.map((item) => ({ ...item, preview: true }))
+        : digestItems;
+      await config.database.collection('email_digest_pending').insertMany(finalItems);
 
       // Optionally trigger immediate delivery (create a flush job)
       const flushJob = {
@@ -4368,7 +4376,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       res.status(200).json({
         success: true,
-        message: `Digest queued for ${targetRecipients.length} recipient(s)`,
+        message: isPreview
+          ? `Preview digest generated for ${targetRecipients.length} recipient(s) — not sent`
+          : `Digest queued for ${targetRecipients.length} recipient(s)`,
+        preview: isPreview,
         recipients: targetRecipients.map((r) => ({
           email: r.email,
           name: r.name,
