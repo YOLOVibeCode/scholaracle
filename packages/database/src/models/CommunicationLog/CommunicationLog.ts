@@ -26,7 +26,8 @@ export type CommunicationStatus =
   | 'failed'
   | 'bounced'
   | 'opened'
-  | 'clicked';
+  | 'clicked'
+  | 'preview';
 
 /**
  * Communication trigger source.
