@@ -22,9 +22,17 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   studentsApi,
   type IWorkflowAssignment,
   type ICourseMaterial,
+  type StudentStatus,
 } from '@/lib/api/students';
 import { ActivityTimeline } from '@/components/dashboard/students/ActivityTimeline';
 import { CommentThread } from '@/components/dashboard/students/CommentThread';
@@ -90,6 +98,17 @@ export function AssignmentWorkflowDetail({
   const [activityEvents, setActivityEvents] = useState<readonly import('@/lib/api/students').IActivityEvent[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [studentStatus, setStudentStatus] = useState<string>(assignment?.studentStatus ?? 'not_started');
+
+  useEffect(() => {
+    if (assignment) setStudentStatus(assignment.studentStatus ?? 'not_started');
+  }, [assignment]);
+
+  const handleStatusChange = async (value: string) => {
+    if (!assignment) return;
+    setStudentStatus(value);
+    await studentsApi.updateAssignmentStatus(studentId, assignment.externalId, value as StudentStatus);
+  };
 
   const loadMaterials = useCallback(async () => {
     if (!studentId || !assignment?.externalId) {
@@ -166,6 +185,21 @@ export function AssignmentWorkflowDetail({
           <span className="rounded px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
             {gradeLabel}
           </span>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-lg border p-3">
+          <span className="text-sm font-medium">Progress:</span>
+          <Select value={studentStatus} onValueChange={(v) => void handleStatusChange(v)}>
+            <SelectTrigger className="h-8 w-[160px] text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="working_on_it">Working On It</SelectItem>
+              <SelectItem value="need_help">Need Help</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">

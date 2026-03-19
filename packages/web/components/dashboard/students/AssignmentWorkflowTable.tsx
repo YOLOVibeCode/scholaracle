@@ -27,6 +27,29 @@ function statusBadgeClass(status: string): string {
   }
 }
 
+function studentStatusBadgeClass(status?: string): string {
+  switch (status) {
+    case 'working_on_it':
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200';
+    case 'need_help':
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
+    case 'done':
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
+    default:
+      return 'bg-muted text-muted-foreground';
+  }
+}
+
+function studentStatusLabel(status?: string): string {
+  switch (status) {
+    case 'not_started': return 'Not Started';
+    case 'working_on_it': return 'Working On It';
+    case 'need_help': return 'Need Help';
+    case 'done': return 'Done';
+    default: return '—';
+  }
+}
+
 function categoryBadgeClass(category: string | undefined): string {
   if (category?.toLowerCase() === 'major')
     return 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-200';
@@ -117,6 +140,21 @@ export function AssignmentWorkflowTable({
             {(row.original.status as string).replace('_', ' ')}
           </span>
         ),
+      },
+      {
+        id: 'studentStatus',
+        header: 'Progress',
+        cell: ({ row }) => {
+          const ss = row.original.studentStatus;
+          if (!ss) return <span className="text-muted-foreground text-xs">—</span>;
+          return (
+            <span
+              className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${studentStatusBadgeClass(ss)}`}
+            >
+              {studentStatusLabel(ss)}
+            </span>
+          );
+        },
       },
       {
         id: 'score',
