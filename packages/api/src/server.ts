@@ -44,6 +44,7 @@ import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
+import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
@@ -83,7 +84,10 @@ export interface IServerConfig {
   readonly sendGridFromName?: string;
   readonly twilioAccountSid?: string;
   readonly twilioAuthToken?: string;
+  readonly twilioApiKeySid?: string;
+  readonly twilioApiKeySecret?: string;
   readonly twilioFromNumber?: string;
+  readonly twilioMessagingServiceSid?: string;
   readonly squareAccessToken?: string;
   readonly squareEnvironment?: 'sandbox' | 'production';
   readonly squareLocationId?: string;
@@ -135,12 +139,19 @@ function getSendGridConfig(config: IServerConfig): {
 function getTwilioConfig(config: IServerConfig): {
   readonly accountSid: string;
   readonly authToken: string;
+  readonly apiKeySid: string;
+  readonly apiKeySecret: string;
   readonly fromNumber: string;
+  readonly messagingServiceSid: string;
 } {
   return {
     accountSid: config.twilioAccountSid ?? process.env['TWILIO_ACCOUNT_SID'] ?? '',
     authToken: config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '',
+    apiKeySid: config.twilioApiKeySid ?? process.env['TWILIO_API_KEY_SID'] ?? '',
+    apiKeySecret: config.twilioApiKeySecret ?? process.env['TWILIO_API_KEY_SECRET'] ?? '',
     fromNumber: config.twilioFromNumber ?? process.env['TWILIO_FROM_NUMBER'] ?? '',
+    messagingServiceSid:
+      config.twilioMessagingServiceSid ?? process.env['TWILIO_MESSAGING_SERVICE_SID'] ?? '',
   };
 }
 
@@ -180,13 +191,29 @@ function initializeNotificationService(config: IServerConfig): NotificationServi
     },
     transport
   );
-  const twilioConfigured = Boolean(
-    twilioConfig.accountSid && twilioConfig.authToken && twilioConfig.fromNumber
+  const hasApiKeyAuth = Boolean(
+    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
   );
+  const hasAuthTokenAuth = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
+  const twilioConfigured =
+    (hasApiKeyAuth || hasAuthTokenAuth) &&
+    Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
   const twilioClient = twilioConfigured
-    ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+    ? hasApiKeyAuth
+      ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+          accountSid: twilioConfig.accountSid,
+        })
+      : twilio(twilioConfig.accountSid, twilioConfig.authToken)
     : ({} as unknown as Twilio);
-  const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
+  const smsDelivery = new SMSDelivery(
+    {
+      accountSid: twilioConfig.accountSid,
+      authToken: twilioConfig.authToken,
+      fromNumber: twilioConfig.fromNumber,
+      messagingServiceSid: twilioConfig.messagingServiceSid,
+    },
+    twilioClient
+  );
 
   const deliveryServices: readonly INotificationDelivery[] = [
     emailDelivery,
@@ -489,6 +516,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
     // Webhook ingestion (delivery tracking)
     app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));
+
+    // Twilio webhooks (inbound SMS, delivery status callbacks)
+    const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
+    app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
 
     // Square billing (optional — only registers if access token and location are configured)
     const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
