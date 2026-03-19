@@ -44,7 +44,10 @@ export interface IWorkerConfig {
   readonly sendGridFromName?: string;
   readonly twilioAccountSid?: string;
   readonly twilioAuthToken?: string;
+  readonly twilioApiKeySid?: string;
+  readonly twilioApiKeySecret?: string;
   readonly twilioFromNumber?: string;
+  readonly twilioMessagingServiceSid?: string;
   readonly firebaseProjectId?: string;
   readonly pollIntervalMs?: number;
   readonly concurrency?: number;
@@ -80,12 +83,19 @@ function getSendGridConfig(config: IWorkerConfig): {
 function getTwilioConfig(config: IWorkerConfig): {
   readonly accountSid: string;
   readonly authToken: string;
+  readonly apiKeySid: string;
+  readonly apiKeySecret: string;
   readonly fromNumber: string;
+  readonly messagingServiceSid: string;
 } {
   return {
     accountSid: config.twilioAccountSid ?? process.env['TWILIO_ACCOUNT_SID'] ?? '',
     authToken: config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '',
+    apiKeySid: config.twilioApiKeySid ?? process.env['TWILIO_API_KEY_SID'] ?? '',
+    apiKeySecret: config.twilioApiKeySecret ?? process.env['TWILIO_API_KEY_SECRET'] ?? '',
     fromNumber: config.twilioFromNumber ?? process.env['TWILIO_FROM_NUMBER'] ?? '',
+    messagingServiceSid:
+      config.twilioMessagingServiceSid ?? process.env['TWILIO_MESSAGING_SERVICE_SID'] ?? '',
   };
 }
 
@@ -101,7 +111,8 @@ const MAX_SMS_LENGTH = 1600;
 async function flushSmsDigests(
   database: Db,
   twilioClient: Twilio,
-  fromNumber: string
+  fromNumber: string,
+  messagingServiceSid?: string
 ): Promise<void> {
   const repo = new SmsDigestPendingRepository(database);
   const userIds = await repo.getDistinctUserIds();
@@ -118,9 +129,9 @@ async function flushSmsDigests(
     }
     const commLogRepo = new CommunicationLogRepository(database);
     try {
-      await twilioClient.messages.create({
+      const msg = await twilioClient.messages.create({
         to: phone,
-        from: fromNumber,
+        ...(messagingServiceSid ? { messagingServiceSid } : { from: fromNumber }),
         body,
       });
       await commLogRepo.create({
@@ -134,6 +145,7 @@ async function flushSmsDigests(
         sentAt: new Date(),
         triggeredBy: 'scheduled',
         templateName: 'sms_digest',
+        providerId: msg.sid,
       });
       await repo.deleteByUserId(userId);
     } catch (err) {
@@ -197,8 +209,15 @@ function initializeNotificationService(
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
 
-  const twilioClient =
-    twilioConfig.accountSid && twilioConfig.authToken
+  const hasApiKeyAuth = Boolean(
+    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
+  );
+  const hasAuthTokenAuth = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
+  const twilioClient = hasApiKeyAuth
+    ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+        accountSid: twilioConfig.accountSid,
+      })
+    : hasAuthTokenAuth
       ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
       : ({} as unknown as Twilio);
 
@@ -214,7 +233,15 @@ function initializeNotificationService(
     },
     transport
   );
-  const smsDelivery = new SMSDelivery(twilioConfig, twilioClient);
+  const smsDelivery = new SMSDelivery(
+    {
+      accountSid: twilioConfig.accountSid,
+      authToken: twilioConfig.authToken,
+      fromNumber: twilioConfig.fromNumber,
+      messagingServiceSid: twilioConfig.messagingServiceSid,
+    },
+    twilioClient
+  );
 
   const firebaseProjectId = config.firebaseProjectId ?? 'default';
   const pushDelivery = new PushDelivery({ projectId: firebaseProjectId });
@@ -468,17 +495,28 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   syncScheduler.start();
 
   const twilioConfig = getTwilioConfig(config);
-  const twilioClientForDigest =
-    twilioConfig.accountSid && twilioConfig.authToken
+  const digestHasApiKey = Boolean(
+    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
+  );
+  const digestHasAuthToken = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
+  const twilioClientForDigest = digestHasApiKey
+    ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+        accountSid: twilioConfig.accountSid,
+      })
+    : digestHasAuthToken
       ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
       : null;
-  if (twilioClientForDigest && twilioConfig.fromNumber) {
+  const hasSender = Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
+  if (twilioClientForDigest && hasSender) {
     setInterval(() => {
       const now = new Date();
       if (now.getUTCHours() === DIGEST_UTC_HOUR) {
-        void flushSmsDigests(database, twilioClientForDigest, twilioConfig.fromNumber).catch((e) =>
-          console.error('[SmsDigest]', e)
-        );
+        void flushSmsDigests(
+          database,
+          twilioClientForDigest,
+          twilioConfig.fromNumber,
+          twilioConfig.messagingServiceSid || undefined
+        ).catch((e) => console.error('[SmsDigest]', e));
       }
     }, 60_000);
   }
