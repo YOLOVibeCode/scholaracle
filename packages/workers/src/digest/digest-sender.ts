@@ -158,17 +158,43 @@ export class DigestSender implements IDigestSender {
       }
 
       const baseUrl = this._dashboardBaseUrl?.replace(/\/$/, '') ?? '';
-      const blocks: IGradeBlock[] = [];
 
+      // Deduplicate snapshots across SIS + LMS sources.
+      // Different providers (skyward vs canvas) use different courseExternalIds for the
+      // same class, so we group by normalized course title and prefer SIS grades.
+      const SIS_PROVIDERS = new Set(['skyward', 'aeries', 'sis']);
+      const bestByTitle = new Map<
+        string,
+        { percent: number; courseName: string; isSis: boolean; courseExternalId: string }
+      >();
       for (const s of snapshots) {
         const doc = s as {
           courseExternalId?: string;
-          record?: { percentGrade?: number };
+          provider?: string;
+          record?: { percentGrade?: number; sourceType?: string };
         };
         const courseExternalId = doc.courseExternalId;
         const percent = doc.record?.percentGrade;
         if (courseExternalId == null || percent == null) continue;
-        const courseName = courseNameByExtId.get(courseExternalId) ?? courseExternalId;
+
+        const rawName = courseNameByExtId.get(courseExternalId) ?? courseExternalId;
+        const normalizedKey = rawName
+          .replace(/[^a-zA-Z0-9\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
+        const sourceType = (doc.record?.sourceType as string) ?? doc.provider ?? '';
+        const isSis = SIS_PROVIDERS.has(sourceType);
+        const existing = bestByTitle.get(normalizedKey);
+
+        // Prefer SIS over LMS; if both SIS, keep the one we already have
+        if (!existing || (isSis && !existing.isSis)) {
+          bestByTitle.set(normalizedKey, { percent, courseName: rawName, isSis, courseExternalId });
+        }
+      }
+
+      const blocks: IGradeBlock[] = [];
+      for (const [, { percent, courseName, courseExternalId }] of bestByTitle) {
         const courseUrl =
           baseUrl && studentId
             ? `${baseUrl}/dashboard/students/${studentId}/grades?course=${encodeURIComponent(courseExternalId)}`
