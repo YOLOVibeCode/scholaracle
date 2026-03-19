@@ -11,6 +11,7 @@ export interface ISMSDeliveryConfig {
   readonly accountSid: string;
   readonly authToken: string;
   readonly fromNumber: string;
+  readonly messagingServiceSid?: string;
 }
 
 const MAX_SMS_LENGTH = 1600;
@@ -51,7 +52,9 @@ export class SMSDelivery implements INotificationDelivery {
 
       const message = await this._twilio.messages.create({
         to: notification.userId,
-        from: this._config.fromNumber,
+        ...(this._config.messagingServiceSid
+          ? { messagingServiceSid: this._config.messagingServiceSid }
+          : { from: this._config.fromNumber }),
         body: smsBody,
       });
 
