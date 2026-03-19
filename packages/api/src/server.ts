@@ -11,6 +11,7 @@ import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
+import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
 import { AuthService, AdminAuthService } from '@scholaracle/auth';
@@ -425,6 +426,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
 
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
+    // Email history API routes
+    app.use('/api/email-history', authMiddleware(authService), emailHistoryRouter({ database }));
     // Settings API routes
     app.use(
       '/api/settings',
