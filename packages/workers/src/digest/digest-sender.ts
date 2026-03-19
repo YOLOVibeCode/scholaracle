@@ -82,6 +82,27 @@ export class DigestSender implements IDigestSender {
         studentId: first?.studentId,
       });
       const text = `${recipientItems.length} alert(s). View your dashboard for details.`;
+      const isPreview = recipientItems.some((item) => item.preview);
+
+      if (isPreview) {
+        // Preview mode: store in history but don't send
+        await this._commLogRepo.create({
+          userId,
+          channel: 'email' as const,
+          type: 'notification' as const,
+          subject,
+          content: text,
+          htmlContent: html,
+          recipientEmail,
+          status: 'preview' as const,
+          createdAt: new Date(),
+          triggeredBy: 'user_action',
+          templateName: 'email_digest',
+          relatedEntityType: 'student',
+          relatedEntityId: first?.studentId,
+        });
+        continue;
+      }
 
       try {
         await this._transport.send({
