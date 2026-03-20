@@ -13,6 +13,9 @@
 FROM node:20-slim AS scrapers-build
 WORKDIR /build
 
+# Install git for cloning scrapers repo
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Copy monorepo contracts (needed as file: dep by scrapers)
 COPY tsconfig.base.json /monorepo/
 COPY packages/contracts/ /monorepo/packages/contracts/
@@ -22,8 +25,13 @@ RUN cd /monorepo && npm init -y > /dev/null 2>&1 && \
     cd /monorepo/packages/contracts && npm install typescript@5.3.3 @types/jest@29 --save-dev && \
     npx tsc --build
 
-# Copy scrapers and patch contracts dep path
-COPY .scrapers/ /scrapers/
+# Clone scrapers repo (public) — fallback to local .scrapers/ if available
+COPY .scraper[s]/ /scrapers-local/
+RUN if [ -d /scrapers-local/src ]; then \
+      cp -r /scrapers-local /scrapers; \
+    else \
+      git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /scrapers; \
+    fi
 RUN sed -i 's|file:../scholarmancy/scholaracle/packages/contracts|file:/monorepo/packages/contracts|g' /scrapers/package.json
 
 # Install scrapers deps and build
