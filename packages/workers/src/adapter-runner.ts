@@ -2,15 +2,60 @@
 /**
  * Server-side adapter runner.
  *
- * This is the bridge between the SyncWorker and the actual adapter code.
- * It creates adapters, runs them, and returns results.
- *
- * For browser-based platforms (Skyward, Canvas with SSO), it uses Playwright.
- * For API-based platforms (Canvas with token, Google Classroom, OneRoster), it uses the adapter directly.
+ * This is the bridge between the SyncWorker and the actual scraping code.
+ * For browser-based platforms (Canvas, Skyward, Aeries), it uses the
+ * scholaracle-scraper library (Playwright-based scrapers).
+ * For API-based platforms (Google Classroom, OneRoster), it uses the
+ * connector's REST adapters directly.
  */
 
 import type { Db } from 'mongodb';
+import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 import type { AdapterRunnerFn, IAdapterRunnerOptions } from '@scholaracle/agents';
+import type { IScraperConfig } from 'scholaracle-scraper';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function buildScraperConfig(
+  provider: string,
+  adapterId: string,
+  credentials: Record<string, string>,
+  baseUrl: string,
+  sourceId: string
+): IScraperConfig {
+  return {
+    credentials: {
+      baseUrl,
+      username: credentials['username'] ?? '',
+      password: credentials['password'] ?? '',
+      accessToken: credentials['accessToken'],
+      loginMethod:
+        (credentials['loginMethod'] as IScraperConfig['credentials']['loginMethod']) ?? undefined,
+      studentNameHint: credentials['studentNameHint'],
+    },
+    studentName: credentials['studentName'] ?? '',
+    studentExternalId: credentials['studentExternalId'] ?? '',
+    institutionExternalId: new URL(baseUrl || 'https://unknown').hostname,
+    sourceId,
+    provider,
+    adapterId,
+    options: { headless: true },
+  };
+}
+
+function envelopeToResult(envelope: ISlcIngestEnvelopeV1): {
+  success: boolean;
+  summary: Record<string, number>;
+  envelope: ISlcIngestEnvelopeV1;
+} {
+  const summary: Record<string, number> = {};
+  for (const op of envelope.ops) {
+    summary[op.entity] = (summary[op.entity] ?? 0) + 1;
+  }
+  return { success: true, summary, envelope };
+}
 
 /**
  * Get Google access token, refreshing if needed.
@@ -29,36 +74,41 @@ async function getGoogleAccessToken(credentials: Record<string, string>): Promis
   return accessToken;
 }
 
+// ---------------------------------------------------------------------------
+// Main runner factory
+// ---------------------------------------------------------------------------
+
 export function createAdapterRunner(db: Db): AdapterRunnerFn {
   return async (
     provider: string,
-    _adapterId: string,
+    adapterId: string,
     credentials: Record<string, string>,
     baseUrl: string,
     runId: string,
     options?: IAdapterRunnerOptions
   ) => {
     console.log(`[AdapterRunner] run=${runId} provider=${provider} url=${baseUrl}`);
+    const sourceId = options?.sourceId ?? runId;
 
     try {
       switch (provider) {
         // -----------------------------------------------------------------
-        // Canvas — API token or browser/SSO
+        // Canvas — Playwright browser scraper
         // -----------------------------------------------------------------
         case 'canvas': {
-          if (credentials['accessToken']) {
-            return await runCanvasApi(baseUrl, credentials['accessToken'], runId, options);
-          }
-          return {
-            success: false,
-            summary: {},
-            error:
-              'Canvas requires an API access token. Browser login is not supported in this environment.',
-          };
+          const { CanvasScraper } = await import('scholaracle-scraper');
+          const scraper = new CanvasScraper();
+          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const envelope = await scraper.run(config);
+          const result = envelopeToResult(envelope);
+          console.log(
+            `[AdapterRunner] Canvas scraper (${runId}): ${envelope.ops.length} total ops`
+          );
+          return result;
         }
 
         // -----------------------------------------------------------------
-        // Skyward — browser-based scraper (Playwright)
+        // Skyward — Playwright browser scraper
         // -----------------------------------------------------------------
         case 'skyward': {
           const username = credentials['username'] ?? '';
@@ -66,11 +116,36 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
           if (!username || !password) {
             return { success: false, summary: {}, error: 'Skyward requires username and password' };
           }
-          return await runSkywardBrowser(db, baseUrl, username, password, runId, options);
+          const { SkywardScraper } = await import('scholaracle-scraper');
+          const { MongoStrategyStore } = await import('@scholaracle/connector');
+          const scraper = new SkywardScraper();
+          scraper.strategyStore = new MongoStrategyStore(db);
+          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const envelope = await scraper.run(config);
+          const result = envelopeToResult(envelope);
+          console.log(
+            `[AdapterRunner] Skyward scraper (${runId}): ${envelope.ops.length} total ops`
+          );
+          return result;
         }
 
         // -----------------------------------------------------------------
-        // Google Classroom — OAuth token (refresh if refreshToken present)
+        // Aeries — Playwright browser scraper
+        // -----------------------------------------------------------------
+        case 'aeries': {
+          const { AeriesScraper } = await import('scholaracle-scraper');
+          const scraper = new AeriesScraper();
+          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const envelope = await scraper.run(config);
+          const result = envelopeToResult(envelope);
+          console.log(
+            `[AdapterRunner] Aeries scraper (${runId}): ${envelope.ops.length} total ops`
+          );
+          return result;
+        }
+
+        // -----------------------------------------------------------------
+        // Google Classroom — OAuth token (API-based, uses connector adapter)
         // -----------------------------------------------------------------
         case 'google-classroom': {
           const accessToken = await getGoogleAccessToken(credentials);
@@ -85,7 +160,7 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
         }
 
         // -----------------------------------------------------------------
-        // OneRoster — API
+        // OneRoster — API (uses connector adapter)
         // -----------------------------------------------------------------
         case 'oneroster': {
           return await runOneRosterApi(baseUrl, credentials, runId, options);
@@ -100,170 +175,6 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
       return { success: false, summary: {}, error: msg };
     }
   };
-}
-
-// ---------------------------------------------------------------------------
-// Canvas REST API (token-based)
-// ---------------------------------------------------------------------------
-
-/**
- * Two-pass sync: pass 1 fetches metadata + downloads critical/high priority
- * files; pass 2 downloads medium/low. Both passes produce an envelope. The
- * caller (SyncWorker) submits the envelope to the ingest API when configured.
- */
-async function runCanvasApi(
-  baseUrl: string,
-  token: string,
-  runId: string,
-  options?: IAdapterRunnerOptions
-): Promise<{
-  success: boolean;
-  summary: Record<string, number>;
-  error?: string;
-  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
-}> {
-  try {
-    const {
-      CanvasAdapter,
-      AssetDownloader: ASSET_DOWNLOADER_CTOR,
-      DEFAULT_MAX_ASSET_DOWNLOAD_BYTES,
-    } = await import('@scholaracle/connector');
-    const adapter = new CanvasAdapter();
-    await adapter.authenticate({ baseUrl, accessToken: token });
-
-    const apiBaseUrl = process.env['API_BASE_URL'];
-    const connectorToken = process.env['CONNECTOR_TOKEN'];
-    const sourceId = options?.sourceId ?? process.env['SOURCE_ID'] ?? runId;
-    const maxSize = parseInt(process.env['MAX_ASSET_DOWNLOAD_SIZE'] ?? '', 10);
-
-    const assetDownloader =
-      apiBaseUrl && connectorToken
-        ? new ASSET_DOWNLOADER_CTOR({
-            apiBaseUrl,
-            connectorToken,
-            sourceId,
-            provider: 'canvas',
-            maxSizeBytes: Number.isFinite(maxSize) ? maxSize : DEFAULT_MAX_ASSET_DOWNLOAD_BYTES,
-          })
-        : undefined;
-
-    const sharedParams = {
-      runId,
-      sourceId,
-      displayName: 'Canvas',
-      portalBaseUrl: baseUrl,
-      assetDownloader,
-      assetDownloadHeaders: { Authorization: `Bearer ${token}` },
-    };
-
-    const pass1Envelope = await adapter.fetchEnvelope({
-      ...sharedParams,
-      assetPriorityFilter: assetDownloader ? ('critical_high_only' as const) : ('all' as const),
-    });
-
-    let totalOps = pass1Envelope.ops.length;
-
-    if (assetDownloader) {
-      try {
-        const pass2Envelope = await adapter.fetchEnvelope({
-          ...sharedParams,
-          assetPriorityFilter: 'medium_low_only',
-        });
-        totalOps += pass2Envelope.ops.filter(
-          (o: { entity: string }) => o.entity === 'courseMaterial'
-        ).length;
-      } catch {
-        // Pass 2 is best-effort; user already sees data from pass 1.
-      }
-    }
-
-    const courses = pass1Envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'course'
-    ).length;
-    const assignments = pass1Envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'assignment'
-    ).length;
-    const grades = pass1Envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'gradeSnapshot'
-    ).length;
-    const materials = pass1Envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'courseMaterial'
-    ).length;
-
-    console.log(
-      `[AdapterRunner] Canvas API: ${courses} courses, ${assignments} assignments, ${grades} grades, ${materials} materials (${totalOps} total ops)`
-    );
-    return {
-      success: true,
-      summary: { courses, assignments, grades, materials },
-      envelope: pass1Envelope,
-    };
-  } catch (err) {
-    return { success: false, summary: {}, error: (err as Error).message };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Skyward browser (Playwright)
-// ---------------------------------------------------------------------------
-
-async function runSkywardBrowser(
-  database: Db,
-  baseUrl: string,
-  username: string,
-  password: string,
-  runId: string,
-  options?: IAdapterRunnerOptions
-): Promise<{
-  success: boolean;
-  summary: Record<string, number>;
-  error?: string;
-  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
-}> {
-  try {
-    const { SkywardBrowserAdapter, createAiClient, MongoStrategyStore } =
-      await import('@scholaracle/connector');
-    const aiProvider = process.env['AI_PROVIDER'] as 'openai' | 'anthropic' | 'gemini' | undefined;
-    const aiApiKey = process.env['AI_API_KEY'];
-    const aiClient =
-      aiProvider && aiApiKey && ['openai', 'anthropic', 'gemini'].includes(aiProvider)
-        ? createAiClient(aiProvider, aiApiKey)
-        : undefined;
-    const strategyStore = new MongoStrategyStore(database);
-    const adapter = new SkywardBrowserAdapter(undefined, aiClient, strategyStore);
-    await adapter.authenticate({ baseUrl, username, password });
-
-    const sourceId = options?.sourceId ?? process.env['SOURCE_ID'] ?? runId;
-    const displayName = options?.displayName ?? 'Skyward';
-    const envelope = await adapter.fetchEnvelope({
-      runId,
-      sourceId,
-      displayName,
-      portalBaseUrl: baseUrl,
-    });
-
-    const courses = envelope.ops.filter((o: { entity: string }) => o.entity === 'course').length;
-    const assignments = envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'assignment'
-    ).length;
-    const grades = envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'gradeSnapshot'
-    ).length;
-    const attendance = envelope.ops.filter(
-      (o: { entity: string }) => o.entity === 'attendanceEvent'
-    ).length;
-
-    console.log(
-      `[AdapterRunner] Skyward browser (${runId}): ${courses} courses, ${assignments} assignments, ${grades} grades, ${attendance} attendance`
-    );
-    return {
-      success: true,
-      summary: { courses, assignments, grades, attendance },
-      envelope,
-    };
-  } catch (err) {
-    return { success: false, summary: {}, error: (err as Error).message };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +208,7 @@ async function refreshGoogleToken(
 }
 
 // ---------------------------------------------------------------------------
-// Google Classroom API
+// Google Classroom API (kept — has API access)
 // ---------------------------------------------------------------------------
 
 async function runGoogleClassroomApi(
@@ -308,7 +219,7 @@ async function runGoogleClassroomApi(
   success: boolean;
   summary: Record<string, number>;
   error?: string;
-  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+  envelope?: ISlcIngestEnvelopeV1;
 }> {
   try {
     const { GoogleClassroomAdapter } = await import('@scholaracle/connector');
@@ -335,7 +246,7 @@ async function runGoogleClassroomApi(
 }
 
 // ---------------------------------------------------------------------------
-// OneRoster API
+// OneRoster API (kept — has API access)
 // ---------------------------------------------------------------------------
 
 async function runOneRosterApi(
@@ -347,7 +258,7 @@ async function runOneRosterApi(
   success: boolean;
   summary: Record<string, number>;
   error?: string;
-  envelope?: import('@scholaracle/contracts').ISlcIngestEnvelopeV1;
+  envelope?: ISlcIngestEnvelopeV1;
 }> {
   try {
     const { OneRosterAdapter } = await import('@scholaracle/connector');

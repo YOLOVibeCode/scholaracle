@@ -32,6 +32,14 @@ export interface IUserPreferences {
       /** Days considered school days (default mon–fri). Lowercase: mon,tue,wed,thu,fri,sat,sun */
       readonly schoolDays?: readonly string[];
       readonly holidayMode?: 'normal' | 'pause' | 'reduced';
+      /** Whether digests auto-send on schedule (default true). */
+      readonly autoSend?: boolean;
+      /** Who receives auto-sent digests: everybody, nobody, or specific emails. */
+      readonly recipients?: 'everybody' | 'nobody' | 'specific';
+      /** Email addresses to send to when recipients === 'specific'. */
+      readonly specificRecipients?: readonly string[];
+      /** ISO date YYYY-MM-DD; digests paused until this date. */
+      readonly snoozeUntil?: string;
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';

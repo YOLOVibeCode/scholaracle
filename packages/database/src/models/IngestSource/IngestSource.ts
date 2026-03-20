@@ -10,6 +10,7 @@ export interface IIngestSourceData {
   readonly schedule?: string;
   readonly dataTypes?: readonly string[];
   readonly enabled?: boolean;
+  readonly lastSyncedAt?: Date;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -25,6 +26,7 @@ export class IngestSource {
   public readonly schedule: string;
   public readonly dataTypes: readonly string[];
   public readonly enabled: boolean;
+  public readonly lastSyncedAt?: Date;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -39,6 +41,7 @@ export class IngestSource {
     this.schedule = data.schedule ?? 'every_6h';
     this.dataTypes = data.dataTypes ?? [];
     this.enabled = data.enabled ?? true;
+    this.lastSyncedAt = data.lastSyncedAt;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }

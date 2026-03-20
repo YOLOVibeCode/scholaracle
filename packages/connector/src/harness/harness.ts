@@ -38,10 +38,11 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ILmsAdapter, ILmsCredentials, IConnectionTestResult } from '../adapter';
 import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
-import { CanvasAdapter } from '../canvas/canvas-adapter';
 import { GoogleClassroomAdapter } from '../google-classroom/google-classroom-adapter';
-import { SkywardAdapter } from '../skyward/skyward-adapter';
 import { OneRosterAdapter } from '../oneroster/oneroster-adapter';
+
+// Note: Canvas, Skyward, and Aeries adapters have been removed from connector.
+// Use the scholaracle-scraper CLI for browser-based scraping of those platforms.
 import { validateEnvelope, formatReport, type IValidationReport } from './validate-envelope';
 
 // ---------------------------------------------------------------------------
@@ -68,30 +69,20 @@ function getEnvOrArg(argName: string, envName: string): string {
 function createAdapter(provider: string): ILmsAdapter {
   switch (provider) {
     case 'skyward':
-      // For the harness, we use a stub scraper factory that requires
-      // the skyward-rest npm package. If not installed, it will fail
-      // with a clear message.
-      return new SkywardAdapter((loginUrl: string) => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const skywardRest = require('skyward-rest');
-          return skywardRest(loginUrl);
-        } catch {
-          throw new Error(
-            'skyward-rest is not installed. Run: npm install skyward-rest\n' +
-              'This package is required to scrape Skyward portals.'
-          );
-        }
-      });
     case 'canvas':
-      return new CanvasAdapter();
+    case 'aeries':
+      throw new Error(
+        `"${provider}" now uses the scholaracle-scraper CLI (Playwright browser scrapers). ` +
+          `Use: npx scholaracle-scraper run ${provider}`
+      );
     case 'google-classroom':
       return new GoogleClassroomAdapter();
     case 'oneroster':
       return new OneRosterAdapter();
     default:
       throw new Error(
-        `Unknown provider: "${provider}". Supported: skyward, canvas, google-classroom, oneroster`
+        `Unknown provider: "${provider}". API-supported: google-classroom, oneroster. ` +
+          'Browser-based (use scholaracle-scraper CLI): canvas, skyward, aeries'
       );
   }
 }

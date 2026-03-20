@@ -43,6 +43,11 @@ export interface IQueueStats {
   readonly failed: number;
 }
 
+export interface ITypedQueueStats extends IQueueStats {
+  /** Average processing duration in ms (from recent completed jobs). */
+  readonly avgDurationMs: number;
+}
+
 export interface IGetNextJobOptions {
   /** When set, only claim jobs of this type (e.g. 'notify', 'sync'). */
   readonly type?: string;
@@ -287,6 +292,78 @@ export class MongoQueue {
       completed: statsMap.get('completed') ?? 0,
       failed: statsMap.get('failed') ?? 0,
     };
+  }
+
+  /**
+   * Get queue statistics filtered by job type, plus average duration.
+   */
+  public async getStatsByType(type: string): Promise<ITypedQueueStats> {
+    const [statusCounts, durationResult] = await Promise.all([
+      this._jobs
+        .aggregate([{ $match: { type } }, { $group: { _id: '$status', count: { $sum: 1 } } }])
+        .toArray(),
+      this._jobs
+        .aggregate([
+          {
+            $match: {
+              type,
+              status: 'completed',
+              processingStartedAt: { $exists: true },
+              completedAt: { $gte: new Date(Date.now() - 24 * 60 * 60_000) },
+            },
+          },
+          {
+            $project: {
+              duration: { $subtract: ['$completedAt', '$processingStartedAt'] },
+            },
+          },
+          { $group: { _id: null, avg: { $avg: '$duration' } } },
+        ])
+        .toArray(),
+    ]);
+
+    const map = new Map(
+      statusCounts.map((s: Document) => [s['_id'] as string, s['count'] as number])
+    );
+
+    return {
+      pending: map.get('pending') ?? 0,
+      processing: map.get('processing') ?? 0,
+      completed: map.get('completed') ?? 0,
+      failed: map.get('failed') ?? 0,
+      avgDurationMs: Math.round((durationResult[0]?.['avg'] as number) ?? 60_000),
+    };
+  }
+
+  /**
+   * Get the position of a specific job in the pending queue.
+   * Returns 0 if the job is already processing, -1 if not found/completed/failed.
+   */
+  public async getJobPosition(jobId: string): Promise<number> {
+    const job = await this._jobs.findOne({ _id: new MongoObjectId(jobId) });
+    if (!job) return -1;
+    if (job.status === 'processing') return 0;
+    if (job.status !== 'pending') return -1;
+
+    // Count how many pending jobs are ahead (higher priority or earlier scheduled)
+    const ahead = await this._jobs.countDocuments({
+      status: 'pending',
+      type: job.type,
+      $or: [
+        { priority: { $lt: job.priority } },
+        {
+          priority: job.priority,
+          scheduledFor: { $lt: job.scheduledFor },
+        },
+        {
+          priority: job.priority,
+          scheduledFor: job.scheduledFor,
+          _id: { $lt: job._id },
+        },
+      ],
+    });
+
+    return ahead + 1;
   }
 
   /**

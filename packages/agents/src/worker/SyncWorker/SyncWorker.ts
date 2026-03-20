@@ -117,6 +117,11 @@ export class SyncWorker {
   private _activeJobs = 0;
   private _loopPromise?: Promise<void>;
 
+  /** Number of sync jobs currently being processed. */
+  public get activeJobs(): number {
+    return this._activeJobs;
+  }
+
   constructor(queue: MongoQueue, db: Db, config: ISyncWorkerConfig) {
     this._queue = queue;
     this._db = db;
