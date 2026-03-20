@@ -169,6 +169,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 300 * 1000,
     },
+    // Server-side sync: login → add source → trigger worker scrape → verify (requires TEST_CANVAS_*)
+    {
+      name: 'server-sync-e2e',
+      testMatch: /server-sync-e2e\.spec\.ts/,
+      dependencies: ['critical'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 300 * 1000,
+    },
   ],
 
   // Web server configuration
