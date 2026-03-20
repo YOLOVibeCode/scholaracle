@@ -84,6 +84,10 @@ COPY . .
 RUN pnpm --filter @scholaracle/workers... build
 # Sync contracts dist into pnpm store (pnpm copied package before build, so dist/ is missing)
 RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
+# Link @scholaracle/contracts into scrapers node_modules for runtime resolution
+RUN rm -rf /scrapers/node_modules/@scholaracle/contracts && \
+    mkdir -p /scrapers/node_modules/@scholaracle && \
+    ln -s /app/packages/contracts /scrapers/node_modules/@scholaracle/contracts
 ENV NODE_ENV=production
 EXPOSE 3003
 CMD ["node", "packages/workers/dist/worker.js"]
@@ -95,5 +99,8 @@ FROM base AS development
 COPY . .
 RUN pnpm --filter @scholaracle/workers... build
 RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
+RUN rm -rf /scrapers/node_modules/@scholaracle/contracts && \
+    mkdir -p /scrapers/node_modules/@scholaracle && \
+    ln -s /app/packages/contracts /scrapers/node_modules/@scholaracle/contracts
 EXPOSE 3003
 CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]
