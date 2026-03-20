@@ -1,9 +1,11 @@
+// Core infrastructure (kept for adapters that still use it)
 export * from './config';
 export * from './fixture-adapter';
 export * from './adapter';
 export * from './adapter-registry';
 export * from './fixture-adapter-wrapper';
-export * from './canvas';
+
+// Asset management
 export {
   AssetDownloader,
   classifyAssetPriority,
@@ -22,9 +24,7 @@ export type { ISyncStateEntry } from './sync-state';
 export { probeLinkAccessibility, probeLinkAccessibilityBatch } from './link-probe';
 export type { LinkAccessibility } from './link-probe';
 
-// Re-export adapters and clients from additional providers.
-// Transformers/types are accessed via deep imports (e.g. '@scholaracle/connector/google-classroom')
-// to avoid name collisions between adapters that share function names like transformCourseToOp.
+// API-based adapters (still active — have API access)
 export { GoogleClassroomAdapter, GoogleClassroomClient } from './google-classroom';
 export type {
   IGoogleCourse,
@@ -33,46 +33,33 @@ export type {
   IGoogleCourseStudent,
   IGoogleClassroomClientConfig,
 } from './google-classroom';
-export { SkywardAdapter, SkywardClient } from './skyward';
+export { OneRosterAdapter, OneRosterClient } from './oneroster';
 export type {
-  ISkywardScraper,
-  ISkywardReport,
-  ISkywardGradebook,
-  ISkywardSchoolYear,
-  ISkywardClientConfig,
-  SkywardScraperFactory,
-} from './skyward';
-export { SkywardBrowserAdapter } from './skyward-browser';
-export type { SkywardBrowserScraperFactory, IAiClient } from './skyward-browser';
+  IOneRosterOrg,
+  IOneRosterCourse,
+  IOneRosterClass,
+  IOneRosterLineItem,
+  IOneRosterResult,
+  IOneRosterAcademicSession,
+  IOneRosterCategory,
+  IOneRosterClientConfig,
+} from './oneroster';
+
+// AI client (used by server-side Skyward scraper for strategy store)
 export { createAiClient } from './ai/create-ai-client';
 export type { AiProvider } from './ai/create-ai-client';
-export { useStrategy, computeFingerprint, MongoStrategyStore } from './strategy';
+
+// Strategy (MongoStrategyStore for server, types from contracts)
+export { MongoStrategyStore } from './strategy';
+export { useStrategy, computeFingerprint } from './strategy';
 export type {
   IExtractionStrategy,
   ISelectorStep,
   IStrategyAttempt,
   IStrategyStore,
 } from './strategy';
-export { AeriesAdapter, AeriesClient } from './aeries';
-export type {
-  IAeriesClientConfig,
-  IAeriesSchool,
-  IAeriesStudent,
-  IAeriesReportCard,
-  IAeriesReportCardCourse,
-  IAeriesMarkingPeriodGrade,
-  IAeriesMarkingPeriod,
-  IAeriesGpa,
-  IAeriesClassScheduleEntry,
-  IAeriesCourse,
-  IAeriesSection,
-  IAeriesSectionStaff,
-  IAeriesGradebook,
-  IAeriesAssignment,
-  IAeriesAssignmentScore,
-  IAeriesGradebookStudent,
-} from './aeries';
-export { OneRosterAdapter, OneRosterClient } from './oneroster';
+
+// Reconciliation (used by ingest API)
 export {
   reconcileCourse,
   reconcileCourses,
@@ -93,13 +80,3 @@ export type {
   IAssignmentForReconciliation,
   IAssignmentMatch,
 } from './reconciliation';
-export type {
-  IOneRosterOrg,
-  IOneRosterCourse,
-  IOneRosterClass,
-  IOneRosterLineItem,
-  IOneRosterResult,
-  IOneRosterAcademicSession,
-  IOneRosterCategory,
-  IOneRosterClientConfig,
-} from './oneroster';

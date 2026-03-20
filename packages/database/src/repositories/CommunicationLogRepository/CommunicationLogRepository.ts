@@ -46,6 +46,7 @@ export interface ICommunicationLogWriter {
     providerId: string,
     status: CommunicationStatus
   ): Promise<boolean>;
+  deleteByUserId(userId: string): Promise<number>;
 }
 
 export interface ICommunicationLogRepository
@@ -228,6 +229,17 @@ export class CommunicationLogRepository
     const result = await this._collection.updateOne({ providerId }, { $set: updateDoc });
 
     return result.modifiedCount > 0;
+  }
+
+  /**
+   * Delete all communication logs for a user.
+   *
+   * @param userId - User ID
+   * @returns Number of deleted logs
+   */
+  public async deleteByUserId(userId: string): Promise<number> {
+    const result = await this._collection.deleteMany({ userId });
+    return result.deletedCount;
   }
 
   /**

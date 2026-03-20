@@ -19,6 +19,10 @@ export interface INotificationSettings {
     readonly weekendSlots?: readonly IDigestSlotApi[];
     readonly schoolDays?: readonly string[];
     readonly holidayMode?: 'normal' | 'pause' | 'reduced';
+    readonly autoSend?: boolean;
+    readonly recipients?: 'everybody' | 'nobody' | 'specific';
+    readonly specificRecipients?: readonly string[];
+    readonly snoozeUntil?: string | null;
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -66,6 +70,10 @@ export interface IUserSettings {
       readonly weekendSlots?: readonly IDigestSlotApi[];
       readonly schoolDays?: readonly string[];
       readonly holidayMode?: 'normal' | 'pause' | 'reduced';
+      readonly autoSend?: boolean;
+      readonly recipients?: 'everybody' | 'nobody' | 'specific';
+      readonly specificRecipients?: readonly string[];
+      readonly snoozeUntil?: string | null;
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -141,6 +149,10 @@ const defaultSettings: IUserSettings = {
       weekendSlots: [],
       schoolDays: ['mon', 'tue', 'wed', 'thu', 'fri'],
       holidayMode: 'normal',
+      autoSend: true,
+      recipients: 'everybody',
+      specificRecipients: [],
+      snoozeUntil: null,
     },
     tone: 'encouraging',
     frequency: 'balanced',

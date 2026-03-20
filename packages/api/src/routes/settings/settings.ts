@@ -39,6 +39,10 @@ export interface INotificationSettings {
     }[];
     readonly schoolDays?: readonly string[];
     readonly holidayMode?: 'normal' | 'pause' | 'reduced';
+    readonly autoSend?: boolean;
+    readonly recipients?: 'everybody' | 'nobody' | 'specific';
+    readonly specificRecipients?: readonly string[];
+    readonly snoozeUntil?: string | null;
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
@@ -146,6 +150,27 @@ function validateDigestSchedule(d: INotificationSettings['digestSchedule']): str
   }
   if (d.holidayMode !== undefined && !VALID_HOLIDAY_MODES.includes(d.holidayMode))
     return 'digestSchedule.holidayMode must be normal, pause, or reduced';
+  if (d.autoSend !== undefined && typeof d.autoSend !== 'boolean')
+    return 'digestSchedule.autoSend must be boolean';
+  const VALID_RECIPIENTS_MODES = ['everybody', 'nobody', 'specific'] as const;
+  if (
+    d.recipients !== undefined &&
+    !VALID_RECIPIENTS_MODES.includes(d.recipients as (typeof VALID_RECIPIENTS_MODES)[number])
+  )
+    return 'digestSchedule.recipients must be everybody, nobody, or specific';
+  if (d.specificRecipients !== undefined) {
+    if (!Array.isArray(d.specificRecipients))
+      return 'digestSchedule.specificRecipients must be an array';
+    if (d.specificRecipients.length > 50) return 'digestSchedule.specificRecipients max 50 entries';
+    for (const email of d.specificRecipients) {
+      if (typeof email !== 'string' || !email.includes('@'))
+        return 'Each specificRecipients entry must be a valid email';
+    }
+  }
+  if (d.snoozeUntil !== undefined && d.snoozeUntil !== null) {
+    if (typeof d.snoozeUntil !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d.snoozeUntil))
+      return 'digestSchedule.snoozeUntil must be YYYY-MM-DD or null';
+  }
   return undefined;
 }
 
@@ -196,6 +221,10 @@ function buildDigestScheduleResponse(
     weekendSlots: weekendSlots ?? [],
     schoolDays: d?.schoolDays ?? DEFAULT_SCHOOL_DAYS,
     holidayMode: d?.holidayMode ?? 'normal',
+    autoSend: d?.autoSend ?? true,
+    recipients: d?.recipients ?? 'everybody',
+    specificRecipients: d?.specificRecipients ?? [],
+    snoozeUntil: d?.snoozeUntil ?? null,
   };
 }
 
@@ -451,6 +480,20 @@ async function handleUpdateSettings(
             notifications?.digestSchedule?.holidayMode ??
             notif.digestSchedule?.holidayMode ??
             'normal',
+          autoSend:
+            notifications?.digestSchedule?.autoSend ?? notif.digestSchedule?.autoSend ?? true,
+          recipients:
+            notifications?.digestSchedule?.recipients ??
+            notif.digestSchedule?.recipients ??
+            'everybody',
+          specificRecipients:
+            notifications?.digestSchedule?.specificRecipients ??
+            notif.digestSchedule?.specificRecipients ??
+            [],
+          snoozeUntil:
+            notifications?.digestSchedule?.snoozeUntil !== undefined
+              ? (notifications.digestSchedule.snoozeUntil ?? undefined)
+              : notif.digestSchedule?.snoozeUntil,
         },
         tone: notifications?.tone ?? notif.tone ?? 'encouraging',
         frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',

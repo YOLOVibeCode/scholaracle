@@ -3,7 +3,9 @@
  * Supports Gemini, OpenAI, and Anthropic. Implements parseHtml only (ISP).
  */
 
-import type { IAiClient } from '../skyward-browser/ai-client-interface';
+export interface IAiClient {
+  parseHtml(html: string, schema: string): Promise<Record<string, unknown>>;
+}
 
 const PARSE_HTML_MAX_CHARS = 50_000;
 

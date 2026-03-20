@@ -15,30 +15,37 @@ const mockEnvelope = {
   ],
 };
 
-jest.mock('@scholaracle/connector', () => {
-  const mockAuthenticate = jest.fn().mockResolvedValue(undefined);
-  const mockFetchEnvelope = jest.fn().mockResolvedValue(mockEnvelope);
-  return {
-    CanvasAdapter: jest.fn().mockImplementation(() => ({
-      authenticate: mockAuthenticate,
-      fetchEnvelope: mockFetchEnvelope,
-    })),
-    GoogleClassroomAdapter: jest.fn().mockImplementation(() => ({
-      authenticate: mockAuthenticate,
-      fetchEnvelope: mockFetchEnvelope,
-    })),
-    SkywardBrowserAdapter: jest.fn().mockImplementation(() => ({
-      authenticate: mockAuthenticate,
-      fetchEnvelope: mockFetchEnvelope,
-    })),
-    OneRosterAdapter: jest.fn().mockImplementation(() => ({
-      authenticate: mockAuthenticate,
-      fetchEnvelope: mockFetchEnvelope,
-    })),
-    createAiClient: jest.fn(),
-    MongoStrategyStore: jest.fn().mockImplementation(() => ({})),
-  };
-});
+const mockScraperRun = jest.fn().mockResolvedValue(mockEnvelope);
+
+// Mock the scholaracle-scraper package (Playwright browser scrapers)
+jest.mock('scholaracle-scraper', () => ({
+  CanvasScraper: jest.fn().mockImplementation(() => ({
+    run: mockScraperRun,
+  })),
+  SkywardScraper: jest.fn().mockImplementation(() => ({
+    run: mockScraperRun,
+    strategyStore: null,
+  })),
+  AeriesScraper: jest.fn().mockImplementation(() => ({
+    run: mockScraperRun,
+  })),
+}));
+
+// Mock connector (Google Classroom + OneRoster API adapters, MongoStrategyStore)
+const mockAuthenticate = jest.fn().mockResolvedValue(undefined);
+const mockFetchEnvelope = jest.fn().mockResolvedValue(mockEnvelope);
+
+jest.mock('@scholaracle/connector', () => ({
+  GoogleClassroomAdapter: jest.fn().mockImplementation(() => ({
+    authenticate: mockAuthenticate,
+    fetchEnvelope: mockFetchEnvelope,
+  })),
+  OneRosterAdapter: jest.fn().mockImplementation(() => ({
+    authenticate: mockAuthenticate,
+    fetchEnvelope: mockFetchEnvelope,
+  })),
+  MongoStrategyStore: jest.fn().mockImplementation(() => ({})),
+}));
 
 describe('createAdapterRunner', () => {
   let db: Db;
@@ -51,9 +58,15 @@ describe('createAdapterRunner', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockScraperRun.mockResolvedValue(mockEnvelope);
+    mockFetchEnvelope.mockResolvedValue(mockEnvelope);
   });
 
-  it('should route canvas with accessToken to Canvas API and return entity counts', async () => {
+  // -----------------------------------------------------------------------
+  // Canvas (Playwright scraper)
+  // -----------------------------------------------------------------------
+
+  it('should route canvas to CanvasScraper and return entity counts', async () => {
     const result = await run(
       'canvas',
       'com.instructure.canvas',
@@ -62,35 +75,18 @@ describe('createAdapterRunner', () => {
       'run-1'
     );
     expect(result.success).toBe(true);
-    expect(result.summary).toEqual({ courses: 2, assignments: 3, grades: 1, materials: 0 });
-    expect(result.error).toBeUndefined();
+    expect(result.summary).toEqual({
+      course: 2,
+      assignment: 3,
+      gradeSnapshot: 1,
+    });
   });
 
-  it('should return error when canvas has username+password but no API token', async () => {
-    const result = await run(
-      'canvas',
-      'com.instructure.canvas',
-      { username: 'u', password: 'p' },
-      'https://canvas.example.com',
-      'run-2'
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('API access token');
-  });
+  // -----------------------------------------------------------------------
+  // Skyward (Playwright scraper)
+  // -----------------------------------------------------------------------
 
-  it('should return error when canvas has no valid credentials', async () => {
-    const result = await run(
-      'canvas',
-      'com.instructure.canvas',
-      {},
-      'https://canvas.example.com',
-      'run-3'
-    );
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/API|access token/i);
-  });
-
-  it('should route skyward with username+password to SkywardBrowserAdapter and return summary', async () => {
+  it('should route skyward to SkywardScraper with MongoStrategyStore', async () => {
     const result = await run(
       'skyward',
       'com.skyward.sis',
@@ -99,7 +95,11 @@ describe('createAdapterRunner', () => {
       'run-4'
     );
     expect(result.success).toBe(true);
-    expect(result.summary).toEqual({ courses: 2, assignments: 3, grades: 1, attendance: 0 });
+    expect(result.summary).toEqual({
+      course: 2,
+      assignment: 3,
+      gradeSnapshot: 1,
+    });
   });
 
   it('should return error when skyward missing credentials', async () => {
@@ -114,12 +114,8 @@ describe('createAdapterRunner', () => {
     expect(result.error).toContain('username');
   });
 
-  it('should return error when Skyward fetchEnvelope fails', async () => {
-    const { SkywardBrowserAdapter } = await import('@scholaracle/connector');
-    (SkywardBrowserAdapter as jest.Mock).mockImplementationOnce(() => ({
-      authenticate: jest.fn().mockResolvedValue(undefined),
-      fetchEnvelope: jest.fn().mockRejectedValue(new Error('Network error')),
-    }));
+  it('should return error when Skyward scraper.run fails', async () => {
+    mockScraperRun.mockRejectedValueOnce(new Error('Network error'));
     const result = await run(
       'skyward',
       'com.skyward.sis',
@@ -130,6 +126,30 @@ describe('createAdapterRunner', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('Network error');
   });
+
+  // -----------------------------------------------------------------------
+  // Aeries (Playwright scraper)
+  // -----------------------------------------------------------------------
+
+  it('should route aeries to AeriesScraper', async () => {
+    const result = await run(
+      'aeries',
+      'com.aeries.sis',
+      { username: 'u', password: 'p' },
+      'https://aeries.example.com',
+      'run-aeries-1'
+    );
+    expect(result.success).toBe(true);
+    expect(result.summary).toEqual({
+      course: 2,
+      assignment: 3,
+      gradeSnapshot: 1,
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Google Classroom (API adapter — unchanged)
+  // -----------------------------------------------------------------------
 
   it('should route google-classroom with accessToken and return summary', async () => {
     const result = await run(
@@ -155,6 +175,10 @@ describe('createAdapterRunner', () => {
     expect(result.error).toContain('OAuth');
   });
 
+  // -----------------------------------------------------------------------
+  // OneRoster (API adapter — unchanged)
+  // -----------------------------------------------------------------------
+
   it('should route oneroster and return summary', async () => {
     const result = await run(
       'oneroster',
@@ -167,18 +191,18 @@ describe('createAdapterRunner', () => {
     expect(result.summary).toEqual({ courses: 2, assignments: 3 });
   });
 
+  // -----------------------------------------------------------------------
+  // Error handling
+  // -----------------------------------------------------------------------
+
   it('should return error for unknown provider', async () => {
     const result = await run('unknown-provider', 'adapter.id', {}, 'https://example.com', 'run-9');
     expect(result.success).toBe(false);
     expect(result.error).toContain('Unknown provider');
   });
 
-  it('should return success false and error when adapter throws', async () => {
-    const { CanvasAdapter } = await import('@scholaracle/connector');
-    (CanvasAdapter as jest.Mock).mockImplementationOnce(() => ({
-      authenticate: jest.fn().mockRejectedValue(new Error('Auth failed')),
-      fetchEnvelope: jest.fn(),
-    }));
+  it('should return success false and error when scraper throws', async () => {
+    mockScraperRun.mockRejectedValueOnce(new Error('Auth failed'));
     const result = await run(
       'canvas',
       'com.instructure.canvas',

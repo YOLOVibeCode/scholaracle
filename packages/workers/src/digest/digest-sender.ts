@@ -38,7 +38,8 @@ export class DigestSender implements IDigestSender {
 
   async sendDigestForUser(
     userId: string,
-    itemFilter?: (item: IEmailDigestPendingItem) => boolean
+    itemFilter?: (item: IEmailDigestPendingItem) => boolean,
+    allowedRecipients?: readonly string[]
   ): Promise<void> {
     let items = await this._digestRepo.findByUserId(userId);
     if (itemFilter) items = items.filter(itemFilter);
@@ -46,6 +47,7 @@ export class DigestSender implements IDigestSender {
 
     const byRecipient = new Map<string, IEmailDigestPendingItem[]>();
     for (const item of items) {
+      if (allowedRecipients && !allowedRecipients.includes(item.recipientEmail)) continue;
       const list = byRecipient.get(item.recipientEmail) ?? ([] as IEmailDigestPendingItem[]);
       list.push(item);
       byRecipient.set(item.recipientEmail, list);
