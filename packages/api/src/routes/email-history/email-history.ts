@@ -232,5 +232,27 @@ export function emailHistoryRouter(config: IEmailHistoryRouterConfig): Router {
     })();
   });
 
+  /**
+   * DELETE /api/email-history
+   * Delete all email history for the current user. Account owners only.
+   */
+  router.delete('/', (req: Request, res: Response) => {
+    void (async (): Promise<void> => {
+      try {
+        const authReq = req as IAuthenticatedRequest;
+        const userId = authReq.userId;
+        if (!userId) {
+          res.status(401).json({ success: false, error: 'Unauthorized' });
+          return;
+        }
+
+        const deleted = await commLogRepo.deleteByUserId(userId);
+        res.json({ success: true, deleted });
+      } catch {
+        res.status(500).json({ success: false, error: 'Failed to delete email history' });
+      }
+    })();
+  });
+
   return router;
 }

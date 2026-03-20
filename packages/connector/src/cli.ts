@@ -4,8 +4,6 @@ import { loadConfig, saveConfig } from './config';
 import { postJson } from './http';
 import { AdapterRegistry } from './adapter-registry';
 import { FixtureAdapter } from './fixture-adapter-wrapper';
-import { CanvasAdapter } from './canvas';
-
 function usage(): never {
   // eslint-disable-next-line no-console
   console.log(`
@@ -119,11 +117,8 @@ async function cmdAddSource(): Promise<void> {
 function createDefaultRegistry(): AdapterRegistry {
   const registry = new AdapterRegistry();
   registry.register('fixture', 'com.scholaracle.fixture', () => new FixtureAdapter());
-  registry.register('canvas', 'com.instructure.canvas', (creds) => {
-    const adapter = new CanvasAdapter();
-    void adapter.authenticate(creds);
-    return adapter;
-  });
+  // Canvas, Skyward, and Aeries now use scholaracle-scraper (Playwright browser scrapers).
+  // Use the fixture adapter for local CLI testing.
   return registry;
 }
 
