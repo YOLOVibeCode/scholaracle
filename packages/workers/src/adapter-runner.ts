@@ -23,7 +23,8 @@ function buildScraperConfig(
   adapterId: string,
   credentials: Record<string, string>,
   baseUrl: string,
-  sourceId: string
+  sourceId: string,
+  options?: IAdapterRunnerOptions
 ): IScraperConfig {
   return {
     credentials: {
@@ -35,8 +36,8 @@ function buildScraperConfig(
         (credentials['loginMethod'] as IScraperConfig['credentials']['loginMethod']) ?? undefined,
       studentNameHint: credentials['studentNameHint'],
     },
-    studentName: credentials['studentName'] ?? '',
-    studentExternalId: credentials['studentExternalId'] ?? '',
+    studentName: credentials['studentName'] ?? options?.studentName ?? '',
+    studentExternalId: credentials['studentExternalId'] || options?.studentId || sourceId,
     institutionExternalId: new URL(baseUrl || 'https://unknown').hostname,
     sourceId,
     provider,
@@ -98,7 +99,14 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
         case 'canvas': {
           const { CanvasScraper } = await import('scholaracle-scraper');
           const scraper = new CanvasScraper();
-          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const config = buildScraperConfig(
+            provider,
+            adapterId,
+            credentials,
+            baseUrl,
+            sourceId,
+            options
+          );
           const envelope = await scraper.run(config);
           const result = envelopeToResult(envelope);
           console.log(
@@ -120,7 +128,14 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
           const { MongoStrategyStore } = await import('@scholaracle/connector');
           const scraper = new SkywardScraper();
           scraper.strategyStore = new MongoStrategyStore(db);
-          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const config = buildScraperConfig(
+            provider,
+            adapterId,
+            credentials,
+            baseUrl,
+            sourceId,
+            options
+          );
           const envelope = await scraper.run(config);
           const result = envelopeToResult(envelope);
           console.log(
@@ -135,7 +150,14 @@ export function createAdapterRunner(db: Db): AdapterRunnerFn {
         case 'aeries': {
           const { AeriesScraper } = await import('scholaracle-scraper');
           const scraper = new AeriesScraper();
-          const config = buildScraperConfig(provider, adapterId, credentials, baseUrl, sourceId);
+          const config = buildScraperConfig(
+            provider,
+            adapterId,
+            credentials,
+            baseUrl,
+            sourceId,
+            options
+          );
           const envelope = await scraper.run(config);
           const result = envelopeToResult(envelope);
           console.log(

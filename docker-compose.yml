@@ -79,6 +79,8 @@ services:
       SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:-}
       SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
       SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-}
+      # Credential encryption (for storing data-source login credentials)
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
       # CORS
       CORS_ORIGINS: http://localhost:2800,http://localhost:3000
     depends_on:

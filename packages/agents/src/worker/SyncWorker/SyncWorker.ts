@@ -62,6 +62,8 @@ export interface ISyncRun {
 export interface IAdapterRunnerOptions {
   readonly sourceId?: string;
   readonly displayName?: string;
+  readonly studentId?: string;
+  readonly studentName?: string;
 }
 
 export type AdapterRunnerFn = (
@@ -226,7 +228,12 @@ export class SyncWorker {
         const createBody = (await createRes.json()) as { runId?: string };
         if (createBody.runId) {
           runId = createBody.runId;
-          runnerOptions = { sourceId, displayName };
+          runnerOptions = {
+            sourceId,
+            displayName,
+            studentId: data.studentId,
+            studentName: (student['name'] as string) ?? '',
+          };
         }
       }
 
@@ -243,6 +250,11 @@ export class SyncWorker {
       const durationMs = Date.now() - startMs;
 
       if (result.success && result.envelope && runId !== insertedId.toString()) {
+        // Patch the envelope's runId to match the one the ingest API expects
+        const patchedEnvelope = {
+          ...result.envelope,
+          run: { ...result.envelope.run, runId },
+        };
         const token = this._createConnectorToken!(data.userId);
         const base = this._apiBaseUrl!.replace(/\/$/, '');
         const envRes = await fetch(`${base}/api/ingest/v1/runs/${runId}/envelope`, {
@@ -251,7 +263,7 @@ export class SyncWorker {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(result.envelope),
+          body: JSON.stringify(patchedEnvelope),
         });
         if (!envRes.ok) {
           const errText = await envRes.text();
