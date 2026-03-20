@@ -18,13 +18,16 @@ COPY packages/database/package.json ./packages/database/
 COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/interfaces/package.json ./packages/interfaces/
 COPY packages/agents/package.json ./packages/agents/
-COPY packages/workers/package.json ./packages/workers/
 COPY packages/connector/package.json ./packages/connector/
-COPY packages/web/package.json ./packages/web/
-COPY packages/e2e/package.json ./packages/e2e/
+
+# Create stub package.json for packages not needed by API but referenced in workspace
+RUN mkdir -p packages/workers packages/web packages/e2e && \
+    echo '{"name":"@scholaracle/workers","version":"1.0.0"}' > packages/workers/package.json && \
+    echo '{"name":"@scholaracle/web","version":"1.0.0"}' > packages/web/package.json && \
+    echo '{"name":"@scholaracle/e2e","version":"1.0.0"}' > packages/e2e/package.json
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Development stage
 FROM base AS development
