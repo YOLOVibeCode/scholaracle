@@ -476,8 +476,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       : undefined;
 
   const syncWorker = new SyncWorker(mongoQueue, database, {
-    pollIntervalMs: 5000,
-    concurrency: 2,
+    pollIntervalMs: Number(process.env['SYNC_POLL_INTERVAL_MS'] ?? 5000),
+    concurrency: Number(process.env['SYNC_CONCURRENCY'] ?? 2),
     decryptCredentials: (encrypted: { encrypted: string; iv: string }): string => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { decryptCredentials } = require('./credentials-cipher');
@@ -556,12 +556,67 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // eslint-disable-next-line no-console
   console.log('Sync worker + scheduler started');
 
+  // -----------------------------------------------------------------------
+  // Worker heartbeat — report capacity + resource usage to MongoDB
+  // -----------------------------------------------------------------------
+  const syncConcurrency = Number(process.env['SYNC_CONCURRENCY'] ?? 2);
+  const workerId = `worker-${process.pid}-${Date.now()}`;
+  const heartbeats = database.collection('worker_heartbeats');
+
+  // Create TTL index so stale heartbeats auto-expire after 2 minutes
+  heartbeats.createIndex({ lastHeartbeat: 1 }, { expireAfterSeconds: 120 }).catch(() => {
+    /* index may already exist */
+  });
+
+  async function sendHeartbeat(): Promise<void> {
+    const mem = process.memoryUsage();
+    await heartbeats.updateOne(
+      { workerId },
+      {
+        $set: {
+          workerId,
+          pid: process.pid,
+          syncConcurrency,
+          activeSyncJobs: syncWorker.activeJobs,
+          memoryMB: {
+            rss: Math.round(mem.rss / 1_048_576),
+            heapUsed: Math.round(mem.heapUsed / 1_048_576),
+            heapTotal: Math.round(mem.heapTotal / 1_048_576),
+          },
+          lastHeartbeat: new Date(),
+          startedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+  }
+
+  // Send first heartbeat immediately, then every 30 seconds
+  void sendHeartbeat().catch(() => {
+    /* best effort */
+  });
+  const heartbeatInterval = setInterval(() => {
+    void sendHeartbeat().catch(() => {
+      /* best effort */
+    });
+  }, 30_000);
+
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
   const healthServer = createServer((req, res) => {
     if (req.url === '/api/health' && req.method === 'GET') {
+      const mem = process.memoryUsage();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok' }));
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          workerId,
+          syncConcurrency,
+          activeSyncJobs: syncWorker.activeJobs,
+          memoryMB: Math.round(mem.rss / 1_048_576),
+        })
+      );
       return;
     }
     res.writeHead(404);
@@ -579,10 +634,15 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const shutdown = async (): Promise<void> => {
     // eslint-disable-next-line no-console
     console.log('Shutting down worker...');
+    clearInterval(heartbeatInterval);
     healthServer.close();
     await syncScheduler.stop();
     await syncWorker.stop();
     await notificationWorker.stop();
+    // Remove heartbeat record so capacity is recalculated immediately
+    await heartbeats.deleteOne({ workerId }).catch(() => {
+      /* best effort */
+    });
     await mongoClient.close();
     // eslint-disable-next-line no-console
     console.log('Worker stopped');
