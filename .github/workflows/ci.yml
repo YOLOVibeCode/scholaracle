@@ -23,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout scrapers (file: dependency for workers)
+      - name: Checkout scrapers repo
         run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
 
       - name: Setup pnpm
@@ -100,7 +100,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout scrapers (file: dependency for workers)
+      - name: Checkout scrapers repo
         run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
 
       - name: Setup pnpm
@@ -157,7 +157,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout scrapers (file: dependency for workers)
+      - name: Checkout scrapers repo
         run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
 
       - name: Setup pnpm
@@ -209,7 +209,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout scrapers (file: dependency for workers)
+      - name: Checkout scrapers repo
         run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
 
       - name: Set up Docker Buildx
