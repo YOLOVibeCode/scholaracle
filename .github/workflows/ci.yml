@@ -259,7 +259,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Copy scrapers for Workers build
-        run: cp -r /home/runner/work/scholaracle_scrapers ./scholaracle_scrapers_copy
+        run: cp -r /home/runner/work/scholaracle_scrapers ./.scrapers
 
       - name: Build Workers image
         uses: docker/build-push-action@v6
