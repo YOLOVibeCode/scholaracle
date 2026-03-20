@@ -46,6 +46,11 @@ export default function SettingsPage() {
   const [holidayMode, setHolidayMode] = useState<'normal' | 'pause' | 'reduced'>('normal');
   const [digestTab, setDigestTab] = useState<'weekday' | 'weekend'>('weekday');
   const [editSlot, setEditSlot] = useState<{ group: 'weekday' | 'weekend'; index: number } | null>(null);
+  const [autoSend, setAutoSend] = useState(true);
+  const [digestRecipients, setDigestRecipients] = useState<'everybody' | 'nobody' | 'specific'>('everybody');
+  const [specificRecipients, setSpecificRecipients] = useState<string[]>([]);
+  const [snoozeUntil, setSnoozeUntil] = useState<string | null>(null);
+  const [snoozeInput, setSnoozeInput] = useState('');
 
   const [tone, setTone] = useState<'formal' | 'casual' | 'encouraging'>('encouraging');
   const [frequency, setFrequency] = useState<'minimal' | 'balanced' | 'proactive'>('balanced');
@@ -101,6 +106,10 @@ export default function SettingsPage() {
         setWeekendSlots([...(s.notifications.digestSchedule?.weekendSlots ?? [])]);
         setSchoolDays([...(s.notifications.digestSchedule?.schoolDays ?? ['mon', 'tue', 'wed', 'thu', 'fri'])]);
         setHolidayMode((s.notifications.digestSchedule?.holidayMode as 'normal' | 'pause' | 'reduced') ?? 'normal');
+        setAutoSend(s.notifications.digestSchedule?.autoSend ?? true);
+        setDigestRecipients((s.notifications.digestSchedule?.recipients as 'everybody' | 'nobody' | 'specific') ?? 'everybody');
+        setSpecificRecipients([...(s.notifications.digestSchedule?.specificRecipients ?? [])]);
+        setSnoozeUntil(s.notifications.digestSchedule?.snoozeUntil ?? null);
         setTone((s.notifications.tone as 'formal' | 'casual' | 'encouraging') ?? 'encouraging');
         setFrequency((s.notifications.frequency as 'minimal' | 'balanced' | 'proactive') ?? 'balanced');
         setGradeDrop(s.alerts.gradeDrop);
@@ -142,6 +151,10 @@ export default function SettingsPage() {
           weekendSlots,
           schoolDays,
           holidayMode,
+          autoSend,
+          recipients: digestRecipients,
+          specificRecipients,
+          snoozeUntil,
         },
         tone,
         frequency,
@@ -393,6 +406,152 @@ export default function SettingsPage() {
             </div>
 
             <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium">Digest Delivery</h4>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-send">Auto-Send Digests</Label>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Automatically send digest emails on schedule.
+                  </p>
+                </div>
+                <Switch
+                  id="auto-send"
+                  checked={autoSend}
+                  onCheckedChange={setAutoSend}
+                  disabled={isSaving || !isLoaded}
+                />
+              </div>
+              {!autoSend && (
+                <p className="text-sm text-muted-foreground">
+                  Digests will only be sent when you manually trigger them from a student&apos;s page.
+                </p>
+              )}
+
+              <div className="space-y-3">
+                <Label>Who receives digests?</Label>
+                {(['everybody', 'nobody', 'specific'] as const).map((opt) => (
+                  <div key={opt} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      id={`recipients-${opt}`}
+                      name="digest-recipients"
+                      value={opt}
+                      checked={digestRecipients === opt}
+                      onChange={() => setDigestRecipients(opt)}
+                      disabled={isSaving || !isLoaded}
+                    />
+                    <Label htmlFor={`recipients-${opt}`} className="font-normal">
+                      {opt === 'everybody'
+                        ? 'Everybody (all linked parents/guardians)'
+                        : opt === 'nobody'
+                          ? 'Nobody (pause all recipients)'
+                          : 'Specific people only'}
+                    </Label>
+                  </div>
+                ))}
+                {digestRecipients === 'specific' && (
+                  <div className="ml-6 space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Enter email addresses (one per line) that should receive digest emails.
+                    </p>
+                    <textarea
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      rows={3}
+                      placeholder="parent@example.com&#10;guardian@example.com"
+                      value={specificRecipients.join('\n')}
+                      onChange={(e) =>
+                        setSpecificRecipients(
+                          e.target.value
+                            .split('\n')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                        )
+                      }
+                      disabled={isSaving || !isLoaded}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <Label>Snooze Digests</Label>
+                {snoozeUntil ? (
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm">
+                      Snoozed until{' '}
+                      <span className="font-medium">
+                        {new Date(snoozeUntil + 'T00:00:00').toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSnoozeUntil(null)}
+                      disabled={isSaving || !isLoaded}
+                    >
+                      Cancel Snooze
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Pause all digest emails until a specific date.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={snoozeInput}
+                        onChange={(e) => setSnoozeInput(e.target.value)}
+                        min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                        className="w-48"
+                        disabled={isSaving || !isLoaded}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (snoozeInput) setSnoozeUntil(snoozeInput);
+                        }}
+                        disabled={isSaving || !isLoaded || !snoozeInput}
+                      >
+                        Snooze
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      {[
+                        { label: '1 week', days: 7 },
+                        { label: '2 weeks', days: 14 },
+                        { label: '1 month', days: 30 },
+                      ].map((opt) => (
+                        <Button
+                          key={opt.label}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + opt.days);
+                            setSnoozeUntil(d.toISOString().slice(0, 10));
+                          }}
+                          disabled={isSaving || !isLoaded}
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className={`border-t pt-4 space-y-4${!autoSend ? ' opacity-50' : ''}`}>
               <h4 className="font-medium">Digest Schedule</h4>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Choose when to receive your digest emails. School days vs weekend can have different times.
