@@ -11,6 +11,7 @@ export interface IIngestSourceReader {
 
 export interface IIngestSourceWriter {
   upsert(source: IIngestSourceData): Promise<IngestSource>;
+  updateLastSyncedAt(userId: ObjectId | string, sourceId: string): Promise<void>;
   deleteByUserIdAndSourceId(userId: ObjectId | string, sourceId: string): Promise<boolean>;
 }
 
@@ -55,6 +56,13 @@ export class IngestSourceRepository implements IIngestSourceReader, IIngestSourc
     const doc = await this._collection.findOne({ userId, sourceId });
     if (!doc) return null;
     return new IngestSource(doc, doc._id as unknown as ObjectId);
+  }
+
+  async updateLastSyncedAt(userId: ObjectId | string, sourceId: string): Promise<void> {
+    await this._collection.updateOne(
+      { userId, sourceId },
+      { $set: { lastSyncedAt: new Date(), updatedAt: new Date() } }
+    );
   }
 
   async deleteByUserIdAndSourceId(userId: ObjectId | string, sourceId: string): Promise<boolean> {

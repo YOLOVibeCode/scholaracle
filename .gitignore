@@ -96,3 +96,6 @@ local/
 # These directories contain backups and temporary files from devibe
 .devibe/
 .unvibe/
+
+# Scrapers copy (created by scripts/build-workers.sh for Docker builds)
+.scrapers/

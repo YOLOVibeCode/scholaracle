@@ -27,7 +27,8 @@ export interface IDigestInsightService {
 export interface IDigestSender {
   sendDigestForUser(
     userId: string,
-    itemFilter?: (item: IEmailDigestPendingItem) => boolean
+    itemFilter?: (item: IEmailDigestPendingItem) => boolean,
+    allowedRecipients?: readonly string[]
   ): Promise<void>;
 }
 

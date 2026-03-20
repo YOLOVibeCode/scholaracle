@@ -128,6 +128,62 @@ services:
       - /app/node_modules
       - /app/.next
 
+  # Workers (background jobs + browser scrapers)
+  # Scale with: docker-compose up -d --scale workers=3
+  # Each instance competes for jobs via atomic MongoQueue — no double-processing.
+  # NOTE: Build with ./scripts/build-workers.sh first (copies scrapers into context).
+  workers:
+    image: scholaracle-workers:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      MONGODB_URI: mongodb://mongodb:27017/scholaracle
+      MONGODB_DB_NAME: scholaracle
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      CONNECTOR_JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      API_BASE_URL: http://api:3002
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
+      # Email (using Mailpit)
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@scholaracle.local}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Scholaracle}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      # Twilio (optional)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      # Firebase (optional)
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
+      # AI (optional - for digest insights)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Scraping concurrency (Chromium instances per worker container)
+      # Each browser uses ~300-500MB RAM. With 2GB limit, max ~3 concurrent.
+      SYNC_CONCURRENCY: ${SYNC_CONCURRENCY:-2}
+      SYNC_POLL_INTERVAL_MS: ${SYNC_POLL_INTERVAL_MS:-5000}
+      # Playwright
+      PLAYWRIGHT_BROWSERS_PATH: /root/.cache/ms-playwright
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - scholaracle-network
+    # Resource limits per instance (Playwright Chromium is memory-hungry)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
 volumes:
   mongodb_data:
     driver: local

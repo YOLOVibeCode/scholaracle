@@ -69,4 +69,8 @@ export const emailHistoryApi = {
       {}
     );
   },
+
+  async deleteAll(): Promise<{ success: boolean; deleted?: number }> {
+    return apiClient.delete<{ success: boolean; deleted?: number }>('/email-history');
+  },
 };

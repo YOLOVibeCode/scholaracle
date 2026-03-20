@@ -57,8 +57,10 @@ describe('Sync API Routes', () => {
       undefined
     );
 
-    mockTriggerAllForStudent = jest.fn().mockResolvedValue(['job-1', 'job-2']);
-    mockTriggerNow = jest.fn().mockResolvedValue('job-single');
+    mockTriggerAllForStudent = jest
+      .fn()
+      .mockResolvedValue([new ObjectId().toString(), new ObjectId().toString()]);
+    mockTriggerNow = jest.fn().mockResolvedValue(new ObjectId().toString());
 
     const syncScheduler = {
       triggerAllForStudent: mockTriggerAllForStudent,
@@ -101,6 +103,8 @@ describe('Sync API Routes', () => {
     await database.collection('refresh_tokens').deleteMany({});
     await database.collection('students').deleteMany({});
     await database.collection('sync_runs').deleteMany({});
+    await database.collection('jobs').deleteMany({});
+    await database.collection('worker_heartbeats').deleteMany({});
     mockTriggerAllForStudent.mockClear();
     mockTriggerNow.mockClear();
 
@@ -202,7 +206,10 @@ describe('Sync API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`);
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.jobIds).toEqual(['job-1', 'job-2']);
+      expect(response.body.jobIds).toHaveLength(2);
+      expect(response.body.queue).toBeDefined();
+      expect(response.body.queue).toHaveProperty('depth');
+      expect(response.body.queue).toHaveProperty('estimatedWaitMs');
       expect(mockTriggerAllForStudent).toHaveBeenCalledWith(
         studentId.toString(),
         testUserId,
@@ -277,7 +284,10 @@ describe('Sync API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`);
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.jobId).toBe('job-single');
+      expect(response.body.jobId).toBeDefined();
+      expect(response.body.queue).toBeDefined();
+      expect(response.body.queue).toHaveProperty('position');
+      expect(response.body.queue).toHaveProperty('estimatedWaitMs');
       expect(mockTriggerNow).toHaveBeenCalledWith(
         expect.objectContaining({
           studentId: studentId.toString(),
@@ -406,6 +416,65 @@ describe('Sync API Routes', () => {
         .get(`/api/sync/runs/${runId}`)
         .set('Authorization', `Bearer ${testToken}`);
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/sync/capacity', () => {
+    it('should return queue stats and capacity with no workers', async () => {
+      const response = await request(app)
+        .get('/api/sync/capacity')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.queue).toBeDefined();
+      expect(response.body.queue.pending).toBe(0);
+      expect(response.body.capacity).toBeDefined();
+      expect(response.body.capacity.workerCount).toBe(0);
+      expect(response.body.capacity.totalSlots).toBe(0);
+      expect(response.body.capacity.availableSlots).toBe(0);
+      expect(response.body.workers).toEqual([]);
+    });
+
+    it('should reflect active workers from heartbeats', async () => {
+      await database.collection('worker_heartbeats').insertOne({
+        workerId: 'worker-test-1',
+        syncConcurrency: 3,
+        activeSyncJobs: 1,
+        memoryMB: { rss: 256, heapUsed: 128, heapTotal: 200 },
+        lastHeartbeat: new Date(),
+      });
+      const response = await request(app)
+        .get('/api/sync/capacity')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.capacity.workerCount).toBe(1);
+      expect(response.body.capacity.totalSlots).toBe(3);
+      expect(response.body.capacity.activeJobs).toBe(1);
+      expect(response.body.capacity.availableSlots).toBe(2);
+      expect(response.body.workers).toHaveLength(1);
+      expect(response.body.workers[0].workerId).toBe('worker-test-1');
+    });
+  });
+
+  describe('GET /api/sync/jobs/:jobId/position', () => {
+    it('should return 401 without token', async () => {
+      const response = await request(app).get(`/api/sync/jobs/${new ObjectId()}/position`);
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 400 for invalid job ID', async () => {
+      const response = await request(app)
+        .get('/api/sync/jobs/invalid/position')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(400);
+    });
+
+    it('should return position -1 for non-existent job', async () => {
+      const jobId = new ObjectId();
+      const response = await request(app)
+        .get(`/api/sync/jobs/${jobId}/position`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.position).toBe(-1);
     });
   });
 });
