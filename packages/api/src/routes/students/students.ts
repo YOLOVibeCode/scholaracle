@@ -3332,6 +3332,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         schedule: body.schedule,
         dataTypes: [...body.dataTypes],
         status: 'active',
+        ...(body.portalBaseUrl
+          ? {
+              baseUrl: body.portalBaseUrl,
+              config: { institutionUrl: body.portalBaseUrl },
+            }
+          : {}),
       };
       const updatedDataSources = [...student.dataSources, newDataSource];
       const updated = await studentRepository.update(studentId, {
