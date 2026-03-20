@@ -184,6 +184,16 @@ jobs:
       - name: Re-link file dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build scrapers dependency
+        run: |
+          # Create symlink so scrapers can resolve @scholaracle/contracts
+          mkdir -p /home/runner/work/scholarmancy/scholaracle/packages
+          ln -s /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
+          # Build contracts first (scrapers depend on it)
+          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build
+          # Install and build scrapers
+          cd /home/runner/work/scholaracle_scrapers && npm install && npx tsc --build
+
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
