@@ -1163,6 +1163,11 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       }
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
       await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
+      // Stamp lastSyncedAt on the data source
+      const committedRun = await runRepo.findByUserIdAndRunId(userId, runId);
+      if (committedRun?.sourceId) {
+        await sourceRepo.updateLastSyncedAt(userId, committedRun.sourceId);
+      }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({
         database: config.database,

@@ -1,17 +1,49 @@
 # Dockerfile for Workers Service
 # Uses BuildKit for better caching and performance.
-# Uses node:20-slim + Playwright Chromium for Skyward browser-based scraping.
+# Uses node:20-slim + Playwright Chromium for browser-based scraping.
+#
+# Build with: ./scripts/build-workers.sh
+# (copies scholaracle_scrapers into .scrapers/ before building)
 
 # syntax=docker/dockerfile:1.4
 
-# Base stage - install dependencies and Chromium for Playwright
+# =========================================================================
+# Stage 1: Build scrapers (separate context — has its own npm deps)
+# =========================================================================
+FROM node:20-slim AS scrapers-build
+WORKDIR /build
+
+# Copy monorepo contracts (needed as file: dep by scrapers)
+COPY tsconfig.base.json /monorepo/
+COPY packages/contracts/ /monorepo/packages/contracts/
+
+# Install contracts deps and build (need @types/jest for test files in src/)
+RUN cd /monorepo && npm init -y > /dev/null 2>&1 && \
+    cd /monorepo/packages/contracts && npm install typescript@5.3.3 @types/jest@29 --save-dev && \
+    npx tsc --build
+
+# Copy scrapers and patch contracts dep path
+COPY .scrapers/ /scrapers/
+RUN sed -i 's|file:../scholarmancy/scholaracle/packages/contracts|file:/monorepo/packages/contracts|g' /scrapers/package.json
+
+# Install scrapers deps and build
+RUN cd /scrapers && npm install --ignore-scripts && npx tsc --build
+
+# =========================================================================
+# Stage 2: Base — install monorepo deps + Chromium
+# =========================================================================
 FROM node:20-slim AS base
 WORKDIR /app
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
-# Copy package files (ALL workspace packages required for frozen lockfile)
+# Copy the built scrapers from stage 1 (dist/ exists now)
+COPY --from=scrapers-build /scrapers/ /scrapers/
+# Patch contracts path for this stage (/monorepo → /app)
+RUN sed -i 's|file:/monorepo/packages/contracts|file:/app/packages/contracts|g' /scrapers/package.json
+
+# Copy package manifests (all workspace packages needed for frozen lockfile)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/auth/package.json ./packages/auth/
@@ -24,24 +56,36 @@ COPY packages/connector/package.json ./packages/connector/
 COPY packages/web/package.json ./packages/web/
 COPY packages/e2e/package.json ./packages/e2e/
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Patch file: paths for Docker layout
+RUN sed -i 's|file:../../../../scholaracle_scrapers|file:../../../scrapers|g' packages/workers/package.json && \
+    sed -i 's|file:../../../../scholaracle_scrapers|file:../../../scrapers|g' pnpm-lock.yaml && \
+    sed -i 's|file:../../scholaracle_scrapers|file:../scrapers|g' pnpm-lock.yaml
 
-# Install Chromium for Skyward browser scraper (connector depends on playwright)
-# Use --filter to run in connector package context where playwright binary exists
-RUN pnpm --filter @scholaracle/connector exec playwright install --with-deps chromium
+# Install monorepo deps (scrapers dist/ exists, so pnpm copies it correctly)
+RUN pnpm install --no-frozen-lockfile
 
-# Development stage
-FROM base AS development
-COPY . .
-RUN pnpm --filter @scholaracle/workers... build
-EXPOSE 3003
-CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]
+# Install Chromium for browser scrapers
+RUN cd /scrapers && npx playwright install --with-deps chromium
 
+# =========================================================================
 # Production stage
+# =========================================================================
 FROM base AS production
 COPY . .
+# Build all transitive deps of workers (contracts → connector/agents → workers)
 RUN pnpm --filter @scholaracle/workers... build
+# Sync contracts dist into pnpm store (pnpm copied package before build, so dist/ is missing)
+RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
 ENV NODE_ENV=production
 EXPOSE 3003
 CMD ["node", "packages/workers/dist/worker.js"]
+
+# =========================================================================
+# Development stage
+# =========================================================================
+FROM base AS development
+COPY . .
+RUN pnpm --filter @scholaracle/workers... build
+RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
+EXPOSE 3003
+CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]

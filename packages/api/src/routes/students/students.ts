@@ -16,87 +16,12 @@ import {
 import { GradeRiskService } from '@scholaracle/agents';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { IInviteEmailSender } from '../../services/InviteEmailSender';
-import { createHash } from 'node:crypto';
+import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
-
-// ---------------------------------------------------------------------------
-// Lightweight cross-source course reconciliation (inline to avoid connector dep)
-// ---------------------------------------------------------------------------
-
-interface ISourceCourse {
-  readonly externalId: string;
-  readonly sourceId: string;
-  readonly provider: string;
-  readonly title: string;
-  readonly teacherName?: string;
-  readonly period?: string;
-  readonly grade?: number;
-}
-
-interface IMergedCourse {
-  readonly mergedId: string;
-  readonly normalizedTitle: string;
-  readonly sources: readonly ISourceCourse[];
-}
-
-function normalizeTitle(raw: string): string {
-  return raw
-    .replace(/\bap\b|advanced\s+placement/gi, '')
-    .replace(/\bhonors?\b|\bhn?rs?\b/gi, '')
-    .replace(/(?:per(?:iod)?|pd?)[\s.:]*\d+/gi, '')
-    .replace(/\([^)]*\)\s*$/g, '')
-    .replace(/[^a-zA-Z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function findCanonicalKey(key: string, groups: Map<string, ISourceCourse[]>): string | undefined {
-  if (key.length < 4) return undefined;
-  for (const existing of groups.keys()) {
-    if (existing === key) return existing;
-    if (existing.length >= 4 && (existing.startsWith(key) || key.startsWith(existing))) {
-      const canonical = key.length >= existing.length ? key : existing;
-      if (canonical !== existing) {
-        const members = groups.get(existing) ?? [];
-        groups.delete(existing);
-        groups.set(canonical, members);
-      }
-      return canonical;
-    }
-  }
-  return undefined;
-}
-
-function mergeCoursesInline(courses: readonly ISourceCourse[]): readonly IMergedCourse[] {
-  const groups = new Map<string, ISourceCourse[]>();
-  for (const c of courses) {
-    const key = normalizeTitle(c.title);
-    const mergedInto = findCanonicalKey(key, groups);
-    const target = mergedInto ?? key;
-    const list = groups.get(target) ?? [];
-    list.push(c);
-    groups.set(target, list);
-  }
-  const result: IMergedCourse[] = [];
-  for (const [key, members] of groups) {
-    const mergedId = createHash('sha256').update(key).digest('hex').slice(0, 12);
-    const bestTitle = members.reduce(
-      (best, m) => (m.title.length > best.length ? m.title : best),
-      members[0]!.title
-    );
-    result.push({
-      mergedId,
-      normalizedTitle: bestTitle.replace(/\s+/g, ' ').trim(),
-      sources: members,
-    });
-  }
-  return result;
-}
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -1320,7 +1245,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           period: info?.period,
         };
       });
-      const mergedGroups = mergeCoursesInline(sourceCourses);
+      const mergedGroups = mergeCourses(sourceCourses);
       const extIdToMergedId = new Map<string, string>();
       const mergedIdToName = new Map<string, string>();
       const mergedIdToSources = new Map<string, readonly ISourceCourse[]>();

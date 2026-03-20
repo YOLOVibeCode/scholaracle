@@ -106,7 +106,11 @@ health:
 
 build:
 	DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker-compose build
-	@echo "✅ Images built"
+	@echo "✅ Compose images built"
+
+build-workers:
+	@./scripts/build-workers.sh
+	@echo "✅ Workers image built"
 
 clean:
 	@echo "🧹 Cleaning up..."

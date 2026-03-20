@@ -5,11 +5,13 @@
  * POST /api/sync/students/:studentId/:dsIndex — sync one data source NOW
  * GET  /api/sync/students/:studentId/runs     — list recent sync runs
  * GET  /api/sync/runs/:runId                  — get one run's status
+ * GET  /api/sync/capacity                     — queue depth + worker capacity
  */
 
 import { Router, type Request, type Response } from 'express';
 import { ObjectId } from 'mongodb';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { MongoQueue } from '@scholaracle/agents';
 
 export interface ISyncRouterConfig {
   readonly database: import('mongodb').Db;
@@ -25,6 +27,8 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
   const { database, syncScheduler } = config;
   const students = database.collection('students');
   const syncRuns = database.collection('sync_runs');
+  const queue = new MongoQueue(database);
+  const heartbeats = database.collection('worker_heartbeats');
 
   // -----------------------------------------------------------------------
   // POST /api/sync/students/:studentId — sync ALL data sources NOW
@@ -59,10 +63,33 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
     }
 
     const jobIds = await syncScheduler.triggerAllForStudent(studentId!, userId, dataSources);
+
+    // Fetch queue position for the first job to give the user an ETA
+    const queueStats = await queue.getStatsByType('sync');
+    const activeWorkers = await heartbeats.find({}).toArray();
+    const totalSlots = activeWorkers.reduce(
+      (sum, w) => sum + ((w['syncConcurrency'] as number) ?? 0),
+      0
+    );
+    const parallelism = Math.max(1, totalSlots);
+    const estimatedWaitMs = Math.round(
+      (queueStats.pending * queueStats.avgDurationMs) / parallelism
+    );
+
     return res.json({
       success: true,
       message: `Enqueued ${jobIds.length} sync job(s)`,
       jobIds,
+      queue: {
+        depth: queueStats.pending,
+        estimatedWaitMs,
+        workerCount: activeWorkers.length,
+        availableSlots: Math.max(
+          0,
+          totalSlots -
+            activeWorkers.reduce((sum, w) => sum + ((w['activeSyncJobs'] as number) ?? 0), 0)
+        ),
+      },
     });
   });
 
@@ -111,7 +138,27 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
       userId,
     });
 
-    return res.json({ success: true, jobId });
+    const position = await queue.getJobPosition(jobId);
+    const stats = await queue.getStatsByType('sync');
+    const activeWorkers = await heartbeats.find({}).toArray();
+    const totalSlots = activeWorkers.reduce(
+      (sum, w) => sum + ((w['syncConcurrency'] as number) ?? 0),
+      0
+    );
+    const parallelism = Math.max(1, totalSlots);
+    const estimatedWaitMs =
+      position > 0 ? Math.round((position * stats.avgDurationMs) / parallelism) : 0;
+
+    return res.json({
+      success: true,
+      jobId,
+      queue: {
+        position,
+        depth: stats.pending,
+        estimatedWaitMs,
+        workerCount: activeWorkers.length,
+      },
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -153,6 +200,83 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
     if (!run) return res.status(404).json({ error: 'Sync run not found' });
 
     return res.json({ run });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /api/sync/capacity — queue depth + worker capacity overview
+  // -----------------------------------------------------------------------
+  router.get('/capacity', async (_req: Request, res: Response) => {
+    const [queueStats, workers] = await Promise.all([
+      queue.getStatsByType('sync'),
+      heartbeats.find({}).toArray(),
+    ]);
+
+    const totalSlots = workers.reduce((sum, w) => sum + ((w['syncConcurrency'] as number) ?? 0), 0);
+    const activeJobs = workers.reduce((sum, w) => sum + ((w['activeSyncJobs'] as number) ?? 0), 0);
+    const availableSlots = Math.max(0, totalSlots - activeJobs);
+
+    // Estimate wait time: pending jobs * avg duration / available parallelism
+    const parallelism = Math.max(1, totalSlots);
+    const estimatedWaitMs =
+      queueStats.pending > 0
+        ? Math.round((queueStats.pending * queueStats.avgDurationMs) / parallelism)
+        : 0;
+
+    const workerDetails = workers.map((w) => ({
+      workerId: w['workerId'],
+      syncConcurrency: w['syncConcurrency'],
+      activeSyncJobs: w['activeSyncJobs'],
+      memoryMB: w['memoryMB'],
+      lastHeartbeat: w['lastHeartbeat'],
+    }));
+
+    return res.json({
+      queue: {
+        pending: queueStats.pending,
+        processing: queueStats.processing,
+        completed: queueStats.completed,
+        failed: queueStats.failed,
+        avgDurationMs: queueStats.avgDurationMs,
+      },
+      capacity: {
+        workerCount: workers.length,
+        totalSlots,
+        activeJobs,
+        availableSlots,
+        estimatedWaitMs,
+      },
+      workers: workerDetails,
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /api/sync/jobs/:jobId/position — position of a specific job in queue
+  // -----------------------------------------------------------------------
+  router.get('/jobs/:jobId/position', async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const { jobId } = req.params;
+    if (!ObjectId.isValid(jobId!)) {
+      return res.status(400).json({ error: 'Invalid job ID' });
+    }
+
+    const position = await queue.getJobPosition(jobId!);
+    const stats = await queue.getStatsByType('sync');
+
+    // Estimate wait: jobs ahead * avg duration / total parallelism
+    const workers = await heartbeats.find({}).toArray();
+    const totalSlots = workers.reduce((sum, w) => sum + ((w['syncConcurrency'] as number) ?? 0), 0);
+    const parallelism = Math.max(1, totalSlots);
+    const estimatedWaitMs =
+      position > 0 ? Math.round((position * stats.avgDurationMs) / parallelism) : 0;
+
+    return res.json({
+      jobId,
+      position,
+      estimatedWaitMs,
+      queueDepth: stats.pending,
+    });
   });
 
   return router;
