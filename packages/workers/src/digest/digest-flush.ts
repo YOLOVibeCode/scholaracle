@@ -51,6 +51,12 @@ export async function flushEmailDigests(
       if (!user) continue;
 
       const schedule = user.preferences?.notifications?.digestSchedule;
+
+      // Auto-send, snooze, and recipient checks
+      if (schedule?.autoSend === false) continue;
+      if (schedule?.snoozeUntil && todayYmd < schedule.snoozeUntil) continue;
+      if (schedule?.recipients === 'nobody') continue;
+
       const hasSlots =
         (schedule?.weekdaySlots?.length ?? 0) > 0 || (schedule?.weekendSlots?.length ?? 0) > 0;
       const shouldFlush = hasSlots
@@ -66,6 +72,12 @@ export async function flushEmailDigests(
           ? (item: IEmailDigestPendingItem): boolean => item.severity === 'critical'
           : undefined;
 
+      const recipientMode = schedule?.recipients ?? 'everybody';
+      const allowedRecipients =
+        recipientMode === 'specific'
+          ? ((schedule?.specificRecipients as string[] | undefined) ?? [])
+          : undefined;
+
       const digestSender = new DigestSender(
         database,
         transport,
@@ -76,7 +88,7 @@ export async function flushEmailDigests(
         commLogRepo,
         insightService
       );
-      await digestSender.sendDigestForUser(userId, itemFilter);
+      await digestSender.sendDigestForUser(userId, itemFilter, allowedRecipients);
     } catch (err) {
       console.error(`[EmailDigest] Error processing user ${userId}:`, err);
     }
