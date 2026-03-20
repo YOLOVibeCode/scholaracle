@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Mail, CheckCircle, XCircle, Clock, Eye, RefreshCw } from 'lucide-react';
+import { Mail, CheckCircle, XCircle, Clock, Eye, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +58,8 @@ export default function EmailHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Preview state
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -121,16 +123,45 @@ export default function EmailHistoryPage() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      const res = await emailHistoryApi.deleteAll();
+      if (res.success) {
+        setShowDeleteConfirm(false);
+        setPage(1);
+        void fetchEmails();
+      }
+    } catch {
+      // best-effort
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Mail className="h-6 w-6" />
-          Email History
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          View digest emails sent to you and other recipients.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Mail className="h-6 w-6" />
+            Email History
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            View digest emails sent to you and other recipients.
+          </p>
+        </div>
+        {total > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete All
+          </Button>
+        )}
       </div>
 
       {/* Status filter */}
@@ -313,6 +344,37 @@ export default function EmailHistoryPage() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete all confirmation dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete All Email History</DialogTitle>
+            <DialogDescription>
+              This will permanently delete all {total} email{total === 1 ? '' : 's'} from your
+              history. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void handleDeleteAll()}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete All'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
