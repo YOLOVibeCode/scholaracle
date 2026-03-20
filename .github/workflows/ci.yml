@@ -22,6 +22,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout scrapers (file: dependency for workers)
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -96,6 +99,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout scrapers (file: dependency for workers)
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -150,6 +156,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout scrapers (file: dependency for workers)
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -199,6 +208,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout scrapers (file: dependency for workers)
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -211,6 +223,9 @@ jobs:
           tags: scholaracle-api:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Copy scrapers for Workers build
+        run: cp -r /home/runner/work/scholaracle_scrapers ./scholaracle_scrapers_copy
 
       - name: Build Workers image
         uses: docker/build-push-action@v6
