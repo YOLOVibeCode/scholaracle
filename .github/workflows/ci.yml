@@ -140,7 +140,24 @@ jobs:
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Run tests with coverage
-        run: pnpm --filter @scholaracle/${{ matrix.package }} test:coverage
+        run: |
+          set +e
+          pnpm --filter @scholaracle/${{ matrix.package }} test:coverage 2>&1 | tee /tmp/test-output.txt
+          EXIT_CODE=$?
+          # Jest --forceExit returns 1 even when all tests pass if there are open handles
+          if grep -q "Test Suites:.*failed" /tmp/test-output.txt; then
+            echo "Tests failed"
+            exit 1
+          fi
+          if grep -q "Tests:.*failed" /tmp/test-output.txt; then
+            echo "Tests failed"
+            exit 1
+          fi
+          if ! grep -q "Tests:" /tmp/test-output.txt; then
+            echo "No test output found"
+            exit $EXIT_CODE
+          fi
+          echo "All tests passed"
         env:
           NODE_ENV: test
 
