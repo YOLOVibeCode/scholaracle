@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -204,7 +204,7 @@ export function AssignmentDetailDrawer({
 }
 
 function AttachmentRow({ attachment }: { attachment: IAttachment }) {
-  const Icon = getAttachmentIcon(attachment.type);
+  const icon = getAttachmentIcon(attachment.type);
   const ext = getFileExtension(attachment.name);
 
   return (
@@ -212,7 +212,7 @@ function AttachmentRow({ attachment }: { attachment: IAttachment }) {
       className="flex items-center gap-3 rounded-md border bg-background px-3 py-2"
       data-testid="drawer-attachment-row"
     >
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {React.createElement(icon, { className: "h-4 w-4 shrink-0 text-muted-foreground" })}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{attachment.name}</p>
         {ext && <p className="text-xs text-muted-foreground">{ext}</p>}
