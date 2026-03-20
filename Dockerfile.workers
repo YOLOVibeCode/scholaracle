@@ -56,10 +56,10 @@ COPY packages/connector/package.json ./packages/connector/
 COPY packages/web/package.json ./packages/web/
 COPY packages/e2e/package.json ./packages/e2e/
 
-# Patch file: paths for Docker layout
-RUN sed -i 's|file:../../../../scholaracle_scrapers|file:../../../scrapers|g' packages/workers/package.json && \
-    sed -i 's|file:../../../../scholaracle_scrapers|file:../../../scrapers|g' pnpm-lock.yaml && \
-    sed -i 's|file:../../scholaracle_scrapers|file:../scrapers|g' pnpm-lock.yaml
+# Patch link:/file: paths for Docker layout
+RUN sed -i 's|link:../../../../scholaracle_scrapers|link:../../../scrapers|g' packages/workers/package.json && \
+    sed -i 's|link:../../../../scholaracle_scrapers|link:../../../scrapers|g' pnpm-lock.yaml && \
+    sed -i 's|link:../../scholaracle_scrapers|link:../scrapers|g' pnpm-lock.yaml
 
 # Install monorepo deps (scrapers dist/ exists, so pnpm copies it correctly)
 RUN pnpm install --no-frozen-lockfile
