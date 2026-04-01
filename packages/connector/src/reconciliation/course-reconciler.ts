@@ -60,8 +60,26 @@ function effectivePeriod(a: IAnnotatedCourse): string | undefined {
   return a.source.period;
 }
 
+/** Normalize period for comparison: strip leading 'p', leading zeros. "p04" → "4", "p05C" → "5c" */
+function normalizePeriod(p: string): string {
+  return p.toLowerCase().replace(/^p/i, '').replace(/^0+/, '') || '0';
+}
+
 function effectiveTeacher(a: IAnnotatedCourse): string | undefined {
   return a.reconciled.teacherName ?? a.source.teacherName;
+}
+
+/**
+ * Extract a comparable teacher token (last name or username stem).
+ * "Noah Chang" → "chang", "nchang" → "chang", "Ashley Hathaway" → "hathaway"
+ */
+function teacherToken(name: string): string {
+  const lower = name.toLowerCase().trim();
+  // If it has a space, take the last word (last name)
+  const parts = lower.split(/\s+/);
+  if (parts.length > 1) return parts[parts.length - 1]!;
+  // Single word (username like "nchang"): return as-is for substring matching
+  return lower;
 }
 
 function firstDefined<T>(
@@ -85,8 +103,17 @@ function shouldSplit(a: IAnnotatedCourse, b: IAnnotatedCourse): boolean {
   const tA = effectiveTeacher(a);
   const tB = effectiveTeacher(b);
 
-  const periodsDiffer = pA != null && pB != null && pA !== pB;
-  const teachersDiffer = tA != null && tB != null && tA.toLowerCase() !== tB.toLowerCase();
+  // Normalize periods: "p04" and "4" should match
+  const periodsDiffer = pA != null && pB != null && normalizePeriod(pA) !== normalizePeriod(pB);
+
+  // Fuzzy teacher matching: "nchang" and "Noah Chang" share the token "chang"
+  let teachersDiffer = false;
+  if (tA != null && tB != null) {
+    const tokA = teacherToken(tA);
+    const tokB = teacherToken(tB);
+    // Match if either token contains the other (handles username vs full name)
+    teachersDiffer = !tokA.includes(tokB) && !tokB.includes(tokA);
+  }
 
   return periodsDiffer && teachersDiffer;
 }
