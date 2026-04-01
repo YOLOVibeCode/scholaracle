@@ -616,6 +616,39 @@ describe('Integrations API Routes', () => {
       expect(typeof response.body.jobId).toBe('string');
       expect(response.body.status).toBe('queued');
     });
+
+    it('returns 429 for a free-plan user on unknown platform (rate limited)', async () => {
+      if (!database) return;
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
+      if (!user) throw new Error('Test user not found');
+      const userId = (user._id as import('mongodb').ObjectId).toString();
+
+      // Downgrade user to free plan (0 scraper_generation uses allowed)
+      await database.collection('subscriptions').deleteMany({ userId });
+      await database
+        .collection('users')
+        .updateOne(
+          { _id: user._id },
+          { $set: { subscription: { plan: 'free', status: 'active' } } }
+        );
+
+      const response = await request(app)
+        .post('/api/integrations/generate-scraper')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          platformName: 'RateLimitedLMS',
+          loginUrl: 'https://ratelimited.example.edu/login',
+          loginMethod: 'form',
+        });
+
+      expect(response.status).toBe(429);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toContain('limit reached');
+      expect(response.body.limit).toBe(0);
+      expect(response.body.used).toBe(0);
+    });
   });
 
   describe('GET /api/integrations/generate-status', () => {

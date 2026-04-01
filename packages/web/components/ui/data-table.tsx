@@ -58,6 +58,7 @@ export interface DataTableProps<TData, TValue> {
     pagination?: { pageIndex: number; pageSize: number };
     sorting?: SortingState;
     columnFilters?: ColumnFiltersState;
+    columnVisibility?: VisibilityState;
   };
   /** Called when pagination changes (for server-side). */
   onPaginationChange?: (updater: (prev: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) => void;
@@ -109,6 +110,7 @@ export function DataTable<TData, TValue>({
   const paginationState = controlledState?.pagination ?? internalPagination;
   const effectiveSorting = controlledState?.sorting ?? sortingState;
   const effectiveColumnFilters = controlledState?.columnFilters ?? columnFiltersState;
+  const effectiveColumnVisibility = controlledState?.columnVisibility ?? columnVisibilityState;
   const setPagination = React.useCallback(
     (updaterOrValue: { pageIndex: number; pageSize: number } | ((prev: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number })) => {
       if (onPaginationChange) onPaginationChange(updaterOrValue as Parameters<NonNullable<typeof onPaginationChange>>[0]);
@@ -141,7 +143,7 @@ export function DataTable<TData, TValue>({
       ...((pagination || manualPagination) && { pagination: paginationState }),
       ...(sorting && { sorting: effectiveSorting }),
       ...(filtering && { columnFilters: effectiveColumnFilters }),
-      ...(enableColumnVisibility && { columnVisibility: columnVisibilityState }),
+      ...(enableColumnVisibility && { columnVisibility: effectiveColumnVisibility }),
     },
     onPaginationChange: setPagination,
     onSortingChange: setSorting,

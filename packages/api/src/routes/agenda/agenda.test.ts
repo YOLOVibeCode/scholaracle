@@ -252,6 +252,51 @@ describe('Agenda API', () => {
     expect(afterItems.length).toBe(0);
   });
 
+  it('does not include aiSummary for a free-plan user (no subscription)', async () => {
+    const userId =
+      (await database.collection('users').findOne({ email: 'agenda@test.com' }))?._id?.toString() ??
+      'unknown';
+
+    // Ensure user has no subscription (defaults to free plan — 0 AI agenda uses)
+    await database.collection('subscriptions').deleteMany({ userId });
+    await database
+      .collection('users')
+      .updateOne(
+        { _id: new (await import('mongodb')).ObjectId(userId) },
+        { $unset: { subscription: '' } }
+      );
+
+    const now = new Date();
+    const dueAt = new Date(now.getTime() + 2 * 24 * 60 * 60_000).toISOString();
+    await database.collection('slc_assignments').insertOne({
+      userId,
+      provider: 'fixture',
+      adapterId: 'com.scholaracle.fixture',
+      externalId: 'assignment-ai-test',
+      studentExternalId: 'student-ext-1',
+      institutionExternalId: 'institution-ext-1',
+      courseExternalId: 'course-ext-1',
+      termExternalId: 'term-ext-fall',
+      deletedAt: null,
+      record: { title: 'AI-Free HW', dueAt },
+    });
+
+    const from = now.toISOString();
+    const to = new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString();
+
+    const res = await request(app)
+      .get('/api/agenda')
+      .query({ from, to })
+      .set('Authorization', `Bearer ${testToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const aiItem = res.body.data.items.find((i: any) => i.title === 'AI-Free HW');
+    expect(aiItem).toBeDefined();
+    expect(aiItem.aiSummary).toBeUndefined();
+  });
+
   it('returns 503 when reminder service not configured', async () => {
     const res = await request(app)
       .post('/api/agenda/remind')

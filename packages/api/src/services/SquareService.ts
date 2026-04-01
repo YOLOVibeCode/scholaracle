@@ -101,7 +101,7 @@ export class SquareService {
         merchantSupportEmail: params.email,
         allowTipping: false,
       },
-      paymentNote: `User ID: ${params.userId}`,
+      paymentNote: `User ID: ${params.userId} | Plan: ${params.plan} | Cycle: ${params.billingCycle}`,
       prePopulatedData: {
         buyerEmail: params.email,
       },
@@ -158,5 +158,29 @@ export class SquareService {
       signatureKey: this._webhookSignatureKey,
       notificationUrl: this._webhookNotificationUrl,
     });
+  }
+
+  public async refundPayment(
+    paymentId: string,
+    amountCents: number,
+    reason?: string
+  ): Promise<{ refundId: string }> {
+    const response = await this._client.refunds.refund({
+      idempotencyKey: `refund-${paymentId}-${Date.now()}`,
+      paymentId,
+      amountMoney: {
+        amount: BigInt(amountCents),
+        currency: 'USD',
+      },
+      reason: reason ?? 'Admin refund',
+    });
+
+    const data =
+      (response as unknown as { result?: { refund?: { id?: string } } }).result ??
+      (response as unknown as { refund?: { id?: string } });
+    const refundId = (data as { refund?: { id?: string } }).refund?.id;
+    if (!refundId) throw new Error('Square refund failed — no refund ID returned');
+
+    return { refundId };
   }
 }

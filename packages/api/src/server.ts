@@ -45,7 +45,7 @@ import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
-import { twilioWebhookRouter, twilioTestRouter } from './routes/webhooks/twilio';
+import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
@@ -524,8 +524,30 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl,
       })
     );
+    // Square service (optional — created early so admin payments can use it for refunds)
+    const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
+    const squareLocationId = config.squareLocationId ?? process.env['SQUARE_LOCATION_ID'];
+    const squareEnv = (config.squareEnvironment ??
+      process.env['SQUARE_ENVIRONMENT'] ??
+      'sandbox') as 'sandbox' | 'production';
+    const squareWebhookKey =
+      config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
+    const squareWebhookUrl =
+      config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
+
+    const squareService =
+      squareAccessToken && squareLocationId
+        ? new SquareService({
+            accessToken: squareAccessToken,
+            environment: squareEnv,
+            locationId: squareLocationId,
+            webhookSignatureKey: squareWebhookKey,
+            webhookNotificationUrl: squareWebhookUrl,
+          })
+        : undefined;
+
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
-    app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use('/api/admin/payments', paymentsRouter({ database, squareService }));
     app.use('/api/admin/coupons', couponsRouter({ database }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
@@ -544,31 +566,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
     app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
 
-    // Twilio test endpoints (dev/staging only - no signature validation)
-    if (nodeEnv !== 'production') {
-      app.use('/api/webhooks/twilio/test', twilioTestRouter({ database }));
-    }
-
-    // Square billing (optional — only registers if access token and location are configured)
-    const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
-    const squareLocationId = config.squareLocationId ?? process.env['SQUARE_LOCATION_ID'];
-    const squareEnv = (config.squareEnvironment ??
-      process.env['SQUARE_ENVIRONMENT'] ??
-      'sandbox') as 'sandbox' | 'production';
-    const squareWebhookKey =
-      config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
-    const squareWebhookUrl =
-      config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
-
-    if (squareAccessToken && squareLocationId) {
-      const squareService = new SquareService({
-        accessToken: squareAccessToken,
-        environment: squareEnv,
-        locationId: squareLocationId,
-        webhookSignatureKey: squareWebhookKey,
-        webhookNotificationUrl: squareWebhookUrl,
-      });
-
+    if (squareService) {
       app.use(
         '/api/billing',
         authMiddleware(authService),

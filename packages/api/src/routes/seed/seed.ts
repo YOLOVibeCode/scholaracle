@@ -559,7 +559,7 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
 function isDemoAllowed(): boolean {
   const demoEnabled = process.env['DEMO_ENABLED'] === 'true';
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
-  return demoEnabled || nodeEnv !== 'production';
+  return demoEnabled || nodeEnv === 'development' || nodeEnv === 'test';
 }
 
 /**

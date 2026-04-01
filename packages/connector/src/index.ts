@@ -25,6 +25,14 @@ export { probeLinkAccessibility, probeLinkAccessibilityBatch } from './link-prob
 export type { LinkAccessibility } from './link-probe';
 
 // API-based adapters (still active — have API access)
+export { CanvasAdapter, CanvasClient } from './canvas';
+export type {
+  ICanvasCourse,
+  ICanvasAssignment,
+  ICanvasSubmission,
+  ICanvasEnrollment,
+  ICanvasClientConfig,
+} from './canvas';
 export { GoogleClassroomAdapter, GoogleClassroomClient } from './google-classroom';
 export type {
   IGoogleCourse,
@@ -34,6 +42,14 @@ export type {
   IGoogleClassroomClientConfig,
 } from './google-classroom';
 export { OneRosterAdapter, OneRosterClient } from './oneroster';
+export { SkywardAdapter, SkywardClient } from './skyward';
+export type {
+  ISkywardClass,
+  ISkywardLineItem,
+  ISkywardResult,
+  ISkywardEnrollment,
+  ISkywardClientConfig,
+} from './skyward';
 export type {
   IOneRosterOrg,
   IOneRosterCourse,

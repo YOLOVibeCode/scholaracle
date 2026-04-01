@@ -838,18 +838,34 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       // Send confirmation emails (if email service is configured)
       if (config.sendInviteEmail) {
-        // Note: Email sending would be implemented here using the invite email service
-        // const _baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
-        // const _studentId = student._id!.toString();
-        // TODO: Implement email confirmation sending
+        const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+        const studentId = student._id!.toString();
+        const confirmBaseUrl = `${baseUrl}/dashboard/students/${studentId}/contacts/transfer-confirm`;
+
+        try {
+          await config.sendInviteEmail.sendInvite({
+            to: currentEmail,
+            studentName: student.name,
+            studentId,
+            inviteEmail: currentEmail,
+            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(oldEmailToken)}&email=${encodeURIComponent(currentEmail)}`,
+          });
+          await config.sendInviteEmail.sendInvite({
+            to: normalizedNewEmail,
+            studentName: student.name,
+            studentId,
+            inviteEmail: normalizedNewEmail,
+            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(newEmailToken)}&email=${encodeURIComponent(normalizedNewEmail)}`,
+          });
+        } catch {
+          // Best-effort: transfer is recorded in DB even if emails fail
+        }
       }
 
       res.status(200).json({
         success: true,
         message:
           'Email transfer initiated. Please check both email addresses for confirmation links.',
-        // In production, don't return tokens - they should only be in emails
-        _debug: { oldEmailToken, newEmailToken },
       });
     } catch (error) {
       res.status(500).json({

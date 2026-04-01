@@ -17,8 +17,14 @@ export interface ICommunicationsWebhooksRouterConfig {
  */
 export function communicationsWebhooksRouter(config: ICommunicationsWebhooksRouterConfig): Router {
   const router = Router();
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
   const secret =
-    config.webhookSecret ?? process.env['COMMUNICATIONS_WEBHOOK_SECRET'] ?? 'test-webhook-secret';
+    config.webhookSecret ??
+    process.env['COMMUNICATIONS_WEBHOOK_SECRET'] ??
+    (nodeEnv === 'production' ? undefined : 'test-webhook-secret');
+  if (!secret) {
+    throw new Error('COMMUNICATIONS_WEBHOOK_SECRET is required in production');
+  }
   const logsRepo = new CommunicationLogRepository(config.database);
   const auditRepo = new AuditLogRepository(config.database);
 
