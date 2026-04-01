@@ -1,3 +1,14 @@
+/**
+ * Build a URL from a base path and optional query params.
+ * Strips trailing slash from base to avoid double-slashes.
+ */
+export function buildUrl(base: string, path: string, params?: Record<string, string>): string {
+  const url = `${base.replace(/\/$/, '')}${path}`;
+  if (!params || Object.keys(params).length === 0) return url;
+  const search = new URLSearchParams(params).toString();
+  return `${url}?${search}`;
+}
+
 export interface IGetJsonResult<TResponse> {
   readonly data: TResponse;
   readonly headers: Headers;

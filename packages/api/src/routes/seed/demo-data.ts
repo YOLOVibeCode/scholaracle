@@ -561,7 +561,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     externalId: 'demo-emma-ap-bio-yt',
     title: 'YouTube - AP Bio Review',
     type: 'video',
-    url: 'https://www.youtube.com/watch?v=placeholder',
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     linkAccessibility: 'public',
   },
   {

@@ -101,7 +101,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
     docsUrl:
       'https://support.aeries.com/support/solutions/articles/14000077926-aeries-api-full-documentation',
     marketShareNote: 'Significant in California',
-    status: 'implemented',
+    status: 'planned',
   },
 
   {
@@ -195,7 +195,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
     urlPatterns: ['skyward\\.com', '/skyward/'],
     docsUrl: 'https://www.skyward.com/qmlativ',
     marketShareNote: '~7% of SIS market (modern version)',
-    status: 'planned',
+    status: 'implemented',
   },
 
   {

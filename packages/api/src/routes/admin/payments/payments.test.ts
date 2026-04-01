@@ -239,5 +239,46 @@ describe('Admin Payment Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
     });
+
+    it('should return 400 for already-succeeded payment', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
+      const payment = await new PaymentRepository(database).create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+
+      const response = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/retry`)
+        .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('already succeeded');
+    });
+
+    it('should set status to retry_pending for failed payment', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
+      const payment = await new PaymentRepository(database).create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'failed',
+        paymentMethod: 'card',
+      });
+
+      const response = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/retry`)
+        .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+
+      const updated = await database.collection('payments').findOne({ _id: payment._id });
+      expect(updated!['status']).toBe('retry_pending');
+    });
   });
 });

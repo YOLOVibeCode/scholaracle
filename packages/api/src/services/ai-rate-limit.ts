@@ -1,5 +1,10 @@
 import type { Db } from 'mongodb';
-import { UserRepository, AiUsageRepository, type AiFeature } from '@scholaracle/database';
+import {
+  UserRepository,
+  SubscriptionRepository,
+  AiUsageRepository,
+  type AiFeature,
+} from '@scholaracle/database';
 
 /** Plan identifier for rate limit lookup (matches User subscription.plan and Subscription plan). */
 export type PlanForRateLimit = 'free' | 'starter' | 'premium' | 'family' | 'enterprise';
@@ -31,10 +36,20 @@ export async function checkAiRateLimit(
   userId: string,
   feature: AiFeature
 ): Promise<ICheckAiRateLimitResult> {
+  const subscriptionRepo = new SubscriptionRepository(database);
   const userRepo = new UserRepository(database);
   const usageRepo = new AiUsageRepository(database);
-  const user = await userRepo.findById(userId);
-  const rawPlan = user?.subscription?.plan as PlanForRateLimit | undefined;
+
+  // Authoritative source: subscriptions collection (updated by Square webhook)
+  const subscription = await subscriptionRepo.findByUserId(userId);
+  let rawPlan = subscription?.plan as PlanForRateLimit | undefined;
+
+  // Fallback: user document's embedded subscription (may be stale)
+  if (!rawPlan || !(rawPlan in AI_RATE_LIMITS)) {
+    const user = await userRepo.findById(userId);
+    rawPlan = user?.subscription?.plan as PlanForRateLimit | undefined;
+  }
+
   const plan = rawPlan && rawPlan in AI_RATE_LIMITS ? rawPlan : ('free' as PlanForRateLimit);
   const limit = AI_RATE_LIMITS[plan][feature];
   if (limit < 0) {
