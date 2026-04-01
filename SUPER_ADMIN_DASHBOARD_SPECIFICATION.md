@@ -82,7 +82,7 @@ export class AdminUser {
 
 export interface ICustomerData extends IUserData {
   // Billing Information
-  readonly stripeCustomerId?: string;
+  readonly squareCustomerId?: string;
   readonly billingEmail?: string;
   readonly billingAddress?: IAddress;
   
@@ -148,9 +148,9 @@ export interface ISubscriptionData {
   readonly nextPaymentDate?: Date;
   readonly nextPaymentAmount?: number;
   
-  // Stripe Integration
-  readonly stripeSubscriptionId?: string;
-  readonly stripeInvoiceId?: string;
+  // Square Integration
+  readonly squareSubscriptionId?: string;
+  readonly squareInvoiceId?: string;
   
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -193,10 +193,10 @@ export interface IPaymentData {
   readonly last4?: string;
   readonly brand?: string;
   
-  // Stripe Integration
-  readonly stripePaymentIntentId?: string;
-  readonly stripeChargeId?: string;
-  readonly stripeInvoiceId?: string;
+  // Square Integration
+  readonly squarePaymentId?: string;
+  readonly squareOrderId?: string;
+  readonly squareInvoiceId?: string;
   
   // Receipt
   readonly receiptUrl?: string;
@@ -635,7 +635,7 @@ interface IAuditLog {
 - [ ] Subscription management
 - [ ] Refund processing
 - [ ] Invoice generation
-- [ ] Stripe webhook integration
+- [ ] Square webhook integration
 
 ### Phase 4: Communication (Week 7)
 - [ ] Communication log viewer
@@ -682,7 +682,7 @@ interface IAuditLog {
   - `audit_logs`
 
 ### Integrations
-- Stripe for payment processing
+- Square for payment processing
 - SendGrid for transactional email
 - Twilio for SMS
 

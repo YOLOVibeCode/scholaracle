@@ -134,6 +134,27 @@ export class UserRepository implements IUserRepository {
   }
 
   /**
+   * Update the embedded subscription fields on a user document.
+   * Used to keep user.subscription in sync with the subscriptions collection.
+   */
+  public async updateSubscription(
+    userId: string,
+    subscription: { plan: string; status: string }
+  ): Promise<boolean> {
+    const result = await this._collection.updateOne(
+      { _id: new ObjectId(userId) },
+      {
+        $set: {
+          'subscription.plan': subscription.plan,
+          'subscription.status': subscription.status,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    return result.modifiedCount > 0;
+  }
+
+  /**
    * Delete user.
    *
    * @param id - User ID

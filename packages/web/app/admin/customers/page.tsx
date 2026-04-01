@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DataTable } from '@/components/ui/data-table';
-import { Search } from 'lucide-react';
+import { Search, Settings2 } from 'lucide-react';
+import type { VisibilityState } from '@/components/ui/data-table';
 import { adminCustomersApi, type ICustomer } from '@/lib/api/admin/customers';
 
 export default function AdminCustomersPage() {
@@ -19,6 +20,14 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const saved = localStorage.getItem('admin-customers-columns');
+      return saved ? (JSON.parse(saved) as VisibilityState) : {};
+    } catch { return {}; }
+  });
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
 
   useEffect(() => {
     // Hydrate initial state from URL query params on the client to avoid
@@ -162,6 +171,32 @@ export default function AdminCustomersPage() {
               />
             </div>
             <Button onClick={handleSearch} data-testid="button-search">Search</Button>
+            <div className="relative">
+              <Button variant="outline" size="sm" onClick={() => setShowColumnMenu(!showColumnMenu)}>
+                <Settings2 className="h-4 w-4 mr-1" />
+                Columns
+              </Button>
+              {showColumnMenu && (
+                <div className="absolute right-0 top-full mt-1 z-10 bg-white dark:bg-gray-800 border rounded-md shadow-lg p-2 min-w-[160px]">
+                  {['customer', 'subscription', 'isSuspended', 'createdAt'].map((colId) => (
+                    <label key={colId} className="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                      <input
+                        type="checkbox"
+                        checked={columnVisibility[colId] !== false}
+                        onChange={() => {
+                          setColumnVisibility((prev) => {
+                            const next = { ...prev, [colId]: prev[colId] === false };
+                            localStorage.setItem('admin-customers-columns', JSON.stringify(next));
+                            return next;
+                          });
+                        }}
+                      />
+                      {colId === 'customer' ? 'Customer' : colId === 'subscription' ? 'Plan' : colId === 'isSuspended' ? 'Status' : 'Created'}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -175,9 +210,10 @@ export default function AdminCustomersPage() {
               data={customers}
               pagination
               manualPagination
+              columnVisibility
               pageCount={totalPages}
               pageSize={25}
-              state={{ pagination: paginationState }}
+              state={{ pagination: paginationState, columnVisibility }}
               onPaginationChange={onPaginationChange}
               getRowProps={(row) => ({
                 'data-testid': 'customer-row',

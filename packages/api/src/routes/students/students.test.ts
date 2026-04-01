@@ -1316,4 +1316,114 @@ describe('Students API Routes', () => {
       expect(found).toBeUndefined();
     });
   });
+
+  describe('GET /api/students/:id/materials', () => {
+    beforeEach(async () => {
+      if (database) {
+        await database.collection('slc_course_materials').deleteMany({});
+        await database.collection('slc_courses').deleteMany({});
+      }
+    });
+
+    it('should return 401 without token', async () => {
+      const res = await request(app).get('/api/students/nonexistent/materials');
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 404 for non-existent student', async () => {
+      const res = await request(app)
+        .get(`/api/students/${new ObjectId()}/materials`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(404);
+    });
+
+    it('should return empty courses when student has no materials', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Materials Test Student' });
+      const studentId = createRes.body.id as string;
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/materials`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.totalMaterials).toBe(0);
+      expect(res.body.courses).toEqual([]);
+    });
+
+    it('should return materials grouped by course', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Materials Student 2' });
+      const studentId = createRes.body.id as string;
+
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_course_materials').insertMany([
+        {
+          userId,
+          studentId,
+          externalId: 'mat1',
+          courseExternalId: 'course1',
+          record: { title: 'Syllabus', type: 'syllabus', courseExternalId: 'course1' },
+          deletedAt: null,
+        },
+        {
+          userId,
+          studentId,
+          externalId: 'mat2',
+          courseExternalId: 'course1',
+          record: { title: 'Handout 1', type: 'handout', courseExternalId: 'course1' },
+          deletedAt: null,
+        },
+      ]);
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        externalId: 'course1',
+        record: { title: 'AP Biology', name: 'AP Biology' },
+        deletedAt: null,
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/materials`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.totalMaterials).toBe(2);
+      expect(res.body.courses.length).toBe(1);
+      expect(res.body.courses[0].courseName).toBe('AP Biology');
+      expect(res.body.courses[0].materials.length).toBe(2);
+    });
+  });
+
+  describe('POST /api/students/:id/contacts/:email/transfer-email', () => {
+    it('should not leak tokens in response body', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Transfer Test Student' });
+      const studentId = createRes.body.id;
+
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'old@example.com', role: 'parent' });
+
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts/old@example.com/transfer-email`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ newEmail: 'new@example.com' });
+
+      if (res.status === 200) {
+        expect(res.body).not.toHaveProperty('_debug');
+        expect(JSON.stringify(res.body)).not.toContain('Token');
+        expect(JSON.stringify(res.body)).not.toContain('token');
+      }
+    });
+  });
 });

@@ -5,6 +5,7 @@ import {
   AuditLogRepository,
   StudentRepository,
   PaymentRepository,
+  SubscriptionRepository,
 } from '@scholaracle/database';
 import { AdminAuthService, AuthService } from '@scholaracle/auth';
 import type { IPasswordChangedEmailSender } from '../../../services/PasswordChangedEmailSender';
@@ -14,6 +15,23 @@ import {
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+
+// ---------------------------------------------------------------------------
+// Data masking utilities
+// ---------------------------------------------------------------------------
+
+/** Mask email: "user@example.com" → "u***@example.com" */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return '***';
+  return `${local[0]}***@${domain}`;
+}
+
+/** Mask phone: "+15551234567" → "+1***4567" */
+export function maskPhone(phone: string): string {
+  if (phone.length <= 4) return '***';
+  return `${phone.slice(0, 2)}***${phone.slice(-4)}`;
+}
 
 export interface ICustomersRouterConfig {
   readonly database: Db;
@@ -38,6 +56,7 @@ async function handleGetCustomers(
     const search = req.query['search'] as string | undefined;
     const plan = req.query['plan'] as string | undefined;
     const status = req.query['status'] as string | undefined;
+    const isMasked = req.query['masked'] === 'true';
 
     const filters: Record<string, unknown> = {};
 
@@ -142,7 +161,7 @@ async function handleGetCustomers(
       const id = c._id?.toString();
       return {
         id,
-        email: c.email,
+        email: isMasked ? maskEmail(c.email) : c.email,
         name: c.name,
         subscription: c.subscription,
         isSuspended: c.isSuspended,
@@ -505,19 +524,22 @@ async function handleBulkAction(
   userRepository: UserRepository,
   auditLogRepository: AuditLogRepository,
   adminId: string,
-  adminEmail: string
+  adminEmail: string,
+  database?: Db
 ): Promise<void> {
   try {
-    const { action, customerIds, reason } = (req.body ?? {}) as {
+    const { action, customerIds, reason, plan } = (req.body ?? {}) as {
       action?: string;
       customerIds?: string[];
       reason?: string;
+      plan?: string;
     };
 
     if (!action || !Array.isArray(customerIds) || customerIds.length === 0) {
       res.status(400).json({
         success: false,
-        error: 'action (suspend | unsuspend) and non-empty customerIds array are required',
+        error:
+          'action (suspend | unsuspend | change_plan) and non-empty customerIds array are required',
       });
       return;
     }
@@ -530,15 +552,29 @@ async function handleBulkAction(
       return;
     }
 
-    if (action !== 'suspend' && action !== 'unsuspend') {
+    if (action === 'change_plan' && !plan) {
       res.status(400).json({
         success: false,
-        error: 'action must be suspend or unsuspend',
+        error: 'plan is required for change_plan action',
+      });
+      return;
+    }
+
+    if (action !== 'suspend' && action !== 'unsuspend' && action !== 'change_plan') {
+      res.status(400).json({
+        success: false,
+        error: 'action must be suspend, unsuspend, or change_plan',
       });
       return;
     }
 
     const results: { id: string; success: boolean; error?: string }[] = [];
+
+    // Lazy-init subscription repo only when needed
+    let subscriptionRepository: SubscriptionRepository | undefined;
+    if (action === 'change_plan' && database) {
+      subscriptionRepository = new SubscriptionRepository(database);
+    }
 
     for (const id of customerIds) {
       const customer = await userRepository.findById(id);
@@ -546,17 +582,33 @@ async function handleBulkAction(
         results.push({ id, success: false, error: 'Not found' });
         continue;
       }
-      const success =
-        action === 'suspend'
-          ? await userRepository.suspendUser(id, reason ?? 'Bulk suspend')
-          : await userRepository.unsuspendUser(id);
-      if (success) {
+
+      let isSuccess = false;
+
+      if (action === 'change_plan' && subscriptionRepository && plan) {
+        const updated = await subscriptionRepository.changePlan(id, plan, adminId);
+        isSuccess = updated !== null;
+      } else if (action === 'suspend' || action === 'unsuspend') {
+        isSuccess =
+          action === 'suspend'
+            ? await userRepository.suspendUser(id, reason ?? 'Bulk suspend')
+            : await userRepository.unsuspendUser(id);
+      }
+
+      if (isSuccess) {
+        const auditAction =
+          action === 'change_plan'
+            ? 'customer:bulk_change_plan'
+            : action === 'suspend'
+              ? 'customer:bulk_suspend'
+              : 'customer:bulk_unsuspend';
         await auditLogRepository.create({
           adminUserId: adminId,
           adminEmail,
-          action: action === 'suspend' ? 'customer:bulk_suspend' : 'customer:bulk_unsuspend',
+          action: auditAction,
           entityType: 'customer',
           entityId: id,
+          changes: action === 'change_plan' ? { newPlan: plan } : undefined,
           ipAddress: req.ip ?? 'unknown',
           userAgent: req.headers['user-agent'] ?? 'unknown',
         });
@@ -772,7 +824,8 @@ export function customersRouter(config: ICustomersRouterConfig): Router {
       userRepository,
       auditLogRepository,
       authReq.adminId!,
-      authReq.adminEmail!
+      authReq.adminEmail!,
+      config.database
     );
   });
 

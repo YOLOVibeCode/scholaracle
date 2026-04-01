@@ -7,10 +7,12 @@ import {
   type IAdminAuthenticatedRequest,
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
+import type { SquareService } from '../../../services/SquareService';
 
 export interface IPaymentsRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  readonly squareService?: SquareService;
 }
 
 async function handleGetPayments(
@@ -119,7 +121,8 @@ async function handleRefundPayment(
   paymentRepository: PaymentRepository,
   auditLogRepository: AuditLogRepository,
   adminId: string,
-  adminEmail: string
+  adminEmail: string,
+  config: IPaymentsRouterConfig
 ): Promise<void> {
   try {
     const { id } = req.params;
@@ -139,6 +142,26 @@ async function handleRefundPayment(
     }
 
     const amountInCents = Math.round(amount * 100);
+
+    // Attempt real refund via Square if configured
+    const payment = await paymentRepository.findById(id);
+    if (!payment) {
+      res.status(404).json({ success: false, error: 'Payment not found' });
+      return;
+    }
+
+    if (config.squareService && payment.squarePaymentId) {
+      try {
+        await config.squareService.refundPayment(payment.squarePaymentId, amountInCents, reason);
+      } catch (err) {
+        res.status(502).json({
+          success: false,
+          error: `Square refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        });
+        return;
+      }
+    }
+
     const success = await paymentRepository.recordRefund(id, amountInCents, adminId, reason);
 
     if (!success) {
@@ -188,17 +211,18 @@ async function handleRetryPayment(
       return;
     }
 
-    // In a real implementation, this would trigger Stripe to retry the payment
-    // For now, just update status to pending
-    const success = await paymentRepository.updateStatus(id, 'pending');
-
-    if (!success) {
-      res.status(404).json({
-        success: false,
-        error: 'Payment not found',
-      });
+    const payment = await paymentRepository.findById(id);
+    if (!payment) {
+      res.status(404).json({ success: false, error: 'Payment not found' });
       return;
     }
+
+    if (payment.status === 'succeeded') {
+      res.status(400).json({ success: false, error: 'Payment already succeeded — cannot retry' });
+      return;
+    }
+
+    await paymentRepository.updateStatus(id, 'retry_pending');
 
     // Create audit log
     await auditLogRepository.create({
@@ -213,6 +237,7 @@ async function handleRetryPayment(
 
     res.status(200).json({
       success: true,
+      message: 'Payment marked for retry. Customer will need to complete a new checkout.',
     });
   } catch (error) {
     res.status(500).json({
@@ -250,7 +275,8 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
         paymentRepository,
         auditLogRepository,
         authReq.adminId!,
-        authReq.adminEmail!
+        authReq.adminEmail!,
+        config
       );
     }
   );
