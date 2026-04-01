@@ -165,7 +165,7 @@ export class SquareService {
     amountCents: number,
     reason?: string
   ): Promise<{ refundId: string }> {
-    const response = await this._client.refunds.refund({
+    const response = await this._client.refunds.refundPayment({
       idempotencyKey: `refund-${paymentId}-${Date.now()}`,
       paymentId,
       amountMoney: {
