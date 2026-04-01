@@ -1270,7 +1270,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       console.log(
         '[grades] mergeCourses input:',
         JSON.stringify(
-          sourceCourses.map((c) => ({ id: c.externalId, provider: c.provider, title: c.title }))
+          sourceCourses.map((c) => ({
+            id: c.externalId,
+            p: c.provider,
+            t: c.title,
+            teacher: c.teacherName,
+            period: c.period,
+          }))
         )
       );
       const mergedGroups = mergeCourses(sourceCourses);
