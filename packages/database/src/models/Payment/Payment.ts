@@ -9,7 +9,8 @@ export type PaymentStatus =
   | 'failed'
   | 'refunded'
   | 'disputed'
-  | 'partially_refunded';
+  | 'partially_refunded'
+  | 'retry_pending';
 
 /**
  * Payment method types.

@@ -6,6 +6,7 @@ import {
   StudentRepository,
   PaymentRepository,
   SubscriptionRepository,
+  type SubscriptionPlan,
 } from '@scholaracle/database';
 import { AdminAuthService, AuthService } from '@scholaracle/auth';
 import type { IPasswordChangedEmailSender } from '../../../services/PasswordChangedEmailSender';
@@ -586,7 +587,11 @@ async function handleBulkAction(
       let isSuccess = false;
 
       if (action === 'change_plan' && subscriptionRepository && plan) {
-        const updated = await subscriptionRepository.changePlan(id, plan, adminId);
+        const updated = await subscriptionRepository.changePlan(
+          id,
+          plan as SubscriptionPlan,
+          adminId
+        );
         isSuccess = updated !== null;
       } else if (action === 'suspend' || action === 'unsuspend') {
         isSuccess =
@@ -608,7 +613,10 @@ async function handleBulkAction(
           action: auditAction,
           entityType: 'customer',
           entityId: id,
-          changes: action === 'change_plan' ? { newPlan: plan } : undefined,
+          changes:
+            action === 'change_plan'
+              ? [{ field: 'plan', oldValue: undefined, newValue: plan }]
+              : undefined,
           ipAddress: req.ip ?? 'unknown',
           userAgent: req.headers['user-agent'] ?? 'unknown',
         });
