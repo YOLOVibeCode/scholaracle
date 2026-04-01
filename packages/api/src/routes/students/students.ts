@@ -1266,32 +1266,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           period: info?.period,
         };
       });
-      // eslint-disable-next-line no-console
-      console.log(
-        '[grades] mergeCourses input:',
-        JSON.stringify(
-          sourceCourses.map((c) => ({
-            id: c.externalId,
-            p: c.provider,
-            t: c.title,
-            teacher: c.teacherName,
-            period: c.period,
-          }))
-        )
-      );
       const mergedGroups = mergeCourses(sourceCourses);
-      // eslint-disable-next-line no-console
-      console.log(
-        '[grades] mergedGroups:',
-        mergedGroups.length,
-        JSON.stringify(
-          mergedGroups.map((g) => ({
-            id: g.mergedId,
-            title: g.normalizedTitle,
-            sources: g.sources.length,
-          }))
-        )
-      );
 
       const extIdToMergedId = new Map<string, string>();
       const mergedIdToName = new Map<string, string>();
