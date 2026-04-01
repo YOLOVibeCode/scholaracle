@@ -1096,6 +1096,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
       const { id: studentDbId } = req.params;
+      // Filter to current grading period by default; pass ?currentOnly=false to show all
+      const currentOnly = req.query['currentOnly'] !== 'false';
       if (!studentDbId) {
         res.status(400).json({ success: false, error: 'Missing student ID' });
         return;
@@ -1166,6 +1168,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           .find({ userId, deletedAt: null })
           .project({
             externalId: 1,
+            'record.startDate': 1,
             'record.endDate': 1,
           })
           .toArray(),
@@ -1191,12 +1194,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       ]);
 
       const termEndDates = new Map<string, string>();
+      const termStartDates = new Map<string, string>();
       for (const t of termDocs) {
         const extId = t['externalId'] as string | undefined;
-        const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
-          | string
-          | undefined;
+        const rec = t['record'] as Record<string, unknown> | undefined;
+        const endDate = rec?.['endDate'] as string | undefined;
+        const startDate = rec?.['startDate'] as string | undefined;
         if (extId && endDate) termEndDates.set(extId, endDate);
+        if (extId && startDate) termStartDates.set(extId, startDate);
       }
       const materialCountByCourse = new Map<string, number>();
       for (const doc of materialDocs) {
@@ -1309,6 +1314,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       >();
 
+      // Track per-course: latest assignment date and associated termExternalIds
+      const courseLatestAssignment = new Map<string, string>();
+      const courseTermIds = new Map<string, Set<string>>();
+
       const now = new Date();
       const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
@@ -1370,6 +1379,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           rubricScores,
           attachments,
         });
+
+        // Track latest assignment date and term associations per course
+        if (dueAt) {
+          const prev = courseLatestAssignment.get(courseExternalId);
+          if (!prev || dueAt > prev) courseLatestAssignment.set(courseExternalId, dueAt);
+        }
+        const termExtId = record?.['termExternalId'] as string | undefined;
+        if (termExtId) {
+          if (!courseTermIds.has(courseExternalId)) courseTermIds.set(courseExternalId, new Set());
+          courseTermIds.get(courseExternalId)!.add(termExtId);
+        }
 
         if (status === 'graded' && pointsPossible != null && pointsPossible > 0) {
           data.totalPointsPossible += pointsPossible;
@@ -1560,14 +1580,54 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         });
       }
 
+      // Filter out courses from ended grading periods when currentOnly is true (default).
+      // A course is considered "ended" if ALL of its term associations have endDate < today
+      // AND its latest assignment is older than 45 days.
+      let filteredGrades = courseGrades;
+      if (currentOnly) {
+        const todayYMD = now.toISOString().slice(0, 10);
+        const staleCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
+        filteredGrades = courseGrades.filter((c) => {
+          const termIds = courseTermIds.get(c.courseExternalId);
+          const latestAssignment = courseLatestAssignment.get(c.courseExternalId);
+
+          // If no term info, keep the course (can't determine if it ended)
+          if (!termIds || termIds.size === 0) {
+            // But if the course has no assignments at all or only very old ones, check snapshots
+            if (!latestAssignment) {
+              // Course only has grade snapshots, no assignments — check snapshot date
+              const sisSnap = sisGradeByCourse.get(c.courseExternalId);
+              const lmsSnap = lmsGradeByCourse.get(c.courseExternalId);
+              const latestSnapDate = [sisSnap?.asOf, lmsSnap?.asOf].filter(Boolean).sort().pop();
+              // Keep if we have a recent snapshot (within 45 days)
+              return !latestSnapDate || latestSnapDate >= staleCutoff.slice(0, 10);
+            }
+            return true;
+          }
+
+          // Check if ALL associated terms have ended
+          const allTermsEnded = [...termIds].every((tid) => {
+            const endDate = termEndDates.get(tid);
+            return endDate && endDate < todayYMD;
+          });
+
+          if (!allTermsEnded) return true; // At least one term is still active
+
+          // Terms ended — but keep if there are recent assignments (within 45 days)
+          if (latestAssignment && latestAssignment >= staleCutoff) return true;
+
+          return false;
+        });
+      }
+
       const overallGPA =
         student.stats?.currentGPA ??
-        (courseGrades.length > 0
-          ? courseGrades
+        (filteredGrades.length > 0
+          ? filteredGrades
               .filter((c) => c.officialGrade != null)
               .reduce((s, c, _i, arr) => s + (c.officialGrade ?? 0) / arr.length, 0)
           : 0);
-      const atRiskCourses = courseGrades.filter((c) =>
+      const atRiskCourses = filteredGrades.filter((c) =>
         ['medium', 'high', 'critical'].includes(c.riskLevel)
       ).length;
 
@@ -1578,8 +1638,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       });
       const ownerUserId = student.userId.toString();
       const gradeRiskLimit = await checkAiRateLimit(config.database, ownerUserId, 'grade_risk');
-      if (gradeRiskService.isAvailable() && courseGrades.length > 0 && gradeRiskLimit.allowed) {
-        const input = courseGrades
+      if (gradeRiskService.isAvailable() && filteredGrades.length > 0 && gradeRiskLimit.allowed) {
+        const input = filteredGrades
           .filter((c) => c.officialGrade != null)
           .map((c) => ({
             courseExternalId: c.courseExternalId,
@@ -1596,7 +1656,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           }));
         const riskResult = await gradeRiskService.analyze(student.name, input, overallGPA);
         aiOverview = riskResult.aiOverview;
-        for (const c of courseGrades) {
+        for (const c of filteredGrades) {
           const enh = riskResult.courseEnhancements.get(c.courseExternalId);
           if (enh) {
             c.riskLevel = enh.riskLevel;
@@ -1610,7 +1670,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentId: studentDbId,
         studentName: student.name,
         overallGPA: Math.round(overallGPA * 10) / 10,
-        courseGrades,
+        courseGrades: filteredGrades,
         atRiskCourses,
         aiOverview,
       });
