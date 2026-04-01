@@ -1671,19 +1671,6 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         courseGrades: filteredGrades,
         atRiskCourses,
         aiOverview,
-        _debug: currentOnly
-          ? {
-              totalBeforeFilter: courseGrades.length,
-              totalAfterFilter: filteredGrades.length,
-              staleCutoffMs: now.getTime() - 45 * 24 * 60 * 60 * 1000,
-              courses: courseGrades.map((c) => ({
-                name: c.courseName,
-                id: c.courseExternalId,
-                latestMs: courseLatestAssignment.get(c.courseExternalId) ?? null,
-                termIds: [...(courseTermIds.get(c.courseExternalId) ?? [])],
-              })),
-            }
-          : undefined,
       });
     } catch (error) {
       res.status(500).json({
