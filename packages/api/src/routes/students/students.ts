@@ -1314,8 +1314,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       >();
 
-      // Track per-course: latest assignment date and associated termExternalIds
-      const courseLatestAssignment = new Map<string, string>();
+      // Track per-course: latest assignment date (epoch ms) and associated termExternalIds
+      const courseLatestAssignment = new Map<string, number>();
       const courseTermIds = new Map<string, Set<string>>();
 
       const now = new Date();
@@ -1380,10 +1380,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           attachments,
         });
 
-        // Track latest assignment date and term associations per course
+        // Track latest assignment date (as epoch ms) and term associations per course
         if (dueAt) {
-          const prev = courseLatestAssignment.get(courseExternalId);
-          if (!prev || dueAt > prev) courseLatestAssignment.set(courseExternalId, dueAt);
+          const dueMs = new Date(dueAt).getTime();
+          if (!isNaN(dueMs)) {
+            const prev = courseLatestAssignment.get(courseExternalId) ?? 0;
+            if (dueMs > prev) courseLatestAssignment.set(courseExternalId, dueMs);
+          }
         }
         const termExtId = record?.['termExternalId'] as string | undefined;
         if (termExtId) {
@@ -1586,37 +1589,32 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       let filteredGrades = courseGrades;
       if (currentOnly) {
         const todayYMD = now.toISOString().slice(0, 10);
-        const staleCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
+        const staleCutoffMs = now.getTime() - 45 * 24 * 60 * 60 * 1000;
+        const staleCutoffYMD = new Date(staleCutoffMs).toISOString().slice(0, 10);
         filteredGrades = courseGrades.filter((c) => {
           const termIds = courseTermIds.get(c.courseExternalId);
-          const latestAssignment = courseLatestAssignment.get(c.courseExternalId);
+          const latestAssignmentMs = courseLatestAssignment.get(c.courseExternalId);
+          const hasRecentAssignment =
+            latestAssignmentMs != null && latestAssignmentMs >= staleCutoffMs;
 
-          // If no term info, keep the course (can't determine if it ended)
-          if (!termIds || termIds.size === 0) {
-            // But if the course has no assignments at all or only very old ones, check snapshots
-            if (!latestAssignment) {
-              // Course only has grade snapshots, no assignments — check snapshot date
-              const sisSnap = sisGradeByCourse.get(c.courseExternalId);
-              const lmsSnap = lmsGradeByCourse.get(c.courseExternalId);
-              const latestSnapDate = [sisSnap?.asOf, lmsSnap?.asOf].filter(Boolean).sort().pop();
-              // Keep if we have a recent snapshot (within 45 days)
-              return !latestSnapDate || latestSnapDate >= staleCutoff.slice(0, 10);
-            }
-            return true;
+          // If course has term info, check whether all terms have ended
+          if (termIds && termIds.size > 0) {
+            const allTermsEnded = [...termIds].every((tid) => {
+              const endDate = termEndDates.get(tid);
+              return endDate && endDate < todayYMD;
+            });
+            if (!allTermsEnded) return true; // At least one term is still active
+            return hasRecentAssignment;
           }
 
-          // Check if ALL associated terms have ended
-          const allTermsEnded = [...termIds].every((tid) => {
-            const endDate = termEndDates.get(tid);
-            return endDate && endDate < todayYMD;
-          });
+          // No term info — use assignment recency as heuristic
+          if (latestAssignmentMs != null) return hasRecentAssignment;
 
-          if (!allTermsEnded) return true; // At least one term is still active
-
-          // Terms ended — but keep if there are recent assignments (within 45 days)
-          if (latestAssignment && latestAssignment >= staleCutoff) return true;
-
-          return false;
+          // No assignments (snapshot-only) — check snapshot date recency
+          const sisSnap = sisGradeByCourse.get(c.courseExternalId);
+          const lmsSnap = lmsGradeByCourse.get(c.courseExternalId);
+          const latestSnapDate = [sisSnap?.asOf, lmsSnap?.asOf].filter(Boolean).sort().pop();
+          return !latestSnapDate || latestSnapDate >= staleCutoffYMD;
         });
       }
 
