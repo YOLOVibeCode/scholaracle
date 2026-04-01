@@ -1,6 +1,13 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { SubscriptionRepository, PaymentRepository } from '@scholaracle/database';
+import {
+  SubscriptionRepository,
+  PaymentRepository,
+  UserRepository,
+  PLAN_PRICING,
+  type SubscriptionPlan,
+  type BillingCycle,
+} from '@scholaracle/database';
 import { SquareService } from '../../../services/SquareService';
 
 export interface ISquareWebhookDeps {
@@ -24,14 +31,46 @@ interface IPaymentPayload {
 
 function extractUserIdFromNote(note: string | undefined): string | null {
   if (!note) return null;
-  const match = note.match(/User ID:\s*([^\s]+)/);
+  const match = note.match(/User ID:\s*([^\s|]+)/);
   return match ? match[1]! : null;
+}
+
+function extractPlanFromNote(
+  note: string | undefined
+): { plan: SubscriptionPlan; cycle: BillingCycle } | null {
+  if (!note) return null;
+  const planMatch = note.match(/Plan:\s*(\w+)/);
+  const cycleMatch = note.match(/Cycle:\s*(\w+)/);
+  if (!planMatch) return null;
+  const plan = planMatch[1]!.toLowerCase() as SubscriptionPlan;
+  const validPlans: SubscriptionPlan[] = ['free', 'starter', 'premium', 'family', 'enterprise'];
+  if (!validPlans.includes(plan)) return null;
+  const cycle = (
+    cycleMatch?.[1]?.toLowerCase() === 'annual' ? 'annual' : 'monthly'
+  ) as BillingCycle;
+  return { plan, cycle };
+}
+
+function resolvePlanFromAmount(amountCents: number): {
+  plan: SubscriptionPlan;
+  cycle: BillingCycle;
+} {
+  for (const [plan, pricing] of Object.entries(PLAN_PRICING) as [
+    SubscriptionPlan,
+    { monthly: number; annual: number },
+  ][]) {
+    if (plan === 'free') continue;
+    if (Math.round(pricing.monthly * 100) === amountCents) return { plan, cycle: 'monthly' };
+    if (Math.round(pricing.annual * 100) === amountCents) return { plan, cycle: 'annual' };
+  }
+  return { plan: 'starter', cycle: 'monthly' };
 }
 
 export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
   const router = Router();
   const subscriptionRepo = new SubscriptionRepository(deps.database);
   const paymentRepo = new PaymentRepository(deps.database);
+  const userRepo = new UserRepository(deps.database);
 
   router.post('/', (req: Request, res: Response) => {
     void handleWebhook(req, res);
@@ -108,6 +147,18 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
     const amount = Number(amountMoney?.amount ?? 0);
     const currency = (amountMoney?.currency ?? 'USD').toLowerCase();
 
+    const noteResolved = extractPlanFromNote(payment.note);
+    const amountResolved = resolvePlanFromAmount(amount);
+    const resolvedPlan = noteResolved?.plan ?? amountResolved.plan;
+    const resolvedCycle = noteResolved?.cycle ?? amountResolved.cycle;
+
+    const periodEnd = new Date();
+    if (resolvedCycle === 'annual') {
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    } else {
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    }
+
     await paymentRepo.create({
       userId,
       amount,
@@ -116,16 +167,16 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
       paymentMethod: 'card',
       squarePaymentId: paymentId,
       squareOrderId: orderId ?? undefined,
-      description: `Square payment ${paymentId}`,
+      description: `Square payment ${paymentId} — ${resolvedPlan} (${resolvedCycle})`,
     });
 
     const subscription = await subscriptionRepo.findByUserId(userId);
-    const periodEnd = new Date();
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     if (subscription) {
       const updates: Record<string, unknown> = {
+        plan: resolvedPlan,
         status: 'active',
+        billingCycle: resolvedCycle,
         currentPeriodStart: new Date(),
         currentPeriodEnd: periodEnd,
         lastPaymentDate: new Date(),
@@ -141,15 +192,22 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
     } else {
       await subscriptionRepo.create({
         userId,
-        plan: 'starter',
+        plan: resolvedPlan,
         status: 'active',
         currentPeriodStart: new Date(),
         currentPeriodEnd: periodEnd,
-        billingCycle: 'monthly',
+        billingCycle: resolvedCycle,
         squareCustomerId: undefined,
         lastPaymentDate: new Date(),
         lastPaymentAmount: amount,
       });
+    }
+
+    // Sync plan to user document so AI rate limiter and other services stay in sync
+    try {
+      await userRepo.updateSubscription(userId, { plan: resolvedPlan, status: 'active' });
+    } catch {
+      // Best-effort: subscription collection is authoritative
     }
   }
 

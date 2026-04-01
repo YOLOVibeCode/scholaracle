@@ -155,13 +155,13 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       }
 
       const origin = req.headers.origin ?? 'http://localhost:2800';
-      const returnUrl = (req.body as { returnUrl?: string }).returnUrl ?? `${origin}/settings`;
 
       res.json({
         success: true,
-        url: returnUrl,
-        message:
-          'Square does not provide a customer billing portal. Manage your subscription in Settings.',
+        hasPortal: false,
+        manageUrl: `${origin}/dashboard/billing`,
+        url: `${origin}/dashboard/billing`,
+        message: 'Manage your subscription from the billing page.',
       });
     } catch (error) {
       res.status(500).json({

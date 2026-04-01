@@ -1,4 +1,4 @@
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { UserRepository } from './UserRepository';
 
 describe('UserRepository Admin Methods', () => {
@@ -172,6 +172,35 @@ describe('UserRepository Admin Methods', () => {
 
       expect(stats.totalUsers).toBeGreaterThanOrEqual(3);
       expect(stats.byPlan).toBeDefined();
+    });
+  });
+
+  describe('updateSubscription', () => {
+    it('should update subscription plan and status on user document', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const user = await repository.create({
+        email: 'sub-test@test.com',
+        name: 'Sub Test',
+        passwordHash,
+      });
+
+      const result = await repository.updateSubscription(user._id!.toString(), {
+        plan: 'premium',
+        status: 'active',
+      });
+      expect(result).toBe(true);
+
+      const updated = await repository.findById(user._id!.toString());
+      expect(updated?.subscription.plan).toBe('premium');
+      expect(updated?.subscription.status).toBe('active');
+    });
+
+    it('should return false for non-existent user', async () => {
+      const result = await repository.updateSubscription(new ObjectId().toString(), {
+        plan: 'starter',
+        status: 'active',
+      });
+      expect(result).toBe(false);
     });
   });
 });

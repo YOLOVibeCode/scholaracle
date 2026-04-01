@@ -36,6 +36,9 @@ export class SendGridInviteEmailSender implements IInviteEmailSender {
   constructor(config: IInviteEmailSenderConfig, sendGrid: MailService) {
     this._config = config;
     this._sendGrid = sendGrid;
+    if (config.apiKey) {
+      this._sendGrid.setApiKey(config.apiKey);
+    }
   }
 
   async sendInvite(opts: {

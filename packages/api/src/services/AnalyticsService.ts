@@ -140,8 +140,6 @@ export class AnalyticsService implements IAnalyticsService {
     startDate: Date,
     endDate: Date
   ): Promise<readonly IRevenueDataPoint[]> {
-    // This would typically query the payments collection
-    // For now, return empty array as PaymentRepository needs to be implemented
     const paymentsCollection = this._database.collection('payments');
 
     const dateFormat: Record<string, string> = {

@@ -19,6 +19,9 @@ export class SendGridPasswordResetEmailSender implements IPasswordResetEmailSend
   constructor(config: ISendGridPasswordResetConfig, sendGrid: MailService) {
     this._config = config;
     this._sendGrid = sendGrid;
+    if (config.apiKey) {
+      this._sendGrid.setApiKey(config.apiKey);
+    }
   }
 
   async sendResetLink(email: string, resetUrl: string): Promise<void> {
