@@ -27,7 +27,21 @@ const SCHEDULE_MS: Record<string, number> = {
   hourly: 60 * 60_000,
   every_6h: 6 * 60 * 60_000,
   daily: 24 * 60 * 60_000,
+  weekdays: 24 * 60 * 60_000,
+  weekends: 24 * 60 * 60_000,
 };
+
+/** Returns true if the given date falls on a weekday (Mon–Fri). */
+function isWeekday(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day >= 1 && day <= 5;
+}
+
+/** Returns true if the given date falls on a weekend (Sat–Sun). */
+function isWeekend(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
 
 /**
  * Periodically scans IngestSources + Students and enqueues sync jobs that are due.
@@ -160,6 +174,10 @@ export class SyncScheduler {
     for (const src of sources) {
       const schedule = (src['schedule'] as string) ?? 'daily';
       if (schedule === 'manual') continue;
+
+      // Skip day-of-week restricted schedules when not applicable
+      if (schedule === 'weekdays' && !isWeekday(now)) continue;
+      if (schedule === 'weekends' && !isWeekend(now)) continue;
 
       const intervalMs = SCHEDULE_MS[schedule] ?? SCHEDULE_MS['daily']!;
 

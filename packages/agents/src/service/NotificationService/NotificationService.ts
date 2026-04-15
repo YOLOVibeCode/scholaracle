@@ -433,8 +433,11 @@ export class NotificationService {
     const frequency = pref.frequency ?? 'balanced';
     if (frequency === 'proactive') return false;
     const severity = alert.severity ?? 'info';
-    if (severity === 'critical') return false;
-    if (frequency === 'balanced' && severity !== 'warning' && severity !== 'info') return false;
+    // 'minimal' batches ALL alerts into digest (including critical)
+    if (frequency !== 'minimal') {
+      if (severity === 'critical') return false;
+      if (frequency === 'balanced' && severity !== 'warning' && severity !== 'info') return false;
+    }
     const relatedData = (alert.relatedData ?? {}) as Record<string, unknown>;
     const dashboardUrl = this._emailDigestOptions.dashboardBaseUrl
       ? `${this._emailDigestOptions.dashboardBaseUrl}/dashboard/students/${notification.studentId}/workflow`
