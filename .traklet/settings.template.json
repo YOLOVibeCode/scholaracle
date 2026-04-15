@@ -1,0 +1,11 @@
+{
+  "user": {
+    "email": "your.email@company.com",
+    "name": "Your Name"
+  },
+  "token": "paste-your-github-pat-here",
+  "adapter": "github",
+  "project": "YOLOVibeCode/scholaracle",
+  "position": "bottom-right",
+  "theme": "light"
+}

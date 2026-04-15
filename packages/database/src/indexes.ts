@@ -162,6 +162,12 @@ export async function createIndexes(database: Db): Promise<void> {
     studentExternalId: 1,
     institutionExternalId: 1,
   });
+  await slcCourseMaterials.createIndex({
+    userId: 1,
+    deletedAt: 1,
+    courseExternalId: 1,
+    'record.assignmentExternalId': 1,
+  });
 
   const slcCourses = database.collection('slc_courses');
   await slcCourses.createIndex({ userId: 1, externalId: 1 });

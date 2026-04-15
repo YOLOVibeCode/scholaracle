@@ -60,12 +60,12 @@ services:
       MONGODB_URI_EXTERNAL: mongodb://localhost:2802/scholaracle
       MONGODB_DB_NAME: scholaracle
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      # Email configuration (using Mailpit when SMTP_HOST set)
+      # Email configuration (SendGrid — remove SMTP_HOST to use SendGrid instead of Mailpit)
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@scholaracle.local}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-notifications@scholarmancy.com}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Scholaracle}
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
+      # SMTP_HOST: mailpit
+      # SMTP_PORT: 1025
       # Twilio (optional)
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
@@ -81,6 +81,8 @@ services:
       SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-}
       # Credential encryption (for storing data-source login credentials)
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
+      # AI (optional - for LLM material matching)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # CORS
       CORS_ORIGINS: http://localhost:2800,http://localhost:3000
     depends_on:
@@ -146,12 +148,12 @@ services:
       CONNECTOR_JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       API_BASE_URL: http://api:3002
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
-      # Email (using Mailpit)
+      # Email configuration (SendGrid)
       SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@scholaracle.local}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-notifications@scholarmancy.com}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Scholaracle}
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
+      # SMTP_HOST: mailpit
+      # SMTP_PORT: 1025
       # Twilio (optional)
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}

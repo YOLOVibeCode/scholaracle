@@ -264,10 +264,18 @@ async function generateAlertsFromIngestedAssignments(params: {
     const students = await studentRepo.findOwnedByUserId(params.userId);
     studentIdByExternal = new Map<string, string>();
     for (const s of students) {
-      if (s.studentId && s._id) studentIdByExternal.set(s.studentId, s._id.toString());
+      if (!s._id) continue;
+      // Map by external studentId when available
+      if (s.studentId) studentIdByExternal.set(s.studentId, s._id.toString());
+      // Also map by MongoDB _id so lookups work even when external studentId is null
+      studentIdByExternal.set(s._id.toString(), s._id.toString());
     }
-    if (students.length === 1 && students[0]?._id) {
-      studentIdByExternal.set('*', students[0]._id.toString());
+    // Wildcard: when only one student has data sources, use it as the default
+    const studentsWithSources = students.filter(
+      (s) => s._id && Array.isArray(s.dataSources) && s.dataSources.length > 0
+    );
+    if (studentsWithSources.length === 1 && studentsWithSources[0]?._id) {
+      studentIdByExternal.set('*', studentsWithSources[0]._id.toString());
     }
   }
 
@@ -309,11 +317,65 @@ async function generateAlertsFromIngestedAssignments(params: {
     })
     .toArray();
 
+  // Past-due missing assignments (within current semester) — alert even though due date has passed
+  const pastDueMissing = await params.database
+    .collection('slc_assignments')
+    .find({
+      userId: params.userId,
+      deletedAt: null,
+      'record.status': 'missing',
+      'record.dueAt': { $gte: semesterStartYmd, $lt: now.toISOString() },
+    })
+    .toArray();
+
+  // Merge: dueSoon + pastDueMissing (deduplicate by externalId)
+  const seenExternalIds = new Set(dueSoon.map((d) => d['externalId'] as string));
+  for (const doc of pastDueMissing) {
+    const extId = doc['externalId'] as string;
+    if (!seenExternalIds.has(extId)) {
+      dueSoon.push(doc);
+      seenExternalIds.add(extId);
+    }
+  }
+
+  // Pre-fetch course names and student names for human-readable alert data
+  const courseNameMap = new Map<string, string>();
+  const courseDocs = await params.database
+    .collection('slc_courses')
+    .find({ userId: params.userId, deletedAt: null })
+    .project({ externalId: 1, 'record.title': 1, 'record.name': 1 })
+    .toArray();
+  for (const c of courseDocs) {
+    const name = (c['record']?.title as string) ?? (c['record']?.name as string);
+    if (name && c['externalId']) courseNameMap.set(c['externalId'] as string, name);
+  }
+
+  const studentNameMap = new Map<string, string>();
+  const studentDocs = await studentRepo.findOwnedByUserId(params.userId);
+  // First pass: map by external studentId (indirect matches)
+  for (const s of studentDocs) {
+    if (s.studentId) studentNameMap.set(s.studentId, s.name ?? 'Student');
+  }
+  // Second pass: map by _id (direct matches override indirect — these are the canonical students)
+  for (const s of studentDocs) {
+    if (s._id) studentNameMap.set(s._id.toString(), s.name ?? 'Student');
+  }
+
   for (const doc of dueSoon) {
     const dueAt = doc['record']?.dueAt as string | undefined;
     const title = doc['record']?.title as string | undefined;
     const status = doc['record']?.status as string | undefined;
     if (!dueAt || !title) continue;
+
+    const courseExtId = doc['courseExternalId'] as string | undefined;
+    const courseName =
+      (courseExtId ? courseNameMap.get(courseExtId) : undefined) ?? 'Unknown Course';
+    const studentExtId = (doc['studentExternalId'] as string | undefined) ?? 'unknown-student';
+    const studentName = studentNameMap.get(studentExtId) ?? 'Student';
+    const daysAgo = Math.max(
+      0,
+      Math.round((now.getTime() - new Date(dueAt).getTime()) / 86_400_000)
+    );
 
     const baseFingerprint = `${doc['provider']}|${doc['adapterId']}|${doc['externalId']}|${dueAt}`;
 
@@ -347,24 +409,28 @@ async function generateAlertsFromIngestedAssignments(params: {
       });
       if (existing) continue;
 
-      const studentExtId = (doc['studentExternalId'] as string | undefined) ?? 'unknown-student';
+      const enrichedMissingData = {
+        fingerprint,
+        dueAt,
+        title,
+        assignment: title,
+        course: courseName,
+        studentName,
+        daysAgo,
+        provider: doc['provider'],
+        adapterId: doc['adapterId'],
+        externalId: doc['externalId'],
+        courseExternalId: doc['courseExternalId'],
+        institutionExternalId: doc['institutionExternalId'],
+        termExternalId: doc['termExternalId'],
+      };
       await alertRepo.create({
         userId: params.userId,
         studentId: studentExtId,
         type: AlertType.MISSING_ASSIGNMENT,
         severity: 'critical',
         message: `Missing assignment: ${title}`,
-        relatedData: {
-          fingerprint,
-          dueAt,
-          title,
-          provider: doc['provider'],
-          adapterId: doc['adapterId'],
-          externalId: doc['externalId'],
-          courseExternalId: doc['courseExternalId'],
-          institutionExternalId: doc['institutionExternalId'],
-          termExternalId: doc['termExternalId'],
-        },
+        relatedData: enrichedMissingData,
       });
       if (params.queue) {
         const jobStudentId = resolveStudentIdForJob(studentExtId);
@@ -378,17 +444,7 @@ async function generateAlertsFromIngestedAssignments(params: {
                   studentId: jobStudentId,
                   type: AlertType.MISSING_ASSIGNMENT,
                   severity: 'critical',
-                  relatedData: {
-                    fingerprint,
-                    dueAt,
-                    title,
-                    provider: doc['provider'],
-                    adapterId: doc['adapterId'],
-                    externalId: doc['externalId'],
-                    courseExternalId: doc['courseExternalId'],
-                    institutionExternalId: doc['institutionExternalId'],
-                    termExternalId: doc['termExternalId'],
-                  },
+                  relatedData: enrichedMissingData,
                   userId: params.userId,
                 },
               },
@@ -411,24 +467,37 @@ async function generateAlertsFromIngestedAssignments(params: {
     });
     if (existing) continue;
 
-    const studentExtId = (doc['studentExternalId'] as string | undefined) ?? 'unknown-student';
+    const dueDate = new Date(dueAt);
+    const formattedDueDate = dueDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    const enrichedDeadlineData = {
+      fingerprint,
+      dueAt,
+      dueDate: dueAt,
+      title,
+      assignment: title,
+      course: courseName,
+      studentName,
+      formattedDueDate,
+      provider: doc['provider'],
+      adapterId: doc['adapterId'],
+      externalId: doc['externalId'],
+      courseExternalId: doc['courseExternalId'],
+      institutionExternalId: doc['institutionExternalId'],
+      termExternalId: doc['termExternalId'],
+    };
     await alertRepo.create({
       userId: params.userId,
       studentId: studentExtId,
       type: AlertType.DEADLINE,
       severity: 'warning',
       message: `Due soon: ${title}`,
-      relatedData: {
-        fingerprint,
-        dueAt,
-        title,
-        provider: doc['provider'],
-        adapterId: doc['adapterId'],
-        externalId: doc['externalId'],
-        courseExternalId: doc['courseExternalId'],
-        institutionExternalId: doc['institutionExternalId'],
-        termExternalId: doc['termExternalId'],
-      },
+      relatedData: enrichedDeadlineData,
     });
     if (params.queue) {
       const jobStudentId = resolveStudentIdForJob(studentExtId);
@@ -442,17 +511,7 @@ async function generateAlertsFromIngestedAssignments(params: {
                 studentId: jobStudentId,
                 type: AlertType.DEADLINE,
                 severity: 'warning',
-                relatedData: {
-                  fingerprint,
-                  dueAt,
-                  title,
-                  provider: doc['provider'],
-                  adapterId: doc['adapterId'],
-                  externalId: doc['externalId'],
-                  courseExternalId: doc['courseExternalId'],
-                  institutionExternalId: doc['institutionExternalId'],
-                  termExternalId: doc['termExternalId'],
-                },
+                relatedData: enrichedDeadlineData,
                 userId: params.userId,
               },
             },
@@ -462,6 +521,124 @@ async function generateAlertsFromIngestedAssignments(params: {
             console.error('Ingest: failed to enqueue notify job for deadline', err);
           });
       }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LLM-based material-to-assignment matching (Layer 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * For materials that Layers 1+2 (modules, descriptions) couldn't match,
+ * use an LLM to semantically match file names to assignment titles.
+ * Fire-and-forget — failures are non-fatal.
+ */
+async function matchUnmatchedMaterialsViaLlm(params: {
+  readonly database: Db;
+  readonly userId: string;
+}): Promise<void> {
+  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  if (!apiKey) return;
+
+  const materialsColl = params.database.collection('slc_course_materials');
+  const assignmentsColl = params.database.collection('slc_assignments');
+
+  // Find materials with no assignmentExternalId
+  const unmatched = await materialsColl
+    .find({
+      userId: params.userId,
+      deletedAt: null,
+      $or: [
+        { 'record.assignmentExternalId': null },
+        { 'record.assignmentExternalId': { $exists: false } },
+      ],
+    })
+    .toArray();
+
+  if (unmatched.length === 0) return;
+
+  // Group by course
+  const byCourse = new Map<string, typeof unmatched>();
+  for (const m of unmatched) {
+    const cid = m['courseExternalId'] as string;
+    if (!cid) continue;
+    if (!byCourse.has(cid)) byCourse.set(cid, []);
+    byCourse.get(cid)!.push(m);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  const { LlmClient } = await import('@scholaracle/agents');
+  const llm = new LlmClient({ apiKey });
+
+  for (const [courseExtId, materials] of byCourse) {
+    const assignments = await assignmentsColl
+      .find({
+        userId: params.userId,
+        deletedAt: null,
+        courseExternalId: courseExtId,
+      })
+      .project({ externalId: 1, 'record.title': 1 })
+      .toArray();
+
+    if (assignments.length === 0) continue;
+
+    const assignmentList = assignments.map((a) => ({
+      id: a['externalId'] as string,
+      title: (a['record'] as Record<string, unknown>)?.['title'] as string,
+    }));
+
+    const fileList = materials.map((m) => {
+      const rec = m['record'] as Record<string, unknown>;
+      const entry: { id: string; name: string; description?: string } = {
+        id: m['externalId'] as string,
+        name: (rec?.['title'] as string) ?? '',
+      };
+      const extracted = rec?.['extractedText'] as string | undefined;
+      if (extracted) entry.description = extracted;
+      return entry;
+    });
+
+    try {
+      const response = await llm.complete(
+        [
+          {
+            role: 'user',
+            content: `Match these course files to their most relevant assignment. Return a JSON array of objects with "fileId", "assignmentId", and "confidence" (0-1). Only include matches with confidence >= 0.7. If no good match exists for a file, omit it. Some files have a "description" field with AI-analyzed content — use it for matching when the filename alone is ambiguous.\n\nFiles:\n${JSON.stringify(fileList)}\n\nAssignments:\n${JSON.stringify(assignmentList)}`,
+          },
+        ],
+        {
+          maxTokens: 4096,
+          system:
+            'You are a school data matching assistant. Match course material filenames to assignment titles based on semantic similarity, topic overlap, and naming patterns (e.g. "5.A" prefix matches "5.A - Independent Practice", "Camera Parts.pptx" matches "Parts of a camera"). Return ONLY a valid JSON array, no markdown fences.',
+        }
+      );
+
+      // Extract JSON from response (handle possible markdown fences)
+      const jsonStr = response.content
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      const matches = JSON.parse(jsonStr) as Array<{
+        fileId: string;
+        assignmentId: string;
+        confidence: number;
+      }>;
+
+      for (const m of matches) {
+        if (m.confidence < 0.7) continue;
+        await materialsColl.updateOne(
+          { userId: params.userId, externalId: m.fileId },
+          { $set: { 'record.assignmentExternalId': m.assignmentId } }
+        );
+      }
+
+      // eslint-disable-next-line no-console
+      console.log(
+        `[MaterialMatcher] LLM matched ${matches.filter((m) => m.confidence >= 0.7).length}/${fileList.length} files for course ${courseExtId}`
+      );
+    } catch (err) {
+      console.error(`[MaterialMatcher] LLM matching failed for course ${courseExtId}:`, err);
     }
   }
 }
@@ -754,6 +931,20 @@ async function applyOps(params: {
       } else if (op.entity === 'courseMaterial' && op.record) {
         const existing = await collection.findOne(baseFilter);
         const record = op.record as Record<string, unknown>;
+        // Preserve LLM/vision-derived fields when the incoming op doesn't provide them.
+        // These fields are set by post-processing (Layers 3+4) and would be lost if
+        // overwritten with undefined on every sync.
+        if (existing) {
+          const prev = (existing['record'] as Record<string, unknown>) ?? {};
+          // eslint-disable-next-line max-depth
+          if (!record['assignmentExternalId'] && prev['assignmentExternalId']) {
+            record['assignmentExternalId'] = prev['assignmentExternalId'];
+          }
+          // eslint-disable-next-line max-depth
+          if (!record['extractedText'] && prev['extractedText']) {
+            record['extractedText'] = prev['extractedText'];
+          }
+        }
         const title =
           (record['title'] as string) ?? (key.externalId as string) ?? 'Course material';
         const activityColl = params.database.collection(ACTIVITY_LOG_COLLECTION);
@@ -765,7 +956,7 @@ async function applyOps(params: {
                 ...baseFilter,
                 ...commonFields,
                 deletedAt: null,
-                record: op.record,
+                record,
               },
             },
             { upsert: true }
@@ -1173,6 +1364,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         database: config.database,
         userId,
         queue: config.queue,
+      });
+      // LLM-based material matching (Layer 3) — fire-and-forget
+      void matchUnmatchedMaterialsViaLlm({
+        database: config.database,
+        userId,
+      }).catch((err: unknown) => {
+        console.error('[MaterialMatcher] post-ingest LLM matching failed:', err);
       });
       res.status(200).json({
         success: true,

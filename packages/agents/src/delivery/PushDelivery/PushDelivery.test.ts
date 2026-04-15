@@ -33,11 +33,11 @@ describe('PushDelivery', () => {
   });
 
   describe('deliver (unconfigured)', () => {
-    it('returns success with error message when VAPID not configured', async () => {
+    it('returns failure with error message when VAPID not configured', async () => {
       const delivery = new PushDelivery({ projectId: 'test' });
       const result = await delivery.deliver(makeNotification());
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
       expect(result.channel).toBe(NotificationChannel.PUSH);
       expect(result.error).toContain('not configured');
     });
@@ -75,7 +75,7 @@ describe('PushDelivery', () => {
       const delivery = makeConfiguredDelivery();
       const result = await delivery.deliver(makeNotification());
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
       expect(result.error).toContain('No push subscriptions');
     });
 

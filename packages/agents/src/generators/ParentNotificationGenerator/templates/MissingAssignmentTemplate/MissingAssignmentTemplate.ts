@@ -3,48 +3,32 @@ import { ITemplateResult, ITemplateAction } from '../../../StudentNotificationGe
 
 /**
  * Template for generating parent notifications about missing assignments.
- * Includes student name, grade impact analysis, and action recommendations.
+ * Includes student name, course, assignment title, and how overdue it is.
  */
 export class MissingAssignmentTemplate {
-  /**
-   * Generate notification content from a missing assignment alert.
-   *
-   * @param alert - The alert containing assignment details
-   * @returns Template result with subject, body, and actions
-   */
   public generate(alert: Alert): ITemplateResult {
-    const relatedData = alert.relatedData as {
-      studentName: string;
-      course: string;
-      assignment: string;
-      daysAgo: number;
-      points: number;
-      gradeImpact: number;
-      currentGrade: number;
-      assignmentUrl?: string;
-    };
+    const rd = alert.relatedData as Record<string, unknown>;
 
-    const { studentName, course, assignment, daysAgo, assignmentUrl } = relatedData;
+    const studentName = (rd['studentName'] as string) ?? 'Your student';
+    const course = (rd['course'] as string) ?? (rd['courseExternalId'] as string) ?? 'a course';
+    const assignment = (rd['assignment'] as string) ?? (rd['title'] as string) ?? 'an assignment';
+    const daysAgo =
+      typeof rd['daysAgo'] === 'number' ? rd['daysAgo'] : this._calcDaysAgo(rd['dueAt'] as string);
 
-    // Concise, link-first: detail lives in dashboard (plan section 8).
-    const body = `${studentName} has a missing assignment in ${course}: ${assignment} (due ${daysAgo} days ago). View details in your dashboard.`;
+    const overduePart = daysAgo > 0 ? ` — ${daysAgo} day${daysAgo === 1 ? '' : 's'} overdue` : '';
+    const body = `${studentName} has a missing assignment in ${course}: "${assignment}"${overduePart}.`;
+    const subject = `${studentName} — Missing: ${assignment} (${course})`;
 
     const actions: ITemplateAction[] = [];
-
-    if (assignmentUrl) {
-      actions.push({
-        label: 'View Assignment',
-        type: 'link',
-        url: assignmentUrl,
-      });
+    if (rd['assignmentUrl']) {
+      actions.push({ label: 'View Assignment', type: 'link', url: rd['assignmentUrl'] as string });
     }
 
-    const subject = `${studentName} - MISSING ASSIGNMENT: ${course}`;
+    return { subject, body, actions };
+  }
 
-    return {
-      subject,
-      body,
-      actions,
-    };
+  private _calcDaysAgo(dueAt?: string): number {
+    if (!dueAt) return 0;
+    return Math.max(0, Math.round((Date.now() - new Date(dueAt).getTime()) / 86_400_000));
   }
 }
