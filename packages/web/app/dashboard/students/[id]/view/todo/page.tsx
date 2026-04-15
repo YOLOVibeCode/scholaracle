@@ -29,10 +29,6 @@ function getStatusColor(status?: string): string {
   return STATUS_OPTIONS.find((o) => o.value === status)?.color ?? 'bg-gray-100 text-gray-700';
 }
 
-function getStatusLabel(status?: string): string {
-  return STATUS_OPTIONS.find((o) => o.value === status)?.label ?? 'Not Started';
-}
-
 function formatRelativeDue(dueAt?: string): { text: string; urgent: boolean } {
   if (!dueAt) return { text: 'No due date', urgent: false };
   const due = new Date(dueAt);

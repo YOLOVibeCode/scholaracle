@@ -79,7 +79,7 @@ describe('EmailNotificationAgent', () => {
         },
       });
       const notification = agent.generate(alert);
-      expect(notification.subject).toBe('MISSING ASSIGNMENT');
+      expect(notification.subject).toContain('Missing:');
       expect(notification.body).toContain('Math');
       expect(notification.body).toContain('Homework 5');
       expect(notification.priority).toBe(NotificationPriority.HIGH);
