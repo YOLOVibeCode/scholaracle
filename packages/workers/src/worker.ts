@@ -11,6 +11,7 @@ import {
   ParentEmailNotificationAgent,
   DeliveryRouter,
   DigestInsightService,
+  GlanceInsightService,
   LlmClient,
 } from '@scholaracle/agents';
 import {
@@ -21,6 +22,7 @@ import {
   type IEmailDigestPendingItem,
 } from '@scholaracle/database';
 import { flushEmailDigests } from './digest/digest-flush';
+import { flushGlanceEmails } from './glance/glance-flush';
 import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
@@ -36,6 +38,7 @@ import type { Twilio } from 'twilio';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { randomUUID } from 'crypto';
 import { createAdapterRunner } from './adapter-runner';
+import { SyncStalenessMonitor } from './sync-staleness-monitor';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -541,6 +544,21 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     ).catch((e) => console.error('[EmailDigest]', e));
   }, 60_000);
 
+  // Scheduled glance email flush (runs every 60 seconds)
+  const glanceInsightService = anthropicApiKey
+    ? new GlanceInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
+    : undefined;
+  setInterval(() => {
+    void flushGlanceEmails(
+      database,
+      emailTransport,
+      sendGridConfig.fromEmail,
+      sendGridConfig.fromName,
+      dashboardBaseUrl,
+      glanceInsightService
+    ).catch((e) => console.error('[Glance]', e));
+  }, 60_000);
+
   // Immediate digest flush job processor (checks every 5 seconds for immediate jobs)
   setInterval(() => {
     void processImmediateFlushJobs(
@@ -602,21 +620,51 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     });
   }, 30_000);
 
+  // -----------------------------------------------------------------------
+  // Sync staleness monitor — emails account owners when syncs are overdue
+  // -----------------------------------------------------------------------
+  const stalenessMonitor = new SyncStalenessMonitor(database, emailTransport, {
+    checkIntervalMs: Number(process.env['STALENESS_CHECK_INTERVAL_MS'] ?? 60 * 60_000), // 1 hour
+    staleThresholdMs: Number(process.env['STALENESS_THRESHOLD_MS'] ?? 48 * 60 * 60_000), // 48 hours
+    fromEmail: sendGridConfig.fromEmail,
+    fromName: sendGridConfig.fromName,
+  });
+  stalenessMonitor.start();
+
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
   const healthServer = createServer((req, res) => {
     if (req.url === '/api/health' && req.method === 'GET') {
-      const mem = process.memoryUsage();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          status: 'ok',
-          workerId,
-          syncConcurrency,
-          activeSyncJobs: syncWorker.activeJobs,
-          memoryMB: Math.round(mem.rss / 1_048_576),
-        })
-      );
+      void (async (): Promise<void> => {
+        try {
+          // Actually verify MongoDB is reachable
+          await database.command({ ping: 1 });
+          const mem = process.memoryUsage();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              status: 'ok',
+              workerId,
+              syncConcurrency,
+              activeSyncJobs: syncWorker.activeJobs,
+              memoryMB: Math.round(mem.rss / 1_048_576),
+            })
+          );
+        } catch {
+          const mem = process.memoryUsage();
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              status: 'unhealthy',
+              reason: 'mongodb_unreachable',
+              workerId,
+              syncConcurrency,
+              activeSyncJobs: syncWorker.activeJobs,
+              memoryMB: Math.round(mem.rss / 1_048_576),
+            })
+          );
+        }
+      })();
       return;
     }
     res.writeHead(404);
@@ -635,6 +683,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     // eslint-disable-next-line no-console
     console.log('Shutting down worker...');
     clearInterval(heartbeatInterval);
+    stalenessMonitor.stop();
     healthServer.close();
     await syncScheduler.stop();
     await syncWorker.stop();

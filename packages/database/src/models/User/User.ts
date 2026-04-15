@@ -43,6 +43,11 @@ export interface IUserPreferences {
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';
+    /** Daily per-student snapshot email schedule. */
+    readonly glanceSchedule?: {
+      readonly enabled: boolean;
+      readonly time: string;
+    };
   };
   readonly alerts?: {
     readonly gradeDrop?: number;
@@ -86,6 +91,8 @@ export interface IUserData {
   readonly smsConsent?: boolean;
   /** Denormalized list of linked OAuth providers (e.g. ['google', 'apple']). */
   readonly oauthProviders?: readonly string[];
+  /** IANA timezone (e.g. 'America/New_York'). Used for digest/glance scheduling. */
+  readonly timezone?: string;
   readonly preferences?: IUserPreferences;
   readonly devices?: readonly IUserDevice[];
   readonly subscription?: IUserSubscription;
@@ -121,6 +128,8 @@ export class User {
   public readonly smsConsent: boolean;
   /** Denormalized list of linked OAuth providers. */
   public readonly oauthProviders: readonly string[];
+  /** IANA timezone (e.g. 'America/New_York'). */
+  public readonly timezone: string;
   public readonly preferences: IUserPreferences;
   public readonly devices: readonly IUserDevice[];
   public readonly subscription: IUserSubscription;
@@ -147,6 +156,7 @@ export class User {
     this.passwordHash = data.passwordHash;
     this.name = data.name;
     this.oauthProviders = data.oauthProviders ?? [];
+    this.timezone = data.timezone ?? 'America/New_York';
     this.phone = data.phone;
     this.phoneVerified = data.phoneVerified ?? false;
     this.smsConsent = data.smsConsent ?? false;
@@ -196,8 +206,8 @@ export class User {
           daily: { enabled: true, time: '07:00' },
           weekly: { enabled: true, day: 'sunday', time: '18:00' },
           weekdaySlots: [
-            { time: '06:30', label: 'Morning', enabled: true },
-            { time: '16:00', label: 'After School', enabled: true },
+            { time: '09:00', label: 'Morning', enabled: true },
+            { time: '15:00', label: 'Afternoon', enabled: true },
             { time: '20:00', label: 'Evening', enabled: true },
           ],
           weekendSlots: [],
@@ -206,6 +216,7 @@ export class User {
         },
         tone: 'encouraging',
         frequency: 'balanced',
+        glanceSchedule: { enabled: true, time: '07:00' },
       },
       alerts: {
         gradeDrop: 5,

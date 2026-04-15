@@ -6,3 +6,5 @@ export { SmtpTransport } from './SmtpTransport';
 export type { ISmtpTransportConfig } from './SmtpTransport';
 export { buildDigestEmail, gradeBarColorForPercent, renderGradeBar } from './digestEmailTemplate';
 export type { IBuildDigestEmailOptions, IGradeBlock } from './digestEmailTemplate';
+export { buildGlanceEmail } from './glanceEmailTemplate';
+export type { IBuildGlanceEmailOptions } from './glanceEmailTemplate';
