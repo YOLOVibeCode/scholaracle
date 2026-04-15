@@ -46,6 +46,10 @@ export interface INotificationSettings {
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
+  readonly glanceSchedule?: {
+    readonly enabled: boolean;
+    readonly time: string;
+  };
 }
 
 export interface IAlertThresholds {
@@ -195,8 +199,8 @@ function defaultEnabledTypes(): Record<string, { enabled: boolean; severity: str
 const VALID_GRADE_DISPLAY = ['letter', 'score'] as const;
 
 const DEFAULT_WEEKDAY_SLOTS = [
-  { time: '06:30', label: 'Morning', enabled: true },
-  { time: '16:00', label: 'After School', enabled: true },
+  { time: '09:00', label: 'Morning', enabled: true },
+  { time: '15:00', label: 'Afternoon', enabled: true },
   { time: '20:00', label: 'Evening', enabled: true },
 ];
 const DEFAULT_SCHOOL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
@@ -252,6 +256,10 @@ function buildSettingsResponse(prefs: IUserPreferences): Record<string, unknown>
       digestSchedule: buildDigestScheduleResponse(notif.digestSchedule),
       tone: notif.tone ?? 'encouraging',
       frequency: notif.frequency ?? 'balanced',
+      glanceSchedule: {
+        enabled: notif.glanceSchedule?.enabled ?? true,
+        time: notif.glanceSchedule?.time ?? '07:00',
+      },
     },
     alerts: {
       gradeDrop: alerts.gradeDrop ?? 5,
@@ -344,6 +352,7 @@ async function handleGetSettings(
     const settingsBody = buildSettingsResponse(user.preferences);
     res.status(200).json({
       ...settingsBody,
+      timezone: (user as { timezone?: string }).timezone ?? 'America/New_York',
       profile: {
         name: user.name,
         email: user.email,
@@ -386,10 +395,12 @@ async function handleUpdateSettings(
       notifications,
       alerts,
       dashboard: dashboardBody,
+      timezone,
     } = req.body as {
       notifications?: INotificationSettings;
       alerts?: IAlertThresholds;
       dashboard?: { gradeDisplay?: 'letter' | 'score' };
+      timezone?: string;
     };
 
     if (alerts) {
@@ -436,6 +447,21 @@ async function handleUpdateSettings(
         .status(400)
         .json({ success: false, error: 'dashboard.gradeDisplay must be letter or score' });
       return;
+    }
+    if (timezone !== undefined) {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone });
+      } catch {
+        res.status(400).json({ success: false, error: 'Invalid IANA timezone' });
+        return;
+      }
+    }
+    if (notifications?.glanceSchedule) {
+      const gs = notifications.glanceSchedule;
+      if (gs.time && !HHMM_REGEX.test(gs.time)) {
+        res.status(400).json({ success: false, error: 'glanceSchedule.time must be HH:mm' });
+        return;
+      }
     }
 
     const user = await userRepository.findById(userId);
@@ -497,6 +523,10 @@ async function handleUpdateSettings(
         },
         tone: notifications?.tone ?? notif.tone ?? 'encouraging',
         frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
+        glanceSchedule: {
+          enabled: notifications?.glanceSchedule?.enabled ?? notif.glanceSchedule?.enabled ?? true,
+          time: notifications?.glanceSchedule?.time ?? notif.glanceSchedule?.time ?? '07:00',
+        },
       },
       alerts: {
         gradeDrop: alerts?.gradeDrop ?? user.preferences.alerts?.gradeDrop ?? 5,
@@ -517,9 +547,17 @@ async function handleUpdateSettings(
       },
     };
 
-    await userRepository.update(userId, { preferences: updatedPreferences });
+    const userUpdate: { preferences: IUserPreferences; timezone?: string } = {
+      preferences: updatedPreferences,
+    };
+    if (timezone !== undefined) userUpdate.timezone = timezone;
+    await userRepository.update(userId, userUpdate);
 
-    res.status(200).json(buildSettingsResponse(updatedPreferences));
+    const responseBody = buildSettingsResponse(updatedPreferences);
+    res.status(200).json({
+      ...responseBody,
+      timezone: timezone ?? (user as { timezone?: string }).timezone ?? 'America/New_York',
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
