@@ -18,39 +18,28 @@ export interface ITemplateAction {
  * Direct, clear messaging telling student what to do.
  */
 export class MissingAssignmentTemplate {
-  /**
-   * Generate notification content from a missing assignment alert.
-   *
-   * @param alert - The alert containing assignment details
-   * @returns Template result with subject, body, and actions
-   */
   public generate(alert: Alert): ITemplateResult {
-    const relatedData = alert.relatedData as {
-      course: string;
-      assignment: string;
-      daysAgo: number;
-      points: number;
-      assignmentUrl?: string;
-    };
+    const rd = alert.relatedData as Record<string, unknown>;
 
-    const { course, assignment, daysAgo, assignmentUrl } = relatedData;
+    const course = (rd['course'] as string) ?? (rd['courseExternalId'] as string) ?? 'a course';
+    const assignment = (rd['assignment'] as string) ?? (rd['title'] as string) ?? 'an assignment';
+    const daysAgo =
+      typeof rd['daysAgo'] === 'number' ? rd['daysAgo'] : this._calcDaysAgo(rd['dueAt'] as string);
 
-    const body = `${course}: ${assignment} (due ${daysAgo} days ago). View details in your dashboard.`;
+    const overduePart = daysAgo > 0 ? ` — ${daysAgo} day${daysAgo === 1 ? '' : 's'} overdue` : '';
+    const body = `${course}: "${assignment}"${overduePart}. Check your portal and submit if possible.`;
+    const subject = `Missing: ${assignment} (${course})`;
 
     const actions: ITemplateAction[] = [];
-
-    if (assignmentUrl) {
-      actions.push({
-        label: 'Submit Now',
-        type: 'link',
-        url: assignmentUrl,
-      });
+    if (rd['assignmentUrl']) {
+      actions.push({ label: 'Submit Now', type: 'link', url: rd['assignmentUrl'] as string });
     }
 
-    return {
-      subject: 'MISSING ASSIGNMENT',
-      body,
-      actions,
-    };
+    return { subject, body, actions };
+  }
+
+  private _calcDaysAgo(dueAt?: string): number {
+    if (!dueAt) return 0;
+    return Math.max(0, Math.round((Date.now() - new Date(dueAt).getTime()) / 86_400_000));
   }
 }

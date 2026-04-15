@@ -33,6 +33,7 @@
     "react-hook-form": "^7.68.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
+    "traklet": "^0.1.6",
     "zod": "^4.1.13"
   },
   "devDependencies": {

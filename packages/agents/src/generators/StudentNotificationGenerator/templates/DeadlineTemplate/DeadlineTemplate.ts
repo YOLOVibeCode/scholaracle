@@ -6,54 +6,37 @@ import { ITemplateResult, ITemplateAction } from '../MissingAssignmentTemplate';
  * Direct, clear messaging telling student what's due and when.
  */
 export class DeadlineTemplate {
-  /**
-   * Generate notification content from a deadline alert.
-   *
-   * @param alert - The alert containing deadline details
-   * @returns Template result with subject, body, and actions
-   */
   public generate(alert: Alert): ITemplateResult {
-    const relatedData = alert.relatedData as {
-      course: string;
-      assignment: string;
-      dueDate: string;
-      points: number;
-      assignmentUrl?: string;
-    };
+    const rd = alert.relatedData as Record<string, unknown>;
 
-    const { course, assignment, dueDate, assignmentUrl } = relatedData;
+    const course = (rd['course'] as string) ?? (rd['courseExternalId'] as string) ?? 'a course';
+    const assignment = (rd['assignment'] as string) ?? (rd['title'] as string) ?? 'an assignment';
+    const dueAt = (rd['dueDate'] as string) ?? (rd['dueAt'] as string);
+    const formattedDate = (rd['formattedDueDate'] as string) ?? this._formatDate(dueAt);
 
-    const dueDateObj = new Date(dueDate);
-    const formattedDate = this._formatDate(dueDateObj);
-
-    const body = `${course}: ${assignment} (due ${formattedDate}). View details in your dashboard.`;
+    const body = `${course}: "${assignment}" is due ${formattedDate}. Don't forget to submit!`;
+    const subject = `Due ${formattedDate}: ${assignment} (${course})`;
 
     const actions: ITemplateAction[] = [];
-
-    if (assignmentUrl) {
-      actions.push({
-        label: 'View Assignment',
-        type: 'link',
-        url: assignmentUrl,
-      });
+    if (rd['assignmentUrl']) {
+      actions.push({ label: 'View Assignment', type: 'link', url: rd['assignmentUrl'] as string });
     }
 
-    const subject = `Assignment Due ${formattedDate}`;
-
-    return {
-      subject,
-      body,
-      actions,
-    };
+    return { subject, body, actions };
   }
 
-  private _formatDate(date: Date): string {
-    const options: Intl.DateTimeFormatOptions = {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    };
-    return date.toLocaleDateString('en-US', options);
+  private _formatDate(dueAt?: string): string {
+    if (!dueAt) return 'soon';
+    try {
+      return new Date(dueAt).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return 'soon';
+    }
   }
 }

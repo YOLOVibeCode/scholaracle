@@ -99,3 +99,6 @@ local/
 
 # Scrapers copy (created by scripts/build-workers.sh for Docker builds)
 .scrapers/
+
+# Traklet local settings (contains PAT tokens — never commit)
+.traklet/settings.json
