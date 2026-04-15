@@ -35,3 +35,8 @@ export {
   type GradeRiskLevel,
 } from './grade-risk-service';
 export { DigestInsightService, type IDigestInsightServiceConfig } from './digest-insight-service';
+export {
+  GlanceInsightService,
+  type IGlanceInsightServiceConfig,
+  type IGlanceInsightInput,
+} from './glance-insight-service';

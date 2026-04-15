@@ -52,6 +52,10 @@ export default function SettingsPage() {
   const [snoozeUntil, setSnoozeUntil] = useState<string | null>(null);
   const [snoozeInput, setSnoozeInput] = useState('');
 
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [glanceEnabled, setGlanceEnabled] = useState(true);
+  const [glanceTime, setGlanceTime] = useState('07:00');
+
   const [tone, setTone] = useState<'formal' | 'casual' | 'encouraging'>('encouraging');
   const [frequency, setFrequency] = useState<'minimal' | 'balanced' | 'proactive'>('balanced');
 
@@ -94,8 +98,8 @@ export default function SettingsPage() {
         setWeeklyDigestDay(s.notifications.digestSchedule?.weekly?.day ?? 'sunday');
         setWeeklyDigestTime(s.notifications.digestSchedule?.weekly?.time ?? '18:00');
         const defaultWeekday = [
-          { time: '06:30', label: 'Morning', enabled: true },
-          { time: '16:00', label: 'After School', enabled: true },
+          { time: '09:00', label: 'Morning', enabled: true },
+          { time: '15:00', label: 'Afternoon', enabled: true },
           { time: '20:00', label: 'Evening', enabled: true },
         ];
         setWeekdaySlots(
@@ -110,6 +114,9 @@ export default function SettingsPage() {
         setDigestRecipients((s.notifications.digestSchedule?.recipients as 'everybody' | 'nobody' | 'specific') ?? 'everybody');
         setSpecificRecipients([...(s.notifications.digestSchedule?.specificRecipients ?? [])]);
         setSnoozeUntil(s.notifications.digestSchedule?.snoozeUntil ?? null);
+        setTimezone(s.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+        setGlanceEnabled(s.notifications.glanceSchedule?.enabled ?? true);
+        setGlanceTime(s.notifications.glanceSchedule?.time ?? '07:00');
         setTone((s.notifications.tone as 'formal' | 'casual' | 'encouraging') ?? 'encouraging');
         setFrequency((s.notifications.frequency as 'minimal' | 'balanced' | 'proactive') ?? 'balanced');
         setGradeDrop(s.alerts.gradeDrop);
@@ -134,6 +141,7 @@ export default function SettingsPage() {
     setToast(null);
 
     const ok = await settingsApi.update({
+      timezone,
       notifications: {
         push: pushNotifications,
         email: emailNotifications,
@@ -156,6 +164,7 @@ export default function SettingsPage() {
           specificRecipients,
           snoozeUntil,
         },
+        glanceSchedule: { enabled: glanceEnabled, time: glanceTime },
         tone,
         frequency,
       },
@@ -551,10 +560,61 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className={`border-t pt-4 space-y-4${!autoSend ? ' opacity-50' : ''}`}>
-              <h4 className="font-medium">Digest Schedule</h4>
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium">Timezone</h4>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Choose when to receive your digest emails. School days vs weekend can have different times.
+                All email times use your local timezone.
+              </p>
+              <select
+                data-testid="select-timezone"
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                disabled={isSaving || !isLoaded}
+              >
+                {Intl.supportedValuesOf('timeZone').map((tz) => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="border-t pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <h4 className="font-medium">Student at a Glance</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Daily per-student snapshot with grades, missing work, and upcoming deadlines.
+                  </p>
+                </div>
+                <Switch
+                  id="glance-enabled"
+                  data-testid="toggle-glance"
+                  checked={glanceEnabled}
+                  onCheckedChange={setGlanceEnabled}
+                  disabled={isSaving || !isLoaded}
+                />
+              </div>
+              {glanceEnabled && (
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="glance-time" className="text-sm whitespace-nowrap">Send at</Label>
+                  <Input
+                    id="glance-time"
+                    data-testid="input-glance-time"
+                    type="time"
+                    value={glanceTime}
+                    onChange={(e) => setGlanceTime(e.target.value)}
+                    disabled={isSaving || !isLoaded}
+                    className="w-32"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">(your local time)</span>
+                </div>
+              )}
+            </div>
+
+            <div className={`border-t pt-4 space-y-4${!autoSend ? ' opacity-50' : ''}`}>
+              <h4 className="font-medium">Alert Digest Schedule</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Sends only when there are new alerts. School days vs weekend can have different times.
               </p>
 
               <div className="flex gap-2 border-b">

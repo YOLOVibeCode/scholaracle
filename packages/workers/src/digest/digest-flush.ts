@@ -12,12 +12,8 @@ import {
 } from '@scholaracle/database';
 import type { DigestInsightService } from '@scholaracle/agents';
 import { DigestSender } from './digest-sender';
-import {
-  UTC_DAY_TO_KEY,
-  isInHoliday,
-  getActiveSlotsForUser,
-  shouldFlushLegacy,
-} from './digest-helpers';
+import { isInHoliday, getActiveSlotsForUser, shouldFlushLegacy } from './digest-helpers';
+import { userLocalHhmm, userLocalDayKey, userLocalDateYmd } from './timezone-utils';
 import type { IEmailDigestPendingItem } from '@scholaracle/database';
 
 /**
@@ -40,15 +36,17 @@ export async function flushEmailDigests(
   if (userIds.length === 0) return;
 
   const now = new Date();
-  const currentHhmm = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
-  const currentHour = now.getUTCHours();
-  const currentUtcDayKey = UTC_DAY_TO_KEY[now.getUTCDay()]!;
-  const todayYmd = now.toISOString().slice(0, 10);
 
   for (const userId of userIds) {
     try {
       const user = await userRepo.findById(userId);
       if (!user) continue;
+
+      const tz = (user as { timezone?: string }).timezone ?? 'America/New_York';
+      const currentHhmm = userLocalHhmm(now, tz);
+      const currentDayKey = userLocalDayKey(now, tz);
+      const todayYmd = userLocalDateYmd(now, tz);
+      const currentHour = parseInt(currentHhmm.slice(0, 2), 10);
 
       const schedule = user.preferences?.notifications?.digestSchedule;
 
@@ -60,7 +58,7 @@ export async function flushEmailDigests(
       const hasSlots =
         (schedule?.weekdaySlots?.length ?? 0) > 0 || (schedule?.weekendSlots?.length ?? 0) > 0;
       const shouldFlush = hasSlots
-        ? getActiveSlotsForUser(user, currentHhmm, currentUtcDayKey)
+        ? getActiveSlotsForUser(user, currentHhmm, currentDayKey)
         : shouldFlushLegacy(user, currentHhmm, currentHour);
       if (!shouldFlush) continue;
 

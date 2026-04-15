@@ -6,18 +6,10 @@
 
 import type { Db } from 'mongodb';
 import type { IEmailDigestPendingItem } from '@scholaracle/database';
-import { buildDigestEmail, type IGradeBlock } from '@scholaracle/agents';
+import { buildDigestEmail } from '@scholaracle/agents';
 import type { IEmailTransport, IDigestInsightService, IDigestSender } from './interfaces';
 import type { ICommunicationLogData } from '@scholaracle/database';
-
-/** F &lt;70, D 70-79, C 80-84, B 85-92, A 93+. */
-function percentToLetter(percent: number): string {
-  if (percent < 70) return 'F';
-  if (percent < 80) return 'D';
-  if (percent < 85) return 'C';
-  if (percent < 93) return 'B';
-  return 'A';
-}
+import { fetchGradeBlocksForUser } from '../shared/grade-block-fetcher';
 
 export class DigestSender implements IDigestSender {
   constructor(
@@ -154,94 +146,9 @@ export class DigestSender implements IDigestSender {
     await this._digestRepo.deleteByUserId(userId);
   }
 
-  /** Fetches grade snapshots and courses for userId, returns IGradeBlock[] sorted by percent ascending. */
-  private async _fetchGradeBlocks(userId: string): Promise<IGradeBlock[]> {
-    if (typeof this._database?.collection !== 'function') return [];
-    try {
-      const snapshots = await this._database
-        .collection('slc_grade_snapshots')
-        .find({ userId, deletedAt: null })
-        .toArray();
-      if (snapshots.length === 0) return [];
-
-      const courses = await this._database
-        .collection('slc_courses')
-        .find({ userId, deletedAt: null })
-        .toArray();
-      const courseNameByExtId = new Map<string, string>();
-      for (const c of courses) {
-        const rec = c as {
-          externalId?: string;
-          courseExternalId?: string;
-          record?: { title?: string };
-        };
-        const extId = rec.externalId ?? rec.courseExternalId;
-        const title = rec.record?.title;
-        if (extId && title) courseNameByExtId.set(extId, title);
-      }
-
-      let studentId: string | null = null;
-      const student = await this._database.collection('students').findOne({ userId });
-      if (student && (student as { _id?: unknown })._id) {
-        studentId = String((student as { _id: unknown })._id);
-      }
-
-      const baseUrl = this._dashboardBaseUrl?.replace(/\/$/, '') ?? '';
-
-      // Deduplicate snapshots across SIS + LMS sources.
-      // Different providers (skyward vs canvas) use different courseExternalIds for the
-      // same class, so we group by normalized course title and prefer SIS grades.
-      const SIS_PROVIDERS = new Set(['skyward', 'aeries', 'sis']);
-      const bestByTitle = new Map<
-        string,
-        { percent: number; courseName: string; isSis: boolean; courseExternalId: string }
-      >();
-      for (const s of snapshots) {
-        const doc = s as {
-          courseExternalId?: string;
-          provider?: string;
-          record?: { percentGrade?: number; sourceType?: string };
-        };
-        const courseExternalId = doc.courseExternalId;
-        const percent = doc.record?.percentGrade;
-        if (courseExternalId == null || percent == null) continue;
-
-        const rawName = courseNameByExtId.get(courseExternalId) ?? courseExternalId;
-        const normalizedKey = rawName
-          .replace(/[^a-zA-Z0-9\s]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .toLowerCase();
-        const sourceType = (doc.record?.sourceType as string) ?? doc.provider ?? '';
-        const isSis = SIS_PROVIDERS.has(sourceType);
-        const existing = bestByTitle.get(normalizedKey);
-
-        // Prefer SIS over LMS; if both SIS, keep the one we already have
-        if (!existing || (isSis && !existing.isSis)) {
-          bestByTitle.set(normalizedKey, { percent, courseName: rawName, isSis, courseExternalId });
-        }
-      }
-
-      const blocks: IGradeBlock[] = [];
-      for (const [, { percent, courseName, courseExternalId }] of bestByTitle) {
-        const courseUrl =
-          baseUrl && studentId
-            ? `${baseUrl}/dashboard/students/${studentId}/grades?course=${encodeURIComponent(courseExternalId)}`
-            : baseUrl
-              ? `${baseUrl}/dashboard`
-              : '';
-        blocks.push({
-          courseName,
-          percentGrade: percent,
-          letterGrade: percentToLetter(percent),
-          courseUrl,
-        });
-      }
-
-      blocks.sort((a, b) => a.percentGrade - b.percentGrade);
-      return blocks;
-    } catch {
-      return [];
-    }
+  private async _fetchGradeBlocks(
+    userId: string
+  ): Promise<import('@scholaracle/agents').IGradeBlock[]> {
+    return fetchGradeBlocksForUser(this._database, userId, this._dashboardBaseUrl ?? '');
   }
 }
