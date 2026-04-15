@@ -26,6 +26,10 @@ export interface INotificationSettings {
   };
   readonly tone?: 'formal' | 'casual' | 'encouraging';
   readonly frequency?: 'minimal' | 'balanced' | 'proactive';
+  readonly glanceSchedule?: {
+    readonly enabled: boolean;
+    readonly time: string;
+  };
 }
 
 export interface IDigestSlotApi {
@@ -51,6 +55,8 @@ export interface IDashboardSettings {
 
 export interface IUserSettings {
   readonly dashboard?: IDashboardSettings;
+  /** IANA timezone (e.g. 'America/New_York'). */
+  readonly timezone?: string;
   readonly notifications: {
     readonly push: boolean;
     readonly email: boolean;
@@ -77,6 +83,10 @@ export interface IUserSettings {
     };
     readonly tone?: 'formal' | 'casual' | 'encouraging';
     readonly frequency?: 'minimal' | 'balanced' | 'proactive';
+    readonly glanceSchedule?: {
+      readonly enabled: boolean;
+      readonly time: string;
+    };
   };
   readonly alerts: {
     readonly gradeDrop: number;
@@ -93,6 +103,7 @@ export interface IUpdateSettingsRequest {
   readonly dashboard?: IDashboardSettings;
   readonly notifications?: INotificationSettings;
   readonly alerts?: IAlertThresholds;
+  readonly timezone?: string;
 }
 
 export interface IHolidaySuggestion {
@@ -142,8 +153,8 @@ const defaultSettings: IUserSettings = {
       weekly: { enabled: true, day: 'sunday', time: '18:00' },
       digestTimes: [],
       weekdaySlots: [
-        { time: '06:30', label: 'Morning', enabled: true },
-        { time: '16:00', label: 'After School', enabled: true },
+        { time: '09:00', label: 'Morning', enabled: true },
+        { time: '15:00', label: 'Afternoon', enabled: true },
         { time: '20:00', label: 'Evening', enabled: true },
       ],
       weekendSlots: [],
@@ -180,6 +191,7 @@ export const settingsApi = {
       const res = await apiClient.get<IUserSettingsResponse>('/settings');
       return {
         dashboard: { ...defaultSettings.dashboard, ...res.dashboard },
+        timezone: res.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         notifications: { ...defaultSettings.notifications, ...res.notifications },
         alerts: { ...defaultSettings.alerts, ...res.alerts },
         profile: res.profile,
