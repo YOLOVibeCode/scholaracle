@@ -1,8 +1,9 @@
 name: Auto-merge
 
-# Automatically enables auto-merge on PRs opened by the repo owner.
+# Automatically enables auto-merge on PRs opened by org members / collaborators.
 # Merge fires when required status checks pass (see branch protection).
-# Guarded to owner-only so external PRs still need explicit approval.
+# External contributors (CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE) still
+# need explicit action — we never auto-merge strangers' code.
 
 on:
   pull_request:
@@ -14,10 +15,14 @@ permissions:
 
 jobs:
   enable-auto-merge:
-    name: Enable auto-merge (owner PRs only)
+    name: Enable auto-merge (trusted authors only)
     if: >-
       !github.event.pull_request.draft
-      && github.event.pull_request.user.login == github.repository_owner
+      && (
+        github.event.pull_request.author_association == 'OWNER'
+        || github.event.pull_request.author_association == 'MEMBER'
+        || github.event.pull_request.author_association == 'COLLABORATOR'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Enable auto-merge (squash)
