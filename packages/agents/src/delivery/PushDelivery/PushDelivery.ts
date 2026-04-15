@@ -62,7 +62,7 @@ export class PushDelivery implements INotificationDelivery {
   public async deliver(notification: Notification): Promise<DeliveryResult> {
     if (!this._isConfigured || !this._config.subscriptionStore) {
       return {
-        success: true,
+        success: false,
         channel: NotificationChannel.PUSH,
         messageId: undefined,
         error: 'Push delivery not configured (missing VAPID keys or subscription store)',
@@ -75,7 +75,7 @@ export class PushDelivery implements INotificationDelivery {
 
     if (subscriptions.length === 0) {
       return {
-        success: true,
+        success: false,
         channel: NotificationChannel.PUSH,
         messageId: undefined,
         error: 'No push subscriptions found for user',

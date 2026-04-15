@@ -103,12 +103,12 @@ export class EmailDelivery implements INotificationDelivery {
 
   private _formatHtmlBody(body: string, subject: string, studentId?: string): string {
     const escapedBody = body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    let bodyHtml = escapedBody.replace(/\n/g, '<br>');
+    let bodyHtml = `<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#1f2937;">${escapedBody.replace(/\n/g, '<br>')}</p>`;
     const baseUrl = this._config.dashboardBaseUrl?.trim();
     if (baseUrl && studentId) {
       const path = `/dashboard/students/${encodeURIComponent(studentId)}/workflow`;
       const dashboardUrl = `${baseUrl.replace(/\/$/, '')}${path}`.replace(/"/g, '&quot;');
-      bodyHtml += `<p style="margin-top:20px;"><a href="${dashboardUrl}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;">View in Dashboard</a></p>`;
+      bodyHtml += `<p style="margin:16px 0 0;"><a href="${dashboardUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">View in Dashboard</a></p>`;
     }
     return buildBrandedEmail({ title: subject, bodyHtml });
   }
