@@ -15,14 +15,13 @@ permissions:
 
 jobs:
   enable-auto-merge:
-    name: Enable auto-merge (trusted authors only)
+    name: Enable auto-merge (non-fork PRs only)
+    # Only auto-merge PRs from branches in this repo (not forks).
+    # Any PR from outside the repo must be merged explicitly, so external
+    # contributions can never sneak into main just because CI is green.
     if: >-
       !github.event.pull_request.draft
-      && (
-        github.event.pull_request.author_association == 'OWNER'
-        || github.event.pull_request.author_association == 'MEMBER'
-        || github.event.pull_request.author_association == 'COLLABORATOR'
-      )
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Enable auto-merge (squash)
