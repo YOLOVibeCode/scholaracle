@@ -67,8 +67,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Checkout scrapers repo
+        if: inputs.base_url == '' || inputs.base_url == null
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
+      - name: Build scrapers dependency
+        if: inputs.base_url == '' || inputs.base_url == null
+        run: |
+          mkdir -p /home/runner/work/scholarmancy/scholaracle/packages
+          ln -s /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
+          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build
+          cd /home/runner/work/scholaracle_scrapers && npm install && npx tsc --build
+
       - name: Build packages
-        # Only needed for localhost mode; Playwright's webServer compiles on demand.
         if: inputs.base_url == '' || inputs.base_url == null
         run: pnpm build
 

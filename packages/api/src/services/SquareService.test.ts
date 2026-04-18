@@ -3,7 +3,7 @@ import { SquareService } from './SquareService';
 jest.mock('square', () => ({
   SquareClient: jest.fn().mockImplementation(() => ({
     refunds: {
-      refund: jest.fn().mockResolvedValue({
+      refundPayment: jest.fn().mockResolvedValue({
         result: {
           refund: { id: 'refund_123' },
         },
@@ -36,7 +36,7 @@ describe('SquareService', () => {
 
     it('should throw if Square returns no refund ID', async () => {
       const client = (service as any)._client;
-      client.refunds.refund.mockResolvedValueOnce({ result: { refund: {} } });
+      client.refunds.refundPayment.mockResolvedValueOnce({ result: { refund: {} } });
       await expect(service.refundPayment('pay_456', 500)).rejects.toThrow('no refund ID');
     });
   });
