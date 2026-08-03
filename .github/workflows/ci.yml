@@ -74,8 +74,8 @@ jobs:
             packages/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (strict — warnings fail CI)
+        run: pnpm lint:strict
 
       - name: Format check
         run: pnpm format:check

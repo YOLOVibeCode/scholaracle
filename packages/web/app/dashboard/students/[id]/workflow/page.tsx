@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { studentsApi, type IAssignmentWorkflowResponse, type IWorkflowAssignment } from '@/lib/api/students';
+import { studentsApi, type IWorkflowAssignment } from '@/lib/api/students';
 import { useAsyncData } from '@/lib/hooks';
 import { LoadingSkeleton } from '@/components/common';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
@@ -55,7 +55,7 @@ export default function StudentWorkflowPage() {
   const [detailAssignment, setDetailAssignment] = useState<IWorkflowAssignment | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const assignments = data?.assignments ?? [];
+  const assignments = useMemo(() => data?.assignments ?? [], [data?.assignments]);
   const filtered = useMemo(
     () => filterAssignments(assignments, filters),
     [assignments, filters]

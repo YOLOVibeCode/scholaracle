@@ -33,7 +33,11 @@ function getEmailTransport(): IEmailTransport {
       nodemailer.createTransport({ host: smtpHost, port, secure: false })
     );
   }
-  return new SendGridTransport(apiKey, sgMail as unknown as MailService);
+  return new SendGridTransport(
+    apiKey,
+    sgMail as unknown as MailService,
+    process.env['SENDGRID_BASE_URL']
+  );
 }
 
 async function main(): Promise<void> {

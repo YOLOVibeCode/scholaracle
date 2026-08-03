@@ -24,6 +24,7 @@ import {
   PasswordResetTokenRepository,
   RefreshTokenRepository,
   SessionRepository,
+  StudentRepository,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
@@ -65,7 +66,7 @@ import {
   SmtpTransport,
   MongoQueue,
 } from '@scholaracle/agents';
-import { SMSDelivery } from '@scholaracle/agents';
+import { SMSDelivery, applyTwilioApiBaseUrl } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
 import type { Twilio } from 'twilio';
@@ -94,6 +95,8 @@ export interface IServerConfig {
   readonly squareLocationId?: string;
   readonly squareWebhookSignatureKey?: string;
   readonly squareWebhookNotificationUrl?: string;
+  /** Optional Square API host override (e.g. Noctusoft relay). */
+  readonly squareBaseUrl?: string;
 }
 
 /**
@@ -184,7 +187,11 @@ function initializeNotificationService(config: IServerConfig): {
           secure: false,
         })
       )
-    : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
+    : new SendGridTransport(
+        sendGridConfig.apiKey,
+        sgMail as unknown as MailService,
+        process.env['SENDGRID_BASE_URL']
+      );
 
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
@@ -205,11 +212,14 @@ function initializeNotificationService(config: IServerConfig): {
     (hasApiKeyAuth || hasAuthTokenAuth) &&
     Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
   const twilioClient = twilioConfigured
-    ? hasApiKeyAuth
-      ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-          accountSid: twilioConfig.accountSid,
-        })
-      : twilio(twilioConfig.accountSid, twilioConfig.authToken)
+    ? applyTwilioApiBaseUrl(
+        hasApiKeyAuth
+          ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+              accountSid: twilioConfig.accountSid,
+            })
+          : twilio(twilioConfig.accountSid, twilioConfig.authToken),
+        process.env['TWILIO_API_BASE_URL']
+      )
     : ({} as unknown as Twilio);
   const smsDelivery = new SMSDelivery(
     {
@@ -324,10 +334,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/seed', seedRouter({ database, jwtSecret }));
   }
 
-  // Legacy alerts route (for notification creation) - POST /api/alerts
-  // When database exists, enqueue notify jobs and return 202; otherwise process in-process and return 201
+  // Legacy alerts route (for notification creation) - POST /api/alerts.
+  // Mounted below inside the `if (database)` block so authMiddleware + IStudentReader
+  // ownership check (DEF-003) can be applied. When database is unavailable the route
+  // is intentionally not exposed.
   const notificationQueue = database ? new MongoQueue(database) : undefined;
-  app.use('/api/alerts', alertsRouter(notificationService, { queue: notificationQueue }));
 
   if (database) {
     const baseUrl =
@@ -435,6 +446,17 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       }
     }
 
+    // Legacy alerts route (for notification creation) - POST /api/alerts.
+    // Auth + ownership-checked per DEF-003.
+    app.use(
+      '/api/alerts',
+      authMiddleware(authService),
+      alertsRouter(notificationService, {
+        queue: notificationQueue,
+        studentReader: new StudentRepository(database),
+      })
+    );
+
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
     // Email history API routes
@@ -534,6 +556,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
     const squareWebhookUrl =
       config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
+    const squareBaseUrl = config.squareBaseUrl ?? process.env['SQUARE_BASE_URL'];
 
     const squareService =
       squareAccessToken && squareLocationId
@@ -543,6 +566,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
             locationId: squareLocationId,
             webhookSignatureKey: squareWebhookKey,
             webhookNotificationUrl: squareWebhookUrl,
+            ...(squareBaseUrl ? { baseUrl: squareBaseUrl } : {}),
           })
         : undefined;
 
