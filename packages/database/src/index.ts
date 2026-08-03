@@ -38,6 +38,7 @@ export * from './repositories/CouponRepository';
 export * from './repositories/SmsDigestPendingRepository';
 export * from './repositories/EmailDigestPendingRepository';
 export * from './repositories/AiUsageRepository';
+export * from './repositories/WebhookEventRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';
