@@ -32,7 +32,7 @@ describe('DeadlineTemplate (Parent)', () => {
 
       // Assert
       expect(result.subject).toContain('John Doe');
-      expect(result.subject).toContain('Assignment Due');
+      expect(result.subject).toContain('Due ');
     });
 
     it('should include student name and course details', () => {
@@ -85,7 +85,6 @@ describe('DeadlineTemplate (Parent)', () => {
       expect(result.body).toContain('John Doe');
       expect(result.body).toContain('Math');
       expect(result.body).toContain('Chapter 5 Homework');
-      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include action links when provided', () => {

@@ -59,7 +59,7 @@ export function StudentActivityTab({ studentId }: StudentActivityTabProps) {
     refresh();
   }, [filters.course, filters.from, filters.to, typesKey, refresh]);
 
-  const events = data?.events ?? [];
+  const events = useMemo(() => data?.events ?? [], [data?.events]);
   const summary = useMemo(() => {
     const gradeChange = events.filter((e) => e.eventType === 'grade_change').length;
     const material = events.filter((e) =>

@@ -18,7 +18,7 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Builds a full HTML email with Scholaracle header, body, and footer.
+ * Builds a full HTML email with Scholarmancy header, body, and footer.
  */
 export function buildBrandedEmail(opts: IBrandedEmailOptions): string {
   const customNote = opts.footerNote
@@ -40,7 +40,7 @@ export function buildBrandedEmail(opts: IBrandedEmailOptions): string {
           <!-- Header -->
           <tr>
             <td style="background:#1a1a1a;padding:16px 24px;">
-              <span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">Scholaracle</span>
+              <span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">Scholarmancy</span>
             </td>
           </tr>
           <!-- Body -->
@@ -55,7 +55,7 @@ export function buildBrandedEmail(opts: IBrandedEmailOptions): string {
               <div style="border-top:1px solid #e5e7eb;padding-top:16px;">
                 ${customNote}
                 <p style="margin:0;font-size:12px;color:#9ca3af;">
-                  Sent by Scholaracle &middot; <a href="mailto:notifications@scholarmancy.com" style="color:#9ca3af;">Contact support</a>
+                  Sent by Scholarmancy &middot; <a href="mailto:notifications@scholarmancy.com" style="color:#9ca3af;">Contact support</a>
                 </p>
               </div>
             </td>

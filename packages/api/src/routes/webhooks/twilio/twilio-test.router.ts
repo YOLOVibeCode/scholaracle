@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { CommunicationLogRepository } from '@scholaracle/database';
 import twilio from 'twilio';
+import { applyTwilioApiBaseUrl } from '@scholaracle/agents';
 
 export interface ITwilioTestRouterConfig {
   readonly database: Db;
@@ -116,9 +117,12 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
         return;
       }
 
-      const client = twilio(twilioApiKeySid, twilioApiKeySecret, {
-        accountSid: twilioAccountSid,
-      });
+      const client = applyTwilioApiBaseUrl(
+        twilio(twilioApiKeySid, twilioApiKeySecret, {
+          accountSid: twilioAccountSid,
+        }),
+        process.env['TWILIO_API_BASE_URL']
+      );
 
       const message = await client.messages.create({
         messagingServiceSid,

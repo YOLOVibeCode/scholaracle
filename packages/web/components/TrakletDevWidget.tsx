@@ -14,7 +14,7 @@ export function TrakletDevWidget(): null {
     initRef.current = true;
 
     void (async (): Promise<void> => {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
+       
       const { Traklet } = await import('traklet');
       instanceRef.current = await Traklet.init({
         adapter: 'github',

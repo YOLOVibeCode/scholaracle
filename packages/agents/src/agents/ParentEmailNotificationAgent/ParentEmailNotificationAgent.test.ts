@@ -88,7 +88,7 @@ describe('ParentEmailNotificationAgent', () => {
       });
       const notification = agent.generate(alert);
       expect(notification.subject).toContain('Avery Sample');
-      expect(notification.subject).toContain('MISSING ASSIGNMENT');
+      expect(notification.subject).toContain('Missing:');
       expect(notification.body).toContain('Avery Sample');
       expect(notification.body).toContain('Math');
       expect(notification.body).toContain('Homework 5');

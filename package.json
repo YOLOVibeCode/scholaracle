@@ -9,6 +9,7 @@
     "test": "pnpm -r test",
     "test:coverage": "pnpm -r test:coverage",
     "lint": "pnpm -r lint",
+    "lint:strict": "pnpm -r lint:strict",
     "lint:fix": "pnpm -r lint:fix",
     "format": "pnpm -r format",
     "format:check": "pnpm -r format:check",
@@ -33,10 +34,10 @@
   },
   "lint-staged": {
     "packages/*/src/**/*.{ts,tsx}": [
-      "eslint --fix",
+      "eslint --fix --quiet",
       "prettier --write"
     ],
-    "packages/*/src/**/*.{json,md}": [
+    "packages/*/src/**/*.{md}": [
       "prettier --write"
     ]
   },

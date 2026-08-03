@@ -6,8 +6,9 @@ import {
 
 describe('SendGridPasswordChangedEmailSender', () => {
   const mockSend = jest.fn().mockResolvedValue([{ statusCode: 202 }]);
+  const mockSetApiKey = jest.fn();
 
-  const sendGrid = { send: mockSend } as unknown as MailService;
+  const sendGrid = { send: mockSend, setApiKey: mockSetApiKey } as unknown as MailService;
 
   beforeEach(() => {
     jest.clearAllMocks();

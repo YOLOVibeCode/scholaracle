@@ -188,12 +188,12 @@ describe('NotificationFlow Integration', () => {
       expect(studentNotification).toBeDefined();
       expect(studentNotification.agentType).toBe(AgentType.STUDENT);
       expect(studentNotification.priority).toBe(NotificationPriority.HIGH);
-      expect(studentNotification.subject).toContain('MISSING ASSIGNMENT');
+      expect(studentNotification.subject).toContain('Missing:');
 
       expect(parentNotification).toBeDefined();
       expect(parentNotification.agentType).toBe(AgentType.PARENT);
       expect(parentNotification.priority).toBe(NotificationPriority.HIGH);
-      expect(parentNotification.subject).toContain('MISSING ASSIGNMENT');
+      expect(parentNotification.subject).toContain('Missing:');
 
       // Act Step 2: Schedule notifications
       await notificationScheduler.schedule(studentNotification, alert);

@@ -234,7 +234,6 @@ function AttachmentRow({ attachment }: { attachment: IAttachment }) {
 
 function MaterialRow({ material }: { material: ICourseMaterial }) {
   const Icon = MATERIAL_ICONS[material.type] ?? File;
-  const isLink = material.type === 'link' || material.url;
   const href = material.downloadUrl ?? material.url;
 
   return (

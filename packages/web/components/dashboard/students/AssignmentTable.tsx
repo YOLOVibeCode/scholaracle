@@ -160,7 +160,7 @@ export function AssignmentTable({ assignments, courseName, onAssignmentClick }: 
         size: 40,
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [hasCategories],
   );
 

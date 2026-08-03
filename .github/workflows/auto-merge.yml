@@ -1,0 +1,31 @@
+name: Auto-merge
+
+# Automatically enables auto-merge on PRs opened by org members / collaborators.
+# Merge fires when required status checks pass (see branch protection).
+# External contributors (CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE) still
+# need explicit action — we never auto-merge strangers' code.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge (non-fork PRs only)
+    # Only auto-merge PRs from branches in this repo (not forks).
+    # Any PR from outside the repo must be merged explicitly, so external
+    # contributions can never sneak into main just because CI is green.
+    if: >-
+      !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge (squash)
+        run: gh pr merge --auto --squash ${{ github.event.pull_request.number }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

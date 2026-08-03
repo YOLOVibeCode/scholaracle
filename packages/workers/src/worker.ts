@@ -27,7 +27,7 @@ import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { SMSDelivery } from '@scholaracle/agents';
+import { SMSDelivery, applyTwilioApiBaseUrl } from '@scholaracle/agents';
 import { PushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
@@ -192,7 +192,11 @@ function getEmailTransport(config: IWorkerConfig): IEmailTransport {
           secure: false,
         })
       )
-    : new SendGridTransport(sendGridConfig.apiKey, sgMail as unknown as MailService);
+    : new SendGridTransport(
+        sendGridConfig.apiKey,
+        sgMail as unknown as MailService,
+        process.env['SENDGRID_BASE_URL']
+      );
 }
 
 /**
@@ -216,12 +220,16 @@ function initializeNotificationService(
     twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
   );
   const hasAuthTokenAuth = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
-  const twilioClient = hasApiKeyAuth
-    ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-        accountSid: twilioConfig.accountSid,
-      })
-    : hasAuthTokenAuth
-      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+  const twilioClient =
+    hasApiKeyAuth || hasAuthTokenAuth
+      ? applyTwilioApiBaseUrl(
+          hasApiKeyAuth
+            ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+                accountSid: twilioConfig.accountSid,
+              })
+            : twilio(twilioConfig.accountSid, twilioConfig.authToken),
+          process.env['TWILIO_API_BASE_URL']
+        )
       : ({} as unknown as Twilio);
 
   const transport: IEmailTransport = emailTransport ?? getEmailTransport(config);
@@ -502,12 +510,16 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
   );
   const digestHasAuthToken = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
-  const twilioClientForDigest = digestHasApiKey
-    ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-        accountSid: twilioConfig.accountSid,
-      })
-    : digestHasAuthToken
-      ? twilio(twilioConfig.accountSid, twilioConfig.authToken)
+  const twilioClientForDigest =
+    digestHasApiKey || digestHasAuthToken
+      ? applyTwilioApiBaseUrl(
+          digestHasApiKey
+            ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
+                accountSid: twilioConfig.accountSid,
+              })
+            : twilio(twilioConfig.accountSid, twilioConfig.authToken),
+          process.env['TWILIO_API_BASE_URL']
+        )
       : null;
   const hasSender = Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
   if (twilioClientForDigest && hasSender) {

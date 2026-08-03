@@ -7,6 +7,13 @@ export interface ISquareServiceConfig {
   readonly locationId: string;
   readonly webhookSignatureKey?: string;
   readonly webhookNotificationUrl?: string;
+  /**
+   * Optional override for the Square API host, e.g. a Square-compatible relay
+   * such as the Noctusoft gateway (https://connect.squareup.noctusoft.com).
+   * Takes precedence over `environment` for URL resolution; `environment` still
+   * controls sandbox-vs-production semantics elsewhere (e.g. webhook helpers).
+   */
+  readonly baseUrl?: string;
 }
 
 export interface ICreatePaymentLinkParams {
@@ -35,6 +42,7 @@ export class SquareService {
         config.environment === 'production'
           ? SquareEnvironment.Production
           : SquareEnvironment.Sandbox,
+      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
     });
     this._locationId = config.locationId;
     this._webhookSignatureKey = config.webhookSignatureKey;
