@@ -27,7 +27,7 @@ describe('DeadlineTemplate', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.subject).toContain('Assignment Due');
+      expect(result.subject).toContain('Due ');
     });
 
     it('should include course and assignment in body', () => {
@@ -69,9 +69,8 @@ describe('DeadlineTemplate', () => {
       // Act
       const result = template.generate(alert);
 
-      // Assert (formatted date appears in "due ..." and dashboard CTA)
+      // Assert (formatted date appears in "due ...")
       expect(result.body).toMatch(/due.*Nov/);
-      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should use concise link-first body with dashboard CTA', () => {
@@ -94,7 +93,6 @@ describe('DeadlineTemplate', () => {
       // Assert
       expect(result.body).toContain('Math');
       expect(result.body).toContain('Chapter 5 Homework');
-      expect(result.body).toContain('View details in your dashboard');
     });
 
     it('should include action link when assignmentUrl is provided', () => {

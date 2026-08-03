@@ -7,9 +7,20 @@ import type { MailService } from '@sendgrid/mail';
 export class SendGridTransport {
   constructor(
     apiKey: string,
-    private readonly _mailService: MailService
+    private readonly _mailService: MailService,
+    baseUrl?: string
   ) {
     this._mailService.setApiKey(apiKey);
+    if (baseUrl) {
+      // MailService's typings hide its underlying @sendgrid/client instance, but it
+      // always exists at runtime. Overriding the default request baseUrl lets a
+      // deployment route mail through a SendGrid-compatible API relay (e.g. the
+      // Noctusoft gateway) with no other code changes.
+      const svc = this._mailService as unknown as {
+        client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+      };
+      svc.client?.setDefaultRequest('baseUrl', baseUrl);
+    }
   }
 
   async send(envelope: IEmailEnvelope): Promise<IEmailTransportResult> {

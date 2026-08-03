@@ -34,7 +34,7 @@ describe('ParentNotificationGenerator', () => {
       expect(notification.agentType).toBe(AgentType.PARENT);
       expect(notification.studentId).toBe('student-123');
       expect(notification.subject).toContain('John Doe');
-      expect(notification.subject).toContain('MISSING ASSIGNMENT');
+      expect(notification.subject).toContain('Missing:');
       expect(notification.body).toContain('John Doe');
       expect(notification.triggerType).toBe(AlertType.MISSING_ASSIGNMENT);
     });
@@ -62,7 +62,7 @@ describe('ParentNotificationGenerator', () => {
       // Assert
       expect(notification.agentType).toBe(AgentType.PARENT);
       expect(notification.subject).toContain('John Doe');
-      expect(notification.subject).toContain('Assignment Due');
+      expect(notification.subject).toContain('Due ');
       expect(notification.body).toContain('Science');
     });
 

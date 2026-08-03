@@ -22,12 +22,6 @@ const TYPE_LABELS: Record<CouponType, string> = {
   free_plan: 'Free Plan',
 };
 
-const DURATION_LABELS: Record<CouponDuration, string> = {
-  once: 'One-time',
-  repeating: 'Repeating',
-  forever: 'Forever',
-};
-
 export default function AdminCouponsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
