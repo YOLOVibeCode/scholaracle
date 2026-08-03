@@ -4,7 +4,9 @@ import {
   SubscriptionRepository,
   PaymentRepository,
   UserRepository,
+  WebhookEventRepository,
   PLAN_PRICING,
+  type IWebhookEventWriter,
   type SubscriptionPlan,
   type BillingCycle,
 } from '@scholaracle/database';
@@ -13,6 +15,12 @@ import { SquareService } from '../../../services/SquareService';
 export interface ISquareWebhookDeps {
   readonly database: Db;
   readonly squareService: SquareService;
+  /**
+   * Optional override for the webhook idempotency writer (DEF-001 / DEF-007).
+   * When omitted, a default WebhookEventRepository(database) is constructed.
+   * Useful for tests that want to inject a stub.
+   */
+  readonly webhookEventWriter?: IWebhookEventWriter;
 }
 
 interface IPaymentPayload {
@@ -27,6 +35,16 @@ interface IPaymentPayload {
     status?: string;
     note?: string;
   };
+}
+
+interface IRefundPayload {
+  id?: string;
+  paymentId?: string;
+  payment_id?: string;
+  amountMoney?: { amount?: bigint | number; currency?: string };
+  amount_money?: { amount?: bigint | number; currency?: string };
+  status?: string;
+  reason?: string;
 }
 
 function extractUserIdFromNote(note: string | undefined): string | null {
@@ -71,6 +89,15 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
   const subscriptionRepo = new SubscriptionRepository(deps.database);
   const paymentRepo = new PaymentRepository(deps.database);
   const userRepo = new UserRepository(deps.database);
+  const defaultWebhookRepo = new WebhookEventRepository(deps.database);
+  // Fire-and-forget: the unique compound index + TTL index are required for
+  // recordIfNew to enforce dedup. Without them, duplicate event.ids could both
+  // succeed insertion and we'd silently lose the DEF-001 protection.
+  void defaultWebhookRepo.ensureIndexes().catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error('Failed to ensure webhook_events indexes:', err);
+  });
+  const webhookEventWriter: IWebhookEventWriter = deps.webhookEventWriter ?? defaultWebhookRepo;
 
   router.post('/', (req: Request, res: Response) => {
     void handleWebhook(req, res);
@@ -100,15 +127,30 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
     try {
       const event = JSON.parse(body) as {
         type?: string;
+        event_id?: string;
         merchant_id?: string;
         data?: {
           type?: string;
           id?: string;
           object?: {
             payment?: IPaymentPayload['payment'];
+            refund?: IRefundPayload;
           };
         };
       };
+
+      // DEF-001 / DEF-007: dedup on the provider's event.id before dispatch.
+      // If the event has already been processed (or is currently being processed
+      // by a duplicate delivery), short-circuit with a 200 to keep the provider
+      // from retrying — the original delivery is the authoritative one.
+      const eventId = event.event_id ?? event.data?.id;
+      if (eventId) {
+        const isNew = await webhookEventWriter.recordIfNew('square', eventId);
+        if (!isNew) {
+          res.json({ received: true, deduped: true });
+          return;
+        }
+      }
 
       const eventType = event.type ?? event.data?.type;
       if (
@@ -119,6 +161,12 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
         const paymentData = event.data?.object?.payment;
         if (paymentData?.id && paymentData.status === 'COMPLETED') {
           await handlePaymentCompleted(paymentData);
+        }
+      } else if (eventType === 'refund.created' || eventType === 'refund.updated') {
+        // DEF-002: process refund events; previously these silently 200'd.
+        const refundData = event.data?.object?.refund;
+        if (refundData) {
+          await handleRefund(refundData);
         }
       }
 
@@ -209,6 +257,34 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
     } catch {
       // Best-effort: subscription collection is authoritative
     }
+  }
+
+  /**
+   * Handle Square refund.created / refund.updated events. Updates the existing
+   * payment row to `refunded` (full) or `partially_refunded` (partial) and records
+   * the refunded amount. If the refund target payment cannot be found we 200 the
+   * webhook so Square does not retry indefinitely — orphan refunds are logged but
+   * non-fatal.
+   */
+  async function handleRefund(refund: IRefundPayload): Promise<void> {
+    const paymentId = refund.paymentId ?? refund.payment_id;
+    if (!paymentId) return;
+
+    const amountMoney = refund.amountMoney ?? refund.amount_money;
+    const refundAmount = Number(amountMoney?.amount ?? 0);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) return;
+
+    const existing = await paymentRepo.findBySquarePaymentId(paymentId);
+    if (!existing) {
+      // Square sometimes delivers refunds for payments we never recorded (e.g.
+      // refunds initiated outside our integration). Acknowledge silently rather
+      // than retry-loop the provider.
+      return;
+    }
+
+    const paymentDocId = existing._id?.toString();
+    if (!paymentDocId) return;
+    await paymentRepo.recordRefund(paymentDocId, refundAmount, 'square-webhook', refund.reason);
   }
 
   return router;

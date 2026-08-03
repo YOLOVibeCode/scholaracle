@@ -1,5 +1,8 @@
 import request from 'supertest';
+import { MongoClient, type Db } from 'mongodb';
 import { AlertType } from '@scholaracle/contracts';
+import { AuthService } from '@scholaracle/auth';
+import { StudentRepository } from '@scholaracle/database';
 
 // Mock SendGrid before importing server
 jest.mock('@sendgrid/mail', () => {
@@ -53,151 +56,160 @@ import { createApp } from '../server';
 
 describe('API Notification Flow Integration', () => {
   let app: ReturnType<typeof createApp>;
+  let mongoClient: MongoClient;
+  let database: Db;
+  let userToken: string;
+  let studentId: string;
+  // Note: integration test now uses real DB + auth — DEF-003 closed the
+  // unauthenticated POST /api/alerts pathway this suite previously exercised.
 
-  beforeAll(() => {
-    // Create app - services will use mocked SendGrid/Twilio
-    app = createApp({
-      sendGridApiKey: 'SG.test-key',
-      sendGridFromEmail: 'test@example.com',
-      sendGridFromName: 'Test',
-      twilioAccountSid: 'TEST_ACCOUNT_SID_PLACEHOLDER_NOT_REAL',
-      twilioAuthToken: 'test-token',
-      twilioFromNumber: '+1234567890',
+  const jwtSecret = 'integration-test-secret-do-not-use-in-prod';
+
+  beforeAll(async () => {
+    const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
+    const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle_test';
+    mongoClient = new MongoClient(uri);
+    await mongoClient.connect();
+    database = mongoClient.db(dbName);
+
+    await database.collection('users').deleteMany({ email: 'integration@apiflow.test' });
+    await database.collection('students').deleteMany({ name: 'IntegrationFlow Student' });
+
+    const authService = new AuthService(database, jwtSecret);
+    const reg = await authService.register(
+      'integration@apiflow.test',
+      'password123',
+      'Integration User'
+    );
+    if (!reg.success || !reg.user?.id || !reg.token) {
+      throw new Error('Failed to register integration user');
+    }
+    userToken = reg.token;
+
+    const studentRepo = new StudentRepository(database);
+    const created = await studentRepo.create({
+      userId: reg.user.id,
+      name: 'IntegrationFlow Student',
+      grade: 9,
+      studentId: 'IFLOW-001',
     });
+    studentId = created._id!.toString();
+
+    app = createApp(
+      {
+        jwtSecret,
+        sendGridApiKey: 'SG.test-key',
+        sendGridFromEmail: 'test@example.com',
+        sendGridFromName: 'Test',
+        twilioAccountSid: 'TEST_ACCOUNT_SID_PLACEHOLDER_NOT_REAL',
+        twilioAuthToken: 'test-token',
+        twilioFromNumber: '+1234567890',
+      },
+      database
+    );
+  });
+
+  afterAll(async () => {
+    // MongoQueue runs a fire-and-forget _ensureIndexes() during construction;
+    // give it a tick to settle before closing so we don't get a
+    // MongoClientClosedError thrown out of the unhandled rejection handler.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await mongoClient.close();
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('POST /api/alerts → NotificationService → Delivery', () => {
-    it('should process alert through complete flow: API → Service → Delivery', async () => {
-      // Arrange
-      const alertData = {
-        studentId: 'student-123',
-        type: AlertType.MISSING_ASSIGNMENT,
-        severity: 'high',
-        relatedData: {
-          assignmentName: 'Math Homework',
-          courseName: 'Algebra I',
-          dueDate: new Date(Date.now() + 86400000).toISOString(),
-        },
-      };
+  describe('POST /api/alerts → enqueue', () => {
+    // With a database wired, the route enqueues a notify job and returns 202.
+    // End-to-end notification *content* is covered in @scholaracle/agents tests;
+    // here we verify the API → queue handoff and validation wiring.
 
-      // Act
-      const response = await request(app).post('/api/alerts').send(alertData);
+    it('enqueues a missing-assignment alert and returns 202 with a jobId', async () => {
+      const response = await request(app)
+        .post('/api/alerts')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          studentId,
+          type: AlertType.MISSING_ASSIGNMENT,
+          severity: 'high',
+          relatedData: {
+            assignmentName: 'Math Homework',
+            courseName: 'Algebra I',
+            dueDate: new Date(Date.now() + 86400000).toISOString(),
+          },
+        });
 
-      // Assert
-      if (response.status !== 201) {
-        // eslint-disable-next-line no-console
-        console.error('Unexpected status:', response.status, response.body);
-      }
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(202);
       expect(response.body).toMatchObject({
-        success: true,
-        studentNotification: expect.objectContaining({
-          id: expect.any(String),
-          agentType: 'student',
-          subject: expect.stringMatching(/MISSING ASSIGNMENT/i),
-        }),
-        parentNotification: expect.objectContaining({
-          id: expect.any(String),
-          agentType: 'parent',
-          subject: expect.stringMatching(/Missing Assignment|MISSING ASSIGNMENT/i),
-        }),
-        deliveryResults: expect.any(Array),
+        jobId: expect.any(String),
+        message: 'Notification queued',
       });
-      expect(response.body.deliveryResults.length).toBeGreaterThan(0);
     });
 
-    it('should handle grade drop alert correctly', async () => {
-      // Arrange
-      const alertData = {
-        studentId: 'student-456',
-        type: AlertType.GRADE_DROP,
-        severity: 'critical',
-        relatedData: {
-          studentName: 'John Doe',
-          course: 'History',
-          courseName: 'History',
-          previousGrade: 85,
-          currentGrade: 72,
-          change: -13,
-          timeframe: 'Last 2 weeks',
-          contributingFactors: ['Missing assignments', 'Low test scores'],
-        },
-      };
+    it('enqueues a grade-drop alert and returns 202', async () => {
+      const response = await request(app)
+        .post('/api/alerts')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          studentId,
+          type: AlertType.GRADE_DROP,
+          severity: 'critical',
+          relatedData: {
+            previousGrade: 85,
+            currentGrade: 72,
+          },
+        });
 
-      // Act
-      const response = await request(app).post('/api/alerts').send(alertData);
-
-      // Assert
-      if (response.status !== 201) {
-        // eslint-disable-next-line no-console
-        console.error('Grade drop test error:', response.status, response.body);
-      }
-      expect(response.status).toBe(201);
-      expect(response.body.success).toBe(true);
-      expect(response.body.studentNotification.subject).toMatch(/GRADE DROP|Grade Drop/i);
-      expect(response.body.parentNotification.subject).toMatch(/Grade Drop/i);
+      expect(response.status).toBe(202);
+      expect(response.body.jobId).toEqual(expect.any(String));
     });
 
-    it('should handle deadline alert correctly', async () => {
-      // Arrange
-      const alertData = {
-        studentId: 'student-789',
-        type: AlertType.DEADLINE,
-        severity: 'medium',
-        relatedData: {
-          assignmentName: 'Science Project',
-          courseName: 'Biology',
-          dueDate: new Date(Date.now() + 3600000).toISOString(),
-        },
-      };
+    it('enqueues a deadline alert and returns 202', async () => {
+      const response = await request(app)
+        .post('/api/alerts')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          studentId,
+          type: AlertType.DEADLINE,
+          severity: 'medium',
+          relatedData: {
+            assignmentName: 'Science Project',
+            courseName: 'Biology',
+            dueDate: new Date(Date.now() + 3600000).toISOString(),
+          },
+        });
 
-      // Act
-      const response = await request(app).post('/api/alerts').send(alertData);
-
-      // Assert
-      if (response.status !== 201) {
-        // eslint-disable-next-line no-console
-        console.error('Deadline test error:', response.status, response.body);
-      }
-      expect(response.status).toBe(201);
-      expect(response.body.success).toBe(true);
-      // Deadline template uses format like "Assignment Due Dec 9, 11:06 PM"
-      expect(response.body.studentNotification.subject).toMatch(/Due|Deadline|DEADLINE/i);
+      expect(response.status).toBe(202);
+      expect(response.body.jobId).toEqual(expect.any(String));
     });
 
-    it('should return 400 for invalid alert type', async () => {
-      // Arrange
-      const alertData = {
-        studentId: 'student-123',
-        type: 'invalid_type',
-        severity: 'high',
-        relatedData: {},
-      };
+    it('returns 400 for invalid alert type', async () => {
+      const response = await request(app)
+        .post('/api/alerts')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          studentId,
+          type: 'invalid_type',
+          severity: 'high',
+          relatedData: {},
+        });
 
-      // Act
-      const response = await request(app).post('/api/alerts').send(alertData);
-
-      // Assert
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('Invalid alert type');
     });
 
-    it('should return 400 for missing required fields', async () => {
-      // Arrange
-      const alertData = {
-        studentId: 'student-123',
-        // Missing type and severity
-      };
+    it('returns 400 for missing required fields', async () => {
+      const response = await request(app)
+        .post('/api/alerts')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          studentId,
+          // Missing type and severity
+        });
 
-      // Act
-      const response = await request(app).post('/api/alerts').send(alertData);
-
-      // Assert
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('Missing required fields');

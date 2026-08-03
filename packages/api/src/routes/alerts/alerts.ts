@@ -1,12 +1,17 @@
 import { Router, type Request, type Response } from 'express';
 import { NotificationService, type IProcessAlertResult, MongoQueue } from '@scholaracle/agents';
+import type { IStudentReader } from '@scholaracle/database';
 import { Alert, AlertType, NotificationError } from '@scholaracle/contracts';
+import type { IAuthenticatedRequest } from '../../middleware/auth';
 
 export interface ICreateAlertRequest {
   readonly studentId: string;
   readonly type: string;
   readonly severity: string;
-  /** Optional parent email for delivery (otherwise falls back to studentId). */
+  /**
+   * @deprecated Body-supplied userId is ignored; the authenticated request user is authoritative.
+   * Retained on the type for backwards-compatible payload shape.
+   */
   readonly userId?: string;
   readonly relatedData?: Record<string, unknown>;
 }
@@ -63,6 +68,13 @@ function formatNotificationResponse(result: IProcessAlertResult): Record<string,
 export interface IAlertsRouterOptions {
   /** When set, POST /api/alerts enqueues a notify job and returns 202; otherwise processes in-process and returns 201. */
   readonly queue?: MongoQueue;
+  /**
+   * Read-only repository slice (ISP) for verifying the authenticated user owns or has shared
+   * access to the requested studentId. Required to close DEF-003 (cross-tenant IDOR).
+   * Optional only so legacy direct-construction callers without DB still build; production
+   * wiring (server.ts) always supplies it.
+   */
+  readonly studentReader?: IStudentReader;
 }
 
 /**
@@ -93,11 +105,35 @@ async function handleCreateAlert(
       return;
     }
 
+    const authUserId = (req as IAuthenticatedRequest).userId;
+    if (!authUserId) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    if (options.studentReader) {
+      let student;
+      try {
+        student = await options.studentReader.findById(alertData.studentId);
+      } catch {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      if (!student) {
+        res.status(404).json({ success: false, error: 'Student not found' });
+        return;
+      }
+      if (!student.hasAccess(authUserId)) {
+        res.status(403).json({ success: false, error: 'Forbidden' });
+        return;
+      }
+    }
+
     const alert = new Alert({
       studentId: alertData.studentId,
       type: alertData.type as AlertType,
       severity: alertData.severity,
-      userId: alertData.userId,
+      userId: authUserId,
       relatedData: alertData.relatedData ?? {},
     });
 

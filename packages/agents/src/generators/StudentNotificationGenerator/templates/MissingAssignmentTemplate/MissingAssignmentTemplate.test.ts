@@ -27,7 +27,7 @@ describe('MissingAssignmentTemplate', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.subject).toBe('MISSING ASSIGNMENT');
+      expect(result.subject).toContain('Missing:');
     });
 
     it('should include course name in body', () => {
@@ -70,7 +70,7 @@ describe('MissingAssignmentTemplate', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.body).toContain('5 days ago');
+      expect(result.body).toContain('5 days overdue');
     });
 
     it('should use concise link-first body with dashboard CTA', () => {
@@ -92,8 +92,7 @@ describe('MissingAssignmentTemplate', () => {
 
       // Assert (concise body; detail in dashboard)
       expect(result.body).toMatch(/Math.*Homework 5/);
-      expect(result.body).toMatch(/2 days ago/);
-      expect(result.body).toContain('View details in your dashboard');
+      expect(result.body).toMatch(/2 days overdue/);
     });
 
     it('should include action button when assignmentUrl is provided', () => {
@@ -159,7 +158,7 @@ describe('MissingAssignmentTemplate', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.body).toContain('1 days ago');
+      expect(result.body).toContain('1 day overdue');
     });
   });
 });

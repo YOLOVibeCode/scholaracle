@@ -1,6 +1,8 @@
 name: E2E Tests
 
 on:
+  pull_request:
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       project:
@@ -8,11 +10,34 @@ on:
         required: false
         default: ''
         type: string
-  push:
-    branches: [main]
+      base_url:
+        description: 'Target URL (leave empty for localhost)'
+        required: false
+        default: ''
+        type: string
+      api_base_url:
+        description: 'API URL (leave empty for localhost)'
+        required: false
+        default: ''
+        type: string
+  workflow_call:
+    inputs:
+      base_url:
+        description: 'Target URL for the web app'
+        required: true
+        type: string
+      api_base_url:
+        description: 'Target URL for the API'
+        required: true
+        type: string
+      project:
+        description: 'Playwright project to run'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: e2e-${{ github.ref }}-${{ inputs.base_url || 'local' }}
   cancel-in-progress: true
 
 env:
@@ -21,7 +46,7 @@ env:
 
 jobs:
   e2e:
-    name: Playwright E2E
+    name: Playwright E2E ${{ inputs.base_url && format('(against {0})', inputs.base_url) || '(localhost)' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -42,30 +67,53 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Checkout scrapers repo
+        if: inputs.base_url == '' || inputs.base_url == null
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
+      - name: Build scrapers dependency
+        if: inputs.base_url == '' || inputs.base_url == null
+        run: |
+          mkdir -p /home/runner/work/scholarmancy/scholaracle/packages
+          ln -s /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
+          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build
+          cd /home/runner/work/scholaracle_scrapers && npm install && npx tsc --build
+
       - name: Build packages
+        if: inputs.base_url == '' || inputs.base_url == null
         run: pnpm build
 
       - name: Install Playwright browsers
         run: pnpm --filter @scholaracle/e2e exec playwright install --with-deps chromium
 
       - name: Cache MongoDB binary
+        if: inputs.base_url == '' || inputs.base_url == null
         uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
+      - name: Seed deployed environment
+        if: inputs.base_url != ''
+        run: |
+          # Seed deployed env so tests have deterministic fixtures.
+          curl -fsS -X POST "${{ inputs.api_base_url }}/seed?force=true" \
+            -H 'Content-Type: application/json' \
+            --max-time 120 \
+            || (echo "Seed failed"; exit 1)
+
       - name: Run Playwright tests
-        run: pnpm --filter @scholaracle/e2e test ${{ github.event.inputs.project && format('--project={0}', github.event.inputs.project) || '' }}
+        run: pnpm --filter @scholaracle/e2e test ${{ inputs.project && format('--project={0}', inputs.project) || '' }}
         env:
           CI: 'true'
-          BASE_URL: http://localhost:2800
-          API_BASE_URL: http://localhost:2801
+          BASE_URL: ${{ inputs.base_url || 'http://localhost:2800' }}
+          API_BASE_URL: ${{ inputs.api_base_url || 'http://localhost:2801' }}
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ inputs.base_url && 'deployed' || 'local' }}
           path: |
             packages/e2e/playwright-report/
             packages/e2e/results/

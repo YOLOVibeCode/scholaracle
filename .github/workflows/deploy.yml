@@ -1,70 +1,148 @@
 name: Deploy
 
+# Pipeline: main push → CI gate → deploy dev → E2E against dev → deploy prod.
+# Prod only ships if dev E2E is green. Everything after CI is automatic.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_e2e:
+        description: 'Skip E2E gate (emergency break-glass only)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: '20'
-  PNPM_VERSION: '8.15.0'
+  DEV_API_URL: https://api-dev-c268.up.railway.app
+  DEV_WEB_URL: https://web-dev-8552.up.railway.app
 
 jobs:
   ci-check:
     name: CI Gate
     uses: ./.github/workflows/ci.yml
 
-  deploy-api:
-    name: Deploy API (Railway)
+  # ─── Stage 1: Deploy to dev ────────────────────────────────────────
+  deploy-dev-api:
+    name: Deploy API → dev
     needs: ci-check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install Railway CLI
         run: npm install -g @railway/cli
-
-      - name: Deploy API
-        run: railway up --service api --detach
+      - name: Deploy API (dev)
+        run: railway up --service api --environment dev --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-  deploy-workers:
-    name: Deploy Workers (Railway)
+  deploy-dev-workers:
+    name: Deploy Workers → dev
     needs: ci-check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install Railway CLI
         run: npm install -g @railway/cli
-
-      - name: Deploy Workers
-        run: railway up --service workers --detach
+      - name: Deploy Workers (dev)
+        run: railway up --service workers --environment dev --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-  deploy-web:
-    name: Deploy Web (Railway)
+  deploy-dev-web:
+    name: Deploy Web → dev
     needs: ci-check
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install Railway CLI
         run: npm install -g @railway/cli
+      - name: Deploy Web (dev)
+        run: railway up --service web --environment dev --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-      - name: Deploy Web
-        run: railway up --service web --detach
+  # ─── Stage 2: Wait for dev to stabilise, then E2E ──────────────────
+  wait-for-dev:
+    name: Wait for dev health
+    needs: [deploy-dev-api, deploy-dev-workers, deploy-dev-web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Poll API health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS "${DEV_API_URL}/api/health" > /dev/null 2>&1; then
+              echo "API healthy"; exit 0
+            fi
+            echo "Waiting for API... ($i/60)"
+            sleep 10
+          done
+          echo "API did not become healthy"; exit 1
+      - name: Poll Web health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS "${DEV_WEB_URL}/api/health" > /dev/null 2>&1; then
+              echo "Web healthy"; exit 0
+            fi
+            echo "Waiting for Web... ($i/60)"
+            sleep 10
+          done
+          echo "Web did not become healthy"; exit 1
+
+  e2e-dev:
+    name: E2E vs dev
+    needs: wait-for-dev
+    if: ${{ !inputs.skip_e2e }}
+    uses: ./.github/workflows/e2e.yml
+    with:
+      base_url: https://web-dev-8552.up.railway.app
+      api_base_url: https://api-dev-c268.up.railway.app/api
+
+  # ─── Stage 3: Prod only deploys if E2E is green ────────────────────
+  deploy-prod-api:
+    name: Deploy API → prod
+    needs: e2e-dev
+    if: ${{ always() && (needs.e2e-dev.result == 'success' || inputs.skip_e2e) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy API (prod)
+        run: railway up --service api --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  deploy-prod-workers:
+    name: Deploy Workers → prod
+    needs: e2e-dev
+    if: ${{ always() && (needs.e2e-dev.result == 'success' || inputs.skip_e2e) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy Workers (prod)
+        run: railway up --service workers --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  deploy-prod-web:
+    name: Deploy Web → prod
+    needs: e2e-dev
+    if: ${{ always() && (needs.e2e-dev.result == 'success' || inputs.skip_e2e) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+      - name: Deploy Web (prod)
+        run: railway up --service web --environment production --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

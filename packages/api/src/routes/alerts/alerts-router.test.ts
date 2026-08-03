@@ -1,5 +1,5 @@
 import request from 'supertest';
-import express, { type Express } from 'express';
+import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import { alertsRouter } from './alerts';
 import { NotificationService } from '@scholaracle/agents';
 import { Notification, AgentType, NotificationPriority, AlertType } from '@scholaracle/contracts';
@@ -12,6 +12,16 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
     relatedData: { course: 'Math', assignment: 'HW' },
   };
 
+  // Stand-in for authMiddleware in unit tests — production wiring (server.ts) uses
+  // the real authMiddleware. DEF-003 requires the handler to enforce req.userId,
+  // so all tests below must inject one.
+  function fakeAuth(userId: string) {
+    return (req: Request, _res: Response, next: NextFunction): void => {
+      (req as Request & { userId: string }).userId = userId;
+      next();
+    };
+  }
+
   describe('when queue is provided', () => {
     it('should return 202 and jobId when enqueue succeeds', async () => {
       const mockQueue = {
@@ -22,6 +32,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
       app.use(express.json());
       app.use(
         '/api/alerts',
+        fakeAuth('user-test-123'),
         alertsRouter(mockNotificationService, {
           queue: mockQueue as unknown as import('@scholaracle/agents').MongoQueue,
         })
@@ -79,7 +90,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
       } as unknown as NotificationService;
       const app: Express = express();
       app.use(express.json());
-      app.use('/api/alerts', alertsRouter(mockNotificationService));
+      app.use('/api/alerts', fakeAuth('user-test-123'), alertsRouter(mockNotificationService));
 
       const response = await request(app).post('/api/alerts').send(validAlertBody);
 
@@ -105,7 +116,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
       const mockNotificationService = { processAlert: jest.fn() } as unknown as NotificationService;
       const app: Express = express();
       app.use(express.json());
-      app.use('/api/alerts', alertsRouter(mockNotificationService));
+      app.use('/api/alerts', fakeAuth('user-test-123'), alertsRouter(mockNotificationService));
 
       const response = await request(app).post('/api/alerts').send({
         studentId: 'student-123',

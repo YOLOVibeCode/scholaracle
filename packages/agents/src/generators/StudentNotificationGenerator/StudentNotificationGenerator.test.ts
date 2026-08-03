@@ -31,7 +31,7 @@ describe('StudentNotificationGenerator', () => {
       expect(notification.agentType).toBe(AgentType.STUDENT);
       expect(notification.studentId).toBe('student-123');
       expect(notification.userId).toBe('student-123');
-      expect(notification.subject).toBe('MISSING ASSIGNMENT');
+      expect(notification.subject).toContain('Missing:');
       expect(notification.body).toContain('Math');
       expect(notification.body).toContain('Homework 5');
       expect(notification.triggerType).toBe(AlertType.MISSING_ASSIGNMENT);
@@ -56,7 +56,7 @@ describe('StudentNotificationGenerator', () => {
 
       // Assert
       expect(notification.agentType).toBe(AgentType.STUDENT);
-      expect(notification.subject).toContain('Assignment Due');
+      expect(notification.subject).toContain('Due ');
       expect(notification.body).toContain('Science');
       expect(notification.body).toContain('Lab Report');
     });

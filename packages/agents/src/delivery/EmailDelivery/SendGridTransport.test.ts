@@ -60,4 +60,45 @@ describe('SendGridTransport', () => {
 
     await expect(transport.send(envelope)).rejects.toThrow(/status 500/);
   });
+
+  describe('custom base URL (API relay support)', () => {
+    let mockSetDefaultRequest: jest.Mock;
+    let mockMailServiceWithClient: MailService;
+
+    beforeEach(() => {
+      mockSetDefaultRequest = jest.fn();
+      mockMailServiceWithClient = {
+        setApiKey: jest.fn(),
+        send: jest.fn(),
+        client: { setDefaultRequest: mockSetDefaultRequest },
+      } as unknown as MailService;
+    });
+
+    it('overrides the underlying client base URL when provided', () => {
+      new SendGridTransport(
+        'test-api-key',
+        mockMailServiceWithClient,
+        'https://api.sendgrid.noctusoft.com'
+      );
+
+      expect(mockSetDefaultRequest).toHaveBeenCalledWith(
+        'baseUrl',
+        'https://api.sendgrid.noctusoft.com'
+      );
+    });
+
+    it('leaves the client base URL untouched when not provided', () => {
+      new SendGridTransport('test-api-key', mockMailServiceWithClient);
+
+      expect(mockSetDefaultRequest).not.toHaveBeenCalled();
+    });
+
+    it('does not crash when the mail service exposes no client', () => {
+      const bareService = { setApiKey: jest.fn(), send: jest.fn() } as unknown as MailService;
+
+      expect(
+        () => new SendGridTransport('test-api-key', bareService, 'https://relay.example.com')
+      ).not.toThrow();
+    });
+  });
 });

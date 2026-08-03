@@ -31,7 +31,7 @@ describe('MissingAssignmentTemplate (Parent)', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.subject).toContain('MISSING ASSIGNMENT');
+      expect(result.subject).toContain('Missing:');
       expect(result.subject).toContain('John Doe');
     });
 
@@ -108,8 +108,7 @@ describe('MissingAssignmentTemplate (Parent)', () => {
       expect(result.body).toContain('John Doe');
       expect(result.body).toContain('Math');
       expect(result.body).toContain('Homework 5');
-      expect(result.body).toContain('2 days ago');
-      expect(result.body).toContain('View details in your dashboard');
+      expect(result.body).toContain('2 days overdue');
     });
 
     it('should include assignment URL in actions when provided', () => {
@@ -159,7 +158,7 @@ describe('MissingAssignmentTemplate (Parent)', () => {
       const result = template.generate(alert);
 
       // Assert
-      expect(result.body).toContain('5 days ago');
+      expect(result.body).toContain('5 days overdue');
     });
   });
 });

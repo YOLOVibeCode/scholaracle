@@ -3,7 +3,7 @@ import { SquareService } from './SquareService';
 jest.mock('square', () => ({
   SquareClient: jest.fn().mockImplementation(() => ({
     refunds: {
-      refund: jest.fn().mockResolvedValue({
+      refundPayment: jest.fn().mockResolvedValue({
         result: {
           refund: { id: 'refund_123' },
         },
@@ -36,8 +36,38 @@ describe('SquareService', () => {
 
     it('should throw if Square returns no refund ID', async () => {
       const client = (service as any)._client;
-      client.refunds.refund.mockResolvedValueOnce({ result: { refund: {} } });
+      client.refunds.refundPayment.mockResolvedValueOnce({ result: { refund: {} } });
       await expect(service.refundPayment('pay_456', 500)).rejects.toThrow('no refund ID');
+    });
+  });
+
+  describe('custom base URL (API relay support)', () => {
+    it('passes baseUrl to SquareClient when provided', () => {
+      const { SquareClient } = jest.requireMock('square') as { SquareClient: jest.Mock };
+
+      new SquareService({
+        accessToken: 'relay-key',
+        environment: 'production',
+        locationId: 'loc-123',
+        baseUrl: 'https://connect.squareup.noctusoft.com',
+      });
+
+      expect(SquareClient).toHaveBeenCalledWith(
+        expect.objectContaining({ baseUrl: 'https://connect.squareup.noctusoft.com' })
+      );
+    });
+
+    it('omits baseUrl from SquareClient options when not provided', () => {
+      const { SquareClient } = jest.requireMock('square') as { SquareClient: jest.Mock };
+
+      new SquareService({
+        accessToken: 'test-token',
+        environment: 'sandbox',
+        locationId: 'loc-123',
+      });
+
+      const lastCallOptions = SquareClient.mock.calls[SquareClient.mock.calls.length - 1]![0];
+      expect(lastCallOptions).not.toHaveProperty('baseUrl');
     });
   });
 });

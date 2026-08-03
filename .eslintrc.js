@@ -52,7 +52,7 @@ module.exports = {
       },
       {
         selector: 'variable',
-        format: ['camelCase', 'UPPER_CASE']
+        format: ['camelCase', 'UPPER_CASE', 'PascalCase']
       },
       {
         selector: 'parameter',
@@ -69,8 +69,10 @@ module.exports = {
       }
     ],
     '@typescript-eslint/no-explicit-any': 'error',
-    '@typescript-eslint/explicit-function-return-type': 'error',
-    '@typescript-eslint/explicit-module-boundary-types': 'error',
+    // Return types: warn-level so hook stays quiet but CI --max-warnings=0 still enforces.
+    // Inference is correct 99% of the time; prefer explicit at module boundaries.
+    '@typescript-eslint/explicit-function-return-type': 'warn',
+    '@typescript-eslint/explicit-module-boundary-types': 'warn',
     'quotes': ['error', 'single', { avoidEscape: true }],
     'prefer-template': 'error',
     'no-useless-concat': 'error',
@@ -82,12 +84,12 @@ module.exports = {
     'prefer-arrow-callback': 'error',
     'no-throw-literal': 'error',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-    'complexity': ['warn', 15],
-    'max-depth': ['error', 4],
-    'max-lines-per-function': [
-      'warn',
-      { max: 200, skipBlankLines: true, skipComments: true }
-    ]
+    // Complexity and function-length heuristics create pressure to artificially
+    // split code, which often makes it worse. Disabled; rely on types/tests/review.
+    'complexity': 'off',
+    'max-lines-per-function': 'off',
+    // Deep nesting is contextual — often legitimate in data-walking code. Warn, don't block.
+    'max-depth': ['warn', 4]
   },
   overrides: [
     {

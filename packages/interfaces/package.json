@@ -8,6 +8,7 @@
     "build": "tsc --build",
     "test": "echo \"No tests for interfaces package\"",
     "lint": "eslint src --ext .ts",
+    "lint:strict": "eslint src --ext .ts --max-warnings=0",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
