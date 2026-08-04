@@ -1,7 +1,8 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
 async function checkAva() {
-  const uri = 'mongodb://mongo:***REMOVED***@shinkansen.proxy.rlwy.net:45948';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI is required');
   const dbName = 'scholaracle';
   const avaStudentId = '69a4f1b53671c632ca591c7f';
   

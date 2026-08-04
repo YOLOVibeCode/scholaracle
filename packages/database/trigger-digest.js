@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 const { MongoClient } = require('mongodb');
 
-const MONGODB_URI = 'mongodb://mongo:***REMOVED***@junction.proxy.rlwy.net:22636';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) throw new Error('MONGODB_URI is required');
 
 async function triggerDigest() {
   const client = new MongoClient(MONGODB_URI, {

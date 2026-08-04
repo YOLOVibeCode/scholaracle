@@ -1,7 +1,8 @@
 const { MongoClient } = require('mongodb');
 
 async function findAva() {
-  const uri = 'mongodb://mongo:***REMOVED***@shinkansen.proxy.rlwy.net:45948';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI is required');
   const dbName = 'scholaracle';
   
   console.log('Connecting to production database...');

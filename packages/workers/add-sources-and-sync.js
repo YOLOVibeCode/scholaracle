@@ -2,7 +2,8 @@ const { MongoClient, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const fetch = require('node-fetch');
 
-const MONGODB_URI = 'mongodb://mongo:***REMOVED***@shinkansen.proxy.rlwy.net:45948';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) throw new Error('MONGODB_URI is required');
 const JWT_SECRET = 'd1eb82c6836e859f272a248c04dc7edbb33fca209b0120bceb3cfe285ee1188b';
 const API_URL = 'https://api.scholarmancy.com';
 const AVA_STUDENT_ID = '69a4f1b53671c632ca591c7f';
