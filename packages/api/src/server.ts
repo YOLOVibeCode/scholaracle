@@ -311,8 +311,18 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // Cookie parsing (for refresh_token httpOnly cookie)
   app.use(cookieParser());
 
-  // Body parsing with size limit
-  app.use(express.json({ limit: '10mb' }));
+  // Body parsing with size limit. The Square webhook route is excluded: it
+  // needs the raw request body for HMAC signature verification, and a global
+  // express.json() would consume the stream before the route-level
+  // express.raw() ever sees it (body-parser skips once req._body is set).
+  const jsonParser = express.json({ limit: '10mb' });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === '/api/webhooks/square') {
+      next();
+      return;
+    }
+    jsonParser(req, res, next);
+  });
 
   // Resolve JWT secret once - fail hard in production if missing
   const nodeEnv = process.env['NODE_ENV'] ?? 'development';
