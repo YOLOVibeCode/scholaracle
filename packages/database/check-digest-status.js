@@ -5,7 +5,8 @@ const JOB_ID = '69acff28ba7ffc4d29944c3b';
 const USER_ID = '69a4f0c73671c632ca591c7c';
 
 async function checkDigestStatus() {
-  const uri = 'mongodb://mongo:***REMOVED***@junction.proxy.rlwy.net:22636';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI is required');
   const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 30000,

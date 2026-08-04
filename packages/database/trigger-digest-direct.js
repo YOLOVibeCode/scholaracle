@@ -11,7 +11,8 @@ const RECIPIENT_EMAIL = 'rvegajr@noctusoft.com';
 
 async function triggerDigestDirect() {
   // Use internal Railway MongoDB URI
-  const uri = process.env.MONGODB_URI || 'mongodb://mongo:***REMOVED***@junction.proxy.rlwy.net:22636';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI is required');
   const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 30000,
