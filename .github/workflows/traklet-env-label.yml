@@ -1,0 +1,26 @@
+name: Traklet env label
+on:
+  issues:
+    types: [opened]
+permissions:
+  issues: write
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const m = body.match(/(?:\*\*URL:\*\*|URL:)\s*(\S+)/i);
+            if (!m) return;
+            let host = '';
+            try { host = new URL(m[1]).host.toLowerCase(); } catch { return; }
+            const segs = host.split(/[.-]/);
+            let label = null;
+            if (segs.includes('dev') || segs.includes('development')) label = 'env:dev';
+            else if (segs.includes('uat') || segs.includes('staging') || segs.includes('qa')) label = 'env:uat';
+            if (!label) return;
+            const have = (context.payload.issue.labels || []).map(l => l.name);
+            if (have.includes(label)) return;
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, labels: [label] });
