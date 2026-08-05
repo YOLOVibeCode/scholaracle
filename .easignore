@@ -1,0 +1,17 @@
+# EAS build archive exclusions
+# Patterns listed here are excluded from the project archive uploaded to EAS.
+# Reduce archive size and avoid uploading build artifacts / dev tooling.
+
+# Expo Go simulator app bundles downloaded locally for testing
+.tmp-expo-go/
+.tmp-expo-go-app/
+
+# macOS
+.DS_Store
+*.pem
+
+# Build artifacts (gitignored but listing explicitly for EAS)
+node_modules/
+*/node_modules/
+*/dist/
+*/.next/
