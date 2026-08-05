@@ -87,13 +87,22 @@ syncCompanionDevSeed();
 const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(projectRoot);
 
-// SDK 57: on-demand filesystem handles pnpm symlinks automatically —
-// no watchFolders or nodeModulesPaths needed for monorepo resolution.
-// Point directly at src/ so Metro compiles TS directly without dist/.
-// (dist/ is gitignored and absent on EAS cold builds.)
+// Limit watchFolders to only what the mobile app needs. getDefaultConfig adds
+// ALL monorepo packages which causes Metro to crawl large backend codebases
+// unnecessarily and can trigger fileMap.build() failures on EAS cold builds.
+const contractsSrc = path.resolve(projectRoot, '../contracts/src');
+const scraperCoreSrc = path.resolve(projectRoot, '../scraper-core/src');
+config.watchFolders = [
+  path.join(workspaceRoot, 'node_modules'),
+  contractsSrc,
+  scraperCoreSrc,
+].filter((dir) => fs.existsSync(dir));
+
+// Alias workspace packages directly to their src/ directories so Metro
+// compiles TypeScript on the fly without needing pre-built dist/.
 config.resolver.extraNodeModules = {
-  '@scholaracle/contracts': path.resolve(projectRoot, '../contracts/src'),
-  '@scholaracle/scraper-core': path.resolve(projectRoot, '../scraper-core/src'),
+  '@scholaracle/contracts': contractsSrc,
+  '@scholaracle/scraper-core': scraperCoreSrc,
 };
 
 // Never pull companion secret files into the JS graph
