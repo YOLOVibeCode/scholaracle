@@ -1,0 +1,22 @@
+{
+  "studentName": "Sample Student",
+  "courses": [
+    {
+      "id": "course-1",
+      "title": "Parent Square Homeroom",
+      "grade": "95%",
+      "teacher": "Ms. Example",
+      "assignments": [
+        {
+          "id": "asg-1",
+          "title": "Welcome Quiz",
+          "dueDate": "2026-09-01T23:59:00.000Z",
+          "status": "graded",
+          "points": "10"
+        }
+      ]
+    }
+  ],
+  "messages": [],
+  "scrapedAt": "2026-08-04T12:00:00.000Z"
+}

@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Scholarmancy Sync",
+  "version": "1.0.0",
+  "description": "Syncs your school portal data to Scholarmancy — grades, assignments, and attendance updated automatically. Credentials stay on your device.",
+  "permissions": [
+    "alarms",
+    "storage",
+    "notifications",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.instructure.com/*",
+    "*://*.skyward.com/*",
+    "*://*.iscorp.com/*",
+    "*://*.aetracking.com/*",
+    "*://*.aeries.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instructure.com/*",
+        "*://*.skyward.com/*",
+        "*://*.iscorp.com/*",
+        "*://*.aetracking.com/*",
+        "*://*.aeries.net/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scholaracle Sync",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
