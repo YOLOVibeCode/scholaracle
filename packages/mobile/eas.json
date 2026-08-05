@@ -27,7 +27,7 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "node": "20.19.4",
+      "node": "22.x",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com"
       },
