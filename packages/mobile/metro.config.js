@@ -85,31 +85,51 @@ syncCompanionDevSeed();
 
 // Emit environment info as the very first thing Metro logs — appears in EAS
 // Xcode logs and helps diagnose Node.js version / path issues on CI.
-console.log('[metro.config] Node.js version:', process.version);
-console.log('[metro.config] Platform:', process.platform, process.arch);
-console.log('[metro.config] projectRoot:', projectRoot);
-console.log('[metro.config] workspaceRoot:', workspaceRoot);
+process.stderr.write(`[metro.config] Node.js version: ${process.version}\n`);
+process.stderr.write(`[metro.config] Platform: ${process.platform} ${process.arch}\n`);
+process.stderr.write(`[metro.config] projectRoot: ${projectRoot}\n`);
+process.stderr.write(`[metro.config] workspaceRoot: ${workspaceRoot}\n`);
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const { getDefaultConfig } = require('expo/metro-config');
-const config = getDefaultConfig(projectRoot);
+let getDefaultConfig;
+try {
+  ({ getDefaultConfig } = require('expo/metro-config'));
+} catch (err) {
+  process.stderr.write(`[metro.config] FATAL: require('expo/metro-config') failed: ${err?.message}\n${err?.stack}\n`);
+  throw err;
+}
+
+let config;
+try {
+  config = getDefaultConfig(projectRoot);
+} catch (err) {
+  process.stderr.write(`[metro.config] FATAL: getDefaultConfig() failed: ${err?.message}\n${err?.stack}\n`);
+  throw err;
+}
 
 // Wrap the reporter to surface the real error if Metro's transformer fails to
-// initialize. Without this, EAS logs only show the downstream TypeError, not
-// the actual root cause (e.g. a failed fileMap.build() call).
+// initialize. Metro's Bundler.js swallows _depGraph.ready() rejections via
+// .catch(), leaving _transformer undefined. Re-throwing here propagates the
+// real error through _initializedPromise so callers see it instead of the
+// confusing downstream "Cannot read properties of undefined (reading 'transformFile')".
 const _baseReporter = config.reporter;
 config.reporter = {
-  ..._baseReporter,
+  ...(_baseReporter || {}),
   update(event) {
     if (event.type === 'transformer_load_failed') {
-      const err = event.error;
-      console.error('\n=== METRO_INIT_FAILURE ===');
-      console.error('type:', event.type);
-      console.error('message:', err?.message ?? String(err));
-      console.error('stack:\n', err?.stack ?? '(no stack)');
-      console.error('=== END METRO_INIT_FAILURE ===\n');
+      const err = event.error ?? new Error('Metro transformer failed to load (unknown error)');
+      process.stderr.write('\n=== METRO_INIT_FAILURE ===\n');
+      process.stderr.write(`type: ${event.type}\n`);
+      process.stderr.write(`message: ${String(err?.message ?? err)}\n`);
+      process.stderr.write(`stack:\n${err?.stack ?? '(no stack)'}\n`);
+      process.stderr.write('=== END METRO_INIT_FAILURE ===\n\n');
+      // Rethrowing causes _initializedPromise to reject, propagating the real
+      // error to every caller of ready() / transformFile().
+      throw err;
     }
-    _baseReporter?.update?.(event);
+    if (_baseReporter && typeof _baseReporter.update === 'function') {
+      _baseReporter.update.call(_baseReporter, event);
+    }
   },
 };
 
