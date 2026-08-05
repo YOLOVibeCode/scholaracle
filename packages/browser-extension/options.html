@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scholaracle Sync — Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, system-ui, sans-serif; max-width: 480px; margin: 24px auto; padding: 0 16px; color: #1a1a2e; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    p { font-size: 13px; color: #6c757d; margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #6c757d; margin: 12px 0 4px; text-transform: uppercase; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #dee2e6; border-radius: 8px; font-size: 14px; }
+    button { margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px; background: #4361ee; color: #fff; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #fff; color: #4361ee; border: 1px solid #4361ee; margin-left: 8px; }
+    .msg { margin-top: 12px; font-size: 13px; }
+    .msg.ok { color: #28a745; }
+    .msg.err { color: #dc3545; }
+    .warn { background: #fff3cd; border: 1px solid #ffc107; padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Scholaracle Sync</h1>
+  <p>Pair this extension with your Scholaracle account. Portal passwords stay in your browser — never uploaded.</p>
+  <div class="warn">Do not put passwords in this page. Connect portals via the active tab after pairing.</div>
+
+  <label for="apiBaseUrl">API base URL</label>
+  <input id="apiBaseUrl" type="url" placeholder="https://api.scholaracle.com" />
+
+  <label for="connectorToken">Connector token</label>
+  <input id="connectorToken" type="password" autocomplete="off" placeholder="Paste connector token from Scholaracle" />
+
+  <label for="scheduleHours">Sync every (hours)</label>
+  <select id="scheduleHours">
+    <option value="1">1</option>
+    <option value="6" selected>6</option>
+    <option value="12">12</option>
+    <option value="24">24</option>
+  </select>
+
+  <div>
+    <button id="save">Save</button>
+    <button id="register-tab" class="secondary" type="button">Register current portal tab</button>
+  </div>
+  <div id="msg" class="msg"></div>
+  <script src="options.js"></script>
+</body>
+</html>

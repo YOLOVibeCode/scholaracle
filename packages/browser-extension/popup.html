@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scholaracle Sync</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, system-ui, sans-serif; width: 320px; background: #f8f9fa; color: #1a1a2e; }
+    .header { background: #4361ee; color: white; padding: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .header h1 { font-size: 16px; font-weight: 700; }
+    .header .version { font-size: 11px; opacity: 0.7; }
+    .section { padding: 12px 16px; border-bottom: 1px solid #dee2e6; background: #fff; }
+    .section h2 { font-size: 12px; font-weight: 700; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .status-row { display: flex; align-items: center; justify-content: space-between; }
+    .status { font-size: 13px; color: #28a745; font-weight: 600; }
+    .status.error { color: #dc3545; }
+    .status.pending { color: #fd7e14; }
+    .run-item { padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+    .run-item:last-child { border-bottom: none; }
+    .run-header { display: flex; align-items: center; justify-content: space-between; }
+    .run-provider { font-size: 13px; font-weight: 600; }
+    .run-status { font-size: 12px; font-weight: 600; }
+    .run-status.success { color: #28a745; }
+    .run-status.failed { color: #dc3545; }
+    .run-status.in_progress { color: #fd7e14; }
+    .run-time { font-size: 12px; color: #6c757d; margin-top: 2px; }
+    .run-ops { font-size: 12px; color: #6c757d; }
+    .actions { padding: 12px 16px; display: flex; gap: 8px; }
+    button { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #4361ee; color: white; flex: 1; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-outline { background: transparent; color: #4361ee; border: 1px solid #4361ee; }
+    .empty { font-size: 13px; color: #6c757d; padding: 4px 0; }
+    .next-sync { font-size: 12px; color: #6c757d; margin-top: 4px; }
+    #error-msg { color: #dc3545; font-size: 12px; padding: 8px 16px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Scholaracle Sync</h1>
+    <span class="version" id="version">v0.1.0</span>
+  </div>
+
+  <div class="section">
+    <h2>Status</h2>
+    <div class="status-row">
+      <span id="sync-status" class="status">Ready</span>
+      <span id="next-sync" class="next-sync"></span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Recent Syncs</h2>
+    <div id="run-list"><p class="empty">No syncs yet</p></div>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <div class="actions">
+    <button class="btn-primary" id="sync-now-btn">Sync Now</button>
+    <button class="btn-outline" id="settings-btn">Settings</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
