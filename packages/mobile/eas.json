@@ -1,0 +1,50 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:2801"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com"
+      },
+      "prebuildCommand": "pnpm --filter @scholaracle/contracts run build && pnpm --filter @scholaracle/scraper-core run build && npx expo prebuild --clean --non-interactive",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com"
+      },
+      "prebuildCommand": "pnpm --filter @scholaracle/contracts run build && pnpm --filter @scholaracle/scraper-core run build && npx expo prebuild --clean --non-interactive",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleTeamId": "N42FM5L5KD",
+        "ascAppId": "to-be-filled-after-asc-record-created",
+        "language": "en-US",
+        "metadataPath": "./store-metadata"
+      }
+    }
+  }
+}
