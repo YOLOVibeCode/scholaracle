@@ -20,7 +20,6 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com"
       },
-      "prebuildCommand": "pnpm --filter @scholaracle/contracts run build && pnpm --filter @scholaracle/scraper-core run build && npx expo prebuild --clean --non-interactive",
       "ios": {
         "resourceClass": "m-medium"
       }
@@ -31,7 +30,6 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com"
       },
-      "prebuildCommand": "pnpm --filter @scholaracle/contracts run build && pnpm --filter @scholaracle/scraper-core run build && npx expo prebuild --clean --non-interactive",
       "ios": {
         "resourceClass": "m-medium"
       }
