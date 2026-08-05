@@ -11,7 +11,14 @@
 *.pem
 
 # Build artifacts (gitignored but listing explicitly for EAS)
-node_modules/
-*/node_modules/
-*/dist/
-*/.next/
+# Use **/ prefix to match at any depth
+**/node_modules/
+**/dist/
+**/.next/
+**/.turbo/
+**/.cache/
+**/harness-output/
+**/coverage/
+**/.nyc_output/
+packages/mobile/ios/
+packages/mobile/android/
