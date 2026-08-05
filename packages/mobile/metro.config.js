@@ -87,6 +87,25 @@ syncCompanionDevSeed();
 const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(projectRoot);
 
+// Wrap the reporter to surface the real error if Metro's transformer fails to
+// initialize. Without this, EAS logs only show the downstream TypeError, not
+// the actual root cause (e.g. a failed fileMap.build() call).
+const _baseReporter = config.reporter;
+config.reporter = {
+  ..._baseReporter,
+  update(event) {
+    if (event.type === 'transformer_load_failed') {
+      const err = event.error;
+      console.error('\n=== METRO_INIT_FAILURE ===');
+      console.error('type:', event.type);
+      console.error('message:', err?.message ?? String(err));
+      console.error('stack:\n', err?.stack ?? '(no stack)');
+      console.error('=== END METRO_INIT_FAILURE ===\n');
+    }
+    _baseReporter?.update?.(event);
+  },
+};
+
 // Limit watchFolders to only what the mobile app needs. getDefaultConfig adds
 // ALL monorepo packages which causes Metro to crawl large backend codebases
 // unnecessarily and can trigger fileMap.build() failures on EAS cold builds.
