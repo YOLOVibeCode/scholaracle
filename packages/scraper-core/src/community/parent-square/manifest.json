@@ -1,0 +1,20 @@
+{
+  "id": "parent-square",
+  "name": "Parent Square",
+  "adapterId": "com.local.parent-square",
+  "version": "0.1.0",
+  "hosts": [
+    "*.parentsquare.com"
+  ],
+  "entities": [
+    "course",
+    "assignment",
+    "message",
+    "studentProfile"
+  ],
+  "entry": "./index.ts",
+  "publisher": "local",
+  "tests": {
+    "fixtureSuite": "sample"
+  }
+}

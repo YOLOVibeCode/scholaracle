@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome"],
+    "baseUrl": ".",
+    "paths": {
+      "@scholaracle/contracts": ["../contracts/src/index"],
+      "@scholaracle/scraper-core": ["../scraper-core/src/index"]
+    }
+  },
+  "include": ["src/**/*"]
+}

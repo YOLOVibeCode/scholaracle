@@ -1,0 +1,25 @@
+{
+  "name": "@scholaracle/browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome/Edge Manifest V3 extension — runs scraper-core extractors as content scripts, scheduled via chrome.alarms",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:watch": "node esbuild.config.mjs --watch",
+    "type-check": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@scholaracle/contracts": "workspace:*",
+    "@scholaracle/scraper-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.283",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.24.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  }
+}
