@@ -83,6 +83,13 @@ export const COMPANION_DEV_SEED: ICompanionDevPortalSeed | null = ${seedLiteral}
 
 syncCompanionDevSeed();
 
+// Emit environment info as the very first thing Metro logs — appears in EAS
+// Xcode logs and helps diagnose Node.js version / path issues on CI.
+console.log('[metro.config] Node.js version:', process.version);
+console.log('[metro.config] Platform:', process.platform, process.arch);
+console.log('[metro.config] projectRoot:', projectRoot);
+console.log('[metro.config] workspaceRoot:', workspaceRoot);
+
 /** @type {import('expo/metro-config').MetroConfig} */
 const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(projectRoot);
@@ -111,11 +118,16 @@ config.reporter = {
 // unnecessarily and can trigger fileMap.build() failures on EAS cold builds.
 const contractsSrc = path.resolve(projectRoot, '../contracts/src');
 const scraperCoreSrc = path.resolve(projectRoot, '../scraper-core/src');
-config.watchFolders = [
+const candidateWatchFolders = [
   path.join(workspaceRoot, 'node_modules'),
   contractsSrc,
   scraperCoreSrc,
-].filter((dir) => fs.existsSync(dir));
+];
+config.watchFolders = candidateWatchFolders.filter((dir) => {
+  const exists = fs.existsSync(dir);
+  console.log(`[metro.config] watchFolder ${exists ? '✓' : '✗'} ${dir}`);
+  return exists;
+});
 
 // Alias workspace packages directly to their src/ directories so Metro
 // compiles TypeScript on the fly without needing pre-built dist/.
@@ -130,8 +142,7 @@ config.resolver.blockList = [
   /(^|[/\\])\.env\.companion/,
 ];
 
-// Use a single transform worker to avoid jest-worker fork issues on EAS
-// (macOS Tahoe / Xcode 26 build machines).
-config.maxWorkers = 1;
+console.log('[metro.config] Configured watchFolders:', config.watchFolders);
+console.log('[metro.config] transformerPath:', config.transformerPath);
 
 module.exports = config;
