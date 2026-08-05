@@ -102,4 +102,8 @@ config.resolver.blockList = [
   /(^|[/\\])\.env\.companion/,
 ];
 
+// Use a single transform worker to avoid jest-worker fork issues on EAS
+// (macOS Tahoe / Xcode 26 build machines).
+config.maxWorkers = 1;
+
 module.exports = config;
