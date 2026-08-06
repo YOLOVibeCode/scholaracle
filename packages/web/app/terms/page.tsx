@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const metadata = {
-  title: 'Terms of Service | Scholaracle',
-  description: 'Scholaracle terms of service and conditions of use.',
+  title: 'Terms of Service | Scholarmancy',
+  description: 'Scholarmancy terms of service and conditions of use.',
 };
 
 export default function TermsPage() {
@@ -19,7 +19,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold">1. Acceptance of Terms</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                By accessing or using Scholaracle (&quot;the Service&quot;), you agree to be bound by these Terms of Service.
+                By accessing or using Scholarmancy (&quot;the Service&quot;), you agree to be bound by these Terms of Service.
                 If you do not agree, do not use the Service.
               </p>
             </section>
@@ -27,7 +27,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold">2. Description of Service</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholaracle is an AI-powered parenting assistant for academic success. The Service helps parents
+                Scholarmancy is an AI-powered parenting assistant for academic success. The Service helps parents
                 track student progress, receive alerts about assignments and deadlines, and get personalized
                 recommendations. Notifications may be delivered via email and, if you opt in, via SMS text message.
               </p>
@@ -46,7 +46,7 @@ export default function TermsPage() {
               <h2 className="text-lg font-semibold">4. SMS Consent and Opt-In</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 If you opt in to receive SMS notifications, you consent to receive automated text messages from
-                Scholaracle at the phone number you provide. Message frequency depends on your alert settings.
+                Scholarmancy at the phone number you provide. Message frequency depends on your alert settings.
                 Standard message and data rates may apply. You may opt out at any time by replying STOP,
                 UNSTOP to resubscribe, or HELP for assistance. Your carrier is not liable for delayed or
                 undelivered messages.
@@ -65,7 +65,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold">6. Intellectual Property</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholaracle and its content, features, and functionality are owned by us and are protected by
+                Scholarmancy and its content, features, and functionality are owned by us and are protected by
                 copyright and other intellectual property laws.
               </p>
             </section>
@@ -103,7 +103,7 @@ export default function TermsPage() {
                 href="/"
                 className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
               >
-                ← Back to Scholaracle
+                ← Back to Scholarmancy
               </Link>
             </div>
           </CardContent>

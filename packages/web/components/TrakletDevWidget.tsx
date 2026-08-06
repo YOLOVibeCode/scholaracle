@@ -22,7 +22,7 @@ export function TrakletDevWidget(): null {
         projects: [
           {
             id: 'YOLOVibeCode/scholaracle',
-            name: 'Scholaracle',
+            name: 'Scholarmancy',
             identifier: 'YOLOVibeCode/scholaracle',
           },
         ],
