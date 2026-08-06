@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@scholaracle/contracts": ["../contracts/src"],
+      "@scholaracle/scraper-core": ["../scraper-core/src"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}
