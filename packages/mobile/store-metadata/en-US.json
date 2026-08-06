@@ -1,0 +1,11 @@
+{
+  "name": "Scholarmancy",
+  "subtitle": "Academic Progress Tracker",
+  "description": "Scholarmancy keeps parents and students on top of academic life — without endless logins to school portals.\n\nConnect your school's Canvas, Skyward, or Aeries portal once, and Scholarmancy automatically syncs assignments, grades, and attendance straight to your phone. Get the full picture at a glance: upcoming due dates, missing work, and current grades — all in one place.\n\nKEY FEATURES\n\n• Assignments — see upcoming, missing, and past assignments grouped by status across all courses\n• Grades — current letter and percentage grades for every class, updated with each sync\n• Multi-student — manage multiple students from a single account; tap to switch between them\n• Sync history — a full log of every sync so you always know when data was last refreshed\n• Secure by design — school portal credentials are stored only on your device using iOS Secure Enclave; they are never sent to Scholarmancy servers\n• Push notifications — get notified when a sync completes or a new missing assignment appears\n\nSUPPORTED PORTALS\n• Canvas LMS\n• Skyward Family Access\n• Aeries Parent Portal\n\nPRIVACY FIRST\nScholarmancy stores your school portal username and password exclusively in your device's encrypted keychain. Only your academic data (assignments, grades, attendance) is transmitted to Scholarmancy servers — and only to display it back to you.\n\nPerfect for busy parents, high-school students, and anyone who wants academic visibility without the friction.",
+  "keywords": "grades,assignments,homework,school,canvas,skyward,aeries,student,education,tracker",
+  "releaseNotes": "Initial release — connect Canvas, Skyward, or Aeries and see your grades and assignments in one place.",
+  "category": "EDUCATION",
+  "supportUrl": "https://scholarmancy.com/support",
+  "marketingUrl": "https://scholarmancy.com",
+  "privacyPolicyUrl": "https://scholarmancy.com/privacy"
+}
