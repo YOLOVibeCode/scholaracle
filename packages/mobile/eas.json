@@ -39,7 +39,7 @@
     "production": {
       "ios": {
         "appleTeamId": "N42FM5L5KD",
-        "ascAppId": "to-be-filled-after-asc-record-created",
+        "ascAppId": "6798499288",
         "language": "en-US",
         "metadataPath": "./store-metadata"
       }
