@@ -90,7 +90,7 @@ export function LoginScreen(): React.ReactElement {
           accessibilityRole="button"
           accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
         >
-          <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+          <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -170,7 +170,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eyeIcon: {
-    fontSize: 20,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4361ee',
   },
   button: {
     height: 52,
