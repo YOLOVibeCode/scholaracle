@@ -34,8 +34,9 @@ CMD ["pnpm", "--filter", "@scholaracle/web", "dev"]
 
 # Production stage
 FROM base AS production
-# CACHEBUST invalidates COPY on each deployment when passed via --build-arg
+# --build-arg CACHEBUST forces rebuild; Railway passes env vars as build args
 ARG CACHEBUST=1
+RUN echo "cache-bust: $CACHEBUST"
 COPY . .
 # Next.js bakes NEXT_PUBLIC_* into the client bundle at build time. Railway passes env as build args.
 ARG NEXT_PUBLIC_API_URL
