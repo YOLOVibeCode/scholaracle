@@ -34,6 +34,7 @@ CMD ["pnpm", "--filter", "@scholaracle/web", "dev"]
 
 # Production stage
 FROM base AS production
+# cache-bust: 2026-08-06
 COPY . .
 # Next.js bakes NEXT_PUBLIC_* into the client bundle at build time. Railway passes env as build args.
 ARG NEXT_PUBLIC_API_URL
