@@ -56,7 +56,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 data-testid="admin-header" className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <p className="text-gray-600 dark:text-gray-400">Welcome to Scholaracle Admin</p>
+        <p className="text-gray-600 dark:text-gray-400">Welcome to Scholarmancy Admin</p>
       </div>
 
       {isLoading ? (

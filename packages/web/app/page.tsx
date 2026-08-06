@@ -29,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { authApi } from '@/lib/api/auth';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
-const DEMO_EMAIL = 'demo@scholaracle.com';
+const DEMO_EMAIL = 'demo@scholarmancy.com';
 const DEMO_PASSWORD = 'DemoPass123!';
 
 export default function HomePage() {
@@ -97,7 +97,7 @@ function SiteNav({
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight" data-testid="nav-logo">
           <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-          <span>Scholaracle</span>
+          <span>Scholarmancy</span>
         </Link>
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#features" className="transition-colors hover:text-foreground">Features</a>
@@ -173,7 +173,7 @@ function Hero({
           </h1>
 
           <p className="max-w-xl text-lg text-muted-foreground sm:text-xl">
-            Scholaracle pulls your kids&apos; grades, assignments, and alerts from every school portal
+            Scholarmancy pulls your kids&apos; grades, assignments, and alerts from every school portal
             into one dashboard — and warns you before things slip.
           </p>
 
@@ -432,7 +432,7 @@ function FeaturesSection() {
             Everything parents need, in one place.
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Stop juggling tabs. Scholaracle does the watching for you and only tells you
+            Stop juggling tabs. Scholarmancy does the watching for you and only tells you
             what matters.
           </p>
         </div>
@@ -908,7 +908,7 @@ function FaqSection() {
         <div className="mt-12 space-y-4">
           <FaqItem
             question="Is it safe? Where do my child&apos;s school passwords live?"
-            answer="On your device. Period. Scholaracle runs the data collection locally — your school portal credentials never leave your machine. Only normalized academic data (grades, assignment names, dates) is uploaded to Scholaracle."
+            answer="On your device. Period. Scholarmancy runs the data collection locally — your school portal credentials never leave your machine. Only normalized academic data (grades, assignment names, dates) is uploaded to Scholarmancy."
           />
           <FaqItem
             question="What schools and portals do you support?"
@@ -1019,7 +1019,7 @@ function Footer() {
           <div className="space-y-3">
             <Link href="/" className="flex items-center gap-2 font-semibold">
               <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <span>Scholaracle</span>
+              <span>Scholarmancy</span>
             </Link>
             <p className="text-sm text-muted-foreground">
               AI-powered parenting assistant for academic success.

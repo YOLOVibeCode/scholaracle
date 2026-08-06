@@ -36,10 +36,8 @@ export function ConnectSourceWizard({
   const [provider, setProvider] = useState<typeof PROVIDERS[number] | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [portalBaseUrl, setPortalBaseUrl] = useState('');
-  const [credentialMode, setCredentialMode] = useState<'api' | 'login' | 'skip' | null>(null);
+  const [credentialMode, setCredentialMode] = useState<'api' | 'skip' | null>(null);
   const [accessToken, setAccessToken] = useState('');
-  const [credsUsername, setCredsUsername] = useState('');
-  const [credsPassword, setCredsPassword] = useState('');
   const [schedule, setSchedule] = useState<IAddSourceRequest['schedule']>('every_6h');
   const [dataTypes, setDataTypes] = useState<string[]>(['grades', 'assignments', 'calendar']);
   const [submitting, setSubmitting] = useState(false);
@@ -51,8 +49,6 @@ export function ConnectSourceWizard({
     setPortalBaseUrl('');
     setCredentialMode(null);
     setAccessToken('');
-    setCredsUsername('');
-    setCredsPassword('');
     setSchedule('every_6h');
     setDataTypes(['grades', 'assignments', 'calendar']);
     onClose();
@@ -85,21 +81,13 @@ export function ConnectSourceWizard({
       dataTypes,
     };
     const result = await sourcesApi.addToStudent(studentId, payload);
-    if (result && credentialMode && credentialMode !== 'skip') {
-      const hasApiCreds = credentialMode === 'api' && accessToken.trim();
-      const hasLoginCreds = credentialMode === 'login' && credsUsername.trim() && credsPassword;
-      if (hasApiCreds || hasLoginCreds) {
-        const creds: ISourceCredentialsRequest =
-          credentialMode === 'api'
-            ? { authType: 'api', accessToken: accessToken.trim(), baseUrl: portalBaseUrl || undefined }
-            : {
-                authType: 'login',
-                username: credsUsername.trim(),
-                password: credsPassword,
-                baseUrl: portalBaseUrl || undefined,
-              };
-        await sourcesApi.setCredentials(studentId, result.id, creds);
-      }
+    if (result && credentialMode === 'api' && accessToken.trim()) {
+      const creds: ISourceCredentialsRequest = {
+        authType: 'api',
+        accessToken: accessToken.trim(),
+        baseUrl: portalBaseUrl || undefined,
+      };
+      await sourcesApi.setCredentials(studentId, result.id, creds);
     }
     setSubmitting(false);
     if (result) {
@@ -217,80 +205,61 @@ export function ConnectSourceWizard({
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Add credentials so we can log in to the API or portal. You can add them later from the source settings.
-                  </p>
-                  <div className="space-y-3">
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        type="button"
-                        variant={credentialMode === 'api' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setCredentialMode('api')}
-                        data-testid="credential-mode-api"
-                      >
-                        API / access token
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={credentialMode === 'login' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setCredentialMode('login')}
-                        data-testid="credential-mode-login"
-                      >
-                        Log in to portal
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={credentialMode === 'skip' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setCredentialMode('skip')}
-                        data-testid="credential-mode-skip"
-                      >
-                        Skip for now
-                      </Button>
+                  {/* Canvas API token (optional) */}
+                  {provider.id === 'canvas' && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Optionally add a Canvas API access token for richer data. You can skip this and sync via the Scholarmancy mobile app instead.
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          type="button"
+                          variant={credentialMode === 'api' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setCredentialMode('api')}
+                          data-testid="credential-mode-api"
+                        >
+                          API / access token
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={credentialMode === 'skip' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setCredentialMode('skip')}
+                          data-testid="credential-mode-skip"
+                        >
+                          Skip for now
+                        </Button>
+                      </div>
+                      {credentialMode === 'api' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="access-token">Access token</Label>
+                          <Input
+                            id="access-token"
+                            type="password"
+                            placeholder="Paste your Canvas API token"
+                            value={accessToken}
+                            onChange={(e) => setAccessToken(e.target.value)}
+                            data-testid="input-access-token"
+                          />
+                        </div>
+                      )}
                     </div>
-                    {credentialMode === 'api' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="access-token">Access token</Label>
-                        <Input
-                          id="access-token"
-                          type="password"
-                          placeholder="Paste your API or access token"
-                          value={accessToken}
-                          onChange={(e) => setAccessToken(e.target.value)}
-                          data-testid="input-access-token"
-                        />
-                      </div>
-                    )}
-                    {credentialMode === 'login' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="creds-username">Username</Label>
-                        <Input
-                          id="creds-username"
-                          type="text"
-                          autoComplete="username"
-                          placeholder="Portal username"
-                          value={credsUsername}
-                          onChange={(e) => setCredsUsername(e.target.value)}
-                          data-testid="input-creds-username"
-                        />
-                        <Label htmlFor="creds-password">Password</Label>
-                        <Input
-                          id="creds-password"
-                          type="password"
-                          autoComplete="current-password"
-                          placeholder="Portal password"
-                          value={credsPassword}
-                          onChange={(e) => setCredsPassword(e.target.value)}
-                          data-testid="input-creds-password"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Used to log in to the school portal when scraping. Stored securely and never shown again.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  )}
+                  {/* Skyward / Aeries: portal login is on-device only */}
+                  {(provider.id === 'skyward' || provider.id === 'aeries') && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 p-4 space-y-2">
+                      <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                        Portal login happens in the Scholarmancy mobile app
+                      </p>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        For {provider.name}, syncing requires you to log in to the portal on your device. Download the Scholarmancy app and add this source there so your credentials stay on your device.
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        You can still register the source here — just connect it in the app to start syncing.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex gap-2 mt-4">
                     <Button type="button" variant="outline" onClick={() => setStep(2)}>
                       Back

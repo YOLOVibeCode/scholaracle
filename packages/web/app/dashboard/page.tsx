@@ -60,7 +60,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 data-testid="dashboard-header" className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-gray-600 dark:text-gray-400">Welcome to Scholaracle</p>
+        <p className="text-gray-600 dark:text-gray-400">Welcome to Scholarmancy</p>
       </div>
 
       {showOnboardingBanner && (
@@ -71,7 +71,7 @@ export default function DashboardPage() {
                 <GraduationCap className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-1">Welcome to Scholaracle!</h3>
+                <h3 className="text-lg font-semibold mb-1">Welcome to Scholarmancy!</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md">
                   Add your first student and connect their grade portal so you can track courses, grades, and alerts — all in one place.
                 </p>

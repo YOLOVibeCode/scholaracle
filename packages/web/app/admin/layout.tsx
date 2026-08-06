@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Scholaracle Admin</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Scholarmancy Admin</h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1" data-testid="admin-role-label">
               {adminUser ? 'Admin' : ''}
             </p>
