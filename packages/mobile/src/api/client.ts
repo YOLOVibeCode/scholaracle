@@ -64,9 +64,27 @@ export interface ISyncRunItem {
   readonly opCount?: number;
 }
 
+/**
+ * Real API shape: sources use `id`, not `sourceId`.
+ * provider + displayName are on the source, not on individual runs.
+ */
 interface ISourceItem {
-  readonly sourceId: string;
+  readonly id: string;
   readonly provider: string;
+  readonly displayName?: string;
+}
+
+/**
+ * Real API shape: runs use `runId`, not `_id`.
+ * There is no `opCount` or `provider` field on runs — provider comes from the source.
+ */
+interface IRunItem {
+  readonly runId: string;
+  readonly status: string;
+  readonly startedAt: string;
+  readonly uploadedAt?: string;
+  readonly committedAt?: string;
+  readonly error?: string;
 }
 
 interface IActionBoardResponse {
@@ -81,13 +99,22 @@ interface IActionBoardResponse {
   }>;
 }
 
+/**
+ * Real API shape: top-level key is `courseGrades`, not `courses`.
+ * Each entry uses `courseExternalId`/`courseName`/`officialGrade`, not
+ * `externalId`/`name`/`currentGrade`.
+ */
 interface IStudentGradesResponse {
-  readonly courses?: ReadonlyArray<{
-    readonly externalId: string;
-    readonly name: string;
-    readonly currentGrade?: number;
-    readonly letterGrade?: string;
-    readonly gradedAt?: string;
+  readonly studentId?: string;
+  readonly overallGPA?: number;
+  readonly courseGrades?: ReadonlyArray<{
+    readonly courseExternalId: string;
+    readonly courseName: string;
+    readonly officialGrade?: number | null;
+    readonly letterGrade?: string | null;
+    readonly gradeSource?: string;
+    readonly totalAssignments?: number;
+    readonly gradedAssignments?: number;
   }>;
 }
 
@@ -181,13 +208,14 @@ export class ScholarmancyApiClient {
   async getStudentGrades(studentId: string): Promise<IGradeItem[]> {
     try {
       const data = await this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades`);
-      return (data.courses ?? []).map((c) => ({
-        _id: c.externalId,
-        courseExternalId: c.externalId,
-        asOfDate: c.gradedAt ?? new Date().toISOString().slice(0, 10),
-        percentGrade: c.currentGrade,
-        letterGrade: c.letterGrade,
-        courseName: c.name,
+      const today = new Date().toISOString().slice(0, 10);
+      return (data.courseGrades ?? []).map((c) => ({
+        _id: c.courseExternalId,
+        courseExternalId: c.courseExternalId,
+        asOfDate: today,
+        percentGrade: c.officialGrade ?? undefined,
+        letterGrade: c.letterGrade ?? undefined,
+        courseName: c.courseName,
       }));
     } catch {
       return [];
@@ -200,12 +228,19 @@ export class ScholarmancyApiClient {
       const allRuns: ISyncRunItem[] = [];
       for (const source of sources) {
         try {
-          const runs = await this._get<ISyncRunItem[]>(
-            `/api/students/${studentId}/sources/${source.sourceId}/runs`
+          const runs = await this._get<IRunItem[]>(
+            `/api/students/${studentId}/sources/${source.id}/runs`
           );
-          allRuns.push(...runs);
+          allRuns.push(
+            ...runs.map((r) => ({
+              _id: r.runId,
+              provider: source.provider,
+              status: r.status,
+              startedAt: r.startedAt,
+            }))
+          );
         } catch {
-          // skip failed sources
+          // skip individual failing sources — others may succeed
         }
       }
       return allRuns
