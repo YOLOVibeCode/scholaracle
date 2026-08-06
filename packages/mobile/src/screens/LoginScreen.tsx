@@ -1,9 +1,11 @@
 /**
  * LoginScreen — email + password form, wires to AuthContext.
+ * Prefills saved credentials, offers a show/hide password toggle.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
@@ -11,19 +13,32 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  View,
 } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
+import { loadSavedLogin, saveLogin } from '../credentials/savedLoginStore';
 
 export function LoginScreen(): React.ReactElement {
   const { login, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadSavedLogin().then((saved) => {
+      if (saved) {
+        setEmail(saved.email);
+        setPassword(saved.password);
+      }
+    });
+  }, []);
 
   const handleLogin = async (): Promise<void> => {
     setError(null);
     try {
       await login(email.trim(), password);
+      await saveLogin({ email: email.trim(), password });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
@@ -34,6 +49,12 @@ export function LoginScreen(): React.ReactElement {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <Image
+        source={require('../../assets/icon.png')}
+        style={styles.logo}
+        resizeMode="contain"
+        accessibilityLabel="Scholarmancy logo"
+      />
       <Text style={styles.title}>Scholarmancy</Text>
       <Text style={styles.subtitle}>Sign in to your account</Text>
 
@@ -44,21 +65,34 @@ export function LoginScreen(): React.ReactElement {
         placeholder="Email"
         placeholderTextColor="#999"
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
+        textContentType="username"
         returnKeyType="next"
         value={email}
         onChangeText={setEmail}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#999"
-        secureTextEntry
-        returnKeyType="done"
-        value={password}
-        onChangeText={setPassword}
-        onSubmitEditing={handleLogin}
-      />
+      <View style={styles.passwordRow}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Password"
+          placeholderTextColor="#999"
+          secureTextEntry={!showPassword}
+          textContentType="password"
+          returnKeyType="done"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={handleLogin}
+        />
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={() => setShowPassword((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+        >
+          <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity
         style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -81,6 +115,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     justifyContent: 'center',
     padding: 24,
+  },
+  logo: {
+    width: 96,
+    height: 96,
+    alignSelf: 'center',
+    marginBottom: 16,
+    borderRadius: 22,
   },
   title: {
     fontSize: 32,
@@ -105,6 +146,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
     color: '#212529',
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    marginBottom: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#212529',
+  },
+  eyeButton: {
+    paddingHorizontal: 14,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  eyeIcon: {
+    fontSize: 20,
   },
   button: {
     height: 52,
