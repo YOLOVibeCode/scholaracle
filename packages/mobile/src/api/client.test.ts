@@ -222,4 +222,211 @@ describe('ScholarmancyApiClient auth', () => {
       expect(secureStoreData.has('slc_connector_token')).toBe(false);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Mapper tests — guards against API shape drift on student data endpoints
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Real production grades response shape (from API research):
+   *   { studentId, overallGPA, courseGrades: [{ courseExternalId, courseName,
+   *     officialGrade, letterGrade, gradeSource, totalAssignments, ... }] }
+   *
+   * Client was reading `data.courses[].{externalId, name, currentGrade}` —
+   * those fields don't exist, so grades always returned [].
+   */
+  describe('getStudentGrades mapper', () => {
+    const STUDENT_ID = 'stu-abc123';
+
+    function makeGradesResponse(overrides?: Record<string, unknown>): Record<string, unknown> {
+      return {
+        studentId: STUDENT_ID,
+        studentName: 'Emma Lewis',
+        overallGPA: 3.8,
+        courseGrades: [
+          {
+            courseExternalId: 'course-1',
+            courseName: 'AP Calculus',
+            officialGrade: 95.5,
+            letterGrade: 'A',
+            gradeSource: 'sis',
+            totalAssignments: 12,
+            gradedAssignments: 10,
+            missingAssignments: 1,
+            lateAssignments: 0,
+            recentTrend: 'stable',
+            riskLevel: 'low',
+          },
+          {
+            courseExternalId: 'course-2',
+            courseName: 'English Lit',
+            officialGrade: null,
+            letterGrade: null,
+            gradeSource: 'none',
+            totalAssignments: 5,
+            gradedAssignments: 0,
+            missingAssignments: 0,
+            lateAssignments: 0,
+            recentTrend: 'unknown',
+            riskLevel: 'low',
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    it('should map courseGrades array using courseExternalId and officialGrade', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 200, body: makeGradesResponse() });
+
+      const grades = await client.getStudentGrades(STUDENT_ID);
+
+      expect(grades).toHaveLength(2);
+      expect(grades[0]).toMatchObject({
+        courseExternalId: 'course-1',
+        courseName: 'AP Calculus',
+        percentGrade: 95.5,
+        letterGrade: 'A',
+      });
+    });
+
+    it('should set asOfDate from the top-level response, not a per-course field', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 200, body: makeGradesResponse() });
+
+      const grades = await client.getStudentGrades(STUDENT_ID);
+
+      // asOfDate must be a valid ISO date string (defaults to today if absent)
+      expect(grades[0].asOfDate).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    });
+
+    it('should tolerate null officialGrade (no crash)', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 200, body: makeGradesResponse() });
+
+      const grades = await client.getStudentGrades(STUDENT_ID);
+
+      expect(grades[1].percentGrade).toBeUndefined();
+      expect(grades[1].letterGrade).toBeUndefined();
+    });
+
+    it('should return [] when the request fails', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 500, body: { error: 'server error' } });
+
+      await expect(client.getStudentGrades(STUDENT_ID)).resolves.toEqual([]);
+    });
+  });
+
+  /**
+   * Real production sources/runs shape (from API research):
+   *   Sources: [{ id, provider, displayName, pluginId, ... }]  — field is `id` not `sourceId`
+   *   Runs:    [{ runId, status, startedAt, ... }]             — field is `runId` not `_id`
+   *                                                              no `provider` or `opCount` on runs
+   *
+   * Client read `source.sourceId` and run `_id`/`provider`/`opCount` — all undefined,
+   * so runs were fetched from wrong URL paths (sourceId=undefined) and mapped to bad objects.
+   */
+  describe('getStudentRuns mapper', () => {
+    const STUDENT_ID = 'stu-abc123';
+
+    function makeSourcesResponse(): unknown[] {
+      return [
+        {
+          id: 'src-111',
+          pluginId: 'canvas',
+          provider: 'canvas',
+          displayName: 'Canvas',
+          enabled: true,
+        },
+        {
+          id: 'src-222',
+          pluginId: 'skyward',
+          provider: 'skyward',
+          displayName: 'Skyward',
+          enabled: true,
+        },
+      ];
+    }
+
+    function makeRunsResponse(provider: string): unknown[] {
+      return [
+        {
+          runId: `run-${provider}-1`,
+          status: 'success',
+          startedAt: '2026-08-06T10:00:00Z',
+          uploadedAt: '2026-08-06T10:01:00Z',
+        },
+        {
+          runId: `run-${provider}-2`,
+          status: 'failed',
+          startedAt: '2026-08-05T09:00:00Z',
+          error: 'Login timeout',
+        },
+      ];
+    }
+
+    it('should use source.id (not source.sourceId) to build the runs URL', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence(
+        { status: 200, body: makeSourcesResponse() },
+        { status: 200, body: makeRunsResponse('canvas') },
+        { status: 200, body: makeRunsResponse('skyward') }
+      );
+
+      await client.getStudentRuns(STUDENT_ID);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/sources/src-111/runs'),
+        expect.anything()
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/sources/src-222/runs'),
+        expect.anything()
+      );
+    });
+
+    it('should map runId to the _id field and provider from the source', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence(
+        { status: 200, body: makeSourcesResponse() },
+        { status: 200, body: makeRunsResponse('canvas') },
+        { status: 200, body: makeRunsResponse('skyward') }
+      );
+
+      const runs = await client.getStudentRuns(STUDENT_ID);
+
+      expect(runs.length).toBeGreaterThan(0);
+      expect(runs[0]._id).toMatch(/^run-/);
+      expect(runs[0].provider).toMatch(/^(canvas|skyward)$/);
+      expect(runs[0].startedAt).toBeTruthy();
+    });
+
+    it('should sort runs newest-first and cap at 20', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const manyRuns = Array.from({ length: 15 }, (_, i) => ({
+        runId: `run-${i}`,
+        status: 'success',
+        startedAt: new Date(2026, 0, i + 1).toISOString(),
+      }));
+      mockFetchSequence(
+        { status: 200, body: [{ id: 'src-1', provider: 'canvas', displayName: 'Canvas' }] },
+        { status: 200, body: manyRuns }
+      );
+
+      const runs = await client.getStudentRuns(STUDENT_ID);
+
+      expect(runs.length).toBe(15);
+      expect(new Date(runs[0].startedAt).getTime()).toBeGreaterThan(
+        new Date(runs[1].startedAt).getTime()
+      );
+    });
+
+    it('should return [] when sources request fails', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 500, body: {} });
+
+      await expect(client.getStudentRuns(STUDENT_ID)).resolves.toEqual([]);
+    });
+  });
 });
