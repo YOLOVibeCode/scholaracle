@@ -173,7 +173,7 @@ export function GradeTrendChart({ studentId, courseExternalId, courseName }: Gra
               borderRadius: '0.5rem',
               fontSize: '0.875rem',
             }}
-            formatter={(value: number | undefined) => [value != null ? `${value}%` : '—', 'Grade']}
+            formatter={(value) => [(typeof value === 'number' ? `${value}%` : '—'), 'Grade']}
           />
           {markers.map((m, i) => (
             <ReferenceDot

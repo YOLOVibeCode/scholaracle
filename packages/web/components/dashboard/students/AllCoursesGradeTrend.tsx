@@ -177,9 +177,9 @@ export function AllCoursesGradeTrend({
               fontSize: '0.875rem',
             }}
             labelFormatter={(label) => label}
-            formatter={(value: number | undefined, name) => {
+            formatter={(value, name) => {
               const course = courseOrder.find((c) => c.courseExternalId === name);
-              return [value != null ? `${value}%` : '—', course?.courseName ?? (name as string)];
+              return [(typeof value === 'number' ? `${value}%` : '—'), course?.courseName ?? String(name)];
             }}
           />
           <ReferenceLine
