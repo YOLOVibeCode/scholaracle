@@ -12,8 +12,14 @@
 import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
-import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
+import type { WebViewMessageEvent, WebViewNavigation, WebViewProps } from 'react-native-webview';
 import type { WebViewPageDriver } from './WebViewPageDriver';
+
+// react-native-webview's class component types collapse to `never` under
+// React 19 typings; re-type the component with its documented props.
+const WebViewComponent = WebView as unknown as React.ForwardRefExoticComponent<
+  WebViewProps & React.RefAttributes<WebView>
+>;
 
 interface ISyncWebViewProps {
   readonly driver: WebViewPageDriver;
@@ -50,9 +56,10 @@ export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
       [driver]
     );
 
-    const handleLoadEnd = useCallback(
-      (event: { nativeEvent: WebViewNavigation }) => {
-        driver.webViewHandlers.onLoadEnd(event.nativeEvent);
+    const handleLoadEnd = useCallback<NonNullable<WebViewProps['onLoadEnd']>>(
+      (event) => {
+        // The driver ignores the payload; error events are safe to pass through.
+        driver.webViewHandlers.onLoadEnd(event.nativeEvent as WebViewNavigation);
       },
       [driver]
     );
@@ -69,7 +76,7 @@ export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
 
     return (
       <View style={visible ? styles.visible : styles.hidden}>
-        <WebView
+        <WebViewComponent
           ref={webViewRef}
           source={{ uri: initialUrl }}
           onLoad={attachInject}

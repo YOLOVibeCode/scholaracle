@@ -12,15 +12,17 @@ const ACCESS_TOKEN_KEY = 'slc_access_token';
 const REFRESH_TOKEN_KEY = 'slc_refresh_token';
 const CONNECTOR_TOKEN_KEY = 'slc_connector_token';
 
-interface IAuthTokens {
-  readonly accessToken: string;
-  readonly refreshToken: string;
-}
-
-interface ILoginResponse {
-  readonly accessToken: string;
-  readonly refreshToken: string;
-  readonly user: { readonly _id: string; readonly email: string };
+/**
+ * Auth response from the Scholarmancy API. Production returns the access
+ * token in `token`; `accessToken` is accepted as a legacy/alternate field.
+ * `refreshToken` may be rotated on refresh and must be re-persisted.
+ */
+interface IAuthResponse {
+  readonly success?: boolean;
+  readonly token?: string;
+  readonly accessToken?: string;
+  readonly refreshToken?: string;
+  readonly user?: { readonly id: string; readonly email: string; readonly name?: string };
 }
 
 export interface IStudentListItem {
@@ -32,7 +34,8 @@ export interface IStudentListItem {
 
 interface IConnectorTokenResponse {
   readonly token: string;
-  readonly expiresAt: string;
+  readonly jti?: string;
+  readonly expiresIn?: string;
 }
 
 export interface IAssignmentItem {
@@ -99,10 +102,16 @@ export class ScholarmancyApiClient {
   // Auth
   // ---------------------------------------------------------------------------
 
-  async login(email: string, password: string): Promise<ILoginResponse> {
-    const res = await this._post<ILoginResponse>('/api/auth/login', { email, password }, false);
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, res.accessToken);
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
+  async login(email: string, password: string): Promise<IAuthResponse> {
+    const res = await this._post<IAuthResponse>('/api/auth/login', { email, password }, false);
+    const accessToken = res.token ?? res.accessToken;
+    if (!accessToken) {
+      throw new Error('Login response did not include an access token');
+    }
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    if (res.refreshToken) {
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
+    }
     return res;
   }
 
@@ -113,8 +122,11 @@ export class ScholarmancyApiClient {
   }
 
   async isLoggedIn(): Promise<boolean> {
-    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
-    return token != null;
+    // A refresh token is enough — the session can be restored transparently.
+    const access = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+    if (access != null) return true;
+    const refresh = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    return refresh != null;
   }
 
   // ---------------------------------------------------------------------------
@@ -139,7 +151,7 @@ export class ScholarmancyApiClient {
   // ---------------------------------------------------------------------------
 
   async getStudents(): Promise<IStudentListItem[]> {
-    return this.get<IStudentListItem[]>('/api/students');
+    return this._get<IStudentListItem[]>('/api/students');
   }
 
   // ---------------------------------------------------------------------------
@@ -209,7 +221,7 @@ export class ScholarmancyApiClient {
   }
 
   async registerPushToken(expoPushToken: string): Promise<void> {
-    await this.post('/api/account/push-token', { expoPushToken }, true);
+    await this._post('/api/account/push-token', { expoPushToken }, true);
     await SecureStore.setItemAsync('slc_push_token', expoPushToken);
   }
 
@@ -310,30 +322,48 @@ export class ScholarmancyApiClient {
     });
     if (!res.ok) throw new Error('Session expired — please log in again');
 
-    const data = (await res.json()) as IAuthTokens;
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, data.accessToken);
-    return data.accessToken;
+    const data = (await res.json()) as IAuthResponse;
+    const accessToken = data.token ?? data.accessToken;
+    if (!accessToken) throw new Error('Session expired — please log in again');
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    // The server rotates refresh tokens; persist the new one or the next
+    // refresh will fail with an invalidated token.
+    if (data.refreshToken) {
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken);
+    }
+    return accessToken;
   }
 
   private async _get<T>(path: string): Promise<T> {
-    const token = await this._getAccessToken();
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const doGet = async (token: string): Promise<Response> =>
+      fetch(`${this.baseUrl}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+    let res = await doGet(await this._getAccessToken());
+    if (res.status === 401) {
+      // Access token expired (15 min TTL) — refresh once and retry.
+      res = await doGet(await this._refreshAccessToken());
+    }
     if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
     return res.json() as Promise<T>;
   }
 
   private async _post<T>(path: string, body: unknown, requireAuth: boolean): Promise<T> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (requireAuth) {
-      headers['Authorization'] = `Bearer ${await this._getAccessToken()}`;
+    const doPost = async (authToken?: string): Promise<Response> => {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      return fetch(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    };
+
+    let res = await doPost(requireAuth ? await this._getAccessToken() : undefined);
+    if (requireAuth && res.status === 401) {
+      res = await doPost(await this._refreshAccessToken());
     }
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
       throw new Error(text || `POST ${path} failed: ${res.status}`);

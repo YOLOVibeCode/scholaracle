@@ -39,9 +39,14 @@ export async function registerForPushNotifications(): Promise<string | null> {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
 
-  const alreadyRegistered = await apiClient.getPushToken();
-  if (alreadyRegistered !== token) {
-    await apiClient.registerPushToken(token);
+  try {
+    const alreadyRegistered = await apiClient.getPushToken();
+    if (alreadyRegistered !== token) {
+      await apiClient.registerPushToken(token);
+    }
+  } catch {
+    // Token upload is best-effort: the backend route may not be deployed yet.
+    // Local notifications still work; upload retries on next login.
   }
 
   return token;
