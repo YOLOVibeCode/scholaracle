@@ -23,6 +23,7 @@ export interface ConnectSourceWizardProps {
 const PROVIDERS = [
   { id: 'canvas', name: 'Canvas LMS', adapterId: 'com.instructure.canvas', available: true },
   { id: 'skyward', name: 'Skyward', adapterId: 'com.skyward', available: true },
+  { id: 'aeries', name: 'Aeries', adapterId: 'com.aeries', available: true },
   { id: 'google', name: 'Google Classroom', adapterId: 'com.google.classroom', available: true },
 ] as const;
 

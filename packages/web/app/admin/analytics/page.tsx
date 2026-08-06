@@ -153,7 +153,7 @@ export default function AdminAnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="period" className="text-xs" />
                   <YAxis className="text-xs" tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(v: number | undefined) => [v != null ? `$${v.toFixed(2)}` : '—', 'Revenue']} />
+                  <Tooltip formatter={(v) => [(typeof v === 'number' ? `$${v.toFixed(2)}` : '—'), 'Revenue']} />
                   <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Revenue" />
                 </BarChart>
               </ResponsiveContainer>
