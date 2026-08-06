@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, Alert } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { StudentsScreen } from './src/screens/StudentsScreen';
@@ -120,7 +120,9 @@ export default function App(): React.ReactElement {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <AppContent />
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          <AppContent />
+        </SafeAreaView>
         <StatusBar style="auto" />
       </AuthProvider>
     </SafeAreaProvider>
@@ -129,4 +131,5 @@ export default function App(): React.ReactElement {
 
 const styles = StyleSheet.create({
   loading: { flex: 1, backgroundColor: '#f8f9fa' },
+  safeArea: { flex: 1, backgroundColor: '#f8f9fa' },
 });
