@@ -38,6 +38,7 @@
   "submit": {
     "production": {
       "ios": {
+        "appleId": "apple@darkware.net",
         "appleTeamId": "N42FM5L5KD",
         "ascAppId": "6798499288",
         "language": "en-US",
