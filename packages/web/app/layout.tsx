@@ -16,8 +16,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Scholaracle',
-    template: '%s | Scholaracle',
+    default: 'Scholarmancy',
+    template: '%s | Scholarmancy',
+  },
+  icons: {
+    icon: '/favicon.png',
+    apple: '/logo.png',
   },
   description:
     'AI-powered parenting assistant for academic success. Track grades, assignments, and deadlines across all your students in one place.',
@@ -31,18 +35,18 @@ export const metadata: Metadata = {
     'academic alerts',
   ],
   openGraph: {
-    title: 'Scholaracle',
+    title: 'Scholarmancy',
     description:
       'Track your student\u2019s academic progress, get proactive alerts, and stay on top of assignments and deadlines.',
-    siteName: 'Scholaracle',
+    siteName: 'Scholarmancy',
     type: 'website',
   },
   twitter: {
     card: 'summary',
-    title: 'Scholaracle',
+    title: 'Scholarmancy',
     description: 'AI-powered parenting assistant for academic success.',
   },
-  applicationName: 'Scholaracle',
+  applicationName: 'Scholarmancy',
 };
 
 export default function RootLayout({

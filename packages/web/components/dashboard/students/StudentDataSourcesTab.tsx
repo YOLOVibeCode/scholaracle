@@ -146,6 +146,17 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
         </div>
       )}
 
+      {sources.length > 0 && (
+        <div className="text-right">
+          <Link
+            href={`/dashboard/students/${studentId}/runs`}
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            View all sync runs →
+          </Link>
+        </div>
+      )}
+
       {openRunSourceId && (
         <SyncHistorySheet
           studentId={studentId}

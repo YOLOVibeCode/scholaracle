@@ -1,6 +1,6 @@
 # @scholaracle/web
 
-Scholaracle web app — the parent-facing dashboard for tracking student academics, grades, alerts, and agenda. Built with Next.js 16, React 19, and Tailwind CSS.
+Scholarmancy web app — the parent-facing dashboard for tracking student academics, grades, alerts, and agenda. Built with Next.js 16, React 19, and Tailwind CSS.
 
 ## Getting Started
 

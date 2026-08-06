@@ -546,7 +546,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
                 Your scraper is ready!
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Download it, double-click to run, and your school data will sync to Scholaracle.
+                Download it, double-click to run, and your school data will sync to Scholarmancy.
               </p>
             </div>
 
@@ -563,7 +563,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
                 <li>Opens a browser and logs into your school portal automatically</li>
                 <li>You watch it read your child&apos;s grades and assignments</li>
                 <li>Shows you a summary and asks you to confirm</li>
-                <li>Syncs everything to your Scholaracle dashboard</li>
+                <li>Syncs everything to your Scholarmancy dashboard</li>
                 <li>Offers to run automatically 3x daily</li>
               </ol>
               <p className="mt-2">

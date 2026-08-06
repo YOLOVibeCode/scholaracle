@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
-const DEMO_EMAIL = 'demo@scholaracle.com';
+const DEMO_EMAIL = 'demo@scholarmancy.com';
 
 function getEmailFromToken(token: string | null): string | null {
   if (!token || typeof token !== 'string') return null;

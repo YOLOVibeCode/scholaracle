@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 
 export const metadata = {
-  title: 'Support | Scholaracle',
-  description: 'Get help with Scholaracle - SMS, notifications, and account support.',
+  title: 'Support | Scholarmancy',
+  description: 'Get help with Scholarmancy - SMS, notifications, and account support.',
 };
 
 export default function SupportPage() {
@@ -20,7 +20,7 @@ export default function SupportPage() {
             <section>
               <h2 className="text-lg font-semibold">SMS Text Messages</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholaracle can send text message alerts about assignments, deadlines, and grade changes.
+                Scholarmancy can send text message alerts about assignments, deadlines, and grade changes.
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-gray-600 dark:text-gray-400">
                 <li>

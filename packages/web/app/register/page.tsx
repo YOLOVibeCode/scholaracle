@@ -60,7 +60,7 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>Sign up for Scholaracle to get started</CardDescription>
+          <CardDescription>Sign up for Scholarmancy to get started</CardDescription>
         </CardHeader>
         <form data-testid="form-register" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
