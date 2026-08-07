@@ -13,6 +13,7 @@ import {
   ReferenceDot,
 } from 'recharts';
 import { studentsApi, type IActivityEvent } from '@/lib/api/students';
+import { gradeHexColor as gradeColor } from '@/lib/grade-colors';
 
 interface GradeTrendChartProps {
   studentId: string;
@@ -39,13 +40,6 @@ interface EventMarker {
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function gradeColor(grade: number): string {
-  if (grade >= 80) return '#10b981';
-  if (grade >= 70) return '#f59e0b';
-  if (grade >= 60) return '#f97316';
-  return '#ef4444';
 }
 
 function eventMarkerColor(e: IActivityEvent): string {

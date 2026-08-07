@@ -1,19 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import type { ICourseGrade, RiskLevel } from '@/lib/api/students';
+import type { ICourseGrade } from '@/lib/api/students';
+import { gradeColorClass } from '@/lib/grade-colors';
 
 export interface CourseGradeCardProps {
   studentId: string;
   course: ICourseGrade;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- riskLevel kept for API consistency with RiskLevel
-function gradeColorClass(grade: number, riskLevel: RiskLevel): string {
-  if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400 border-emerald-500/50';
-  if (grade >= 70) return 'text-amber-600 dark:text-amber-400 border-amber-500/50';
-  if (grade >= 60) return 'text-orange-600 dark:text-orange-400 border-orange-500/50';
-  return 'text-red-600 dark:text-red-400 border-red-500/50';
 }
 
 export function CourseGradeCard({ studentId, course }: CourseGradeCardProps) {

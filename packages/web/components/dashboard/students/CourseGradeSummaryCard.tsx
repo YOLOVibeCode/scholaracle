@@ -3,17 +3,11 @@
 import Link from 'next/link';
 import type { ICourseGrade, ICourseAssignment } from '@/lib/api/students';
 import { GradeTrendChart } from './GradeTrendChart';
+import { gradeTextColor } from '@/lib/grade-colors';
 
 export interface CourseGradeSummaryCardProps {
   course: ICourseGrade;
   studentId?: string;
-}
-
-function letterGradeColor(grade: number): string {
-  if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400';
-  if (grade >= 70) return 'text-amber-600 dark:text-amber-400';
-  if (grade >= 60) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
 }
 
 function riskBadgeClass(riskLevel: string): string {
@@ -82,7 +76,7 @@ export function CourseGradeSummaryCard({ course, studentId }: CourseGradeSummary
         <h2 className="mb-3 text-lg font-semibold">{course.courseName}</h2>
         <div className="flex flex-wrap items-baseline gap-4">
           <span
-            className={`text-3xl font-bold tabular-nums ${letterGradeColor(course.grade)}`}
+            className={`text-3xl font-bold tabular-nums ${gradeTextColor(course.grade)}`}
             data-testid="course-letter-grade"
           >
             {course.letterGrade}

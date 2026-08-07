@@ -1,3 +1,5 @@
+import { getTokenExp } from '@/lib/jwt';
+
 const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -6,27 +8,11 @@ const REMEMBER_ME_KEY = 'remember_me';
 /** Seconds before token expiry at which we trigger a proactive background refresh. */
 const PROACTIVE_REFRESH_THRESHOLD_SEC = 2 * 60; // 2 minutes
 
-/**
- * Decode JWT payload without verification (browser-safe, no crypto needed).
- * Returns the `exp` claim in seconds or null.
- */
-function getTokenExp(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const base64 = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
-    const json = typeof atob !== 'undefined' ? atob(base64) : '';
-    const payload = JSON.parse(json) as { exp?: number };
-    return typeof payload.exp === 'number' ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
-
 export interface IApiError {
   readonly success: false;
   readonly error: string;
   readonly code?: string;
+  readonly requestId?: string;
 }
 
 export interface IApiResponse<T> {
@@ -39,13 +25,16 @@ export class ApiClientError extends Error {
   public readonly status: number;
   public readonly code?: string;
   public readonly details?: unknown;
+  /** Server correlation ID (x-request-id) — quote this when reporting issues. */
+  public readonly requestId?: string;
 
-  constructor(message: string, status: number, code?: string, details?: unknown) {
+  constructor(message: string, status: number, code?: string, details?: unknown, requestId?: string) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.requestId = requestId;
   }
 }
 
@@ -304,6 +293,8 @@ export class ApiClient {
         }
       }
 
+      const requestId = response.headers.get('x-request-id') ?? undefined;
+
       if (!response.ok) {
         let errorData: Partial<IApiError> | null = null;
         try {
@@ -314,15 +305,43 @@ export class ApiClient {
 
         const message = errorData?.error ?? `HTTP ${response.status}`;
         const code = errorData?.code;
-        throw new ApiClientError(message, response.status, code, errorData);
+        throw new ApiClientError(
+          message,
+          response.status,
+          code,
+          errorData,
+          requestId ?? errorData?.requestId
+        );
       }
 
       // After a successful response, proactively refresh if the token is near expiry
       this._maybeProactiveRefresh();
 
-      return (await response.json()) as T;
+      // Guard the success-path parse: a malformed/HTML body must not surface
+      // a raw SyntaxError to the UI.
+      try {
+        return (await response.json()) as T;
+      } catch {
+        throw new ApiClientError(
+          'Received an invalid response from the server. Please try again.',
+          response.status,
+          'PARSE_ERROR',
+          undefined,
+          requestId
+        );
+      }
     } catch (error) {
-      throw error instanceof Error ? error : new Error('Network error');
+      if (error instanceof ApiClientError) {
+        throw error;
+      }
+      // fetch() rejections (offline, DNS, CORS) — normalize so users never
+      // see raw browser text like "Failed to fetch".
+      throw new ApiClientError(
+        'Unable to reach the server. Check your connection and try again.',
+        0,
+        'NETWORK_ERROR',
+        error
+      );
     }
   }
 }
