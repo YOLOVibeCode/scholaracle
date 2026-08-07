@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { IStudent, IStudentGradesResponse, ICourseGrade } from '@/lib/api/students';
+import { gradeBarColor, gradeTextColor } from '@/lib/grade-colors';
 
 /** Show letter grade prominently (default) or numeric score. Schools use different scales. */
 export type GradeDisplayMode = 'letter' | 'score';
@@ -13,20 +14,6 @@ export interface StudentGradePanelProps {
   loading?: boolean;
   /** 'letter' = letter grade prominent; 'score' = numeric % prominent. Default 'letter'. */
   displayMode?: GradeDisplayMode;
-}
-
-function gradeBarColor(grade: number): string {
-  if (grade >= 80) return 'bg-emerald-500';
-  if (grade >= 70) return 'bg-amber-500';
-  if (grade >= 60) return 'bg-orange-500';
-  return 'bg-red-500';
-}
-
-function letterGradeColor(grade: number): string {
-  if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400';
-  if (grade >= 70) return 'text-amber-600 dark:text-amber-400';
-  if (grade >= 60) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
 }
 
 export interface GradeBarProps {
@@ -54,7 +41,7 @@ function GradeBar({ course, studentId, displayMode = 'letter' }: GradeBarProps) 
         <div className="flex shrink-0 items-baseline gap-2">
           {showLetterProminent ? (
             <>
-              <span className={`text-xl font-bold tabular-nums ${letterGradeColor(course.grade)}`}>
+              <span className={`text-xl font-bold tabular-nums ${gradeTextColor(course.grade)}`}>
                 {course.letterGrade}
               </span>
               <span className="text-xs tabular-nums text-muted-foreground">
