@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getTokenExp } from '@/lib/jwt';
 
 const publicRoutes = [
   '/',
@@ -15,20 +16,6 @@ const publicRoutes = [
   '/cli-auth',
 ];
 const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
-
-/** Decode JWT payload without verification (only to read exp). Returns exp in seconds or null. Edge-safe (no Buffer). */
-function getTokenExp(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const base64 = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
-    const json = typeof atob !== 'undefined' ? atob(base64) : '';
-    const payload = JSON.parse(json) as { exp?: number };
-    return typeof payload.exp === 'number' ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
 
 /** If token expires within this many seconds, client may proactively refresh. */
 const PROACTIVE_REFRESH_THRESHOLD_SEC = 2 * 60; // 2 minutes

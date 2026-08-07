@@ -4,28 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { authApi } from '@/lib/api/auth';
+import { getTokenEmail } from '@/lib/jwt';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 const DEMO_EMAIL = 'demo@scholarmancy.com';
 
-function getEmailFromToken(token: string | null): string | null {
-  if (!token || typeof token !== 'string') return null;
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const base64 = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
-    const json = typeof atob !== 'undefined' ? atob(base64) : '';
-    const payload = JSON.parse(json) as { email?: string };
-    return typeof payload.email === 'string' ? payload.email : null;
-  } catch {
-    return null;
-  }
-}
-
 export function DemoBanner() {
   const router = useRouter();
   const token = authApi.getToken();
-  const email = getEmailFromToken(token);
+  const email = getTokenEmail(token);
   const isDemoUser = email === DEMO_EMAIL;
 
   const [resetting, setResetting] = useState(false);

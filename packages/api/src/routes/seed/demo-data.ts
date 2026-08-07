@@ -1,11 +1,11 @@
 /**
  * Realistic demo data for "Try Demo" flow.
- * Demo user: demo@scholaracle.com / DemoPass123! (Sarah Mitchell)
+ * Demo user: demo@scholarmancy.com / DemoPass123! (Sarah Mitchell)
  * Students: Emma Mitchell (10th), Liam Mitchell (7th)
  */
 
 export const DEMO_USER = {
-  email: 'demo@scholaracle.com',
+  email: 'demo@scholarmancy.com',
   password: 'DemoPass123!',
   name: 'Sarah Mitchell',
 } as const;
@@ -512,14 +512,7 @@ export interface DemoMaterialInput {
   readonly externalId: string;
   readonly title: string;
   readonly type:
-    | 'document'
-    | 'link'
-    | 'syllabus'
-    | 'handout'
-    | 'rubric'
-    | 'study_guide'
-    | 'video'
-    | 'other';
+    'document' | 'link' | 'syllabus' | 'handout' | 'rubric' | 'study_guide' | 'video' | 'other';
   readonly url?: string;
   readonly fileName?: string;
   readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';

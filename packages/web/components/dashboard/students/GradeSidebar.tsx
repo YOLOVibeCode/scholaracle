@@ -1,6 +1,7 @@
 'use client';
 
 import type { ICourseGrade, RiskLevel } from '@/lib/api/students';
+import { gradeColorClass as _gradeColorClass } from '@/lib/grade-colors';
 
 export interface GradeSidebarProps {
   courseGrades: readonly ICourseGrade[];
@@ -10,12 +11,9 @@ export interface GradeSidebarProps {
   compact?: boolean;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- riskLevel kept for API consistency
+/** @deprecated Import from \`@/lib/grade-colors\` directly. Kept for back-compat. */
 export function gradeColorClass(grade: number, riskLevel: RiskLevel): string {
-  if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400';
-  if (grade >= 70) return 'text-amber-600 dark:text-amber-400';
-  if (grade >= 60) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
+  return _gradeColorClass(grade, riskLevel);
 }
 
 export function borderRiskClass(riskLevel: RiskLevel): string {

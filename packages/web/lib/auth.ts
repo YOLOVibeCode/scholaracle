@@ -4,7 +4,7 @@ import Apple from 'next-auth/providers/apple';
 import AzureAD from 'next-auth/providers/azure-ad';
 import type { Provider } from 'next-auth/providers';
 
-const apiBase = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001/api';
+const apiBase = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 const internalSecret = process.env['INTERNAL_API_SECRET'] ?? '';
 
 const providers: Provider[] = [];

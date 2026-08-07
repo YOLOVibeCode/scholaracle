@@ -18,13 +18,23 @@ coverage/
 .nyc_output/
 .jest-cache/
 
-# Environment variables
+# Environment variables — never commit real secrets
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 .env.development
 .env.production
 .env.test
+.env.companion.local
+**/.env.companion.local
+companion.env.local
+**/companion.env.local
+**/companionDevSeed.generated.ts
+**/credentials.json
+**/secrets.json
+**/*.credentials.json
 
 # IDE
 .vscode/
@@ -102,3 +112,6 @@ local/
 
 # Traklet local settings (contains PAT tokens — never commit)
 .traklet/settings.json
+
+# App Store demo account credentials (public repo — never commit)
+.demo-credentials

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { IStudent, IStudentGradesResponse, ICourseGrade } from '@/lib/api/students';
 import type { GradeDisplayMode } from '@/components/dashboard/StudentGradePanel';
+import { gradeBarColor, gradeTextColor } from '@/lib/grade-colors';
 
 /** Min height per row in rem (~6.25rem). Responsive. */
 const ROW_MIN_HEIGHT_REM = 6.25;
@@ -14,20 +15,6 @@ export interface StudentGradeStripRowProps {
   displayMode?: GradeDisplayMode;
   /** Optional loading skeleton. */
   loading?: boolean;
-}
-
-function gradeBarColor(grade: number): string {
-  if (grade >= 80) return 'bg-emerald-500';
-  if (grade >= 70) return 'bg-amber-500';
-  if (grade >= 60) return 'bg-orange-500';
-  return 'bg-red-500';
-}
-
-function letterGradeColor(grade: number): string {
-  if (grade >= 80) return 'text-emerald-600 dark:text-emerald-400';
-  if (grade >= 70) return 'text-amber-600 dark:text-amber-400';
-  if (grade >= 60) return 'text-orange-600 dark:text-orange-400';
-  return 'text-red-600 dark:text-red-400';
 }
 
 function CompactCourseGrade({
@@ -57,7 +44,7 @@ function CompactCourseGrade({
         <span
           className={cn(
             'text-sm font-bold tabular-nums',
-            showLetter ? letterGradeColor(course.grade) : 'text-foreground'
+            showLetter ? gradeTextColor(course.grade) : 'text-foreground'
           )}
         >
           {showLetter ? course.letterGrade : `${course.grade}%`}
