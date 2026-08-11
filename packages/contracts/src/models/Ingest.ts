@@ -75,6 +75,11 @@ export interface ISlcRunMeta {
   readonly adapterVersion: string;
   readonly mode: SlcIngestMode; // v0.1: delta only
   readonly timezone: string; // IANA tz
+  /**
+   * Optional client identity / version stamp.
+   * e.g. { clientType: 'mobile', coreVersion: '0.1.0', extractorBundleHash: 'abc' }
+   */
+  readonly meta?: Readonly<Record<string, string>>;
 }
 
 export interface ISlcSourceMeta {
@@ -291,13 +296,7 @@ export interface ISlcGradeSnapshot {
 export interface ISlcAttendanceEvent {
   readonly date: string; // ISO date (YYYY-MM-DD)
   readonly status:
-    | 'present'
-    | 'absent'
-    | 'tardy'
-    | 'excused'
-    | 'unexcused'
-    | 'partial'
-    | 'field_trip';
+    'present' | 'absent' | 'tardy' | 'excused' | 'unexcused' | 'partial' | 'field_trip';
   readonly periodName?: string;
   /** Course name for period-level attendance. */
   readonly courseName?: string;
