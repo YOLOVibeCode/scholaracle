@@ -14,7 +14,23 @@ import {
   type IStudentData,
 } from '@scholaracle/database';
 import { GradeRiskService } from '@scholaracle/agents';
+import {
+  AuthenticationError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+  type IActionAsset,
+  type IActionItem,
+  type IActionBucket,
+  type IActionBoardResponse,
+  type IStudentListItem,
+  type IStudentGradesResponse,
+  type ISourceListItem,
+  type IRunListItem,
+} from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IInviteEmailSender } from '../../services/InviteEmailSender';
 import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { encryptCredentials } from '../../utils/credentialsCipher';
@@ -34,47 +50,9 @@ export interface IStudentsRouterConfig {
   readonly syncScheduler?: import('@scholaracle/agents').SyncScheduler;
 }
 
-export interface IActionAsset {
-  readonly assetId: string;
-  readonly fileName: string;
-  readonly materialType: string;
-  readonly mimeType: string;
-  readonly fileSize: number;
-  readonly downloadUrl: string;
-}
-
-export interface IActionItem {
-  readonly assignmentExternalId: string;
-  readonly title: string;
-  readonly dueAt?: string;
-  readonly status: string;
-  readonly termExternalId?: string;
-  readonly pointsPossible?: number;
-  readonly pointsEarned?: number;
-  readonly isOverdue: boolean;
-  readonly course: {
-    readonly externalId: string;
-    readonly name: string;
-    readonly currentGrade?: number;
-    readonly letterGrade?: string;
-    readonly riskLevel: string;
-  };
-  readonly assets: readonly IActionAsset[];
-  readonly materials: readonly IActionAsset[];
-}
-
-export interface IActionBucket {
-  readonly id: 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
-  readonly label: string;
-  readonly count: number;
-  readonly items: readonly IActionItem[];
-}
-
-export interface IActionBoardResponse {
-  readonly studentId: string;
-  readonly studentName: string;
-  readonly buckets: readonly IActionBucket[];
-}
+// Action-board wire types live in @scholaracle/contracts (types/api/actionBoard.ts).
+// Re-exported here for backwards compatibility with existing importers.
+export type { IActionAsset, IActionItem, IActionBucket, IActionBoardResponse };
 
 /** Assignment status for workflow (aligns with ICourseAssignment). */
 export type WorkflowAssignmentStatus =
@@ -281,11 +259,9 @@ function determineActionBucket(
 ): BucketId {
   const dueAt = item.dueAt ? new Date(item.dueAt).getTime() : null;
   const doc = assignmentDocs.find((d) => d.externalId === item.assignmentExternalId) as
-    | ActionBoardAssignmentDoc
-    | undefined;
+    ActionBoardAssignmentDoc | undefined;
   const docGradedAt = (doc?.record as Record<string, unknown> | undefined)?.['gradedAt'] as
-    | string
-    | undefined;
+    string | undefined;
   const gradedAtMs = docGradedAt ? new Date(docGradedAt).getTime() : 0;
 
   if (item.status === 'missing') {
@@ -333,50 +309,44 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students
    * Get all students for the authenticated user.
    */
-  router.get('/', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/',
+    asyncHandler(async (req: Request, res: Response) => {
       const authReq = req as IAuthenticatedRequest;
       const userId = authReq.userId;
 
       if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: 'Unauthorized',
-        });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const students = await studentRepository.findByUserId(userId);
 
       res.status(200).json(
-        students.map((student) => ({
+        students.map((student): IStudentListItem => ({
           id: student._id?.toString() ?? '',
           userId: student.userId.toString(),
           name: student.name,
           grade: student.grade,
           studentId: student.studentId,
-          stats: student.stats,
+          stats: student.stats
+            ? { ...student.stats, lastUpdated: student.stats.lastUpdated?.toISOString() }
+            : undefined,
         }))
       );
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/invites/pending
    * List all pending invites for the current user (by email).
    * Must be registered BEFORE /:id to avoid matching "invites" as an id.
    */
-  router.get('/invites/pending', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/invites/pending',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const { email } = req.query as { email?: string };
@@ -396,29 +366,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }));
 
       res.status(200).json(invites);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/contacts
    * List owner + all contacts with status (consent-first contact list).
    */
-  router.get('/:id/contacts', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/contacts',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const contacts = [
         {
@@ -448,33 +412,26 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         })),
       ];
       res.status(200).json(contacts);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/contacts
    * Invite a new contact. Sends invitation email when sendInviteEmail is configured.
    */
-  router.post('/:id/contacts', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/contacts',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       if (!student.canAdmin(userId)) {
-        res.status(403).json({ success: false, error: 'Only an admin can add contacts' });
-        return;
+        throw new ForbiddenError('Only an admin can add contacts');
       }
       const body = req.body as {
         email?: string;
@@ -485,15 +442,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         alertTypes?: readonly string[];
       };
       if (!body.email || typeof body.email !== 'string' || !body.email.includes('@')) {
-        res.status(400).json({ success: false, error: 'Valid email is required' });
-        return;
+        throw new ValidationError('Valid email is required');
       }
       const normalizedEmail = body.email.toLowerCase().trim();
       const role =
         body.role === 'guardian' || body.role === 'caregiver' ? body.role : ('parent' as const);
       if (student.hasContact(normalizedEmail)) {
-        res.status(409).json({ success: false, error: 'This email is already a contact' });
-        return;
+        throw new ConflictError('This email is already a contact');
       }
       const newContact: ISharedParent = {
         email: normalizedEmail,
@@ -535,42 +490,34 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           alertTypes: newContact.alertTypes,
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/contacts/accept
    * Accept a pending invite (authenticated user; email must match).
    */
-  router.post('/:id/contacts/accept', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/contacts/accept',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { email } = req.body as { email?: string };
       if (!email) {
-        res.status(400).json({ success: false, error: 'Email is required' });
-        return;
+        throw new ValidationError('Email is required');
       }
       const normalizedEmail = (email as string).toLowerCase().trim();
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const inviteIdx = student.sharedWith.findIndex(
         (sp) => sp.email === normalizedEmail && sp.status === 'pending'
       );
       if (inviteIdx === -1) {
-        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
-        return;
+        throw new NotFoundError('No pending invite found for this email');
       }
       const updatedShared = [...student.sharedWith];
       const current = updatedShared[inviteIdx]!;
@@ -584,78 +531,63 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       };
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true, message: 'Invite accepted' });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/contacts/decline
    * Decline a pending invite (authenticated user; email must match).
    */
-  router.post('/:id/contacts/decline', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/contacts/decline',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { email } = req.body as { email?: string };
       if (!email) {
-        res.status(400).json({ success: false, error: 'Email is required' });
-        return;
+        throw new ValidationError('Email is required');
       }
       const normalizedEmail = (email as string).toLowerCase().trim();
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const inviteIdx = student.sharedWith.findIndex(
         (sp) => sp.email === normalizedEmail && sp.status === 'pending'
       );
       if (inviteIdx === -1) {
-        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
-        return;
+        throw new NotFoundError('No pending invite found for this email');
       }
       const updatedShared = [...student.sharedWith];
       updatedShared[inviteIdx] = { ...updatedShared[inviteIdx]!, status: 'declined' };
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true, message: 'Invite declined' });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/contacts/:email
    * Update contact. Owner/admin: any field. Contact: only receiveAlerts, alertChannels, alertTypes.
    */
-  router.put('/:id/contacts/:email', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/contacts/:email',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const targetEmail = decodeURIComponent(req.params['email'] ?? '')
         .toLowerCase()
         .trim();
       const idx = student.sharedWith.findIndex((sp) => sp.email === targetEmail);
       if (idx === -1) {
-        res.status(404).json({ success: false, error: 'Contact not found' });
-        return;
+        throw new NotFoundError('Contact not found');
       }
       const isOwnerOrAdmin = student.canAdmin(userId);
       const isSelf = student.sharedWith[idx]!.userId === userId;
@@ -676,9 +608,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           ...(body.phone !== undefined && { phone: body.phone?.trim() }),
           ...(body.role !== undefined && {
             role: (body.role === 'guardian' || body.role === 'caregiver' ? body.role : 'parent') as
-              | 'parent'
-              | 'guardian'
-              | 'caregiver',
+              'parent' | 'guardian' | 'caregiver',
           }),
           ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
           ...(body.alertChannels !== undefined && { alertChannels: body.alertChannels }),
@@ -692,34 +622,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
         };
       } else {
-        res.status(403).json({ success: false, error: 'You can only edit your own contact prefs' });
-        return;
+        throw new ForbiddenError('You can only edit your own contact prefs');
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id/contacts/:email
    * Remove a contact. Only admin/owner can remove contacts - shared parents cannot remove themselves.
    */
-  router.delete('/:id/contacts/:email', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/:id/contacts/:email',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const targetEmail = decodeURIComponent(req.params['email'] ?? '')
         .toLowerCase()
@@ -728,45 +651,35 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       // NEW: Shared parents cannot remove themselves - only admin/owner can remove them
       if (!isAdmin) {
-        res.status(403).json({
-          success: false,
-          error:
-            'Only the account owner or admin can remove contacts. Shared parents cannot remove themselves.',
-        });
-        return;
+        throw new ForbiddenError(
+          'Only the account owner or admin can remove contacts. Shared parents cannot remove themselves.'
+        );
       }
 
       const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
       if (updatedShared.length === student.sharedWith.length) {
-        res.status(404).json({ success: false, error: 'Contact not found' });
-        return;
+        throw new NotFoundError('Contact not found');
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/contacts/:email/transfer-email
    * Initiate email transfer for a shared parent contact.
    * Only the shared parent themselves can initiate their own email transfer.
    */
-  router.post('/:id/contacts/:email/transfer-email', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/contacts/:email/transfer-email',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const currentEmail = decodeURIComponent(req.params['email'] ?? '')
         .toLowerCase()
@@ -775,41 +688,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       // Find the shared parent entry
       const sharedParent = student.sharedWith.find((sp) => sp.email === currentEmail);
       if (!sharedParent) {
-        res.status(404).json({ success: false, error: 'Shared parent not found' });
-        return;
+        throw new NotFoundError('Shared parent not found');
       }
 
       // Only the shared parent themselves can initiate their own transfer
       if (sharedParent.userId !== userId) {
-        res.status(403).json({
-          success: false,
-          error: 'You can only initiate email transfer for your own account',
-        });
-        return;
+        throw new ForbiddenError('You can only initiate email transfer for your own account');
       }
 
       const { newEmail } = req.body as { newEmail?: string };
       if (!newEmail || !newEmail.trim()) {
-        res.status(400).json({ success: false, error: 'New email required' });
-        return;
+        throw new ValidationError('New email required');
       }
 
       const normalizedNewEmail = newEmail.trim().toLowerCase();
       if (normalizedNewEmail === currentEmail) {
-        res.status(400).json({
-          success: false,
-          error: 'New email must be different from current email',
-        });
-        return;
+        throw new ValidationError('New email must be different from current email');
       }
 
       // Check if new email is already used
       if (student.hasContact(normalizedNewEmail)) {
-        res.status(400).json({
-          success: false,
-          error: 'New email is already a contact for this student',
-        });
-        return;
+        throw new ValidationError('New email is already a contact for this student');
       }
 
       // Generate tokens
@@ -867,31 +766,25 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         message:
           'Email transfer initiated. Please check both email addresses for confirmation links.',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/contacts/transfer-confirm
    * Confirm email transfer for a shared parent.
    * Body: { token, email } where email is either old or new email
    */
-  router.post('/:id/contacts/transfer-confirm', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/contacts/transfer-confirm',
+    asyncHandler(async (req: Request, res: Response) => {
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const { token, email } = req.body as { token?: string; email?: string };
       if (!token || !email) {
-        res.status(400).json({ success: false, error: 'Token and email required' });
-        return;
+        throw new ValidationError('Token and email required');
       }
 
       const normalizedEmail = email.trim().toLowerCase();
@@ -904,8 +797,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       );
 
       if (sharedParentIdx === -1) {
-        res.status(404).json({ success: false, error: 'No pending email transfer found' });
-        return;
+        throw new NotFoundError('No pending email transfer found');
       }
 
       const sharedParent = student.sharedWith[sharedParentIdx]!;
@@ -916,8 +808,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const updatedShared = [...student.sharedWith];
         updatedShared[sharedParentIdx] = { ...sharedParent, transferRequest: undefined };
         await studentRepository.update(student._id!, { sharedWith: updatedShared });
-        res.status(400).json({ success: false, error: 'Transfer request expired' });
-        return;
+        throw new ValidationError('Transfer request expired');
       }
 
       // Validate token
@@ -928,8 +819,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         : isNewEmail && token === transfer.newEmailToken;
 
       if (!validToken) {
-        res.status(400).json({ success: false, error: 'Invalid confirmation token' });
-        return;
+        throw new ValidationError('Invalid confirmation token');
       }
 
       // Store confirmation
@@ -988,35 +878,26 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           message: `${confirmType === 'old' ? 'Old' : 'New'} email confirmed. Waiting for ${confirmType === 'old' ? 'new' : 'old'} email confirmation.`,
         });
       }
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/owner-alert-prefs
    * Set owner's per-student alert preferences (receiveAlerts, channels, types).
    */
-  router.put('/:id/owner-alert-prefs', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/owner-alert-prefs',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       if (student.userId.toString() !== userId) {
-        res
-          .status(403)
-          .json({ success: false, error: 'Only the account owner can set owner alert prefs' });
-        return;
+        throw new ForbiddenError('Only the account owner can set owner alert prefs');
       }
       const body = req.body as {
         receiveAlerts?: boolean;
@@ -1030,38 +911,30 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       };
       await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
       res.status(200).json({ success: true, ownerAlertPrefs: prefs });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id
    * Get student by ID.
    */
-  router.get('/:id', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id } = req.params;
       if (!id) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(id);
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       if (!student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       res.status(200).json({
@@ -1075,37 +948,30 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         alertPreferences: student.alertPreferences,
         alertEmail: student.alertEmail,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/grades
    * Get per-course grades and assignment breakdown for a student.
    */
   // eslint-disable-next-line complexity
-  router.get('/:id/grades', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/grades',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId } = req.params;
       // Filter to current grading period by default; pass ?currentOnly=false to show all
       const currentOnly = req.query['currentOnly'] !== 'false';
       if (!studentDbId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const studentDbIdStr = student._id?.toString() ?? '';
@@ -1473,8 +1339,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         const rec = snap['record'] as Record<string, unknown> | undefined;
         if (!rec) continue;
         const rawCourseId = (snap['courseExternalId'] ?? rec['courseExternalId']) as
-          | string
-          | undefined;
+          string | undefined;
         if (!rawCourseId) continue;
         const courseExtId = extIdToMergedId.get(rawCourseId) ?? rawCourseId;
         const asOf = (rec['asOfDate'] as string) ?? '';
@@ -1672,35 +1537,28 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         courseGrades: filteredGrades,
         atRiskCourses,
         aiOverview,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+      } satisfies IStudentGradesResponse);
+    })
+  );
 
   /**
    * GET /api/students/:id/materials
    * Get course materials for a student, optionally filtered by course.
    */
-  router.get('/:id/materials', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/materials',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId } = req.params;
       if (!studentDbId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const studentExternalId = student.studentId ?? '';
@@ -1815,10 +1673,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
                 ? `${baseUrl}/api/assets/${asset.assetId}`
                 : undefined,
           linkAccessibility: rec?.['linkAccessibility'] as
-            | 'public'
-            | 'authenticated'
-            | 'unknown'
-            | undefined,
+            'public' | 'authenticated' | 'unknown' | undefined,
         };
 
         const list = grouped.get(courseExtId);
@@ -1843,31 +1698,25 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         totalMaterials,
         courses,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/grade-history
    * Get grade trend data for charting. Returns time-series grade snapshots per course.
    * Query params: ?course=<courseExternalId> (optional), ?from=<date>&to=<date> (optional), ?term=<termName> (optional).
    */
-  router.get('/:id/grade-history', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/grade-history',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const studentId = req.params['id'] ?? '';
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const courseFilter = req.query['course'] as string | undefined;
@@ -1877,8 +1726,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const validation = validateGradeHistoryQuery({ from: fromParam, to: toParam });
       if (!validation.valid) {
-        res.status(400).json({ error: validation.error });
-        return;
+        throw new ValidationError(validation.error);
       }
 
       const query: Record<string, unknown> = {
@@ -1938,8 +1786,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const cd of courseDocs) {
         const eid = (cd['externalId'] as string) ?? (cd['courseExternalId'] as string) ?? '';
         const title = (cd['record'] as Record<string, unknown> | undefined)?.['title'] as
-          | string
-          | undefined;
+          string | undefined;
         if (eid && title) courseNames.set(eid, title);
       }
 
@@ -1950,37 +1797,32 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }));
 
       res.status(200).json({ studentId, courses });
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id/grade-history
    * Archive records with date < before. Moves docs to slc_grade_history_archive.
    * Query params: ?before=<date> (required, ISO date string).
    */
-  router.delete('/:id/grade-history', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/:id/grade-history',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const studentId = req.params['id'] ?? '';
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const before = req.query['before'] as string | undefined;
       if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
-        res.status(400).json({ error: 'Query param before=<date> required (YYYY-MM-DD)' });
-        return;
+        throw new ValidationError('Query param before=<date> required (YYYY-MM-DD)');
       }
       if (student.studentId == null) {
-        res.status(400).json({ error: 'Student has no external id; cannot archive grade history' });
-        return;
+        throw new ValidationError('Student has no external id; cannot archive grade history');
       }
 
       const historyColl = config.database.collection('slc_grade_history');
@@ -2005,32 +1847,28 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const deleteResult = await historyColl.deleteMany(filter);
       const count = deleteResult.deletedCount ?? docs.length;
       res.status(200).json({ archived: count });
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/action-board
    * Get action board buckets for a student.
    */
   // eslint-disable-next-line complexity
-  router.get('/:id/action-board', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/action-board',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId } = req.params;
       if (!studentDbId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const studentExternalId = student.studentId ?? '';
@@ -2075,8 +1913,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const t of termDocs) {
         const extId = t['externalId'] as string | undefined;
         const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
-          | string
-          | undefined;
+          string | undefined;
         if (extId && endDate) termEndDates.set(extId, endDate);
       }
 
@@ -2090,8 +1927,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const latestGradeByCourse = new Map<string, { percent: number; asOf: string }>();
       for (const g of gradeDocs) {
         const courseExtId = (g['courseExternalId'] ?? g['record']?.courseExternalId) as
-          | string
-          | undefined;
+          string | undefined;
         if (!courseExtId) continue;
         const asOf = (g['record']?.asOfDate as string) ?? '';
         const raw = g['record']?.percentGrade ?? g['record']?.grade;
@@ -2123,11 +1959,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
       type BucketId =
-        | 'needs_attention'
-        | 'due_soon'
-        | 'in_progress'
-        | 'recently_graded'
-        | 'caught_up';
+        'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
       const bucketLabels: Record<BucketId, string> = {
         needs_attention: 'Needs Attention',
         due_soon: 'Due Soon',
@@ -2235,36 +2067,29 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentId: studentDbId,
         studentName: student.name,
         buckets,
-      } as IActionBoardResponse);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+      } satisfies IActionBoardResponse);
+    })
+  );
 
   /**
    * GET /api/students/:id/activity
    * Unified activity timeline: grade changes, materials, alerts, comments, grade snapshots.
    * Query: course, assignment, types (comma), from, to, limit.
    */
-  router.get('/:id/activity', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/activity',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId } = req.params;
       if (!studentDbId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const studentExternalId = student.studentId ?? '';
       const assignmentFilter = {
@@ -2515,34 +2340,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         events: sliced,
         hasMore,
       } as IActivityTimelineResponse);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/assignment-workflow
    * Flat list of all assignments across courses with optional query filters.
    */
-  router.get('/:id/assignment-workflow', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/assignment-workflow',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId } = req.params;
       if (!studentDbId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const studentExternalId = student.studentId ?? '';
@@ -2577,8 +2395,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const g of gradeDocs) {
         const gRec = g['record'] as Record<string, unknown> | undefined;
         const courseExtId = (g['courseExternalId'] ?? gRec?.['courseExternalId']) as
-          | string
-          | undefined;
+          string | undefined;
         if (!courseExtId) continue;
         const asOf = (gRec?.['asOfDate'] as string) ?? '';
         const raw = (gRec?.['percentGrade'] ?? gRec?.['grade']) as number | undefined;
@@ -2702,36 +2519,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           upcoming,
         },
       } as IAssignmentWorkflowResponse);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/assignments/:externalId/history
    * Grade/status change history for a single assignment (from _history array on doc).
    */
-  router.get('/:id/assignments/:externalId/history', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/assignments/:externalId/history',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res
-          .status(400)
-          .json({ success: false, error: 'Missing student ID or assignment external ID' });
-        return;
+        throw new ValidationError('Missing student ID or assignment external ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const studentExternalId = student.studentId ?? '';
@@ -2746,8 +2554,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       });
 
       if (!doc) {
-        res.status(404).json({ success: false, error: 'Assignment not found' });
-        return;
+        throw new NotFoundError('Assignment not found');
       }
 
       const record = (doc['record'] ?? {}) as Record<string, unknown>;
@@ -2779,36 +2586,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         courseName,
         history,
       } as IAssignmentHistoryResponse);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/assignments/:externalId/note
    * Set student note (e.g. "What have you done?") on an assignment.
    */
-  router.put('/:id/assignments/:externalId/note', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/assignments/:externalId/note',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res
-          .status(400)
-          .json({ success: false, error: 'Missing student ID or assignment external ID' });
-        return;
+        throw new ValidationError('Missing student ID or assignment external ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const body = req.body as { note?: string };
@@ -2828,18 +2626,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       );
 
       if (result.matchedCount === 0) {
-        res.status(404).json({ success: false, error: 'Assignment not found' });
-        return;
+        throw new NotFoundError('Assignment not found');
       }
 
       res.status(200).json({ success: true, note });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   const VALID_STUDENT_STATUSES = new Set(['not_started', 'working_on_it', 'need_help', 'done']);
 
@@ -2847,34 +2639,28 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * PUT /api/students/:id/assignments/:externalId/status
    * Set student progress status on an assignment.
    */
-  router.put('/:id/assignments/:externalId/status', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/assignments/:externalId/status',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res
-          .status(400)
-          .json({ success: false, error: 'Missing student ID or assignment external ID' });
-        return;
+        throw new ValidationError('Missing student ID or assignment external ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const body = req.body as { status?: string | null };
       const status = body.status === null || body.status === '' ? null : body.status;
       if (status !== null && (typeof status !== 'string' || !VALID_STUDENT_STATUSES.has(status))) {
-        res.status(400).json({
-          success: false,
-          error: `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`,
-        });
-        return;
+        throw new ValidationError(
+          `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`
+        );
       }
 
       const studentExternalId = student.studentId ?? '';
@@ -2891,18 +2677,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       );
 
       if (result.matchedCount === 0) {
-        res.status(404).json({ success: false, error: 'Assignment not found' });
-        return;
+        throw new NotFoundError('Assignment not found');
       }
 
       res.status(200).json({ success: true, studentStatus: status });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   const COMMENTS_COLLECTION = 'slc_assignment_comments';
 
@@ -2910,25 +2690,20 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students/:id/assignments/:externalId/comments
    * List comments on an assignment (chronological).
    */
-  router.get('/:id/assignments/:externalId/comments', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/assignments/:externalId/comments',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing student ID or assignment external ID',
-        });
-        return;
+        throw new ValidationError('Missing student ID or assignment external ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const assignmentsColl = config.database.collection('slc_assignments');
       const assignmentDoc = await assignmentsColl.findOne({
@@ -2941,8 +2716,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         ],
       });
       if (!assignmentDoc) {
-        res.status(404).json({ success: false, error: 'Assignment not found' });
-        return;
+        throw new NotFoundError('Assignment not found');
       }
       const courseExternalId =
         (assignmentDoc['courseExternalId'] as string) ||
@@ -2968,39 +2742,29 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         createdAt: (d['createdAt'] as Date).toISOString(),
       }));
       res.status(200).json(list);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/assignments/:externalId/comments
    * Add a comment. Body: { body: string, authorName?: string }.
    */
-  router.post('/:id/assignments/:externalId/comments', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/assignments/:externalId/comments',
+    asyncHandler(async (req: Request, res: Response) => {
       const authReq = req as IAuthenticatedRequest;
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const userEmail = authReq.userEmail ?? '';
       const { id: studentDbId, externalId: assignmentExternalId } = req.params;
       if (!studentDbId || !assignmentExternalId) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing student ID or assignment external ID',
-        });
-        return;
+        throw new ValidationError('Missing student ID or assignment external ID');
       }
       const student = await studentRepository.findById(studentDbId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const assignmentsColl = config.database.collection('slc_assignments');
       const assignmentDoc = await assignmentsColl.findOne({
@@ -3013,8 +2777,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         ],
       });
       if (!assignmentDoc) {
-        res.status(404).json({ success: false, error: 'Assignment not found' });
-        return;
+        throw new NotFoundError('Assignment not found');
       }
       const courseExternalId =
         (assignmentDoc['courseExternalId'] as string) ||
@@ -3023,8 +2786,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const bodyPayload = req.body as { body?: string; authorName?: string };
       const body = typeof bodyPayload.body === 'string' ? bodyPayload.body.trim() : '';
       if (!body) {
-        res.status(400).json({ success: false, error: 'Missing or empty body' });
-        return;
+        throw new ValidationError('Missing or empty body');
       }
       const authorName =
         typeof bodyPayload.authorName === 'string' && bodyPayload.authorName.trim()
@@ -3060,13 +2822,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         body,
         createdAt: now.toISOString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id/assignments/:externalId/comments/:commentId
@@ -3074,80 +2831,61 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    */
   router.delete(
     '/:id/assignments/:externalId/comments/:commentId',
-    async (req: Request, res: Response) => {
-      try {
-        const userId = getUserId(req);
-        if (!userId) {
-          res.status(401).json({ success: false, error: 'Unauthorized' });
-          return;
-        }
-        const { id: studentDbId, externalId: assignmentExternalId, commentId } = req.params;
-        if (!studentDbId || !assignmentExternalId || !commentId) {
-          res.status(400).json({
-            success: false,
-            error: 'Missing student ID, assignment external ID, or comment ID',
-          });
-          return;
-        }
-        const student = await studentRepository.findById(studentDbId);
-        if (!student || !student.hasAccess(userId)) {
-          res.status(404).json({ success: false, error: 'Student not found' });
-          return;
-        }
-        let commentObjectId: ObjectId;
-        try {
-          commentObjectId = new ObjectId(commentId);
-        } catch {
-          res.status(400).json({ success: false, error: 'Invalid comment ID' });
-          return;
-        }
-        const commentsColl = config.database.collection(COMMENTS_COLLECTION);
-        const doc = await commentsColl.findOne({
-          _id: commentObjectId,
-          userId,
-          assignmentExternalId,
-          deletedAt: { $in: [null, undefined] },
-        });
-        if (!doc) {
-          res.status(404).json({ success: false, error: 'Comment not found' });
-          return;
-        }
-        const isAuthor = (doc['userId'] as string) === userId;
-        const isOwner = student.userId.toString() === userId;
-        if (!isAuthor && !isOwner) {
-          res.status(403).json({ success: false, error: 'Not allowed to delete this comment' });
-          return;
-        }
-        const now = new Date();
-        await commentsColl.updateOne(
-          { _id: commentObjectId },
-          { $set: { deletedAt: now, updatedAt: now } }
-        );
-        res.status(200).json({ success: true });
-      } catch (error) {
-        res.status(500).json({
-          success: false,
-          error: error instanceof Error ? error.message : 'Internal server error',
-        });
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
       }
-    }
+      const { id: studentDbId, externalId: assignmentExternalId, commentId } = req.params;
+      if (!studentDbId || !assignmentExternalId || !commentId) {
+        throw new ValidationError('Missing student ID, assignment external ID, or comment ID');
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Student not found');
+      }
+      let commentObjectId: ObjectId;
+      try {
+        commentObjectId = new ObjectId(commentId);
+      } catch {
+        throw new ValidationError('Invalid comment ID');
+      }
+      const commentsColl = config.database.collection(COMMENTS_COLLECTION);
+      const doc = await commentsColl.findOne({
+        _id: commentObjectId,
+        userId,
+        assignmentExternalId,
+        deletedAt: { $in: [null, undefined] },
+      });
+      if (!doc) {
+        throw new NotFoundError('Comment not found');
+      }
+      const isAuthor = (doc['userId'] as string) === userId;
+      const isOwner = student.userId.toString() === userId;
+      if (!isAuthor && !isOwner) {
+        throw new ForbiddenError('Not allowed to delete this comment');
+      }
+      const now = new Date();
+      await commentsColl.updateOne(
+        { _id: commentObjectId },
+        { $set: { deletedAt: now, updatedAt: now } }
+      );
+      res.status(200).json({ success: true });
+    })
   );
 
   /**
    * POST /api/students
    * Create a new student.
    */
-  router.post('/', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/',
+    asyncHandler(async (req: Request, res: Response) => {
       const authReq = req as IAuthenticatedRequest;
       const userId = authReq.userId;
 
       if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: 'Unauthorized',
-        });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const { name, grade, studentId } = req.body as {
@@ -3157,11 +2895,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       };
 
       if (!name) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing required field: name',
-        });
-        return;
+        throw new ValidationError('Missing required field: name');
       }
 
       const subscription = await subscriptionRepository.findByUserId(userId);
@@ -3199,42 +2933,34 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentId: student.studentId,
         stats: student.stats,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id
    * Update student.
    */
-  router.put('/:id', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id } = req.params;
       if (!id) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const existing = await studentRepository.findById(id);
       if (!existing || existing.userId.toString() !== userId) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const updates = req.body as Partial<IStudentData>;
 
       const student = await studentRepository.update(id, updates);
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       res.status(200).json({
@@ -3248,48 +2974,35 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         alertPreferences: student.alertPreferences,
         alertEmail: student.alertEmail,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id
    * Delete student.
    */
-  router.delete('/:id', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id } = req.params;
       if (!id) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(id);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const deleted = await studentRepository.delete(id);
       if (!deleted) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   // --- Student data sources (must be before /:id to avoid matching "sources" as id) ---
 
@@ -3297,39 +3010,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students/:id/sources
    * List data sources for a student.
    */
-  router.get('/:id/sources', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/sources',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId } = req.params;
       if (!studentId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
-      const sources: Array<{
-        id: string;
-        pluginId: string;
-        provider: string;
-        displayName: string;
-        portalBaseUrl?: string;
-        enabled: boolean;
-        schedule: string;
-        dataTypes: string[];
-        status: string;
-        hasCredentials?: boolean;
-        lastScraped?: string;
-        lastSuccess?: string;
-        lastError?: string | null;
-      }> = [];
+      const sources: ISourceListItem[] = [];
 
       for (const ds of student.dataSources) {
         const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, ds.id);
@@ -3352,42 +3049,33 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       res.status(200).json(sources);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/sources
    * Add a data source to a student.
    */
-  router.post('/:id/sources', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/sources',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId } = req.params;
       if (!studentId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
       const parsed = addSourceSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const body = parsed.data;
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const sourceId = randomUUID();
@@ -3435,48 +3123,38 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         dataTypes: body.dataTypes,
         status: 'active',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/sources/:sourceId
    * Update a data source config for a student.
    */
-  router.put('/:id/sources/:sourceId', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/sources/:sourceId',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId, sourceId } = req.params;
       if (!studentId || !sourceId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
-        return;
+        throw new ValidationError('Missing student ID or source ID');
       }
       const parsed = updateSourceSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const updates = parsed.data;
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const idx = student.dataSources.findIndex((ds) => ds.id === sourceId);
       if (idx === -1) {
-        res.status(404).json({ success: false, error: 'Source not found' });
-        return;
+        throw new NotFoundError('Source not found');
       }
 
       const ds = student.dataSources[idx]!;
@@ -3518,48 +3196,38 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         dataTypes: updatedDs.dataTypes ?? ds.dataTypes ?? [],
         status: ds.status ?? 'active',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/sources/:sourceId/credentials
    * Set or update credentials for a source (API token or login for scraping). Stored encrypted.
    */
-  router.put('/:id/sources/:sourceId/credentials', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/sources/:sourceId/credentials',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId, sourceId } = req.params;
       if (!studentId || !sourceId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
-        return;
+        throw new ValidationError('Missing student ID or source ID');
       }
       const parsed = credentialsSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const credentials = parsed.data;
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const idx = student.dataSources.findIndex((ds) => ds.id === sourceId);
       if (idx === -1) {
-        res.status(404).json({ success: false, error: 'Source not found' });
-        return;
+        throw new NotFoundError('Source not found');
       }
 
       const plain = JSON.stringify(credentials);
@@ -3582,81 +3250,65 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       await studentRepository.update(studentId, { dataSources: dataSourcesUpdated });
 
       res.status(200).json({ success: true, hasCredentials: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id/sources/:sourceId
    * Remove a data source from a student.
    */
-  router.delete('/:id/sources/:sourceId', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/:id/sources/:sourceId',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId, sourceId } = req.params;
       if (!studentId || !sourceId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
-        return;
+        throw new ValidationError('Missing student ID or source ID');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const newDataSources = student.dataSources.filter((ds) => ds.id !== sourceId);
       if (newDataSources.length === student.dataSources.length) {
-        res.status(404).json({ success: false, error: 'Source not found' });
-        return;
+        throw new NotFoundError('Source not found');
       }
 
       await studentRepository.update(studentId, { dataSources: [...newDataSources] });
       await ingestSourceRepository.deleteByUserIdAndSourceId(userId, sourceId);
 
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/sources/:sourceId/runs
    * List ingest runs for a source.
    */
-  router.get('/:id/sources/:sourceId/runs', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/sources/:sourceId/runs',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId, sourceId } = req.params;
       if (!studentId || !sourceId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
-        return;
+        throw new ValidationError('Missing student ID or source ID');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
       if (!hasSource) {
-        res.status(404).json({ success: false, error: 'Source not found' });
-        return;
+        throw new NotFoundError('Source not found');
       }
 
       const limitParam = req.query['limit'];
@@ -3672,7 +3324,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             uploadedAt?: Date;
             committedAt?: Date;
             error?: string | null;
-          }) => ({
+          }): IRunListItem => ({
             runId: r.runId,
             status: r.status,
             startedAt: r.startedAt.toISOString(),
@@ -3682,35 +3334,28 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           })
         )
       );
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/students/:id/alerts
    * List alerts for a student.
    */
-  router.get('/:id/alerts', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/alerts',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId } = req.params;
       if (!studentId) {
-        res.status(400).json({ success: false, error: 'Missing student ID' });
-        return;
+        throw new ValidationError('Missing student ID');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const allAlerts = await alertRepository.findByUserId(userId);
@@ -3728,40 +3373,32 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           createdAt: a.createdAt?.toISOString?.() ?? new Date().toISOString(),
         }))
       );
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/sources/:sourceId/runs/trigger
    * Trigger a manual sync (creates a new ingest run).
    */
-  router.post('/:id/sources/:sourceId/runs/trigger', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/sources/:sourceId/runs/trigger',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const { id: studentId, sourceId } = req.params;
       if (!studentId || !sourceId) {
-        res.status(400).json({ success: false, error: 'Missing student ID or source ID' });
-        return;
+        throw new ValidationError('Missing student ID or source ID');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
       if (!hasSource) {
-        res.status(404).json({ success: false, error: 'Source not found' });
-        return;
+        throw new NotFoundError('Source not found');
       }
 
       const lastCursor = await ingestRunRepository.findLastCommittedCursor(userId, sourceId);
@@ -3795,13 +3432,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         committedAt: run.committedAt?.toISOString(),
         error: run.error ?? null,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   // =========================================================================
   // Parent sharing routes
@@ -3811,18 +3443,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
    * GET /api/students/:id/parents
    * List all parents (owner + shared) for a student.
    */
-  router.get('/:id/parents', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id/parents',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const parents = [
@@ -3851,41 +3482,33 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       ];
 
       res.status(200).json(parents);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/parents/invite
    * Invite another parent/guardian to share access to this student.
    * Only the primary owner can invite.
    */
-  router.post('/:id/parents/invite', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/parents/invite',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       if (!student.canAdmin(userId)) {
-        res.status(403).json({ success: false, error: 'Only an admin parent can invite others' });
-        return;
+        throw new ForbiddenError('Only an admin parent can invite others');
       }
 
       const { email, role } = req.body as { email?: string; role?: string };
       if (!email || typeof email !== 'string' || !email.includes('@')) {
-        res.status(400).json({ success: false, error: 'Valid email is required' });
-        return;
+        throw new ValidationError('Valid email is required');
       }
 
       const normalizedEmail = email.toLowerCase().trim();
@@ -3896,8 +3519,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         (sp) => sp.email === normalizedEmail && sp.status !== 'declined'
       );
       if (existing) {
-        res.status(409).json({ success: false, error: 'This person has already been invited' });
-        return;
+        throw new ConflictError('This person has already been invited');
       }
 
       // Check if inviting yourself
@@ -3939,45 +3561,37 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           status: 'pending',
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/parents/accept
    * Accept a pending invite (called by the invited user after login/register).
    */
-  router.post('/:id/parents/accept', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/parents/accept',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const { email } = req.body as { email?: string };
       if (!email) {
-        res.status(400).json({ success: false, error: 'Email is required' });
-        return;
+        throw new ValidationError('Email is required');
       }
 
       const normalizedEmail = email.toLowerCase().trim();
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const inviteIdx = student.sharedWith.findIndex(
         (sp) => sp.email === normalizedEmail && sp.status === 'pending'
       );
       if (inviteIdx === -1) {
-        res.status(404).json({ success: false, error: 'No pending invite found for this email' });
-        return;
+        throw new NotFoundError('No pending invite found for this email');
       }
 
       const updatedShared = [...student.sharedWith];
@@ -3991,38 +3605,29 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
 
       res.status(200).json({ success: true, message: 'Invite accepted' });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/students/:id/parents/:email/admin
    * Promote or demote a shared parent to/from admin.
    * Only existing admins (owner or promoted) can do this.
    */
-  router.put('/:id/parents/:email/admin', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id/parents/:email/admin',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       if (!student.canAdmin(userId)) {
-        res
-          .status(403)
-          .json({ success: false, error: 'Only an admin parent can change admin rights' });
-        return;
+        throw new ForbiddenError('Only an admin parent can change admin rights');
       }
 
       const targetEmail = decodeURIComponent(req.params['email'] ?? '')
@@ -4031,18 +3636,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const { isAdmin } = req.body as { isAdmin?: boolean };
 
       if (typeof isAdmin !== 'boolean') {
-        res.status(400).json({ success: false, error: 'isAdmin (boolean) is required' });
-        return;
+        throw new ValidationError('isAdmin (boolean) is required');
       }
 
       const idx = student.sharedWith.findIndex(
         (sp) => sp.email === targetEmail && sp.status === 'accepted'
       );
       if (idx === -1) {
-        res
-          .status(404)
-          .json({ success: false, error: 'Accepted shared parent not found with that email' });
-        return;
+        throw new NotFoundError('Accepted shared parent not found with that email');
       }
 
       const updatedShared = [...student.sharedWith];
@@ -4056,30 +3657,24 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           ? `${targetEmail} has been promoted to admin`
           : `${targetEmail} has been demoted from admin`,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/students/:id/parents/:email
    * Remove a shared parent. Admin can remove anyone; shared parent can remove themselves.
    */
-  router.delete('/:id/parents/:email', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/:id/parents/:email',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const targetEmail = decodeURIComponent(req.params['email'] ?? '')
@@ -4093,54 +3688,43 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           (sp) => sp.userId === userId && sp.email === targetEmail
         );
         if (!selfEntry) {
-          res.status(403).json({ success: false, error: 'You can only remove yourself' });
-          return;
+          throw new ForbiddenError('You can only remove yourself');
         }
       }
 
       const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
 
       if (updatedShared.length === student.sharedWith.length) {
-        res.status(404).json({ success: false, error: 'Shared parent not found' });
-        return;
+        throw new NotFoundError('Shared parent not found');
       }
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
 
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/students/:id/send-digest
    * Manually trigger a digest email for a student.
    * Body: { recipients?: 'all' | string[] }
    */
-  router.post('/:id/send-digest', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/send-digest',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       // Only owner or admin can send digests
       if (!student.canAdmin(userId)) {
-        res
-          .status(403)
-          .json({ success: false, error: 'Only account owner or admin can send digests' });
-        return;
+        throw new ForbiddenError('Only account owner or admin can send digests');
       }
 
       const { recipients, send: shouldSend = true } = req.body as {
@@ -4185,8 +3769,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       if (targetRecipients.length === 0) {
-        res.status(400).json({ success: false, error: 'No recipients found or all opted out' });
-        return;
+        throw new ValidationError('No recipients found or all opted out');
       }
 
       // Build full digest items from live grade data
@@ -4208,8 +3791,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const c of courseDocs) {
         const extId = (c['externalId'] ?? c['courseExternalId']) as string | undefined;
         const title = (c['record'] as Record<string, unknown> | undefined)?.['title'] as
-          | string
-          | undefined;
+          string | undefined;
         if (extId && title) courseNameByExtId.set(extId, title);
       }
 
@@ -4222,8 +3804,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       for (const snap of gradeSnapshots) {
         const courseExtId = (snap['courseExternalId'] ??
           (snap['record'] as Record<string, unknown> | undefined)?.['courseExternalId']) as
-          | string
-          | undefined;
+          string | undefined;
         const percent = (snap['record'] as Record<string, unknown> | undefined)?.[
           'percentGrade'
         ] as number | undefined;
@@ -4393,13 +3974,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         })),
         jobId: jobResult.insertedId?.toString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   return router;
 }

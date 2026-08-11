@@ -11,6 +11,7 @@ import {
   type BillingCycle,
 } from '@scholaracle/database';
 import { SquareService } from '../../../services/SquareService';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface ISquareWebhookDeps {
   readonly database: Db;
@@ -99,9 +100,10 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
   });
   const webhookEventWriter: IWebhookEventWriter = deps.webhookEventWriter ?? defaultWebhookRepo;
 
-  router.post('/', (req: Request, res: Response) => {
-    void handleWebhook(req, res);
-  });
+  router.post(
+    '/',
+    asyncHandler((req: Request, res: Response) => handleWebhook(req, res))
+  );
 
   async function handleWebhook(req: Request, res: Response): Promise<void> {
     const signature = req.headers['x-square-hmacsha256-signature'] as string | undefined;
@@ -113,6 +115,8 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
           ? rawBody.toString('utf8')
           : '';
 
+    // Deliberate webhook signature responses — status codes and body shape must
+    // stay exactly as Square integration expects (no envelope conversion).
     if (!signature) {
       res.status(400).json({ error: 'Missing x-square-hmacsha256-signature header' });
       return;
@@ -124,58 +128,52 @@ export function squareWebhookRouter(deps: ISquareWebhookDeps): Router {
       return;
     }
 
-    try {
-      const event = JSON.parse(body) as {
+    const event = JSON.parse(body) as {
+      type?: string;
+      event_id?: string;
+      merchant_id?: string;
+      data?: {
         type?: string;
-        event_id?: string;
-        merchant_id?: string;
-        data?: {
-          type?: string;
-          id?: string;
-          object?: {
-            payment?: IPaymentPayload['payment'];
-            refund?: IRefundPayload;
-          };
+        id?: string;
+        object?: {
+          payment?: IPaymentPayload['payment'];
+          refund?: IRefundPayload;
         };
       };
+    };
 
-      // DEF-001 / DEF-007: dedup on the provider's event.id before dispatch.
-      // If the event has already been processed (or is currently being processed
-      // by a duplicate delivery), short-circuit with a 200 to keep the provider
-      // from retrying — the original delivery is the authoritative one.
-      const eventId = event.event_id ?? event.data?.id;
-      if (eventId) {
-        const isNew = await webhookEventWriter.recordIfNew('square', eventId);
-        if (!isNew) {
-          res.json({ received: true, deduped: true });
-          return;
-        }
+    // DEF-001 / DEF-007: dedup on the provider's event.id before dispatch.
+    // If the event has already been processed (or is currently being processed
+    // by a duplicate delivery), short-circuit with a 200 to keep the provider
+    // from retrying — the original delivery is the authoritative one.
+    const eventId = event.event_id ?? event.data?.id;
+    if (eventId) {
+      const isNew = await webhookEventWriter.recordIfNew('square', eventId);
+      if (!isNew) {
+        res.json({ received: true, deduped: true });
+        return;
       }
-
-      const eventType = event.type ?? event.data?.type;
-      if (
-        eventType === 'payment.created' ||
-        eventType === 'payment.completed' ||
-        eventType === 'payment.updated'
-      ) {
-        const paymentData = event.data?.object?.payment;
-        if (paymentData?.id && paymentData.status === 'COMPLETED') {
-          await handlePaymentCompleted(paymentData);
-        }
-      } else if (eventType === 'refund.created' || eventType === 'refund.updated') {
-        // DEF-002: process refund events; previously these silently 200'd.
-        const refundData = event.data?.object?.refund;
-        if (refundData) {
-          await handleRefund(refundData);
-        }
-      }
-
-      res.json({ received: true });
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Square webhook error:', err);
-      res.status(500).json({ error: 'Webhook handler failed' });
     }
+
+    const eventType = event.type ?? event.data?.type;
+    if (
+      eventType === 'payment.created' ||
+      eventType === 'payment.completed' ||
+      eventType === 'payment.updated'
+    ) {
+      const paymentData = event.data?.object?.payment;
+      if (paymentData?.id && paymentData.status === 'COMPLETED') {
+        await handlePaymentCompleted(paymentData);
+      }
+    } else if (eventType === 'refund.created' || eventType === 'refund.updated') {
+      // DEF-002: process refund events; previously these silently 200'd.
+      const refundData = event.data?.object?.refund;
+      if (refundData) {
+        await handleRefund(refundData);
+      }
+    }
+
+    res.json({ received: true });
   }
 
   async function handlePaymentCompleted(

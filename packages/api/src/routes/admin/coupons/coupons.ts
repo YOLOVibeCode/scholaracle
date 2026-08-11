@@ -4,10 +4,12 @@ import { CouponRepository, AuditLogRepository } from '@scholaracle/database';
 import type { CouponType, CouponDuration, ICouponData } from '@scholaracle/database';
 import type { SubscriptionPlan } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
+import { ConflictError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import {
   adminAuthMiddleware,
   type IAdminAuthenticatedRequest,
 } from '../../../middleware/adminAuth';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface ICouponsRouterConfig {
   readonly database: Db;
@@ -22,8 +24,9 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
 
   router.use(adminAuthMiddleware(adminAuthService));
 
-  router.get('/', async (_req: Request, res: Response) => {
-    try {
+  router.get(
+    '/',
+    asyncHandler(async (_req: Request, res: Response) => {
       const status = _req.query['status'] as string | undefined;
       const filter: Record<string, unknown> = {};
       if (status === 'active') filter['isActive'] = true;
@@ -31,20 +34,15 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
 
       const coupons = await couponRepository.findAll(filter);
       res.json({ success: true, data: coupons.map((c) => c.toJSON()) });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
-  router.get('/:id', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const coupon = await couponRepository.findById(req.params['id']!);
       if (!coupon) {
-        res.status(404).json({ success: false, error: 'Coupon not found' });
-        return;
+        throw new NotFoundError('Coupon not found');
       }
       res.json({
         success: true,
@@ -53,16 +51,12 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
           redemptions: coupon.redemptions,
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
-  router.post('/', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/',
+    asyncHandler(async (req: Request, res: Response) => {
       const adminReq = req as IAdminAuthenticatedRequest;
       const {
         code,
@@ -87,16 +81,12 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
       };
 
       if (!code || !type || value == null || !duration) {
-        res
-          .status(400)
-          .json({ success: false, error: 'code, type, value, and duration are required' });
-        return;
+        throw new ValidationError('code, type, value, and duration are required');
       }
 
       const existing = await couponRepository.findByCode(code);
       if (existing) {
-        res.status(409).json({ success: false, error: 'Coupon code already exists' });
-        return;
+        throw new ConflictError('Coupon code already exists');
       }
 
       const couponData: ICouponData = {
@@ -129,16 +119,12 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
       });
 
       res.status(201).json({ success: true, data: coupon.toJSON() });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
-  router.put('/:id', async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const adminReq = req as IAdminAuthenticatedRequest;
       const { description, maxRedemptions, expiresAt, plan } = req.body as {
         description?: string;
@@ -156,8 +142,7 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
 
       const coupon = await couponRepository.update(req.params['id']!, updates);
       if (!coupon) {
-        res.status(404).json({ success: false, error: 'Coupon not found' });
-        return;
+        throw new NotFoundError('Coupon not found');
       }
 
       await auditLogRepository.create({
@@ -172,21 +157,16 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
       });
 
       res.json({ success: true, data: coupon.toJSON() });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
-  router.post('/:id/toggle', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/:id/toggle',
+    asyncHandler(async (req: Request, res: Response) => {
       const adminReq = req as IAdminAuthenticatedRequest;
       const coupon = await couponRepository.findById(req.params['id']!);
       if (!coupon) {
-        res.status(404).json({ success: false, error: 'Coupon not found' });
-        return;
+        throw new NotFoundError('Coupon not found');
       }
 
       const newState = !coupon.isActive;
@@ -204,13 +184,8 @@ export function couponsRouter(config: ICouponsRouterConfig): Router {
       });
 
       res.json({ success: true, isActive: newState });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   return router;
 }

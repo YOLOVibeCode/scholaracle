@@ -1,8 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
+import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { UserRepository, CommunicationLogRepository } from '@scholaracle/database';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IUserPreferences } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 import { LlmClient } from '@scholaracle/agents';
@@ -283,35 +285,26 @@ async function handleUnlinkOAuth(
   res: Response,
   authService: IAuthService
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
-    if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-    const provider = req.params['provider'] as string;
-    if (
-      !provider ||
-      !VALID_OAUTH_PROVIDERS.includes(provider as (typeof VALID_OAUTH_PROVIDERS)[number])
-    ) {
-      res.status(400).json({ success: false, error: 'Invalid provider' });
-      return;
-    }
-    const result = await authService.unlinkOAuthAccount(
-      userId,
-      provider as 'google' | 'apple' | 'microsoft'
-    );
-    if (result.success) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(400).json({ success: false, error: result.error });
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
+  }
+  const provider = req.params['provider'] as string;
+  if (
+    !provider ||
+    !VALID_OAUTH_PROVIDERS.includes(provider as (typeof VALID_OAUTH_PROVIDERS)[number])
+  ) {
+    throw new ValidationError('Invalid provider');
+  }
+  const result = await authService.unlinkOAuthAccount(
+    userId,
+    provider as 'google' | 'apple' | 'microsoft'
+  );
+  if (result.success) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(400).json({ success: false, error: result.error });
   }
 }
 
@@ -327,44 +320,29 @@ async function handleGetSettings(
   res: Response,
   userRepository: UserRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const user = await userRepository.findById(userId);
-
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        error: 'User not found',
-      });
-      return;
-    }
-
-    const settingsBody = buildSettingsResponse(user.preferences);
-    res.status(200).json({
-      ...settingsBody,
-      timezone: (user as { timezone?: string }).timezone ?? 'America/New_York',
-      profile: {
-        name: user.name,
-        email: user.email,
-        oauthProviders: user.oauthProviders ?? [],
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const settingsBody = buildSettingsResponse(user.preferences);
+  res.status(200).json({
+    ...settingsBody,
+    timezone: (user as { timezone?: string }).timezone ?? 'America/New_York',
+    profile: {
+      name: user.name,
+      email: user.email,
+      oauthProviders: user.oauthProviders ?? [],
+    },
+  });
 }
 
 /**
@@ -379,191 +357,164 @@ async function handleUpdateSettings(
   res: Response,
   userRepository: UserRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const {
-      notifications,
-      alerts,
-      dashboard: dashboardBody,
-      timezone,
-    } = req.body as {
-      notifications?: INotificationSettings;
-      alerts?: IAlertThresholds;
-      dashboard?: { gradeDisplay?: 'letter' | 'score' };
-      timezone?: string;
-    };
-
-    if (alerts) {
-      const validationError = validateAlertThresholds(alerts);
-      if (validationError) {
-        res.status(400).json({ success: false, error: validationError });
-        return;
-      }
-    }
-    if (notifications?.quietHours) {
-      const err = validateQuietHours(notifications.quietHours);
-      if (err) {
-        res.status(400).json({ success: false, error: err });
-        return;
-      }
-    }
-    if (notifications?.digestSchedule) {
-      const err = validateDigestSchedule(notifications.digestSchedule);
-      if (err) {
-        res.status(400).json({ success: false, error: err });
-        return;
-      }
-    }
-    if (notifications?.tone !== undefined && !VALID_TONES.includes(notifications.tone)) {
-      res
-        .status(400)
-        .json({ success: false, error: 'tone must be formal, casual, or encouraging' });
-      return;
-    }
-    if (
-      notifications?.frequency !== undefined &&
-      !VALID_FREQUENCIES.includes(notifications.frequency)
-    ) {
-      res
-        .status(400)
-        .json({ success: false, error: 'frequency must be minimal, balanced, or proactive' });
-      return;
-    }
-    if (
-      dashboardBody?.gradeDisplay !== undefined &&
-      !VALID_GRADE_DISPLAY.includes(dashboardBody.gradeDisplay)
-    ) {
-      res
-        .status(400)
-        .json({ success: false, error: 'dashboard.gradeDisplay must be letter or score' });
-      return;
-    }
-    if (timezone !== undefined) {
-      try {
-        Intl.DateTimeFormat(undefined, { timeZone: timezone });
-      } catch {
-        res.status(400).json({ success: false, error: 'Invalid IANA timezone' });
-        return;
-      }
-    }
-    if (notifications?.glanceSchedule) {
-      const gs = notifications.glanceSchedule;
-      if (gs.time && !HHMM_REGEX.test(gs.time)) {
-        res.status(400).json({ success: false, error: 'glanceSchedule.time must be HH:mm' });
-        return;
-      }
-    }
-
-    const user = await userRepository.findById(userId);
-
-    if (!user) {
-      res.status(404).json({ success: false, error: 'User not found' });
-      return;
-    }
-
-    const notif = user.preferences.notifications;
-    const existingDashboard = user.preferences.dashboard ?? { gradeDisplay: 'letter' as const };
-    const updatedPreferences: IUserPreferences = {
-      notifications: {
-        push: notifications?.push ?? notif.push ?? true,
-        email: notifications?.email ?? notif.email ?? true,
-        sms: notifications?.sms ?? notif.sms ?? false,
-        quietHours: notifications?.quietHours ??
-          notif.quietHours ?? {
-            enabled: true,
-            start: '22:00',
-            end: '07:00',
-            criticalOverride: true,
-          },
-        digestSchedule: {
-          daily: notifications?.digestSchedule?.daily ??
-            notif.digestSchedule?.daily ?? { enabled: true, time: '07:00' },
-          weekly: notifications?.digestSchedule?.weekly ??
-            notif.digestSchedule?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' },
-          digestTimes:
-            notifications?.digestSchedule?.digestTimes ?? notif.digestSchedule?.digestTimes ?? [],
-          weekdaySlots:
-            notifications?.digestSchedule?.weekdaySlots ??
-            notif.digestSchedule?.weekdaySlots ??
-            DEFAULT_WEEKDAY_SLOTS,
-          weekendSlots:
-            notifications?.digestSchedule?.weekendSlots ?? notif.digestSchedule?.weekendSlots ?? [],
-          schoolDays:
-            notifications?.digestSchedule?.schoolDays ??
-            notif.digestSchedule?.schoolDays ??
-            DEFAULT_SCHOOL_DAYS,
-          holidayMode:
-            notifications?.digestSchedule?.holidayMode ??
-            notif.digestSchedule?.holidayMode ??
-            'normal',
-          autoSend:
-            notifications?.digestSchedule?.autoSend ?? notif.digestSchedule?.autoSend ?? true,
-          recipients:
-            notifications?.digestSchedule?.recipients ??
-            notif.digestSchedule?.recipients ??
-            'everybody',
-          specificRecipients:
-            notifications?.digestSchedule?.specificRecipients ??
-            notif.digestSchedule?.specificRecipients ??
-            [],
-          snoozeUntil:
-            notifications?.digestSchedule?.snoozeUntil !== undefined
-              ? (notifications.digestSchedule.snoozeUntil ?? undefined)
-              : notif.digestSchedule?.snoozeUntil,
-        },
-        tone: notifications?.tone ?? notif.tone ?? 'encouraging',
-        frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
-        glanceSchedule: {
-          enabled: notifications?.glanceSchedule?.enabled ?? notif.glanceSchedule?.enabled ?? true,
-          time: notifications?.glanceSchedule?.time ?? notif.glanceSchedule?.time ?? '07:00',
-        },
-      },
-      alerts: {
-        gradeDrop: alerts?.gradeDrop ?? user.preferences.alerts?.gradeDrop ?? 5,
-        daysBeforeDeadline:
-          alerts?.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline ?? 2,
-        lowGradeThreshold:
-          alerts?.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold ?? 80,
-        prioritizeHighImpact:
-          alerts?.prioritizeHighImpact ?? user.preferences.alerts?.prioritizeHighImpact ?? true,
-        emphasizeWeakSubjects:
-          alerts?.emphasizeWeakSubjects ?? user.preferences.alerts?.emphasizeWeakSubjects ?? true,
-        celebrateWins: alerts?.celebrateWins ?? user.preferences.alerts?.celebrateWins ?? true,
-        enabledTypes:
-          alerts?.enabledTypes ?? user.preferences.alerts?.enabledTypes ?? defaultEnabledTypes(),
-      },
-      dashboard: {
-        gradeDisplay: dashboardBody?.gradeDisplay ?? existingDashboard.gradeDisplay ?? 'letter',
-      },
-    };
-
-    const userUpdate: { preferences: IUserPreferences; timezone?: string } = {
-      preferences: updatedPreferences,
-    };
-    if (timezone !== undefined) userUpdate.timezone = timezone;
-    await userRepository.update(userId, userUpdate);
-
-    const responseBody = buildSettingsResponse(updatedPreferences);
-    res.status(200).json({
-      ...responseBody,
-      timezone: timezone ?? (user as { timezone?: string }).timezone ?? 'America/New_York',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const {
+    notifications,
+    alerts,
+    dashboard: dashboardBody,
+    timezone,
+  } = req.body as {
+    notifications?: INotificationSettings;
+    alerts?: IAlertThresholds;
+    dashboard?: { gradeDisplay?: 'letter' | 'score' };
+    timezone?: string;
+  };
+
+  if (alerts) {
+    const validationError = validateAlertThresholds(alerts);
+    if (validationError) {
+      throw new ValidationError(validationError);
+    }
+  }
+  if (notifications?.quietHours) {
+    const err = validateQuietHours(notifications.quietHours);
+    if (err) {
+      throw new ValidationError(err);
+    }
+  }
+  if (notifications?.digestSchedule) {
+    const err = validateDigestSchedule(notifications.digestSchedule);
+    if (err) {
+      throw new ValidationError(err);
+    }
+  }
+  if (notifications?.tone !== undefined && !VALID_TONES.includes(notifications.tone)) {
+    throw new ValidationError('tone must be formal, casual, or encouraging');
+  }
+  if (
+    notifications?.frequency !== undefined &&
+    !VALID_FREQUENCIES.includes(notifications.frequency)
+  ) {
+    throw new ValidationError('frequency must be minimal, balanced, or proactive');
+  }
+  if (
+    dashboardBody?.gradeDisplay !== undefined &&
+    !VALID_GRADE_DISPLAY.includes(dashboardBody.gradeDisplay)
+  ) {
+    throw new ValidationError('dashboard.gradeDisplay must be letter or score');
+  }
+  if (timezone !== undefined) {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    } catch {
+      throw new ValidationError('Invalid IANA timezone');
+    }
+  }
+  if (notifications?.glanceSchedule) {
+    const gs = notifications.glanceSchedule;
+    if (gs.time && !HHMM_REGEX.test(gs.time)) {
+      throw new ValidationError('glanceSchedule.time must be HH:mm');
+    }
+  }
+
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const notif = user.preferences.notifications;
+  const existingDashboard = user.preferences.dashboard ?? { gradeDisplay: 'letter' as const };
+  const updatedPreferences: IUserPreferences = {
+    notifications: {
+      push: notifications?.push ?? notif.push ?? true,
+      email: notifications?.email ?? notif.email ?? true,
+      sms: notifications?.sms ?? notif.sms ?? false,
+      quietHours: notifications?.quietHours ??
+        notif.quietHours ?? {
+          enabled: true,
+          start: '22:00',
+          end: '07:00',
+          criticalOverride: true,
+        },
+      digestSchedule: {
+        daily: notifications?.digestSchedule?.daily ??
+          notif.digestSchedule?.daily ?? { enabled: true, time: '07:00' },
+        weekly: notifications?.digestSchedule?.weekly ??
+          notif.digestSchedule?.weekly ?? { enabled: true, day: 'sunday', time: '18:00' },
+        digestTimes:
+          notifications?.digestSchedule?.digestTimes ?? notif.digestSchedule?.digestTimes ?? [],
+        weekdaySlots:
+          notifications?.digestSchedule?.weekdaySlots ??
+          notif.digestSchedule?.weekdaySlots ??
+          DEFAULT_WEEKDAY_SLOTS,
+        weekendSlots:
+          notifications?.digestSchedule?.weekendSlots ?? notif.digestSchedule?.weekendSlots ?? [],
+        schoolDays:
+          notifications?.digestSchedule?.schoolDays ??
+          notif.digestSchedule?.schoolDays ??
+          DEFAULT_SCHOOL_DAYS,
+        holidayMode:
+          notifications?.digestSchedule?.holidayMode ??
+          notif.digestSchedule?.holidayMode ??
+          'normal',
+        autoSend: notifications?.digestSchedule?.autoSend ?? notif.digestSchedule?.autoSend ?? true,
+        recipients:
+          notifications?.digestSchedule?.recipients ??
+          notif.digestSchedule?.recipients ??
+          'everybody',
+        specificRecipients:
+          notifications?.digestSchedule?.specificRecipients ??
+          notif.digestSchedule?.specificRecipients ??
+          [],
+        snoozeUntil:
+          notifications?.digestSchedule?.snoozeUntil !== undefined
+            ? (notifications.digestSchedule.snoozeUntil ?? undefined)
+            : notif.digestSchedule?.snoozeUntil,
+      },
+      tone: notifications?.tone ?? notif.tone ?? 'encouraging',
+      frequency: notifications?.frequency ?? notif.frequency ?? 'balanced',
+      glanceSchedule: {
+        enabled: notifications?.glanceSchedule?.enabled ?? notif.glanceSchedule?.enabled ?? true,
+        time: notifications?.glanceSchedule?.time ?? notif.glanceSchedule?.time ?? '07:00',
+      },
+    },
+    alerts: {
+      gradeDrop: alerts?.gradeDrop ?? user.preferences.alerts?.gradeDrop ?? 5,
+      daysBeforeDeadline:
+        alerts?.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline ?? 2,
+      lowGradeThreshold:
+        alerts?.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold ?? 80,
+      prioritizeHighImpact:
+        alerts?.prioritizeHighImpact ?? user.preferences.alerts?.prioritizeHighImpact ?? true,
+      emphasizeWeakSubjects:
+        alerts?.emphasizeWeakSubjects ?? user.preferences.alerts?.emphasizeWeakSubjects ?? true,
+      celebrateWins: alerts?.celebrateWins ?? user.preferences.alerts?.celebrateWins ?? true,
+      enabledTypes:
+        alerts?.enabledTypes ?? user.preferences.alerts?.enabledTypes ?? defaultEnabledTypes(),
+    },
+    dashboard: {
+      gradeDisplay: dashboardBody?.gradeDisplay ?? existingDashboard.gradeDisplay ?? 'letter',
+    },
+  };
+
+  const userUpdate: { preferences: IUserPreferences; timezone?: string } = {
+    preferences: updatedPreferences,
+  };
+  if (timezone !== undefined) userUpdate.timezone = timezone;
+  await userRepository.update(userId, userUpdate);
+
+  const responseBody = buildSettingsResponse(updatedPreferences);
+  res.status(200).json({
+    ...responseBody,
+    timezone: timezone ?? (user as { timezone?: string }).timezone ?? 'America/New_York',
+  });
 }
 
 /**
@@ -578,50 +529,35 @@ async function handleUpdateNotifications(
   res: Response,
   userRepository: UserRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const notifications = req.body as INotificationSettings;
-
-    const user = await userRepository.findById(userId);
-
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        error: 'User not found',
-      });
-      return;
-    }
-
-    const notif = user.preferences.notifications;
-    const updatedPreferences: IUserPreferences = {
-      ...user.preferences,
-      notifications: {
-        ...notif,
-        push: notifications.push ?? notif.push,
-        email: notifications.email ?? notif.email,
-        sms: notifications.sms ?? notif.sms,
-      },
-    };
-
-    await userRepository.update(userId, { preferences: updatedPreferences });
-
-    res.status(200).json(buildSettingsResponse(updatedPreferences));
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const notifications = req.body as INotificationSettings;
+
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const notif = user.preferences.notifications;
+  const updatedPreferences: IUserPreferences = {
+    ...user.preferences,
+    notifications: {
+      ...notif,
+      push: notifications.push ?? notif.push,
+      email: notifications.email ?? notif.email,
+      sms: notifications.sms ?? notif.sms,
+    },
+  };
+
+  await userRepository.update(userId, { preferences: updatedPreferences });
+
+  res.status(200).json(buildSettingsResponse(updatedPreferences));
 }
 
 /**
@@ -636,60 +572,40 @@ async function handleUpdateAlerts(
   res: Response,
   userRepository: UserRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const alerts = req.body as IAlertThresholds;
-
-    // Validate thresholds
-    const validationError = validateAlertThresholds(alerts);
-    if (validationError) {
-      res.status(400).json({
-        success: false,
-        error: validationError,
-      });
-      return;
-    }
-
-    const user = await userRepository.findById(userId);
-
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        error: 'User not found',
-      });
-      return;
-    }
-
-    const updatedPreferences: IUserPreferences = {
-      ...user.preferences,
-      alerts: {
-        ...user.preferences.alerts,
-        gradeDrop: alerts.gradeDrop ?? user.preferences.alerts?.gradeDrop,
-        daysBeforeDeadline:
-          alerts.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline,
-        lowGradeThreshold: alerts.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold,
-      },
-    };
-
-    await userRepository.update(userId, { preferences: updatedPreferences });
-
-    res.status(200).json(buildSettingsResponse(updatedPreferences));
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const alerts = req.body as IAlertThresholds;
+
+  // Validate thresholds
+  const validationError = validateAlertThresholds(alerts);
+  if (validationError) {
+    throw new ValidationError(validationError);
+  }
+
+  const user = await userRepository.findById(userId);
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const updatedPreferences: IUserPreferences = {
+    ...user.preferences,
+    alerts: {
+      ...user.preferences.alerts,
+      gradeDrop: alerts.gradeDrop ?? user.preferences.alerts?.gradeDrop,
+      daysBeforeDeadline: alerts.daysBeforeDeadline ?? user.preferences.alerts?.daysBeforeDeadline,
+      lowGradeThreshold: alerts.lowGradeThreshold ?? user.preferences.alerts?.lowGradeThreshold,
+    },
+  };
+
+  await userRepository.update(userId, { preferences: updatedPreferences });
+
+  res.status(200).json(buildSettingsResponse(updatedPreferences));
 }
 
 /**
@@ -701,38 +617,30 @@ async function handleGetNotificationHistory(
   res: Response,
   commLogRepo: CommunicationLogRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
-    if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-    const logs = await commLogRepo.findByUserId(userId);
-    const limited = logs.slice(0, 50);
-    res.status(200).json({
-      success: true,
-      data: limited.map((log) => ({
-        id: log._id?.toString(),
-        channel: log.channel,
-        type: log.type,
-        subject: log.subject,
-        status: log.status,
-        recipientEmail: log.recipientEmail,
-        recipientPhone: log.recipientPhone,
-        sentAt: log.sentAt,
-        failedAt: log.failedAt,
-        failureReason: log.failureReason,
-        templateName: log.templateName,
-        createdAt: log.createdAt,
-      })),
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+  const logs = await commLogRepo.findByUserId(userId);
+  const limited = logs.slice(0, 50);
+  res.status(200).json({
+    success: true,
+    data: limited.map((log) => ({
+      id: log._id?.toString(),
+      channel: log.channel,
+      type: log.type,
+      subject: log.subject,
+      status: log.status,
+      recipientEmail: log.recipientEmail,
+      recipientPhone: log.recipientPhone,
+      sentAt: log.sentAt,
+      failedAt: log.failedAt,
+      failureReason: log.failureReason,
+      templateName: log.templateName,
+      createdAt: log.createdAt,
+    })),
+  });
 }
 
 export interface IHolidaySuggestionResponse {
@@ -811,57 +719,49 @@ async function getHolidayState(
  * Handle POST suggest-holidays: return AI suggestion for digest pause during holidays.
  */
 async function handleSuggestHolidays(req: Request, res: Response, database: Db): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
-    if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
+  }
 
-    const { inHoliday, nextBreak, termSummary } = await getHolidayState(database, userId);
+  const { inHoliday, nextBreak, termSummary } = await getHolidayState(database, userId);
 
-    const apiKey = process.env['ANTHROPIC_API_KEY'];
-    let suggestion: string;
-    if (apiKey && termSummary !== 'No academic terms on file.') {
-      try {
-        const llm = new LlmClient({ apiKey });
-        const prompt = inHoliday
-          ? `The user's academic terms: ${termSummary}. Today is during a break (${nextBreak?.name ?? 'holiday'}). Suggest in 1-2 sentences whether they should pause digest emails during this break.`
-          : nextBreak
-            ? `The user's academic terms: ${termSummary}. The next break is ${nextBreak.start} to ${nextBreak.end}. Suggest in 1-2 sentences whether to enable "Pause digests during school holidays" before that date.`
-            : `The user's academic terms: ${termSummary}. No upcoming break. Suggest keeping normal digest settings.`;
-        const response = await llm.complete([{ role: 'user' as const, content: prompt }], {
-          maxTokens: 120,
-          system:
-            'You are a helpful assistant for a parent/student app. Reply in plain text only, 1-2 sentences.',
-        });
-        suggestion =
-          response.content.trim() ||
-          (inHoliday ? 'Consider pausing digests during this break.' : 'No change needed.');
-      } catch {
-        suggestion = inHoliday
-          ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'
-          : 'No upcoming break detected. Keep normal digest settings.';
-      }
-    } else {
+  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  let suggestion: string;
+  if (apiKey && termSummary !== 'No academic terms on file.') {
+    try {
+      const llm = new LlmClient({ apiKey });
+      const prompt = inHoliday
+        ? `The user's academic terms: ${termSummary}. Today is during a break (${nextBreak?.name ?? 'holiday'}). Suggest in 1-2 sentences whether they should pause digest emails during this break.`
+        : nextBreak
+          ? `The user's academic terms: ${termSummary}. The next break is ${nextBreak.start} to ${nextBreak.end}. Suggest in 1-2 sentences whether to enable "Pause digests during school holidays" before that date.`
+          : `The user's academic terms: ${termSummary}. No upcoming break. Suggest keeping normal digest settings.`;
+      const response = await llm.complete([{ role: 'user' as const, content: prompt }], {
+        maxTokens: 120,
+        system:
+          'You are a helpful assistant for a parent/student app. Reply in plain text only, 1-2 sentences.',
+      });
+      suggestion =
+        response.content.trim() ||
+        (inHoliday ? 'Consider pausing digests during this break.' : 'No change needed.');
+    } catch {
       suggestion = inHoliday
         ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'
-        : 'Add your school calendar for holiday-aware suggestions.';
+        : 'No upcoming break detected. Keep normal digest settings.';
     }
-
-    const body: IHolidaySuggestionResponse = {
-      inHoliday,
-      ...(nextBreak && { nextBreak }),
-      suggestion,
-    };
-    res.status(200).json(body);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  } else {
+    suggestion = inHoliday
+      ? 'You appear to be in a school break. Consider pausing digests in Holiday settings.'
+      : 'Add your school calendar for holiday-aware suggestions.';
   }
+
+  const body: IHolidaySuggestionResponse = {
+    inHoliday,
+    ...(nextBreak && { nextBreak }),
+    suggestion,
+  };
+  res.status(200).json(body);
 }
 
 /**
@@ -879,58 +779,71 @@ export function settingsRouter(config: ISettingsRouterConfig): Router {
    * GET /api/settings
    * Get user settings.
    */
-  router.get('/', (req: Request, res: Response) => {
-    void handleGetSettings(req, res, userRepository);
-  });
+  router.get(
+    '/',
+    asyncHandler((req: Request, res: Response) => handleGetSettings(req, res, userRepository))
+  );
 
   /**
    * GET /api/settings/notification-history
    * Get notification/communication history for the authenticated user.
    */
-  router.get('/notification-history', (req: Request, res: Response) => {
-    void handleGetNotificationHistory(req, res, commLogRepo);
-  });
+  router.get(
+    '/notification-history',
+    asyncHandler((req: Request, res: Response) =>
+      handleGetNotificationHistory(req, res, commLogRepo)
+    )
+  );
 
   /**
    * POST /api/settings/suggest-holidays
    * Get AI suggestion for pausing digests during school holidays (uses academic terms).
    */
-  router.post('/suggest-holidays', (req: Request, res: Response) => {
-    void handleSuggestHolidays(req, res, config.database);
-  });
+  router.post(
+    '/suggest-holidays',
+    asyncHandler((req: Request, res: Response) => handleSuggestHolidays(req, res, config.database))
+  );
 
   /**
    * PUT /api/settings
    * Update all settings.
    */
-  router.put('/', (req: Request, res: Response) => {
-    void handleUpdateSettings(req, res, userRepository);
-  });
+  router.put(
+    '/',
+    asyncHandler((req: Request, res: Response) => handleUpdateSettings(req, res, userRepository))
+  );
 
   /**
    * PUT /api/settings/notifications
    * Update notification preferences only.
    */
-  router.put('/notifications', (req: Request, res: Response) => {
-    void handleUpdateNotifications(req, res, userRepository);
-  });
+  router.put(
+    '/notifications',
+    asyncHandler((req: Request, res: Response) =>
+      handleUpdateNotifications(req, res, userRepository)
+    )
+  );
 
   /**
    * PUT /api/settings/alerts
    * Update alert thresholds only.
    */
-  router.put('/alerts', (req: Request, res: Response) => {
-    void handleUpdateAlerts(req, res, userRepository);
-  });
+  router.put(
+    '/alerts',
+    asyncHandler((req: Request, res: Response) => handleUpdateAlerts(req, res, userRepository))
+  );
 
   /**
    * DELETE /api/settings/oauth/:provider
    * Unlink an OAuth provider from the current user.
    */
   if (config.authService) {
-    router.delete('/oauth/:provider', (req: Request, res: Response) => {
-      void handleUnlinkOAuth(req, res, config.authService!);
-    });
+    router.delete(
+      '/oauth/:provider',
+      asyncHandler((req: Request, res: Response) =>
+        handleUnlinkOAuth(req, res, config.authService!)
+      )
+    );
   }
 
   return router;

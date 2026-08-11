@@ -4,6 +4,7 @@ import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { StudentRepository } from '@scholaracle/database';
 import { ingestV1Router } from './ingest';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Ingest v1 API', () => {
   let app: Express;
@@ -47,6 +48,7 @@ describe('Ingest v1 API', () => {
     app = express();
     app.use(express.json());
     app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -202,6 +204,7 @@ describe('Ingest v1 API', () => {
     const res = await request(app).post('/api/ingest/v1/device/poll').send({});
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/deviceCode/i);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   // ---------------------------------------------------------------------------
@@ -852,5 +855,31 @@ describe('Ingest v1 API', () => {
     expect(doc).toBeDefined();
     expect(doc?.['deletedAt']).toBeDefined();
     expect(doc?.['deletedAt']).toBeInstanceOf(Date);
+  });
+
+  it('records a failed run without an envelope', async () => {
+    const connectorToken = await getConnectorToken();
+    const start = await request(app)
+      .post('/api/ingest/v1/runs')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId: 'src-fail-1',
+        clientMeta: { clientType: 'mobile', coreVersion: '0.1.0' },
+        runId: 'run-client-fail-1',
+      });
+    expect(start.status).toBe(200);
+    const runId = start.body.runId as string;
+
+    const complete = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/complete`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({ status: 'failed', error: 'session expired' });
+    expect(complete.status).toBe(200);
+    expect(complete.body.failed).toBe(true);
+
+    const doc = await database.collection('slc_runs').findOne({ runId });
+    expect(doc?.['status']).toBe('failed');
+    expect(doc?.['error']).toBe('session expired');
+    expect(doc?.['clientMeta']).toEqual({ clientType: 'mobile', coreVersion: '0.1.0' });
   });
 });

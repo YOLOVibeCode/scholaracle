@@ -4,6 +4,7 @@ import { MongoClient, type Db } from 'mongodb';
 import { reportsRouter } from './reports';
 import { UserRepository } from '@scholaracle/database';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler, notFoundHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Reports Routes', () => {
   let app: Express;
@@ -28,6 +29,8 @@ describe('Admin Reports Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/admin/reports', reportsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(notFoundHandler);
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -106,6 +109,16 @@ describe('Admin Reports Routes', () => {
       expect(response.headers['content-type']).toContain('text/csv');
       expect(response.headers['content-disposition']).toContain('subscriptions.csv');
       expect(response.text).toContain('User Email');
+    });
+  });
+
+  describe('error envelope', () => {
+    it('should return NOT_FOUND code for unknown route', async () => {
+      const response = await request(app)
+        .get('/api/admin/reports/does-not-exist')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(response.status).toBe(404);
+      expect(response.body.code).toBe('NOT_FOUND');
     });
   });
 });

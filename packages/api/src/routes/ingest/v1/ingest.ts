@@ -4,11 +4,19 @@ import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
+  AuthenticationError,
+  InternalError,
+  NotFoundError,
+  ValidationError,
   type ISlcIngestEnvelopeV1,
   type ISlcDeltaOp,
   type ISlcAssignment,
   type ISlcEventSeries,
   type ISlcEventOverride,
+  type IIngestRunStartResponse,
+  type IIngestSourceRegisterResponse,
+  type IIngestRunCompleteResponse,
+  type IIngestEnvelopeAcceptResponse,
 } from '@scholaracle/contracts';
 import { authMiddleware } from '../../../middleware/auth';
 import {
@@ -300,8 +308,7 @@ async function generateAlertsFromIngestedAssignments(params: {
   for (const t of termDocs) {
     const extId = t['externalId'] as string | undefined;
     const endDate = (t['record'] as Record<string, unknown> | undefined)?.['endDate'] as
-      | string
-      | undefined;
+      string | undefined;
     if (extId && endDate) termEndDates.set(extId, endDate);
   }
 
@@ -1014,6 +1021,26 @@ async function applyOps(params: {
             adapterId: key.adapterId,
           });
         }
+
+        // Server-side vision analysis: if this is an image with a stored URL and no
+        // extractedText, analyze it with Claude vision (API key stays server-side).
+        if (!record['extractedText']) {
+          const storedUrl = record['url'] as string | undefined;
+          const mimeType = record['mimeType'] as string | undefined;
+          const fileName = record['fileName'] as string | undefined;
+          void import('../../../services/VisionAnalysisService').then(
+            ({ analyzeCourseMaterialImage }) => {
+              analyzeCourseMaterialImage({
+                database: params.database,
+                collection: collection.collectionName,
+                filter: baseFilter,
+                mimeType,
+                storedUrl,
+                fileName,
+              }).catch(() => {});
+            }
+          );
+        }
       } else {
         await collection.updateOne(
           baseFilter,
@@ -1099,14 +1126,12 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const deviceCode = (req.body?.deviceCode as string | undefined) ?? '';
       if (!deviceCode) {
-        res.status(400).json({ success: false, error: 'Missing deviceCode' });
-        return;
+        throw new ValidationError('Missing deviceCode');
       }
 
       const result = await deviceRepo.deliverTokenOnce(deviceCode);
       if (result.status === 'expired') {
-        res.status(404).json({ success: false, error: 'Device code expired or not found' });
-        return;
+        throw new NotFoundError('Device code expired or not found');
       }
 
       res.status(200).json({
@@ -1124,19 +1149,16 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userCode = (req.body?.userCode as string | undefined) ?? '';
       const userId = (req as unknown as { userId?: string }).userId ?? '';
       if (!userCode) {
-        res.status(400).json({ success: false, error: 'Missing userCode' });
-        return;
+        throw new ValidationError('Missing userCode');
       }
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const token = connectorTokenService.createToken(userId, randomUUID());
       const ok = await deviceRepo.approveByUserCode(userCode, userId, token);
       if (!ok) {
-        res.status(404).json({ success: false, error: 'User code not found or expired' });
-        return;
+        throw new NotFoundError('User code not found or expired');
       }
 
       res.status(200).json({ success: true });
@@ -1201,8 +1223,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userId = req.connectorUserId ?? '';
       const sourceId = req.params['sourceId'];
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing sourceId' });
-        return;
+        throw new ValidationError('Missing sourceId');
       }
       const students = await studentRepo.findByUserId(userId);
       for (const student of students) {
@@ -1226,8 +1247,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         try {
           credentials = JSON.parse(plain) as typeof credentials;
         } catch {
-          res.status(500).json({ success: false, error: 'Invalid credentials payload' });
-          return;
+          throw new InternalError('Invalid credentials payload');
         }
         const ingestSource = await sourceRepo.findByUserIdAndSourceId(userId, sourceId);
         const baseUrl = credentials.baseUrl ?? ingestSource?.portalBaseUrl ?? '';
@@ -1243,7 +1263,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         });
         return;
       }
-      res.status(404).json({ success: false, error: 'Source not found or no credentials set' });
+      throw new NotFoundError('Source not found or no credentials set');
     })
   );
 
@@ -1254,8 +1274,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userId = req.connectorUserId ?? '';
       const { sourceId, provider, adapterId, displayName, portalBaseUrl } = req.body ?? {};
       if (!sourceId || !provider || !adapterId || !displayName) {
-        res.status(400).json({ success: false, error: 'Missing required fields' });
-        return;
+        throw new ValidationError('Missing required fields');
       }
 
       const stored = await sourceRepo.upsert({
@@ -1267,7 +1286,9 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         portalBaseUrl,
       });
 
-      res.status(200).json({ success: true, source: stored });
+      res
+        .status(200)
+        .json({ success: true, source: stored } satisfies IIngestSourceRegisterResponse);
     })
   );
 
@@ -1276,17 +1297,26 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
-      const { sourceId } = req.body ?? {};
+      const { sourceId, clientMeta, runId: clientRunId } = req.body ?? {};
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing sourceId' });
-        return;
+        throw new ValidationError('Missing sourceId');
       }
 
       const lastCursor = await runRepo.findLastCommittedCursor(userId, sourceId);
-      const runId = randomUUID();
-      await runRepo.startRun({ userId, sourceId, runId, lastCursor });
+      const runId =
+        typeof clientRunId === 'string' && clientRunId.length > 0 ? clientRunId : randomUUID();
+      const meta =
+        clientMeta && typeof clientMeta === 'object' && !Array.isArray(clientMeta)
+          ? (clientMeta as Record<string, string>)
+          : null;
+      await runRepo.startRun({ userId, sourceId, runId, lastCursor, clientMeta: meta });
 
-      res.status(200).json({ success: true, runId, mode: 'delta', lastCursor });
+      res.status(200).json({
+        success: true,
+        runId,
+        mode: 'delta',
+        lastCursor,
+      } satisfies IIngestRunStartResponse);
     })
   );
 
@@ -1297,19 +1327,16 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
       if (!runId) {
-        res.status(400).json({ success: false, error: 'Missing runId' });
-        return;
+        throw new ValidationError('Missing runId');
       }
       const envelope = req.body as ISlcIngestEnvelopeV1;
 
       const v = validateEnvelope(envelope);
       if (!v.valid) {
-        res.status(400).json({ success: false, error: v.error ?? 'Invalid envelope' });
-        return;
+        throw new ValidationError(v.error ?? 'Invalid envelope');
       }
       if (envelope.run.runId !== runId) {
-        res.status(400).json({ success: false, error: 'runId mismatch' });
-        return;
+        throw new ValidationError('runId mismatch');
       }
 
       await applyOps({
@@ -1338,7 +1365,9 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         });
       }
       await runRepo.markUploaded(userId, runId);
-      res.status(200).json({ success: true, accepted: true });
+      res
+        .status(200)
+        .json({ success: true, accepted: true } satisfies IIngestEnvelopeAcceptResponse);
     })
   );
 
@@ -1349,9 +1378,20 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const userId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
       if (!runId) {
-        res.status(400).json({ success: false, error: 'Missing runId' });
+        throw new ValidationError('Missing runId');
+      }
+
+      const status = (req.body?.status as string | undefined) ?? 'success';
+      if (status === 'failed') {
+        const error =
+          typeof req.body?.error === 'string' && req.body.error.length > 0
+            ? req.body.error
+            : 'Run failed';
+        await runRepo.failRun({ userId, runId, error });
+        res.status(200).json({ success: true, committed: false, failed: true, error });
         return;
       }
+
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
       await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
       // Stamp lastSyncedAt on the data source
@@ -1377,7 +1417,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         committed: true,
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
-      });
+      } satisfies IIngestRunCompleteResponse);
     })
   );
 

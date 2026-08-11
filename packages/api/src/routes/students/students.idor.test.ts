@@ -31,6 +31,7 @@ import { AuthService } from '@scholaracle/auth';
 import { StudentRepository, AlertRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Students route — IDOR sweep', () => {
   let app: Express;
@@ -55,6 +56,7 @@ describe('Students route — IDOR sweep', () => {
     app.use(express.json());
     const baseUrl = 'http://test.example';
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database, baseUrl }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {

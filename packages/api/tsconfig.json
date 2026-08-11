@@ -12,6 +12,7 @@
   "references": [
     { "path": "../interfaces" },
     { "path": "../contracts" },
-    { "path": "../agents" }
+    { "path": "../agents" },
+    { "path": "../logger" }
   ]
 }

@@ -12,6 +12,7 @@ import {
   PasswordResetTokenRepository,
 } from '@scholaracle/database';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 const noOpPasswordResetSender = { sendResetLink: async (): Promise<void> => {} };
 const mockPasswordChangedSender = {
@@ -80,6 +81,7 @@ describe('Admin Customer Routes', () => {
         baseUrl: 'https://test.example.com',
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -415,6 +417,7 @@ describe('Admin Customer Routes', () => {
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(response.status).toBe(404);
+      expect(response.body.code).toBe('NOT_FOUND');
     });
   });
 

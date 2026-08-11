@@ -6,6 +6,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { createAssetServeRouter } from './assets';
+import { createErrorHandler } from '../../middleware/errorHandler';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
 
 describe('Asset serve router — HTTP caching', () => {
@@ -60,6 +61,7 @@ describe('Asset serve router — HTTP caching', () => {
         authService,
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -116,5 +118,14 @@ describe('Asset serve router — HTTP caching', () => {
       .set('Authorization', `Bearer ${testToken}`)
       .set('If-None-Match', `"${contentHash}"`);
     expect(res.status).toBe(304);
+  });
+
+  it('should return 404 with NOT_FOUND code for unknown asset', async () => {
+    const res = await request(app)
+      .get('/api/assets/does-not-exist')
+      .set('Authorization', `Bearer ${testToken}`);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Asset not found');
+    expect(res.body.code).toBe('NOT_FOUND');
   });
 });

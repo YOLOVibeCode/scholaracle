@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import { alertsRouter } from './alerts';
+import { createErrorHandler } from '../../middleware/errorHandler';
 import { NotificationService } from '@scholaracle/agents';
 import { Notification, AgentType, NotificationPriority, AlertType } from '@scholaracle/contracts';
 
@@ -37,6 +38,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
           queue: mockQueue as unknown as import('@scholaracle/agents').MongoQueue,
         })
       );
+      app.use(createErrorHandler());
 
       const response = await request(app).post('/api/alerts').send(validAlertBody);
 
@@ -91,6 +93,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
       const app: Express = express();
       app.use(express.json());
       app.use('/api/alerts', fakeAuth('user-test-123'), alertsRouter(mockNotificationService));
+      app.use(createErrorHandler());
 
       const response = await request(app).post('/api/alerts').send(validAlertBody);
 
@@ -117,6 +120,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
       const app: Express = express();
       app.use(express.json());
       app.use('/api/alerts', fakeAuth('user-test-123'), alertsRouter(mockNotificationService));
+      app.use(createErrorHandler());
 
       const response = await request(app).post('/api/alerts').send({
         studentId: 'student-123',
@@ -125,6 +129,7 @@ describe('alertsRouter (legacy POST /api/alerts)', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toMatchObject({ success: false, error: expect.any(String) });
+      expect(response.body.code).toBe('VALIDATION_ERROR');
       expect(mockNotificationService.processAlert).not.toHaveBeenCalled();
     });
   });

@@ -2,6 +2,12 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { RRule } from 'rrule';
 import { AuthService } from '@scholaracle/auth';
+import {
+  AuthenticationError,
+  NotFoundError,
+  RateLimitError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import { AgendaIntelligenceService } from '@scholaracle/agents';
 import { authMiddleware } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -140,15 +146,13 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const userId = (req as unknown as { userId?: string }).userId ?? '';
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const from = parseDateParam(req.query['from']);
       const to = parseDateParam(req.query['to']);
       if (!from || !to) {
-        res.status(400).json({ success: false, error: 'Missing from/to ISO timestamps' });
-        return;
+        throw new ValidationError('Missing from/to ISO timestamps');
       }
 
       const now = new Date();
@@ -374,20 +378,17 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const userId = (req as unknown as { userId?: string }).userId ?? '';
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const { itemType, itemKey, snoozedUntil, scope } = req.body ?? {};
       if (!itemType || !itemKey || !snoozedUntil) {
-        res.status(400).json({ success: false, error: 'Missing itemType/itemKey/snoozedUntil' });
-        return;
+        throw new ValidationError('Missing itemType/itemKey/snoozedUntil');
       }
 
       const until = new Date(snoozedUntil);
       if (Number.isNaN(until.getTime())) {
-        res.status(400).json({ success: false, error: 'Invalid snoozedUntil' });
-        return;
+        throw new ValidationError('Invalid snoozedUntil');
       }
 
       const saved = await overridesRepo.upsertSnooze({
@@ -411,8 +412,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const userId = (req as unknown as { userId?: string }).userId ?? '';
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       if (!config.notificationService) {
@@ -422,28 +422,23 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
 
       const { itemId, channel, title, studentName, courseName, timeAt } = req.body ?? {};
       if (!itemId || typeof itemId !== 'string') {
-        res.status(400).json({ success: false, error: 'Missing itemId' });
-        return;
+        throw new ValidationError('Missing itemId');
       }
       if (channel !== 'sms' && channel !== 'email') {
-        res.status(400).json({ success: false, error: 'channel must be sms or email' });
-        return;
+        throw new ValidationError('channel must be sms or email');
       }
 
       const userRepo = new UserRepository(config.database);
       const user = await userRepo.findById(userId);
       if (!user) {
-        res.status(404).json({ success: false, error: 'User not found' });
-        return;
+        throw new NotFoundError('User not found');
       }
 
       const recipient = channel === 'email' ? user.email : user.phone;
       if (!recipient) {
-        res.status(400).json({
-          success: false,
-          error: channel === 'email' ? 'No email on file' : 'No phone number on file',
-        });
-        return;
+        throw new ValidationError(
+          channel === 'email' ? 'No email on file' : 'No phone number on file'
+        );
       }
 
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -454,8 +449,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
         createdAt: { $gte: oneHourAgo },
       });
       if (recent) {
-        res.status(429).json({ success: false, error: 'One reminder per item per hour' });
-        return;
+        throw new RateLimitError('One reminder per item per hour');
       }
 
       const displayTitle = typeof title === 'string' && title.length > 0 ? title : 'Upcoming item';

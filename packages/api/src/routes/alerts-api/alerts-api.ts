@@ -1,7 +1,14 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { AlertRepository } from '@scholaracle/database';
+import {
+  AuthenticationError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAlertData } from '@scholaracle/interfaces';
 
 export interface IAlertsApiRouterConfig {
@@ -20,43 +27,32 @@ async function handleGetAlerts(
   res: Response,
   alertRepository: AlertRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const alerts = await alertRepository.findByUserId(userId);
-
-    // Convert to DTO format
-    const alertDTOs = alerts.map((alert) => {
-      const alertWithId = alert as IAlertData & { id?: string };
-      return {
-        id: alertWithId.id ?? '',
-        studentId: alert.studentId,
-        userId: alert.userId,
-        type: alert.type,
-        severity: alert.severity,
-        message: alert.message,
-        acknowledged: alert.acknowledged ?? false,
-        acknowledgedAt: alert.acknowledgedAt?.toISOString(),
-        createdAt: alert.createdAt?.toISOString() ?? new Date().toISOString(),
-      };
-    });
-
-    res.status(200).json(alertDTOs);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const alerts = await alertRepository.findByUserId(userId);
+
+  // Convert to DTO format
+  const alertDTOs = alerts.map((alert) => {
+    const alertWithId = alert as IAlertData & { id?: string };
+    return {
+      id: alertWithId.id ?? '',
+      studentId: alert.studentId,
+      userId: alert.userId,
+      type: alert.type,
+      severity: alert.severity,
+      message: alert.message,
+      acknowledged: alert.acknowledged ?? false,
+      acknowledgedAt: alert.acknowledgedAt?.toISOString(),
+      createdAt: alert.createdAt?.toISOString() ?? new Date().toISOString(),
+    };
+  });
+
+  res.status(200).json(alertDTOs);
 }
 
 /**
@@ -71,67 +67,44 @@ async function handleGetAlert(
   res: Response,
   alertRepository: AlertRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing alert ID',
-      });
-      return;
-    }
-
-    const alert = await alertRepository.findById(id);
-
-    if (!alert) {
-      res.status(404).json({
-        success: false,
-        error: 'Alert not found',
-      });
-      return;
-    }
-
-    // Check authorization
-    if (alert.userId !== userId) {
-      res.status(403).json({
-        success: false,
-        error: 'Forbidden',
-      });
-      return;
-    }
-
-    // Convert to DTO format
-    const alertWithId = alert as IAlertData & { id?: string };
-    const alertDTO = {
-      id: alertWithId.id ?? id,
-      studentId: alert.studentId,
-      userId: alert.userId,
-      type: alert.type,
-      severity: alert.severity,
-      message: alert.message,
-      acknowledged: alert.acknowledged ?? false,
-      acknowledgedAt: alert.acknowledgedAt?.toISOString(),
-      createdAt: alert.createdAt?.toISOString() ?? new Date().toISOString(),
-    };
-
-    res.status(200).json(alertDTO);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Missing alert ID');
+  }
+
+  const alert = await alertRepository.findById(id);
+
+  if (!alert) {
+    throw new NotFoundError('Alert not found');
+  }
+
+  // Check authorization
+  if (alert.userId !== userId) {
+    throw new ForbiddenError('Forbidden');
+  }
+
+  // Convert to DTO format
+  const alertWithId = alert as IAlertData & { id?: string };
+  const alertDTO = {
+    id: alertWithId.id ?? id,
+    studentId: alert.studentId,
+    userId: alert.userId,
+    type: alert.type,
+    severity: alert.severity,
+    message: alert.message,
+    acknowledged: alert.acknowledged ?? false,
+    acknowledgedAt: alert.acknowledgedAt?.toISOString(),
+    createdAt: alert.createdAt?.toISOString() ?? new Date().toISOString(),
+  };
+
+  res.status(200).json(alertDTO);
 }
 
 /**
@@ -146,65 +119,38 @@ async function handleAcknowledgeAlert(
   res: Response,
   alertRepository: AlertRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing alert ID',
-      });
-      return;
-    }
-
-    // Check if alert exists and belongs to user
-    const alert = await alertRepository.findById(id);
-
-    if (!alert) {
-      res.status(404).json({
-        success: false,
-        error: 'Alert not found',
-      });
-      return;
-    }
-
-    if (alert.userId !== userId) {
-      res.status(403).json({
-        success: false,
-        error: 'Forbidden',
-      });
-      return;
-    }
-
-    const acknowledged = await alertRepository.acknowledge(id);
-
-    if (!acknowledged) {
-      res.status(404).json({
-        success: false,
-        error: 'Alert not found',
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Missing alert ID');
+  }
+
+  // Check if alert exists and belongs to user
+  const alert = await alertRepository.findById(id);
+
+  if (!alert) {
+    throw new NotFoundError('Alert not found');
+  }
+
+  if (alert.userId !== userId) {
+    throw new ForbiddenError('Forbidden');
+  }
+
+  const acknowledged = await alertRepository.acknowledge(id);
+
+  if (!acknowledged) {
+    throw new NotFoundError('Alert not found');
+  }
+
+  res.status(200).json({
+    success: true,
+  });
 }
 
 /**
@@ -219,65 +165,38 @@ async function handleDeleteAlert(
   res: Response,
   alertRepository: AlertRepository
 ): Promise<void> {
-  try {
-    const authReq = req as IAuthenticatedRequest;
-    const userId = authReq.userId;
+  const authReq = req as IAuthenticatedRequest;
+  const userId = authReq.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing alert ID',
-      });
-      return;
-    }
-
-    // Check if alert exists and belongs to user
-    const alert = await alertRepository.findById(id);
-
-    if (!alert) {
-      res.status(404).json({
-        success: false,
-        error: 'Alert not found',
-      });
-      return;
-    }
-
-    if (alert.userId !== userId) {
-      res.status(403).json({
-        success: false,
-        error: 'Forbidden',
-      });
-      return;
-    }
-
-    const deleted = await alertRepository.delete(id);
-
-    if (!deleted) {
-      res.status(404).json({
-        success: false,
-        error: 'Alert not found',
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!userId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Missing alert ID');
+  }
+
+  // Check if alert exists and belongs to user
+  const alert = await alertRepository.findById(id);
+
+  if (!alert) {
+    throw new NotFoundError('Alert not found');
+  }
+
+  if (alert.userId !== userId) {
+    throw new ForbiddenError('Forbidden');
+  }
+
+  const deleted = await alertRepository.delete(id);
+
+  if (!deleted) {
+    throw new NotFoundError('Alert not found');
+  }
+
+  res.status(200).json({
+    success: true,
+  });
 }
 
 /**
@@ -294,33 +213,37 @@ export function alertsApiRouter(config: IAlertsApiRouterConfig): Router {
    * GET /api/alerts-api
    * Get all alerts for authenticated user.
    */
-  router.get('/', (req: Request, res: Response) => {
-    void handleGetAlerts(req, res, alertRepository);
-  });
+  router.get(
+    '/',
+    asyncHandler((req: Request, res: Response) => handleGetAlerts(req, res, alertRepository))
+  );
 
   /**
    * GET /api/alerts-api/:id
    * Get single alert by ID.
    */
-  router.get('/:id', (req: Request, res: Response) => {
-    void handleGetAlert(req, res, alertRepository);
-  });
+  router.get(
+    '/:id',
+    asyncHandler((req: Request, res: Response) => handleGetAlert(req, res, alertRepository))
+  );
 
   /**
    * POST /api/alerts-api/:id/acknowledge
    * Acknowledge an alert.
    */
-  router.post('/:id/acknowledge', (req: Request, res: Response) => {
-    void handleAcknowledgeAlert(req, res, alertRepository);
-  });
+  router.post(
+    '/:id/acknowledge',
+    asyncHandler((req: Request, res: Response) => handleAcknowledgeAlert(req, res, alertRepository))
+  );
 
   /**
    * DELETE /api/alerts-api/:id
    * Delete an alert.
    */
-  router.delete('/:id', (req: Request, res: Response) => {
-    void handleDeleteAlert(req, res, alertRepository);
-  });
+  router.delete(
+    '/:id',
+    asyncHandler((req: Request, res: Response) => handleDeleteAlert(req, res, alertRepository))
+  );
 
   return router;
 }

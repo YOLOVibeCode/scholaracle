@@ -4,6 +4,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
+import { ValidationError } from '@scholaracle/contracts';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface IDiagnosticsRouterConfig {
   readonly database: Db;
@@ -111,13 +113,13 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
    * POST /api/admin/diagnostics/flush-digests
    * Manually flush pending digest emails for a user
    */
-  router.post('/flush-digests', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/flush-digests',
+    asyncHandler(async (req: Request, res: Response) => {
       const { userId } = req.body as { userId?: string };
 
       if (!userId) {
-        res.status(400).json({ success: false, error: 'userId is required' });
-        return;
+        throw new ValidationError('userId is required');
       }
 
       const sendGridApiKey = config.sendGridApiKey ?? process.env['SENDGRID_API_KEY'];
@@ -146,20 +148,16 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         message: `Flushed digests for ${result.sent} recipient(s)`,
         ...result,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/diagnostics/pending-digests/:userId
    * Check pending digest items for a user
    */
-  router.get('/pending-digests/:userId', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/pending-digests/:userId',
+    asyncHandler(async (req: Request, res: Response) => {
       const { userId } = req.params;
 
       const items = await config.database
@@ -181,25 +179,20 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           itemCount: count,
         })),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/admin/diagnostics/create-sample-digest
    * Create sample digest alerts with grade data for testing
    */
-  router.post('/create-sample-digest', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/create-sample-digest',
+    asyncHandler(async (req: Request, res: Response) => {
       const { userId, studentId } = req.body as { userId?: string; studentId?: string };
 
       if (!userId || !studentId) {
-        res.status(400).json({ success: false, error: 'userId and studentId are required' });
-        return;
+        throw new ValidationError('userId and studentId are required');
       }
 
       // Create various types of alerts
@@ -343,20 +336,16 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         alertCount: alerts.length,
         digestItemCount: digestItems.length,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/diagnostics/sync-status
    * Check sync jobs and runs status for diagnostics
    */
-  router.get('/sync-status', async (_req: Request, res: Response) => {
-    try {
+  router.get(
+    '/sync-status',
+    asyncHandler(async (_req: Request, res: Response) => {
       const db = config.database;
 
       // Check jobs collection
@@ -453,20 +442,16 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
                   : 'System appears healthy',
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/diagnostics/student-data/:studentId
    * Query SLC collections for a student's academic data
    */
-  router.get('/student-data/:studentId', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/student-data/:studentId',
+    asyncHandler(async (req: Request, res: Response) => {
       const { studentId } = req.params;
       const db = config.database;
 
@@ -526,13 +511,8 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           updatedAt: g['updatedAt'],
         })),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   return router;
 }
