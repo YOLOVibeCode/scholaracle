@@ -1,6 +1,7 @@
 import type { Db } from 'mongodb';
 import type { IEmailTransport } from '@scholaracle/agents';
 import type { GlanceInsightService } from '@scholaracle/agents';
+import { logger } from '../logger';
 import {
   CommunicationLogRepository,
   StudentRepository,
@@ -102,7 +103,7 @@ export async function flushGlanceEmails(
         }
       }
     } catch (err) {
-      console.error(`[Glance] Error processing user ${String(doc._id)}:`, err);
+      logger.error({ err, userId: String(doc._id), job: 'glance-email' }, 'error processing user');
     }
   }
 }

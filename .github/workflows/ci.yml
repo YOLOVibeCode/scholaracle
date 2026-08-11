@@ -96,6 +96,7 @@ jobs:
           - api
           - web
           - workers
+          - mobile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -280,3 +281,42 @@ jobs:
           tags: scholaracle-web:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  mobile-bundle:
+    name: Mobile bundle check
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout scrapers repo
+        run: git clone --depth 1 https://github.com/YOLOVibeCode/scholaracle_scrapers.git /home/runner/work/scholaracle_scrapers
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Re-link file dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts (mobile type dependency)
+        run: pnpm --filter @scholaracle/contracts build
+
+      - name: Export iOS bundle (catches Metro/bundle breaks)
+        working-directory: packages/mobile
+        run: npx expo export --platform ios --output-dir /tmp/expo-export

@@ -6,6 +6,7 @@
 
 import type { Db } from 'mongodb';
 import type { IEmailDigestPendingItem } from '@scholaracle/database';
+import { logger } from '../logger';
 import { buildDigestEmail } from '@scholaracle/agents';
 import type { IEmailTransport, IDigestInsightService, IDigestSender } from './interfaces';
 import type { ICommunicationLogData } from '@scholaracle/database';
@@ -122,7 +123,7 @@ export class DigestSender implements IDigestSender {
           relatedEntityId: first?.studentId,
         });
       } catch (err) {
-        console.error(`[EmailDigest] Failed to send digest to ${recipientEmail}:`, err);
+        logger.error({ err, recipientEmail, job: 'email-digest' }, 'failed to send digest');
         await this._commLogRepo
           .create({
             userId,

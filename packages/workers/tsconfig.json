@@ -17,6 +17,9 @@
     },
     {
       "path": "../agents"
+    },
+    {
+      "path": "../logger"
     }
   ]
 }
