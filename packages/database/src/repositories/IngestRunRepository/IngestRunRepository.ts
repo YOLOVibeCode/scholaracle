@@ -20,12 +20,18 @@ export interface IIngestRunWriter {
     readonly sourceId: string;
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+    readonly clientMeta?: Readonly<Record<string, string>> | null;
   }): Promise<IngestRun>;
   markUploaded(userId: ObjectId | string, runId: string): Promise<void>;
   commitRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+  }): Promise<void>;
+  failRun(params: {
+    readonly userId: ObjectId | string;
+    readonly runId: string;
+    readonly error: string;
   }): Promise<void>;
 }
 
@@ -41,6 +47,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     readonly sourceId: string;
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+    readonly clientMeta?: Readonly<Record<string, string>> | null;
   }): Promise<IngestRun> {
     const doc: IIngestRunData = {
       userId: params.userId,
@@ -51,6 +58,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       lastCursor: params.lastCursor ?? null,
       startedAt: new Date(),
       error: null,
+      clientMeta: params.clientMeta ?? null,
     };
 
     await this._collection.insertOne(doc);
@@ -77,6 +85,23 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
           status: 'committed' satisfies IngestRunStatus,
           committedAt: new Date(),
           newCursor: params.newCursor ?? null,
+        },
+      }
+    );
+  }
+
+  async failRun(params: {
+    readonly userId: ObjectId | string;
+    readonly runId: string;
+    readonly error: string;
+  }): Promise<void> {
+    await this._collection.updateOne(
+      { userId: params.userId, runId: params.runId },
+      {
+        $set: {
+          status: 'failed' satisfies IngestRunStatus,
+          failedAt: new Date(),
+          error: params.error,
         },
       }
     );
