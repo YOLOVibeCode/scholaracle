@@ -21,6 +21,12 @@ export type {
   IPushSubscriptionStore,
   IPushSubscription,
 } from './PushDelivery';
+export { ExpoPushDelivery } from './ExpoPushDelivery';
+export type {
+  IExpoPushDeliveryConfig,
+  IExpoPushTokenStore,
+  ExpoPushSender,
+} from './ExpoPushDelivery';
 export { SMSDelivery, applyTwilioApiBaseUrl } from './SMSDelivery';
 export type { ISMSDeliveryConfig } from './SMSDelivery';
 export { InAppDelivery } from './InAppDelivery';
