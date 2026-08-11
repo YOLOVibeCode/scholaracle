@@ -152,4 +152,26 @@ describe('IngestRunRepository', () => {
     const cursor = await repo.findLastCommittedCursor('user-1', 'src-1');
     expect(cursor).toEqual({ type: 'opaque', value: 'cursor-src1' });
   });
+
+  it('fails a run without requiring an envelope', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-fail',
+      lastCursor: null,
+      clientMeta: { clientType: 'mobile', coreVersion: '0.1.0' },
+    });
+
+    await repo.failRun({
+      userId: 'user-1',
+      runId: 'run-fail',
+      error: 'session expired',
+    });
+
+    const run = await repo.findByUserIdAndRunId('user-1', 'run-fail');
+    expect(run).not.toBeNull();
+    expect(run!.status).toBe('failed');
+    expect(run!.error).toBe('session expired');
+    expect(run!.clientMeta).toEqual({ clientType: 'mobile', coreVersion: '0.1.0' });
+  });
 });
