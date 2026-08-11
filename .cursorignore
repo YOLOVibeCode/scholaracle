@@ -1,0 +1,33 @@
+# Dependencies
+**/node_modules/
+**/.pnpm-store/
+
+# Build outputs
+**/dist/
+**/build/
+**/.next/
+**/out/
+**/*.tsbuildinfo
+
+# Test artifacts
+**/coverage/
+**/.nyc_output/
+**/.jest-cache/
+**/harness-output/
+**/.scrapers/
+
+# Mobile native
+packages/mobile/ios/Pods/
+packages/mobile/ios/build/
+packages/mobile/android/.gradle/
+packages/mobile/android/app/build/
+packages/mobile/.expo/
+
+# Caches / logs
+**/.cache/
+**/*.log
+**/.DS_Store
+
+# Locks (large, low signal for AI)
+pnpm-lock.yaml
+**/package-lock.json
