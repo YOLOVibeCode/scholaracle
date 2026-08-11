@@ -66,12 +66,10 @@ describe('studentsApi', () => {
       expect(result).toEqual(students);
     });
 
-    it('returns an empty array when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Network error'));
 
-      const result = await studentsApi.getAll();
-
-      expect(result).toEqual([]);
+      await expect(studentsApi.getAll()).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -99,12 +97,10 @@ describe('studentsApi', () => {
       expect(result).toEqual(student);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Not found'));
 
-      const result = await studentsApi.getById('missing');
-
-      expect(result).toBeNull();
+      await expect(studentsApi.getById('missing')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -130,12 +126,10 @@ describe('studentsApi', () => {
       expect(result).toEqual(created);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Validation error'));
 
-      const result = await studentsApi.create({ name: 'Fail' });
-
-      expect(result).toBeNull();
+      await expect(studentsApi.create({ name: 'Fail' })).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -167,12 +161,10 @@ describe('studentsApi', () => {
       expect(result).toEqual(updated);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Update failed'));
 
-      const result = await studentsApi.update('stu-1', { name: 'Nope' });
-
-      expect(result).toBeNull();
+      await expect(studentsApi.update('stu-1', { name: 'Nope' })).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -193,12 +185,10 @@ describe('studentsApi', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Delete failed'));
 
-      const result = await studentsApi.delete('stu-1');
-
-      expect(result).toBe(false);
+      await expect(studentsApi.delete('stu-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -258,12 +248,10 @@ describe('studentsApi', () => {
       expect(url).toContain('Semester');
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Network error'));
 
-      const result = await studentsApi.getGradeHistory('stu-1');
-
-      expect(result).toBeNull();
+      await expect(studentsApi.getGradeHistory('stu-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 

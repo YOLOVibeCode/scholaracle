@@ -114,7 +114,9 @@ describe('alertsApi', () => {
     it('throws when the network request fails (no try-catch wrapping)', async () => {
       fetchSpy.mockRejectedValue(new Error('Network failure'));
 
-      await expect(alertsApi.acknowledge('a1')).rejects.toThrow('Network failure');
+      await expect(alertsApi.acknowledge('a1')).rejects.toThrow(
+        'Unable to reach the server. Check your connection and try again.'
+      );
     });
   });
 });

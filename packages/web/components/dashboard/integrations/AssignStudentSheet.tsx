@@ -74,15 +74,20 @@ export function AssignStudentSheet({
       credentials = { authType: 'login', username: username.trim(), password };
     }
 
-    const result = await integrationsApi.assignStudent(integrationId, selectedStudentId, {
-      credentials,
-    });
-    setSubmitting(false);
-    if (result) {
-      onAssigned?.();
-      handleClose();
-    } else {
-      setError('Failed to assign student');
+    try {
+      const result = await integrationsApi.assignStudent(integrationId, selectedStudentId, {
+        credentials,
+      });
+      if (result) {
+        onAssigned?.();
+        handleClose();
+      } else {
+        setError('Failed to assign student');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign student');
+    } finally {
+      setSubmitting(false);
     }
   };
 

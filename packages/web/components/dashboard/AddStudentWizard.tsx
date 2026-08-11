@@ -161,19 +161,24 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setError(null);
     setSubmitting(true);
 
-    const result = await studentsApi.create({
-      name: name.trim(),
-      grade: grade || undefined,
-      school: school || undefined,
-    });
+    try {
+      const result = await studentsApi.create({
+        name: name.trim(),
+        grade: grade || undefined,
+        school: school || undefined,
+      });
 
-    setSubmitting(false);
-    if (result) {
-      setCreatedStudentId(result.id);
-      setCreatedStudentName(result.name);
-      setStep('connect-services');
-    } else {
-      setError('Failed to create student. Please try again.');
+      if (result) {
+        setCreatedStudentId(result.id);
+        setCreatedStudentName(result.name);
+        setStep('connect-services');
+      } else {
+        setError('Failed to create student. Please try again.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create student. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -205,27 +210,32 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
       credentials = { authType: 'login', username: username.trim(), password };
     }
 
-    const result = await integrationsApi.assignStudent(
-      currentIntegration.id,
-      createdStudentId,
-      credentials ? { credentials } : {}
-    );
-    setSubmitting(false);
+    try {
+      const result = await integrationsApi.assignStudent(
+        currentIntegration.id,
+        createdStudentId,
+        credentials ? { credentials } : {}
+      );
 
-    if (result) {
-      setConnections((prev) => [
-        ...prev,
-        {
-          integrationId: currentIntegration.id,
-          integrationName: currentIntegration.displayName,
-          hasCredentials: Boolean(credentials),
-        },
-      ]);
-      setCurrentIntegration(null);
-      resetCredentials();
-      setStep('done');
-    } else {
-      setError('Failed to connect student to service.');
+      if (result) {
+        setConnections((prev) => [
+          ...prev,
+          {
+            integrationId: currentIntegration.id,
+            integrationName: currentIntegration.displayName,
+            hasCredentials: Boolean(credentials),
+          },
+        ]);
+        setCurrentIntegration(null);
+        resetCredentials();
+        setStep('done');
+      } else {
+        setError('Failed to connect student to service.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect student to service.');
+    } finally {
+      setSubmitting(false);
     }
   };
 

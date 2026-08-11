@@ -3,6 +3,7 @@
 import { SessionProvider, useSession } from 'next-auth/react';
 import { useEffect, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
+import { GlobalErrorListener } from '@/components/common/GlobalErrorListener';
 
 function OAuthSessionSync() {
   const { data: session, status } = useSession();
@@ -32,6 +33,7 @@ function OAuthSessionSync() {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
+      <GlobalErrorListener />
       <OAuthSessionSync />
       {children}
     </SessionProvider>

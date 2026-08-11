@@ -346,36 +346,21 @@ export const studentsApi = {
    * Get all students for the current user.
    */
   async getAll(): Promise<readonly IStudent[]> {
-    try {
-      return await apiClient.get<readonly IStudent[]>('/students');
-    } catch (error) {
-      console.error('Failed to load students:', error);
-      return [];
-    }
+    return await apiClient.get<readonly IStudent[]>('/students');
   },
 
   /**
    * Get student by ID.
    */
   async getById(id: string): Promise<IStudent | null> {
-    try {
-      return await apiClient.get<IStudent>(`/students/${id}`);
-    } catch (error) {
-      console.error('Failed to load student:', error);
-      return null;
-    }
+    return await apiClient.get<IStudent>(`/students/${id}`);
   },
 
   /**
    * Create a new student.
    */
   async create(student: ICreateStudentRequest): Promise<IStudent | null> {
-    try {
-      return await apiClient.post<IStudent>('/students', student);
-    } catch (error) {
-      console.error('Failed to create student:', error);
-      return null;
-    }
+    return await apiClient.post<IStudent>('/students', student);
   },
 
   /**
@@ -388,61 +373,36 @@ export const studentsApi = {
       alertPreferences?: IStudent['alertPreferences'];
     }
   ): Promise<IStudent | null> {
-    try {
-      return await apiClient.put<IStudent>(`/students/${id}`, updates);
-    } catch (error) {
-      console.error('Failed to update student:', error);
-      return null;
-    }
+    return await apiClient.put<IStudent>(`/students/${id}`, updates);
   },
 
   /**
    * Get alerts for a student.
    */
   async getAlerts(studentId: string): Promise<readonly IStudentAlert[]> {
-    try {
-      return await apiClient.get<readonly IStudentAlert[]>(`/students/${studentId}/alerts`);
-    } catch (error) {
-      console.error('Failed to load student alerts:', error);
-      return [];
-    }
+    return await apiClient.get<readonly IStudentAlert[]>(`/students/${studentId}/alerts`);
   },
 
   /**
    * Delete a student.
    */
   async delete(id: string): Promise<boolean> {
-    try {
-      const response = await apiClient.delete<{ readonly success: boolean }>(`/students/${id}`);
-      return response.success ?? false;
-    } catch (error) {
-      console.error('Failed to delete student:', error);
-      return false;
-    }
+    const response = await apiClient.delete<{ readonly success: boolean }>(`/students/${id}`);
+    return response.success ?? false;
   },
 
   /**
    * Get per-course grades and assignment breakdown for a student.
    */
   async getGrades(id: string): Promise<IStudentGradesResponse | null> {
-    try {
-      return await apiClient.get<IStudentGradesResponse>(`/students/${id}/grades`);
-    } catch (error) {
-      console.error('Failed to load student grades:', error);
-      return null;
-    }
+    return await apiClient.get<IStudentGradesResponse>(`/students/${id}/grades`);
   },
 
   /**
    * Get action board (buckets: needs_attention, due_soon, in_progress, recently_graded, caught_up) for a student.
    */
   async getActionBoard(id: string): Promise<IActionBoardResponse | null> {
-    try {
-      return await apiClient.get<IActionBoardResponse>(`/students/${id}/action-board`);
-    } catch (error) {
-      console.error('Failed to load action board:', error);
-      return null;
-    }
+    return await apiClient.get<IActionBoardResponse>(`/students/${id}/action-board`);
   },
 
   /**
@@ -459,20 +419,15 @@ export const studentsApi = {
       readonly upcoming?: boolean;
     }
   ): Promise<IAssignmentWorkflowResponse | null> {
-    try {
-      const params = new URLSearchParams();
-      if (filters?.status) params.set('status', filters.status);
-      if (filters?.course) params.set('course', filters.course);
-      if (filters?.category) params.set('category', filters.category);
-      if (filters?.from) params.set('from', filters.from);
-      if (filters?.to) params.set('to', filters.to);
-      if (filters?.upcoming === true) params.set('upcoming', 'true');
-      const query = params.toString() ? `?${params.toString()}` : '';
-      return await apiClient.get<IAssignmentWorkflowResponse>(`/students/${id}/assignment-workflow${query}`);
-    } catch (error) {
-      console.error('Failed to load assignment workflow:', error);
-      return null;
-    }
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.course) params.set('course', filters.course);
+    if (filters?.category) params.set('category', filters.category);
+    if (filters?.from) params.set('from', filters.from);
+    if (filters?.to) params.set('to', filters.to);
+    if (filters?.upcoming === true) params.set('upcoming', 'true');
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await apiClient.get<IAssignmentWorkflowResponse>(`/students/${id}/assignment-workflow${query}`);
   },
 
   /**
@@ -482,14 +437,9 @@ export const studentsApi = {
     studentId: string,
     assignmentExternalId: string
   ): Promise<IAssignmentHistoryResponse | null> {
-    try {
-      return await apiClient.get<IAssignmentHistoryResponse>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/history`
-      );
-    } catch (error) {
-      console.error('Failed to load assignment history:', error);
-      return null;
-    }
+    return await apiClient.get<IAssignmentHistoryResponse>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/history`
+    );
   },
 
   /**
@@ -500,16 +450,11 @@ export const studentsApi = {
     assignmentExternalId: string,
     note: string
   ): Promise<boolean> {
-    try {
-      const res = await apiClient.put<{ success?: boolean }>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/note`,
-        { note }
-      );
-      return res?.success ?? false;
-    } catch (error) {
-      console.error('Failed to save assignment note:', error);
-      return false;
-    }
+    const res = await apiClient.put<{ success?: boolean }>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/note`,
+      { note }
+    );
+    return res?.success ?? false;
   },
 
   /**
@@ -520,16 +465,11 @@ export const studentsApi = {
     assignmentExternalId: string,
     status: StudentStatus | null
   ): Promise<boolean> {
-    try {
-      const res = await apiClient.put<{ success?: boolean }>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-        { status }
-      );
-      return res?.success ?? false;
-    } catch (error) {
-      console.error('Failed to update assignment status:', error);
-      return false;
-    }
+    const res = await apiClient.put<{ success?: boolean }>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+      { status }
+    );
+    return res?.success ?? false;
   },
 
   /**
@@ -539,20 +479,15 @@ export const studentsApi = {
     studentId: string,
     filters?: IActivityTimelineFilters
   ): Promise<IActivityTimelineResponse | null> {
-    try {
-      const params = new URLSearchParams();
-      if (filters?.course) params.set('course', filters.course);
-      if (filters?.assignment) params.set('assignment', filters.assignment);
-      if (filters?.types?.length) params.set('types', filters.types.join(','));
-      if (filters?.from) params.set('from', filters.from);
-      if (filters?.to) params.set('to', filters.to);
-      if (filters?.limit != null) params.set('limit', String(filters.limit));
-      const query = params.toString() ? `?${params.toString()}` : '';
-      return await apiClient.get<IActivityTimelineResponse>(`/students/${studentId}/activity${query}`);
-    } catch (error) {
-      console.error('Failed to load activity timeline:', error);
-      return null;
-    }
+    const params = new URLSearchParams();
+    if (filters?.course) params.set('course', filters.course);
+    if (filters?.assignment) params.set('assignment', filters.assignment);
+    if (filters?.types?.length) params.set('types', filters.types.join(','));
+    if (filters?.from) params.set('from', filters.from);
+    if (filters?.to) params.set('to', filters.to);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await apiClient.get<IActivityTimelineResponse>(`/students/${studentId}/activity${query}`);
   },
 
   /**
@@ -562,15 +497,10 @@ export const studentsApi = {
     studentId: string,
     assignmentExternalId: string
   ): Promise<readonly ICommentResponse[]> {
-    try {
-      const list = await apiClient.get<readonly ICommentResponse[]>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`
-      );
-      return list ?? [];
-    } catch (error) {
-      console.error('Failed to load assignment comments:', error);
-      return [];
-    }
+    const list = await apiClient.get<readonly ICommentResponse[]>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`
+    );
+    return list ?? [];
   },
 
   /**
@@ -582,15 +512,10 @@ export const studentsApi = {
     body: string,
     authorName?: string
   ): Promise<ICommentResponse | null> {
-    try {
-      return await apiClient.post<ICommentResponse>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`,
-        { body, authorName }
-      );
-    } catch (error) {
-      console.error('Failed to add comment:', error);
-      return null;
-    }
+    return await apiClient.post<ICommentResponse>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments`,
+      { body, authorName }
+    );
   },
 
   /**
@@ -601,15 +526,10 @@ export const studentsApi = {
     assignmentExternalId: string,
     commentId: string
   ): Promise<boolean> {
-    try {
-      const res = await apiClient.delete<{ success?: boolean }>(
-        `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments/${encodeURIComponent(commentId)}`
-      );
-      return res?.success ?? false;
-    } catch (error) {
-      console.error('Failed to delete comment:', error);
-      return false;
-    }
+    const res = await apiClient.delete<{ success?: boolean }>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/comments/${encodeURIComponent(commentId)}`
+    );
+    return res?.success ?? false;
   },
 
   async getGradeHistory(
@@ -617,18 +537,13 @@ export const studentsApi = {
     courseExternalId?: string,
     opts?: { readonly from?: string; readonly to?: string; readonly term?: string }
   ): Promise<IGradeHistoryResponse | null> {
-    try {
-      const params = new URLSearchParams();
-      if (courseExternalId) params.set('course', courseExternalId);
-      if (opts?.from) params.set('from', opts.from);
-      if (opts?.to) params.set('to', opts.to);
-      if (opts?.term) params.set('term', opts.term);
-      const query = params.toString() ? `?${params.toString()}` : '';
-      return await apiClient.get<IGradeHistoryResponse>(`/students/${id}/grade-history${query}`);
-    } catch (error) {
-      console.error('Failed to load grade history:', error);
-      return null;
-    }
+    const params = new URLSearchParams();
+    if (courseExternalId) params.set('course', courseExternalId);
+    if (opts?.from) params.set('from', opts.from);
+    if (opts?.to) params.set('to', opts.to);
+    if (opts?.term) params.set('term', opts.term);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await apiClient.get<IGradeHistoryResponse>(`/students/${id}/grade-history${query}`);
   },
 
   async archiveGradeHistory(id: string, before: string): Promise<void> {
@@ -641,16 +556,11 @@ export const studentsApi = {
     id: string,
     opts?: { courseExternalId?: string; assignmentExternalId?: string }
   ): Promise<IStudentMaterialsResponse | null> {
-    try {
-      const params = new URLSearchParams();
-      if (opts?.courseExternalId) params.set('course', opts.courseExternalId);
-      if (opts?.assignmentExternalId) params.set('assignment', opts.assignmentExternalId);
-      const query = params.toString() ? `?${params.toString()}` : '';
-      return await apiClient.get<IStudentMaterialsResponse>(`/students/${id}/materials${query}`);
-    } catch (error) {
-      console.error('Failed to load materials:', error);
-      return null;
-    }
+    const params = new URLSearchParams();
+    if (opts?.courseExternalId) params.set('course', opts.courseExternalId);
+    if (opts?.assignmentExternalId) params.set('assignment', opts.assignmentExternalId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await apiClient.get<IStudentMaterialsResponse>(`/students/${id}/materials${query}`);
   },
 
   // ---------------------------------------------------------------------------
@@ -658,12 +568,7 @@ export const studentsApi = {
   // ---------------------------------------------------------------------------
 
   async getParents(studentId: string): Promise<readonly ISharedParent[]> {
-    try {
-      return await apiClient.get<readonly ISharedParent[]>(`/students/${studentId}/parents`);
-    } catch (error) {
-      console.error('Failed to load parents:', error);
-      return [];
-    }
+    return await apiClient.get<readonly ISharedParent[]>(`/students/${studentId}/parents`);
   },
 
   async inviteParent(
@@ -683,47 +588,31 @@ export const studentsApi = {
   },
 
   async acceptInvite(studentId: string, email: string): Promise<boolean> {
-    try {
-      const res = await apiClient.post<{ success?: boolean }>(
-        `/students/${studentId}/parents/accept`,
-        { email }
-      );
-      return res.success ?? false;
-    } catch {
-      return false;
-    }
+    const res = await apiClient.post<{ success?: boolean }>(
+      `/students/${studentId}/parents/accept`,
+      { email }
+    );
+    return res.success ?? false;
   },
 
   async setParentAdmin(studentId: string, email: string, isAdmin: boolean): Promise<boolean> {
-    try {
-      const res = await apiClient.put<{ success?: boolean }>(
-        `/students/${studentId}/parents/${encodeURIComponent(email)}/admin`,
-        { isAdmin }
-      );
-      return res.success ?? false;
-    } catch {
-      return false;
-    }
+    const res = await apiClient.put<{ success?: boolean }>(
+      `/students/${studentId}/parents/${encodeURIComponent(email)}/admin`,
+      { isAdmin }
+    );
+    return res.success ?? false;
   },
 
   async removeParent(studentId: string, email: string): Promise<boolean> {
-    try {
-      const res = await apiClient.delete<{ success?: boolean }>(
-        `/students/${studentId}/parents/${encodeURIComponent(email)}`
-      );
-      return res.success ?? false;
-    } catch {
-      return false;
-    }
+    const res = await apiClient.delete<{ success?: boolean }>(
+      `/students/${studentId}/parents/${encodeURIComponent(email)}`
+    );
+    return res.success ?? false;
   },
 
   async getPendingInvites(email: string): Promise<readonly IPendingInvite[]> {
-    try {
-      return await apiClient.get<readonly IPendingInvite[]>(
-        `/students/invites/pending?email=${encodeURIComponent(email)}`
-      );
-    } catch {
-      return [];
-    }
+    return apiClient.get<readonly IPendingInvite[]>(
+      `/students/invites/pending?email=${encodeURIComponent(email)}`
+    );
   },
 };

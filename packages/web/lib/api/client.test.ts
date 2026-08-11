@@ -242,4 +242,73 @@ describe('ApiClient', () => {
       expect.objectContaining({ method: 'PATCH', body: '{}' }),
     );
   });
+
+  // -------------------------------------------------------------------------
+  // Error normalization (trapped errors, no raw browser/parse messages)
+  // -------------------------------------------------------------------------
+
+  it('normalizes fetch rejections to NETWORK_ERROR with a friendly message', async () => {
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    try {
+      await client.get('/anything');
+      throw new Error('expected throw');
+    } catch (err) {
+      const apiErr = err as ApiClientError;
+      expect(apiErr).toBeInstanceOf(ApiClientError);
+      expect(apiErr.code).toBe('NETWORK_ERROR');
+      expect(apiErr.status).toBe(0);
+      expect(apiErr.message).toBe(
+        'Unable to reach the server. Check your connection and try again.'
+      );
+    }
+  });
+
+  it('normalizes malformed success bodies to PARSE_ERROR', async () => {
+    const badJson = fakeResponse({ ok: true });
+    (badJson as { json: () => Promise<unknown> }).json = () =>
+      Promise.reject(new SyntaxError('Unexpected token < in JSON'));
+    fetchSpy.mockResolvedValue(badJson);
+
+    try {
+      await client.get('/html-page');
+      throw new Error('expected throw');
+    } catch (err) {
+      const apiErr = err as ApiClientError;
+      expect(apiErr).toBeInstanceOf(ApiClientError);
+      expect(apiErr.code).toBe('PARSE_ERROR');
+      expect(apiErr.message).not.toContain('Unexpected token');
+    }
+  });
+
+  it('carries the x-request-id header onto ApiClientError', async () => {
+    const errorResponse = fakeResponse({ success: false, error: 'Nope', code: 'FORBIDDEN' }, 403);
+    (errorResponse as { headers: Headers }).headers = new Headers({
+      'x-request-id': 'req-abc-123',
+    });
+    fetchSpy.mockResolvedValue(errorResponse);
+
+    try {
+      await client.get('/forbidden');
+      throw new Error('expected throw');
+    } catch (err) {
+      const apiErr = err as ApiClientError;
+      expect(apiErr.requestId).toBe('req-abc-123');
+      expect(apiErr.code).toBe('FORBIDDEN');
+      expect(apiErr.status).toBe(403);
+    }
+  });
+
+  it('falls back to the requestId in the error body when the header is absent', async () => {
+    fetchSpy.mockResolvedValue(
+      fakeResponse({ success: false, error: 'Boom', requestId: 'req-body-9' }, 500)
+    );
+
+    try {
+      await client.get('/failing');
+      throw new Error('expected throw');
+    } catch (err) {
+      expect((err as ApiClientError).requestId).toBe('req-body-9');
+    }
+  });
 });

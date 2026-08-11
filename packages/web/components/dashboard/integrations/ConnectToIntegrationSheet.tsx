@@ -56,13 +56,18 @@ export function ConnectToIntegrationSheet({
       credentials = { authType: 'login', username: username.trim(), password };
     }
 
-    const result = await integrationsApi.assignStudent(selected.id, studentId, { credentials });
-    setSubmitting(false);
-    if (result) {
-      onConnected?.();
-      handleClose();
-    } else {
-      setError('Failed to connect');
+    try {
+      const result = await integrationsApi.assignStudent(selected.id, studentId, { credentials });
+      if (result) {
+        onConnected?.();
+        handleClose();
+      } else {
+        setError('Failed to connect');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to connect');
+    } finally {
+      setSubmitting(false);
     }
   };
 

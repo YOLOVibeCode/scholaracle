@@ -44,8 +44,8 @@ export function ReconciliationCard() {
       } else {
         setError('Failed to link');
       }
-    } catch {
-      setError('Failed to link');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to link');
     } finally {
       setSubmitting(false);
     }
@@ -64,8 +64,8 @@ export function ReconciliationCard() {
       } else {
         setError('Failed to create student');
       }
-    } catch {
-      setError('Failed to create student');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create student');
     } finally {
       setSubmitting(false);
     }
