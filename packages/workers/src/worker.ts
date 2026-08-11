@@ -28,7 +28,7 @@ import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
 import { SMSDelivery, applyTwilioApiBaseUrl } from '@scholaracle/agents';
-import { PushDelivery } from '@scholaracle/agents';
+import { PushDelivery, ExpoPushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import twilio from 'twilio';
@@ -39,6 +39,10 @@ import { ConnectorTokenService } from '@scholaracle/auth';
 import { randomUUID } from 'crypto';
 import { createAdapterRunner } from './adapter-runner';
 import { SyncStalenessMonitor } from './sync-staleness-monitor';
+import { logger } from './logger';
+import { initSentry } from './sentry';
+import { safeInterval } from './utils/safeInterval';
+import { installProcessHandlers } from './utils/processHandlers';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -152,7 +156,7 @@ async function flushSmsDigests(
       });
       await repo.deleteByUserId(userId);
     } catch (err) {
-      console.error(`[SmsDigest] Failed to send digest for user ${userId}:`, err);
+      logger.error({ err, userId, job: 'sms-digest' }, 'failed to send SMS digest');
       await commLogRepo
         .create({
           userId,
@@ -256,11 +260,28 @@ function initializeNotificationService(
 
   const firebaseProjectId = config.firebaseProjectId ?? 'default';
   const pushDelivery = new PushDelivery({ projectId: firebaseProjectId });
+
+  // Expo push (APNs/FCM via Expo) when users have registered tokens on user.devices
+  const expoPushDelivery =
+    database != null
+      ? new ExpoPushDelivery({
+          tokenStore: {
+            getTokens: async (userId: string): Promise<readonly string[]> => {
+              const user = await new UserRepository(database).findById(userId);
+              return (user?.devices ?? [])
+                .map((d) => d.pushToken)
+                .filter((t): t is string => typeof t === 'string' && t.length > 0);
+            },
+          },
+        })
+      : null;
+
   const inAppDelivery = new InAppDelivery();
 
   const deliveryRouter = new DeliveryRouter([
     emailDelivery,
     smsDelivery,
+    ...(expoPushDelivery ? [expoPushDelivery] : []),
     pushDelivery,
     inAppDelivery,
   ]);
@@ -314,10 +335,7 @@ function initializeNotificationService(
         const daily = user?.preferences?.notifications?.digestSchedule?.daily?.enabled === true;
         if (!daily) return null;
         const frequency = user?.preferences?.notifications?.frequency as
-          | 'minimal'
-          | 'balanced'
-          | 'proactive'
-          | undefined;
+          'minimal' | 'balanced' | 'proactive' | undefined;
         return {
           enabled: true,
           time: user?.preferences?.notifications?.digestSchedule?.daily?.time,
@@ -388,8 +406,7 @@ async function processImmediateFlushJobs(
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`[ImmediateFlush] Processing digest for user ${userId}`);
+    logger.info({ userId, job: 'immediate-flush' }, 'processing digest');
 
     // Use DigestSender to send the digest for this specific user
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -424,10 +441,9 @@ async function processImmediateFlushJobs(
       }
     );
 
-    // eslint-disable-next-line no-console
-    console.log(`[ImmediateFlush] ✅ Digest sent for user ${userId}`);
+    logger.info({ userId, job: 'immediate-flush' }, 'digest sent');
   } catch (error) {
-    console.error('[ImmediateFlush] Error:', error);
+    logger.error({ err: error, job: 'immediate-flush' }, 'immediate flush failed');
   }
 }
 
@@ -437,6 +453,9 @@ async function processImmediateFlushJobs(
  * @param config - Worker configuration
  */
 export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
+  initSentry();
+  installProcessHandlers(logger);
+
   const mongodbUri =
     config.mongodbUri ??
     process.env['MONGODB_URI'] ??
@@ -476,7 +495,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // -----------------------------------------------------------------------
   // Sync worker + scheduler (runs adapters server-side)
   // -----------------------------------------------------------------------
-  const adapterRunner: AdapterRunnerFn = createAdapterRunner(database);
+  const adapterRunner: AdapterRunnerFn = createAdapterRunner();
 
   const apiBaseUrl = process.env['API_BASE_URL'] ?? process.env['BASE_URL'] ?? '';
   const jwtSecret = process.env['JWT_SECRET'] ?? process.env['CONNECTOR_JWT_SECRET'] ?? '';
@@ -523,17 +542,21 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       : null;
   const hasSender = Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
   if (twilioClientForDigest && hasSender) {
-    setInterval(() => {
-      const now = new Date();
-      if (now.getUTCHours() === DIGEST_UTC_HOUR) {
-        void flushSmsDigests(
-          database,
-          twilioClientForDigest,
-          twilioConfig.fromNumber,
-          twilioConfig.messagingServiceSid || undefined
-        ).catch((e) => console.error('[SmsDigest]', e));
-      }
-    }, 60_000);
+    safeInterval(
+      'sms-digest',
+      async () => {
+        const now = new Date();
+        if (now.getUTCHours() === DIGEST_UTC_HOUR) {
+          await flushSmsDigests(
+            database,
+            twilioClientForDigest,
+            twilioConfig.fromNumber,
+            twilioConfig.messagingServiceSid || undefined
+          );
+        }
+      },
+      60_000
+    );
   }
 
   const dashboardBaseUrl =
@@ -545,46 +568,54 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     : undefined;
 
   // Scheduled digest flush (runs every 60 seconds)
-  setInterval(() => {
-    void flushEmailDigests(
-      database,
-      emailTransport,
-      sendGridConfig.fromEmail,
-      sendGridConfig.fromName,
-      dashboardBaseUrl,
-      digestInsightService
-    ).catch((e) => console.error('[EmailDigest]', e));
-  }, 60_000);
+  safeInterval(
+    'email-digest',
+    () =>
+      flushEmailDigests(
+        database,
+        emailTransport,
+        sendGridConfig.fromEmail,
+        sendGridConfig.fromName,
+        dashboardBaseUrl,
+        digestInsightService
+      ),
+    60_000
+  );
 
   // Scheduled glance email flush (runs every 60 seconds)
   const glanceInsightService = anthropicApiKey
     ? new GlanceInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
     : undefined;
-  setInterval(() => {
-    void flushGlanceEmails(
-      database,
-      emailTransport,
-      sendGridConfig.fromEmail,
-      sendGridConfig.fromName,
-      dashboardBaseUrl,
-      glanceInsightService
-    ).catch((e) => console.error('[Glance]', e));
-  }, 60_000);
+  safeInterval(
+    'glance-email',
+    () =>
+      flushGlanceEmails(
+        database,
+        emailTransport,
+        sendGridConfig.fromEmail,
+        sendGridConfig.fromName,
+        dashboardBaseUrl,
+        glanceInsightService
+      ),
+    60_000
+  );
 
   // Immediate digest flush job processor (checks every 5 seconds for immediate jobs)
-  setInterval(() => {
-    void processImmediateFlushJobs(
-      database,
-      emailTransport,
-      sendGridConfig.fromEmail,
-      sendGridConfig.fromName,
-      dashboardBaseUrl,
-      digestInsightService
-    ).catch((e) => console.error('[ImmediateFlush]', e));
-  }, 5_000);
+  safeInterval(
+    'immediate-flush',
+    () =>
+      processImmediateFlushJobs(
+        database,
+        emailTransport,
+        sendGridConfig.fromEmail,
+        sendGridConfig.fromName,
+        dashboardBaseUrl,
+        digestInsightService
+      ),
+    5_000
+  );
 
-  // eslint-disable-next-line no-console
-  console.log('Sync worker + scheduler started');
+  logger.info('sync worker + scheduler started');
 
   // -----------------------------------------------------------------------
   // Worker heartbeat — report capacity + resource usage to MongoDB
@@ -622,15 +653,15 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     );
   }
 
-  // Send first heartbeat immediately, then every 30 seconds
-  void sendHeartbeat().catch(() => {
-    /* best effort */
+  // Send first heartbeat immediately, then every 30 seconds (best effort —
+  // warn-level, not reported to Sentry)
+  void sendHeartbeat().catch((error: unknown) => {
+    logger.warn({ err: error, job: 'heartbeat' }, 'heartbeat failed');
   });
-  const heartbeatInterval = setInterval(() => {
-    void sendHeartbeat().catch(() => {
-      /* best effort */
-    });
-  }, 30_000);
+  const heartbeatInterval = safeInterval('heartbeat', sendHeartbeat, 30_000, {
+    level: 'warn',
+    isReported: false,
+  });
 
   // -----------------------------------------------------------------------
   // Sync staleness monitor — emails account owners when syncs are overdue
@@ -662,7 +693,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
               memoryMB: Math.round(mem.rss / 1_048_576),
             })
           );
-        } catch {
+        } catch (error) {
+          logger.warn({ err: error }, 'health check failed - mongodb unreachable');
           const mem = process.memoryUsage();
           res.writeHead(503, { 'Content-Type': 'application/json' });
           res.end(
@@ -683,17 +715,14 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     res.end();
   });
   healthServer.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Health check server listening on port ${port}`);
+    logger.info({ port }, 'health check server listening');
   });
 
-  // eslint-disable-next-line no-console
-  console.log('Notification worker started');
+  logger.info('notification worker started');
 
   // Handle graceful shutdown
   const shutdown = async (): Promise<void> => {
-    // eslint-disable-next-line no-console
-    console.log('Shutting down worker...');
+    logger.info('shutting down worker');
     clearInterval(heartbeatInterval);
     stalenessMonitor.stop();
     healthServer.close();
@@ -705,8 +734,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       /* best effort */
     });
     await mongoClient.close();
-    // eslint-disable-next-line no-console
-    console.log('Worker stopped');
+    logger.info('worker stopped');
     process.exit(0);
   };
 
@@ -720,9 +748,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
 
 // Start worker if this file is run directly
 if (require.main === module) {
-  startWorker().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('Failed to start worker:', error);
+  startWorker().catch((error: unknown) => {
+    logger.fatal({ err: error }, 'failed to start worker');
     process.exit(1);
   });
 }

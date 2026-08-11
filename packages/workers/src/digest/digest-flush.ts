@@ -5,6 +5,7 @@
 
 import type { Db } from 'mongodb';
 import type { IEmailTransport } from '@scholaracle/agents';
+import { logger } from '../logger';
 import {
   EmailDigestPendingRepository,
   CommunicationLogRepository,
@@ -88,7 +89,7 @@ export async function flushEmailDigests(
       );
       await digestSender.sendDigestForUser(userId, itemFilter, allowedRecipients);
     } catch (err) {
-      console.error(`[EmailDigest] Error processing user ${userId}:`, err);
+      logger.error({ err, userId, job: 'email-digest' }, 'error processing user digest');
     }
   }
 }

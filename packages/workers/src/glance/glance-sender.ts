@@ -4,6 +4,7 @@ import { buildGlanceEmail } from '@scholaracle/agents';
 import type { ICommunicationLogData } from '@scholaracle/database';
 import type { GlanceInsightService, IGlanceInsightInput } from '@scholaracle/agents';
 import { fetchGlanceData } from './glance-data-fetcher';
+import { logger } from '../logger';
 
 export class GlanceSender {
   constructor(
@@ -92,9 +93,9 @@ export class GlanceSender {
         relatedEntityId: studentId,
       });
     } catch (err) {
-      console.error(
-        `[Glance] Failed to send glance for student ${studentId} to ${recipientEmail}:`,
-        err
+      logger.error(
+        { err, studentId, recipientEmail, job: 'glance-email' },
+        'failed to send glance email'
       );
       await this._commLogRepo
         .create({
