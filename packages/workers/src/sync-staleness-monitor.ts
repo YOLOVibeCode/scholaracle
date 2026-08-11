@@ -1,5 +1,7 @@
 import { type Db, ObjectId } from 'mongodb';
 import type { IEmailTransport } from '@scholaracle/agents';
+import { getErrorReporter } from '@scholaracle/contracts';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // Sync Staleness Monitor
@@ -66,15 +68,21 @@ export class SyncStalenessMonitor {
   public start(): void {
     if (this._interval) return;
     // Run first check after a short delay (let the worker finish bootstrapping)
-    setTimeout(() => {
-      void this.runCheck().catch((e) => console.error('[StalenessMonitor] check error:', e));
-    }, 30_000);
-    this._interval = setInterval(() => {
-      void this.runCheck().catch((e) => console.error('[StalenessMonitor] check error:', e));
-    }, this._checkMs);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[StalenessMonitor] started (check every ${Math.round(this._checkMs / 60_000)}m, threshold ${Math.round(this._thresholdMs / 3_600_000)}h)`
+    const runSafely = (): void => {
+      void this.runCheck().catch((e: unknown) => {
+        logger.error({ err: e, job: 'staleness-monitor' }, 'staleness check failed');
+        getErrorReporter().captureException(e, { job: 'staleness-monitor' });
+      });
+    };
+    setTimeout(runSafely, 30_000);
+    this._interval = setInterval(runSafely, this._checkMs);
+    logger.info(
+      {
+        job: 'staleness-monitor',
+        checkEveryMinutes: Math.round(this._checkMs / 60_000),
+        thresholdHours: Math.round(this._thresholdMs / 3_600_000),
+      },
+      'staleness monitor started'
     );
   }
 
@@ -148,8 +156,7 @@ export class SyncStalenessMonitor {
       }
 
       if (!owner?.['email']) {
-        // eslint-disable-next-line no-console
-        console.warn(`[StalenessMonitor] Owner ${ownerKey} has no email, skipping alert`);
+        logger.warn({ ownerKey, job: 'staleness-monitor' }, 'owner has no email - skipping alert');
         continue;
       }
 
@@ -160,12 +167,12 @@ export class SyncStalenessMonitor {
       try {
         await this._sendStaleAlert(email, ownerName, info.staleSources, thresholdHours);
         this._alertedOwners.add(ownerKey);
-        // eslint-disable-next-line no-console
-        console.log(
-          `[StalenessMonitor] Alert sent to ${email} for ${info.staleSources.length} stale source(s)`
+        logger.info(
+          { email, staleCount: info.staleSources.length, job: 'staleness-monitor' },
+          'stale-sync alert sent'
         );
       } catch (err) {
-        console.error(`[StalenessMonitor] Failed to send alert to ${email}:`, err);
+        logger.error({ err, email, job: 'staleness-monitor' }, 'failed to send stale-sync alert');
       }
     }
   }
