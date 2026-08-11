@@ -1,5 +1,7 @@
 import type { Db, Collection, ObjectId, Document } from 'mongodb';
 import { ObjectId as MongoObjectId } from 'mongodb';
+import { getErrorReporter } from '@scholaracle/contracts';
+import { logger } from '../../logger';
 
 export interface IJobData {
   readonly type: string;
@@ -66,8 +68,8 @@ export class MongoQueue {
     this._workerId = `worker-${process.pid}-${Date.now()}`;
 
     // Ensure indexes exist (non-blocking)
-    this._ensureIndexes().catch((error) => {
-      console.error('Failed to create indexes:', error);
+    this._ensureIndexes().catch((error: unknown) => {
+      logger.error({ err: error }, 'failed to create queue indexes');
     });
   }
 
@@ -210,6 +212,18 @@ export class MongoQueue {
           },
         }
       );
+      // Terminal failure: retries exhausted. Make it visible beyond the
+      // jobs collection.
+      logger.error(
+        { err: error, jobId, jobType: job.type, jobName: job.name, attempts },
+        'job permanently failed'
+      );
+      getErrorReporter().captureException(error, {
+        jobId,
+        jobType: job.type,
+        jobName: job.name,
+        attempts,
+      });
     } else {
       const delay = Math.pow(2, attempts) * 2000;
 
