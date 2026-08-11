@@ -2,6 +2,15 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { UserRepository } from '@scholaracle/database';
 import {
+  AuthenticationError,
+  NotFoundError,
+  ValidationError,
+  type IPushTokenRequest,
+  type IPushTokenDeleteRequest,
+  type IPushTokenResponse,
+} from '@scholaracle/contracts';
+import { asyncHandler } from '../../middleware/asyncHandler';
+import {
   EmailTransferService,
   type IEmailTransferEmailService,
 } from '../../services/email-transfer';
@@ -31,32 +40,27 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
    * POST /api/account/email-transfer/initiate
    * Initiate an email transfer for the current user.
    */
-  router.post('/email-transfer/initiate', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/email-transfer/initiate',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const user = await userRepository.findById(userId);
       if (!user) {
-        res.status(404).json({ success: false, error: 'User not found' });
-        return;
+        throw new NotFoundError('User not found');
       }
 
       const { newEmail } = req.body as { newEmail?: string };
       if (!newEmail || !newEmail.trim()) {
-        res.status(400).json({ success: false, error: 'New email required' });
-        return;
+        throw new ValidationError('New email required');
       }
 
       const normalizedNewEmail = newEmail.trim().toLowerCase();
       if (normalizedNewEmail === user.email.toLowerCase()) {
-        res
-          .status(400)
-          .json({ success: false, error: 'New email must be different from current email' });
-        return;
+        throw new ValidationError('New email must be different from current email');
       }
 
       await emailTransferService.initiateUserTransfer({
@@ -70,25 +74,20 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         message:
           'Email transfer initiated. Please check both email addresses for confirmation links.',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/account/email-transfer/confirm-old
    * Confirm email transfer from old email address.
    */
-  router.get('/email-transfer/confirm-old', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/email-transfer/confirm-old',
+    asyncHandler(async (req: Request, res: Response) => {
       const { userId, token } = req.query as { userId?: string; token?: string };
 
       if (!userId || !token) {
-        res.status(400).json({ success: false, error: 'Missing userId or token' });
-        return;
+        throw new ValidationError('Missing userId or token');
       }
 
       await emailTransferService.confirmOldEmail({ userId, token });
@@ -97,25 +96,20 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         success: true,
         message: 'Old email confirmed. Waiting for new email confirmation to complete transfer.',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/account/email-transfer/confirm-new
    * Confirm email transfer from new email address.
    */
-  router.get('/email-transfer/confirm-new', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/email-transfer/confirm-new',
+    asyncHandler(async (req: Request, res: Response) => {
       const { userId, token } = req.query as { userId?: string; token?: string };
 
       if (!userId || !token) {
-        res.status(400).json({ success: false, error: 'Missing userId or token' });
-        return;
+        throw new ValidationError('Missing userId or token');
       }
 
       const result = await emailTransferService.confirmNewEmail({ userId, token });
@@ -133,24 +127,19 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
           message: 'New email confirmed. Waiting for old email confirmation to complete transfer.',
         });
       }
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/account/email-transfer/cancel
    * Cancel a pending email transfer.
    */
-  router.post('/email-transfer/cancel', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/email-transfer/cancel',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       await emailTransferService.cancelTransfer({ userId });
@@ -159,30 +148,24 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         success: true,
         message: 'Email transfer cancelled',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/account/email-transfer/status
    * Get status of pending email transfer.
    */
-  router.get('/email-transfer/status', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/email-transfer/status',
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
 
       const user = await userRepository.findById(userId);
       if (!user) {
-        res.status(404).json({ success: false, error: 'User not found' });
-        return;
+        throw new NotFoundError('User not found');
       }
 
       if (!user.emailTransferRequest) {
@@ -205,13 +188,81 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         oldEmailConfirmed: !!oldConfirm,
         newEmailConfirmed: !!newConfirm,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
+
+  /**
+   * POST /api/account/push-token
+   * Register or replace the Expo push token for the current user's device.
+   */
+  router.post(
+    '/push-token',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+
+      const { expoPushToken, deviceId, type } = req.body as Partial<IPushTokenRequest>;
+      if (!expoPushToken || typeof expoPushToken !== 'string' || !expoPushToken.trim()) {
+        throw new ValidationError('expoPushToken required');
+      }
+
+      const user = await userRepository.findById(userId);
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      const id = deviceId?.trim() || 'mobile-default';
+      const deviceType = type ?? 'ios';
+      const existing = [...(user.devices ?? [])];
+      const idx = existing.findIndex((d) => d.deviceId === id);
+      const nextDevice = {
+        deviceId: id,
+        type: deviceType,
+        pushToken: expoPushToken.trim(),
+        lastActive: new Date(),
+      };
+      const devices =
+        idx >= 0
+          ? [...existing.slice(0, idx), nextDevice, ...existing.slice(idx + 1)]
+          : [...existing, nextDevice];
+
+      await userRepository.update(userId, { devices });
+      res.status(200).json({ success: true } satisfies IPushTokenResponse);
+    })
+  );
+
+  /**
+   * DELETE /api/account/push-token
+   * Remove the push registration for a device (sign-out). Idempotent:
+   * deleting an unknown deviceId succeeds.
+   */
+  router.delete(
+    '/push-token',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+
+      const { deviceId } = req.body as Partial<IPushTokenDeleteRequest>;
+      if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) {
+        throw new ValidationError('deviceId required');
+      }
+
+      const user = await userRepository.findById(userId);
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      const devices = (user.devices ?? []).filter((d) => d.deviceId !== deviceId.trim());
+      if (devices.length !== (user.devices ?? []).length) {
+        await userRepository.update(userId, { devices });
+      }
+      res.status(200).json({ success: true } satisfies IPushTokenResponse);
+    })
+  );
 
   return router;
 }

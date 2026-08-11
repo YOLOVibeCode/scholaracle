@@ -2,8 +2,10 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
 import { AdminAuthService, MFAService } from '@scholaracle/auth';
+import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
 import type { IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 import {
   AdminUserRepository,
   AdminPasswordResetTokenRepository,
@@ -64,42 +66,31 @@ async function handleLogin(
   res: Response,
   adminAuthService: AdminAuthService
 ): Promise<void> {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        error: 'Email and password are required',
-      });
-      return;
-    }
-
-    const result = await adminAuthService.login(email, password);
-
-    if (!result.success) {
-      res.status(401).json({
-        success: false,
-        error: result.error,
-        requiresMFA: result.requiresMFA,
-        mfaToken: result.mfaToken,
-        requiresMFASetup: result.requiresMFASetup,
-        mfaSetupToken: result.mfaSetupToken,
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      token: result.token,
-      admin: result.admin,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!email || !password) {
+    throw new ValidationError('Email and password are required');
   }
+
+  const result = await adminAuthService.login(email, password);
+
+  if (!result.success) {
+    res.status(401).json({
+      success: false,
+      error: result.error,
+      requiresMFA: result.requiresMFA,
+      mfaToken: result.mfaToken,
+      requiresMFASetup: result.requiresMFASetup,
+      mfaSetupToken: result.mfaSetupToken,
+    });
+    return;
+  }
+
+  res.status(200).json({
+    success: true,
+    token: result.token,
+    admin: result.admin,
+  });
 }
 
 async function handleMFAVerify(
@@ -108,41 +99,26 @@ async function handleMFAVerify(
   adminAuthService: AdminAuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const { mfaToken, token } = req.body;
+  const { mfaToken, token } = req.body;
 
-    if (!mfaToken || !token) {
-      res.status(400).json({
-        success: false,
-        error: 'MFA token and TOTP code are required',
-      });
-      return;
-    }
-
-    const result = await adminAuthService.verifyMFAToken(mfaToken, token);
-
-    if (!result.success) {
-      res.status(401).json({
-        success: false,
-        error: result.error,
-      });
-      return;
-    }
-
-    if (result.token) {
-      await createAdminSession(sessionRepository, result.token, req);
-    }
-    res.status(200).json({
-      success: true,
-      token: result.token,
-      admin: result.admin,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!mfaToken || !token) {
+    throw new ValidationError('MFA token and TOTP code are required');
   }
+
+  const result = await adminAuthService.verifyMFAToken(mfaToken, token);
+
+  if (!result.success) {
+    throw new AuthenticationError(result.error);
+  }
+
+  if (result.token) {
+    await createAdminSession(sessionRepository, result.token, req);
+  }
+  res.status(200).json({
+    success: true,
+    token: result.token,
+    admin: result.admin,
+  });
 }
 
 async function handleMFASetupData(
@@ -150,38 +126,23 @@ async function handleMFASetupData(
   res: Response,
   adminAuthService: AdminAuthService
 ): Promise<void> {
-  try {
-    const { mfaSetupToken } = req.body as { mfaSetupToken?: string };
+  const { mfaSetupToken } = req.body as { mfaSetupToken?: string };
 
-    if (!mfaSetupToken || typeof mfaSetupToken !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: 'mfaSetupToken is required',
-      });
-      return;
-    }
-
-    const result = await adminAuthService.getMFASetupData(mfaSetupToken);
-
-    if ('error' in result) {
-      res.status(400).json({
-        success: false,
-        error: result.error,
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      qrCodeUrl: result.qrCodeUrl,
-      manualEntryKey: result.manualEntryKey,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!mfaSetupToken || typeof mfaSetupToken !== 'string') {
+    throw new ValidationError('mfaSetupToken is required');
   }
+
+  const result = await adminAuthService.getMFASetupData(mfaSetupToken);
+
+  if ('error' in result) {
+    throw new ValidationError(result.error);
+  }
+
+  res.status(200).json({
+    success: true,
+    qrCodeUrl: result.qrCodeUrl,
+    manualEntryKey: result.manualEntryKey,
+  });
 }
 
 async function handleMFACompleteSetup(
@@ -190,41 +151,26 @@ async function handleMFACompleteSetup(
   adminAuthService: AdminAuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const { mfaSetupToken, totpToken } = req.body as { mfaSetupToken?: string; totpToken?: string };
+  const { mfaSetupToken, totpToken } = req.body as { mfaSetupToken?: string; totpToken?: string };
 
-    if (!mfaSetupToken || !totpToken) {
-      res.status(400).json({
-        success: false,
-        error: 'mfaSetupToken and totpToken are required',
-      });
-      return;
-    }
-
-    const result = await adminAuthService.completeMFASetup(mfaSetupToken, totpToken);
-
-    if (!result.success) {
-      res.status(401).json({
-        success: false,
-        error: result.error,
-      });
-      return;
-    }
-
-    if (result.token) {
-      await createAdminSession(sessionRepository, result.token, req);
-    }
-    res.status(200).json({
-      success: true,
-      token: result.token,
-      admin: result.admin,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!mfaSetupToken || !totpToken) {
+    throw new ValidationError('mfaSetupToken and totpToken are required');
   }
+
+  const result = await adminAuthService.completeMFASetup(mfaSetupToken, totpToken);
+
+  if (!result.success) {
+    throw new AuthenticationError(result.error);
+  }
+
+  if (result.token) {
+    await createAdminSession(sessionRepository, result.token, req);
+  }
+  res.status(200).json({
+    success: true,
+    token: result.token,
+    admin: result.admin,
+  });
 }
 
 async function handleMFASetup(
@@ -233,35 +179,24 @@ async function handleMFASetup(
   _adminAuthService: AdminAuthService,
   mfaService: MFAService
 ): Promise<void> {
-  try {
-    const authReq = req as IAdminAuthenticatedRequest;
-    const adminId = authReq.adminId;
-    const adminEmail = authReq.adminEmail;
+  const authReq = req as IAdminAuthenticatedRequest;
+  const adminId = authReq.adminId;
+  const adminEmail = authReq.adminEmail;
 
-    if (!adminId || !adminEmail) {
-      res.status(401).json({
-        success: false,
-        error: 'Unauthorized',
-      });
-      return;
-    }
-
-    // Generate MFA secret
-    const setupResult = mfaService.generateSecret(adminEmail);
-    const qrCodeUrl = await mfaService.generateQRCode(setupResult.qrCodeUrl);
-
-    res.status(200).json({
-      success: true,
-      secret: setupResult.secret,
-      qrCodeUrl,
-      manualEntryKey: setupResult.manualEntryKey,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!adminId || !adminEmail) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  // Generate MFA secret
+  const setupResult = mfaService.generateSecret(adminEmail);
+  const qrCodeUrl = await mfaService.generateQRCode(setupResult.qrCodeUrl);
+
+  res.status(200).json({
+    success: true,
+    secret: setupResult.secret,
+    qrCodeUrl,
+    manualEntryKey: setupResult.manualEntryKey,
+  });
 }
 
 async function handleMFAEnable(
@@ -271,51 +206,40 @@ async function handleMFAEnable(
   auditLogRepo: AuditLogRepository,
   mfaService: MFAService
 ): Promise<void> {
-  try {
-    const authReq = req as IAdminAuthenticatedRequest;
-    const adminId = authReq.adminId;
-    const adminEmail = authReq.adminEmail;
-    if (!adminId || !adminEmail) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-
-    const { secret, token } = req.body as { secret?: string; token?: string };
-    if (!secret || !token) {
-      res.status(400).json({ success: false, error: 'secret and token are required' });
-      return;
-    }
-
-    const ok = mfaService.verifyToken(secret, token);
-    if (!ok) {
-      res.status(401).json({ success: false, error: 'Invalid MFA code' });
-      return;
-    }
-
-    const updated = await adminRepo.update(adminId, { mfaEnabled: true, mfaSecret: secret });
-    if (!updated) {
-      res.status(404).json({ success: false, error: 'Admin not found' });
-      return;
-    }
-
-    await auditLogRepo.create({
-      adminUserId: adminId,
-      adminEmail,
-      action: 'admin:mfa_setup',
-      entityType: 'admin_user',
-      entityId: adminId,
-      reason: 'Enabled MFA',
-      ipAddress: req.ip ?? 'unknown',
-      userAgent: req.headers['user-agent'] ?? 'unknown',
-    });
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authReq = req as IAdminAuthenticatedRequest;
+  const adminId = authReq.adminId;
+  const adminEmail = authReq.adminEmail;
+  if (!adminId || !adminEmail) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const { secret, token } = req.body as { secret?: string; token?: string };
+  if (!secret || !token) {
+    throw new ValidationError('secret and token are required');
+  }
+
+  const ok = mfaService.verifyToken(secret, token);
+  if (!ok) {
+    throw new AuthenticationError('Invalid MFA code');
+  }
+
+  const updated = await adminRepo.update(adminId, { mfaEnabled: true, mfaSecret: secret });
+  if (!updated) {
+    throw new NotFoundError('Admin not found');
+  }
+
+  await auditLogRepo.create({
+    adminUserId: adminId,
+    adminEmail,
+    action: 'admin:mfa_setup',
+    entityType: 'admin_user',
+    entityId: adminId,
+    reason: 'Enabled MFA',
+    ipAddress: req.ip ?? 'unknown',
+    userAgent: req.headers['user-agent'] ?? 'unknown',
+  });
+
+  res.status(200).json({ success: true });
 }
 
 async function handleStepUpStart(
@@ -324,33 +248,23 @@ async function handleStepUpStart(
   adminRepo: AdminUserRepository,
   stepUpStore: IAdminStepUpChallengeStore
 ): Promise<void> {
-  try {
-    const authReq = req as IAdminAuthenticatedRequest;
-    if (!authReq.adminId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-
-    const admin = await adminRepo.findById(authReq.adminId);
-    if (!admin || !admin.isActive) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-    if (!admin.mfaEnabled || !admin.mfaSecret) {
-      res.status(400).json({ success: false, error: 'MFA is not enabled for this admin' });
-      return;
-    }
-
-    const stepUpId = crypto.randomUUID();
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-    await stepUpStore.create(stepUpId, authReq.adminId, new Date(expiresAt));
-    res.status(200).json({ success: true, data: { stepUpId, expiresAt } });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authReq = req as IAdminAuthenticatedRequest;
+  if (!authReq.adminId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const admin = await adminRepo.findById(authReq.adminId);
+  if (!admin || !admin.isActive) {
+    throw new AuthenticationError('Unauthorized');
+  }
+  if (!admin.mfaEnabled || !admin.mfaSecret) {
+    throw new ValidationError('MFA is not enabled for this admin');
+  }
+
+  const stepUpId = crypto.randomUUID();
+  const expiresAt = Date.now() + 5 * 60 * 1000;
+  await stepUpStore.create(stepUpId, authReq.adminId, new Date(expiresAt));
+  res.status(200).json({ success: true, data: { stepUpId, expiresAt } });
 }
 
 async function handleStepUpVerify(
@@ -361,52 +275,39 @@ async function handleStepUpVerify(
   adminAuthService: AdminAuthService,
   stepUpStore: IAdminStepUpChallengeStore
 ): Promise<void> {
-  try {
-    const authReq = req as IAdminAuthenticatedRequest;
-    if (!authReq.adminId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-
-    const { stepUpId, token } = req.body as { stepUpId?: string; token?: string };
-    if (!stepUpId || !token) {
-      res.status(400).json({ success: false, error: 'stepUpId and token are required' });
-      return;
-    }
-
-    const record = await stepUpStore.get(stepUpId);
-    if (!record || record.adminId !== authReq.adminId) {
-      res.status(401).json({ success: false, error: 'Invalid step-up challenge' });
-      return;
-    }
-
-    const admin = await adminRepo.findById(authReq.adminId);
-    if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) {
-      res.status(401).json({ success: false, error: 'MFA is not enabled' });
-      return;
-    }
-
-    const ok = mfaService.verifyToken(admin.mfaSecret, token);
-    if (!ok) {
-      res.status(401).json({ success: false, error: 'Invalid MFA code' });
-      return;
-    }
-
-    await stepUpStore.delete(stepUpId);
-
-    const stepUpToken = await adminAuthService.issueStepUpToken(authReq.adminId);
-    if (!stepUpToken) {
-      res.status(401).json({ success: false, error: 'MFA is not enabled' });
-      return;
-    }
-
-    res.status(200).json({ success: true, data: { stepUpToken } });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authReq = req as IAdminAuthenticatedRequest;
+  if (!authReq.adminId) {
+    throw new AuthenticationError('Unauthorized');
   }
+
+  const { stepUpId, token } = req.body as { stepUpId?: string; token?: string };
+  if (!stepUpId || !token) {
+    throw new ValidationError('stepUpId and token are required');
+  }
+
+  const record = await stepUpStore.get(stepUpId);
+  if (!record || record.adminId !== authReq.adminId) {
+    throw new AuthenticationError('Invalid step-up challenge');
+  }
+
+  const admin = await adminRepo.findById(authReq.adminId);
+  if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) {
+    throw new AuthenticationError('MFA is not enabled');
+  }
+
+  const ok = mfaService.verifyToken(admin.mfaSecret, token);
+  if (!ok) {
+    throw new AuthenticationError('Invalid MFA code');
+  }
+
+  await stepUpStore.delete(stepUpId);
+
+  const stepUpToken = await adminAuthService.issueStepUpToken(authReq.adminId);
+  if (!stepUpToken) {
+    throw new AuthenticationError('MFA is not enabled');
+  }
+
+  res.status(200).json({ success: true, data: { stepUpToken } });
 }
 
 async function handleAdminForgotPassword(
@@ -414,29 +315,18 @@ async function handleAdminForgotPassword(
   res: Response,
   adminAuthService: AdminAuthService
 ): Promise<void> {
-  try {
-    const { email } = req.body as { email?: string };
+  const { email } = req.body as { email?: string };
 
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required field: email',
-      });
-      return;
-    }
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    throw new ValidationError('Missing required field: email');
+  }
 
-    const result = await adminAuthService.requestPasswordReset(email.trim());
+  const result = await adminAuthService.requestPasswordReset(email.trim());
 
-    if (result.success) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(500).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (result.success) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(500).json(result);
   }
 }
 
@@ -445,37 +335,22 @@ async function handleAdminResetPassword(
   res: Response,
   adminAuthService: AdminAuthService
 ): Promise<void> {
-  try {
-    const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
 
-    if (!token || !newPassword || typeof newPassword !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: token, newPassword',
-      });
-      return;
-    }
+  if (!token || !newPassword || typeof newPassword !== 'string') {
+    throw new ValidationError('Missing required fields: token, newPassword');
+  }
 
-    if (newPassword.length < 8) {
-      res.status(400).json({
-        success: false,
-        error: 'Password must be at least 8 characters',
-      });
-      return;
-    }
+  if (newPassword.length < 8) {
+    throw new ValidationError('Password must be at least 8 characters');
+  }
 
-    const result = await adminAuthService.resetPasswordWithToken(token, newPassword);
+  const result = await adminAuthService.resetPasswordWithToken(token, newPassword);
 
-    if (result.success) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (result.success) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(400).json(result);
   }
 }
 
@@ -485,34 +360,23 @@ async function handleLogout(
   adminAuthService: AdminAuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        success: false,
-        error: 'Missing authorization header',
-      });
-      return;
-    }
-
-    const token = authHeader.substring(7);
-    if (sessionRepository) {
-      const decoded = jwt.decode(token) as { adminId?: string; jti?: string } | null;
-      if (decoded?.adminId && decoded.jti) {
-        await sessionRepository.revokeByFamilyId(decoded.adminId, 'admin', decoded.jti);
-      }
-    }
-    const success = await adminAuthService.logout(token);
-
-    res.status(200).json({
-      success,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new AuthenticationError('Missing authorization header');
   }
+
+  const token = authHeader.substring(7);
+  if (sessionRepository) {
+    const decoded = jwt.decode(token) as { adminId?: string; jti?: string } | null;
+    if (decoded?.adminId && decoded.jti) {
+      await sessionRepository.revokeByFamilyId(decoded.adminId, 'admin', decoded.jti);
+    }
+  }
+  const success = await adminAuthService.logout(token);
+
+  res.status(200).json({
+    success,
+  });
 }
 
 async function handleRefresh(
@@ -520,37 +384,22 @@ async function handleRefresh(
   res: Response,
   adminAuthService: AdminAuthService
 ): Promise<void> {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        success: false,
-        error: 'Missing authorization header',
-      });
-      return;
-    }
-
-    const token = authHeader.substring(7);
-    const result = await adminAuthService.refreshToken(token);
-
-    if (!result.success) {
-      res.status(401).json({
-        success: false,
-        error: result.error,
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      token: result.token,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new AuthenticationError('Missing authorization header');
   }
+
+  const token = authHeader.substring(7);
+  const result = await adminAuthService.refreshToken(token);
+
+  if (!result.success) {
+    throw new AuthenticationError(result.error);
+  }
+
+  res.status(200).json({
+    success: true,
+    token: result.token,
+  });
 }
 
 export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
@@ -582,78 +431,93 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
       max: 10,
       keyPrefix: 'admin:auth:login',
     }),
-    (req: Request, res: Response) => {
-      void handleLogin(req, res, adminAuthService);
-    }
+    asyncHandler((req: Request, res: Response) => handleLogin(req, res, adminAuthService))
   );
 
-  router.post('/mfa/verify', (req: Request, res: Response) => {
-    void handleMFAVerify(req, res, adminAuthService, config.sessionRepository);
-  });
+  router.post(
+    '/mfa/verify',
+    asyncHandler((req: Request, res: Response) =>
+      handleMFAVerify(req, res, adminAuthService, config.sessionRepository)
+    )
+  );
 
-  router.post('/mfa/setup-data', (req: Request, res: Response) => {
-    void handleMFASetupData(req, res, adminAuthService);
-  });
+  router.post(
+    '/mfa/setup-data',
+    asyncHandler((req: Request, res: Response) => handleMFASetupData(req, res, adminAuthService))
+  );
 
-  router.post('/mfa/complete-setup', (req: Request, res: Response) => {
-    void handleMFACompleteSetup(req, res, adminAuthService, config.sessionRepository);
-  });
+  router.post(
+    '/mfa/complete-setup',
+    asyncHandler((req: Request, res: Response) =>
+      handleMFACompleteSetup(req, res, adminAuthService, config.sessionRepository)
+    )
+  );
 
   router.post(
     '/mfa/setup',
     adminAuthMiddleware(adminAuthService),
-    (req: Request, res: Response) => {
-      void handleMFASetup(req, res, adminAuthService, mfaService);
-    }
+    asyncHandler((req: Request, res: Response) =>
+      handleMFASetup(req, res, adminAuthService, mfaService)
+    )
   );
 
   router.post(
     '/mfa/enable',
     adminAuthMiddleware(adminAuthService),
-    (req: Request, res: Response) => {
-      void handleMFAEnable(req, res, adminRepo, auditLogRepo, mfaService);
-    }
+    asyncHandler((req: Request, res: Response) =>
+      handleMFAEnable(req, res, adminRepo, auditLogRepo, mfaService)
+    )
   );
 
   router.post(
     '/step-up/start',
     adminAuthMiddleware(adminAuthService),
-    (req: Request, res: Response) => {
-      void (stepUpStore
-        ? handleStepUpStart(req, res, adminRepo, stepUpStore)
-        : Promise.resolve().then(() => {
-            res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
-          }));
-    }
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!stepUpStore) {
+        res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+        return;
+      }
+      await handleStepUpStart(req, res, adminRepo, stepUpStore);
+    })
   );
 
   router.post(
     '/step-up/verify',
     adminAuthMiddleware(adminAuthService),
-    (req: Request, res: Response) => {
-      void (stepUpStore
-        ? handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore)
-        : Promise.resolve().then(() => {
-            res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
-          }));
-    }
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!stepUpStore) {
+        res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
+        return;
+      }
+      await handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore);
+    })
   );
 
-  router.post('/forgot-password', (req: Request, res: Response) => {
-    void handleAdminForgotPassword(req, res, adminAuthService);
-  });
+  router.post(
+    '/forgot-password',
+    asyncHandler((req: Request, res: Response) =>
+      handleAdminForgotPassword(req, res, adminAuthService)
+    )
+  );
 
-  router.post('/reset-password', (req: Request, res: Response) => {
-    void handleAdminResetPassword(req, res, adminAuthService);
-  });
+  router.post(
+    '/reset-password',
+    asyncHandler((req: Request, res: Response) =>
+      handleAdminResetPassword(req, res, adminAuthService)
+    )
+  );
 
-  router.post('/logout', (req: Request, res: Response) => {
-    void handleLogout(req, res, adminAuthService, config.sessionRepository);
-  });
+  router.post(
+    '/logout',
+    asyncHandler((req: Request, res: Response) =>
+      handleLogout(req, res, adminAuthService, config.sessionRepository)
+    )
+  );
 
-  router.post('/refresh', (req: Request, res: Response) => {
-    void handleRefresh(req, res, adminAuthService);
-  });
+  router.post(
+    '/refresh',
+    asyncHandler((req: Request, res: Response) => handleRefresh(req, res, adminAuthService))
+  );
 
   return router;
 }

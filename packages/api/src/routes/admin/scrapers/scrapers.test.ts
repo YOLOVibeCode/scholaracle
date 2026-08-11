@@ -6,6 +6,7 @@ import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { scrapersAdminRouter } from './scrapers';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 jest.mock('../../../services/scraper-generator/crawler', () => ({
   connectStep: jest.fn().mockResolvedValue({ ok: true, httpStatus: 200 }),
@@ -47,6 +48,7 @@ describe('Admin Scrapers Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/admin/scrapers', scrapersAdminRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -152,6 +154,7 @@ describe('Admin Scrapers Routes', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(404);
       expect(res.body.error).toContain('not found');
+      expect(res.body.code).toBe('NOT_FOUND');
     });
 
     it('should return 200 with full cache entry including code', async () => {

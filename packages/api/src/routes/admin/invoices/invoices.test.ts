@@ -5,6 +5,7 @@ import { invoicesRouter } from './invoices';
 import { AdminStepUpChallengeRepository, PaymentRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Invoice Routes', () => {
   let app: Express;
@@ -37,6 +38,7 @@ describe('Admin Invoice Routes', () => {
       })
     );
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -62,6 +64,7 @@ describe('Admin Invoice Routes', () => {
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('not found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
 
     it('should return success:false with skipped:true when no SendGrid key', async () => {

@@ -12,6 +12,7 @@ import {
 import { AuthService } from '@scholaracle/auth';
 import { authRouter } from '../auth/auth';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 import { createSyncRouter, type ISyncRouterConfig } from './sync';
 
 const noOpEmailSender = { sendResetLink: async (): Promise<void> => {} };
@@ -89,6 +90,7 @@ describe('Sync API Routes', () => {
       authMiddleware(authService),
       createSyncRouter({ database, syncScheduler })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -144,6 +146,7 @@ describe('Sync API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`);
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('Invalid');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should return 404 for unknown student', async () => {

@@ -5,6 +5,7 @@ import { adminAuthRouter } from './auth';
 import { AdminUserRepository, AdminStepUpChallengeRepository } from '@scholaracle/database';
 import { MFAService } from '@scholaracle/auth';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Auth Routes', () => {
   let app: Express;
@@ -29,6 +30,7 @@ describe('Admin Auth Routes', () => {
         stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -181,6 +183,7 @@ describe('Admin Auth Routes', () => {
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
+      expect(response.body.code).toBe('UNAUTHENTICATED');
     });
   });
 

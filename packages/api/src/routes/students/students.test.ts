@@ -4,6 +4,7 @@ import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Students API Routes', () => {
   let app: Express;
@@ -34,6 +35,7 @@ describe('Students API Routes', () => {
     app.use(express.json());
     const baseUrl = 'http://test.example';
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database, baseUrl }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -134,6 +136,7 @@ describe('Students API Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('name');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
   });
 

@@ -10,8 +10,7 @@ export interface IGradeHistoryQueryParams {
 }
 
 export type GradeHistoryQueryValidation =
-  | { readonly valid: true }
-  | { readonly valid: false; readonly error: string };
+  { readonly valid: true } | { readonly valid: false; readonly error: string };
 
 /** Returns validation result; invalid if from/to are not YYYY-MM-DD or if from > to. */
 export function validateGradeHistoryQuery(

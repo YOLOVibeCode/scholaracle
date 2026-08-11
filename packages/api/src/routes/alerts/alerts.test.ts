@@ -5,6 +5,7 @@ import { AlertRepository } from '@scholaracle/database';
 import { AuthService } from '@scholaracle/auth';
 import { alertsApiRouter } from '../alerts-api/alerts-api';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Alerts API Routes', () => {
   let app: Express;
@@ -45,6 +46,7 @@ describe('Alerts API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {

@@ -2,6 +2,14 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import crypto from 'node:crypto';
 import { AuthService, type IPasswordResetEmailSender } from '@scholaracle/auth';
+import {
+  AuthenticationError,
+  RateLimitError,
+  ValidationError,
+  type IAuthLoginResponse,
+  type IAuthRefreshResponse,
+} from '@scholaracle/contracts';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import type {
   IPasswordResetTokenStore,
   IRefreshTokenStore,
@@ -137,46 +145,35 @@ async function handleRegister(
   authService: AuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const { email, password, name, phone, smsConsent, rememberMe } = req.body as {
-      email?: string;
-      password?: string;
-      name?: string;
-      phone?: string;
-      smsConsent?: boolean;
-      rememberMe?: boolean;
-    };
+  const { email, password, name, phone, smsConsent, rememberMe } = req.body as {
+    email?: string;
+    password?: string;
+    name?: string;
+    phone?: string;
+    smsConsent?: boolean;
+    rememberMe?: boolean;
+  };
 
-    if (!email || !password || !name) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: email, password, name',
-      });
-      return;
-    }
+  if (!email || !password || !name) {
+    throw new ValidationError('Missing required fields: email, password, name');
+  }
 
-    const result = await authService.register(email, password, name, {
-      phone: phone || undefined,
-      smsConsent: smsConsent === true,
-      rememberMe: rememberMe !== false,
-    });
+  const result = await authService.register(email, password, name, {
+    phone: phone || undefined,
+    smsConsent: smsConsent === true,
+    rememberMe: rememberMe !== false,
+  });
 
-    if (result.success && result.user?.id && result.familyId) {
-      await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
     }
-    if (result.success) {
-      if (result.refreshToken) {
-        setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
-      }
-      res.status(201).json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+    res.status(201).json(result);
+  } else {
+    res.status(400).json(result);
   }
 }
 
@@ -193,41 +190,30 @@ async function handleLogin(
   authService: AuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const { email, password, rememberMe } = req.body as {
-      email?: string;
-      password?: string;
-      rememberMe?: boolean;
-    };
+  const { email, password, rememberMe } = req.body as {
+    email?: string;
+    password?: string;
+    rememberMe?: boolean;
+  };
 
-    if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: email, password',
-      });
-      return;
-    }
+  if (!email || !password) {
+    throw new ValidationError('Missing required fields: email, password');
+  }
 
-    const result = await authService.login(email, password, {
-      rememberMe: rememberMe !== false,
-    });
+  const result = await authService.login(email, password, {
+    rememberMe: rememberMe !== false,
+  });
 
-    if (result.success && result.user?.id && result.familyId) {
-      await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
     }
-    if (result.success) {
-      if (result.refreshToken) {
-        setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
-      }
-      res.status(200).json(result);
-    } else {
-      res.status(401).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+    res.status(200).json(result satisfies IAuthLoginResponse);
+  } else {
+    res.status(401).json(result);
   }
 }
 
@@ -239,41 +225,26 @@ async function handleForgotPassword(
   res: Response,
   authService: AuthService
 ): Promise<void> {
-  try {
-    const { email } = req.body as { email?: string };
+  const { email } = req.body as { email?: string };
 
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required field: email',
-      });
-      return;
-    }
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    throw new ValidationError('Missing required field: email');
+  }
 
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
-      req.socket.remoteAddress ??
-      '';
-    if (!checkForgotPasswordRateLimit(email.trim(), ip)) {
-      res.status(429).json({
-        success: false,
-        error: 'Too many reset requests. Please try again later.',
-      });
-      return;
-    }
+  const ip =
+    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
+    req.socket.remoteAddress ??
+    '';
+  if (!checkForgotPasswordRateLimit(email.trim(), ip)) {
+    throw new RateLimitError('Too many reset requests. Please try again later.');
+  }
 
-    const result = await authService.requestPasswordReset(email.trim());
+  const result = await authService.requestPasswordReset(email.trim());
 
-    if (result.success) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(500).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (result.success) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(500).json(result);
   }
 }
 
@@ -285,37 +256,22 @@ async function handleResetPassword(
   res: Response,
   authService: AuthService
 ): Promise<void> {
-  try {
-    const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
 
-    if (!token || !newPassword || typeof newPassword !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: token, newPassword',
-      });
-      return;
-    }
+  if (!token || !newPassword || typeof newPassword !== 'string') {
+    throw new ValidationError('Missing required fields: token, newPassword');
+  }
 
-    if (newPassword.length < 8) {
-      res.status(400).json({
-        success: false,
-        error: 'Password must be at least 8 characters',
-      });
-      return;
-    }
+  if (newPassword.length < 8) {
+    throw new ValidationError('Password must be at least 8 characters');
+  }
 
-    const result = await authService.resetPasswordWithToken(token, newPassword);
+  const result = await authService.resetPasswordWithToken(token, newPassword);
 
-    if (result.success) {
-      res.status(200).json({ success: true });
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (result.success) {
+    res.status(200).json({ success: true });
+  } else {
+    res.status(400).json(result);
   }
 }
 
@@ -330,49 +286,37 @@ async function handleRefresh(
   authService: AuthService,
   sessionRepository?: ISessionRepository
 ): Promise<void> {
-  try {
-    const refreshToken =
-      (req.cookies?.['refresh_token'] as string | undefined) ??
-      (req.body as { refreshToken?: string }).refreshToken;
-    const rememberMe = (req.body as { rememberMe?: boolean }).rememberMe !== false;
+  const refreshToken =
+    (req.cookies?.['refresh_token'] as string | undefined) ??
+    (req.body as { refreshToken?: string }).refreshToken;
+  const rememberMe = (req.body as { rememberMe?: boolean }).rememberMe !== false;
 
-    if (!refreshToken || typeof refreshToken !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required field: refreshToken',
-      });
-      return;
-    }
-
-    const result = await authService.refreshAccessToken(refreshToken);
-
-    if ('error' in result) {
-      res.status(401).json({ success: false, error: result.error });
-      return;
-    }
-
-    if (sessionRepository && result.familyId) {
-      const payload = await authService.verifyToken(result.token);
-      if (payload) {
-        await upsertSession(sessionRepository, payload.userId, result.familyId, req);
-      }
-    }
-
-    if (result.refreshToken) {
-      setRefreshTokenCookie(res, result.refreshToken, rememberMe);
-    }
-    res.status(200).json({
-      success: true,
-      token: result.token,
-      refreshToken: result.refreshToken,
-      rememberMe,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    throw new ValidationError('Missing required field: refreshToken');
   }
+
+  const result = await authService.refreshAccessToken(refreshToken);
+
+  if ('error' in result) {
+    throw new AuthenticationError(result.error);
+  }
+
+  if (sessionRepository && result.familyId) {
+    const payload = await authService.verifyToken(result.token);
+    if (payload) {
+      await upsertSession(sessionRepository, payload.userId, result.familyId, req);
+    }
+  }
+
+  if (result.refreshToken) {
+    setRefreshTokenCookie(res, result.refreshToken, rememberMe);
+  }
+  res.status(200).json({
+    success: true,
+    token: result.token,
+    refreshToken: result.refreshToken,
+    rememberMe,
+  } satisfies IAuthRefreshResponse);
 }
 
 function validateOAuthSecret(req: Request): boolean {
@@ -429,37 +373,28 @@ async function handleOAuth(
   sessionRepository?: ISessionRepository
 ): Promise<void> {
   if (!validateOAuthSecret(req)) {
-    res.status(401).json({ success: false, error: 'Unauthorized' });
-    return;
+    throw new AuthenticationError('Unauthorized');
   }
   const payload = validateOAuthPayload(req.body);
   if (!payload.ok) {
-    res.status(400).json({ success: false, error: payload.error });
-    return;
+    throw new ValidationError(payload.error);
   }
-  try {
-    const result = await authService.loginOrRegisterOAuth(
-      payload.provider,
-      payload.providerAccountId,
-      payload.email,
-      payload.name
-    );
-    if (result.success && result.user?.id && result.familyId) {
-      await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  const result = await authService.loginOrRegisterOAuth(
+    payload.provider,
+    payload.providerAccountId,
+    payload.email,
+    payload.name
+  );
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
     }
-    if (result.success) {
-      if (result.refreshToken) {
-        setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
-      }
-      res.status(200).json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+    res.status(200).json(result);
+  } else {
+    res.status(400).json(result);
   }
 }
 
@@ -474,30 +409,23 @@ async function handleLogout(
   sessionRepository?: ISessionRepository,
   refreshTokenStore?: IRefreshTokenStore
 ): Promise<void> {
-  try {
-    const refreshToken =
-      (req.cookies?.['refresh_token'] as string | undefined) ??
-      (req.body as { refreshToken?: string }).refreshToken;
+  const refreshToken =
+    (req.cookies?.['refresh_token'] as string | undefined) ??
+    (req.body as { refreshToken?: string }).refreshToken;
 
-    if (refreshToken && typeof refreshToken === 'string') {
-      if (sessionRepository && refreshTokenStore) {
-        const tokenHash = crypto.createHash('sha256').update(refreshToken.trim()).digest('hex');
-        const existing = await refreshTokenStore.findByTokenHash(tokenHash);
-        if (existing) {
-          await sessionRepository.revokeByFamilyId(existing.userId, 'user', existing.familyId);
-        }
+  if (refreshToken && typeof refreshToken === 'string') {
+    if (sessionRepository && refreshTokenStore) {
+      const tokenHash = crypto.createHash('sha256').update(refreshToken.trim()).digest('hex');
+      const existing = await refreshTokenStore.findByTokenHash(tokenHash);
+      if (existing) {
+        await sessionRepository.revokeByFamilyId(existing.userId, 'user', existing.familyId);
       }
-      await authService.revokeRefreshToken(refreshToken);
     }
-
-    clearRefreshTokenCookie(res);
-    res.status(200).json({ success: true });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+    await authService.revokeRefreshToken(refreshToken);
   }
+
+  clearRefreshTokenCookie(res);
+  res.status(200).json({ success: true });
 }
 
 /**
@@ -527,58 +455,75 @@ export function authRouter(config: IAuthRouterConfig): Router {
    * POST /api/auth/register
    * Register a new user.
    */
-  router.post('/register', (req: Request, res: Response) => {
-    void handleRegister(req, res, authService, config.sessionRepository);
-  });
+  router.post(
+    '/register',
+    asyncHandler((req: Request, res: Response) =>
+      handleRegister(req, res, authService, config.sessionRepository)
+    )
+  );
 
   /**
    * POST /api/auth/login
    * Login user.
    */
-  router.post('/login', (req: Request, res: Response) => {
-    void handleLogin(req, res, authService, config.sessionRepository);
-  });
+  router.post(
+    '/login',
+    asyncHandler((req: Request, res: Response) =>
+      handleLogin(req, res, authService, config.sessionRepository)
+    )
+  );
 
   /**
    * POST /api/auth/oauth
    * Internal: called by Next.js after OAuth callback to issue JWT tokens.
    * Requires x-internal-api-secret or Authorization: Bearer <INTERNAL_API_SECRET>.
    */
-  router.post('/oauth', (req: Request, res: Response) => {
-    void handleOAuth(req, res, authService, config.sessionRepository);
-  });
+  router.post(
+    '/oauth',
+    asyncHandler((req: Request, res: Response) =>
+      handleOAuth(req, res, authService, config.sessionRepository)
+    )
+  );
 
   /**
    * POST /api/auth/forgot-password
    * Request a password reset email (always returns success to avoid enumeration).
    */
-  router.post('/forgot-password', (req: Request, res: Response) => {
-    void handleForgotPassword(req, res, authService);
-  });
+  router.post(
+    '/forgot-password',
+    asyncHandler((req: Request, res: Response) => handleForgotPassword(req, res, authService))
+  );
 
   /**
    * POST /api/auth/reset-password
    * Reset password using token from email link.
    */
-  router.post('/reset-password', (req: Request, res: Response) => {
-    void handleResetPassword(req, res, authService);
-  });
+  router.post(
+    '/reset-password',
+    asyncHandler((req: Request, res: Response) => handleResetPassword(req, res, authService))
+  );
 
   /**
    * POST /api/auth/refresh
    * Exchange refresh token for new access and refresh tokens.
    */
-  router.post('/refresh', (req: Request, res: Response) => {
-    void handleRefresh(req, res, authService, config.sessionRepository);
-  });
+  router.post(
+    '/refresh',
+    asyncHandler((req: Request, res: Response) =>
+      handleRefresh(req, res, authService, config.sessionRepository)
+    )
+  );
 
   /**
    * POST /api/auth/logout
    * Revoke refresh token (logout).
    */
-  router.post('/logout', (req: Request, res: Response) => {
-    void handleLogout(req, res, authService, config.sessionRepository, config.refreshTokenStore);
-  });
+  router.post(
+    '/logout',
+    asyncHandler((req: Request, res: Response) =>
+      handleLogout(req, res, authService, config.sessionRepository, config.refreshTokenStore)
+    )
+  );
 
   return router;
 }

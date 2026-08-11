@@ -8,8 +8,10 @@ import { createHmac } from 'node:crypto';
 import type { Db } from 'mongodb';
 import { StudentRepository } from '@scholaracle/database';
 import type { AuthService } from '@scholaracle/auth';
+import { AuthenticationError, ValidationError } from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { authMiddleware } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -79,17 +81,16 @@ export function createGoogleOAuthRouter(config: IGoogleOAuthConfig): Router {
   router.get('/google/authorize', authMiddleware(authService), (req: Request, res: Response) => {
     const userId = getUserId(req);
     if (!userId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
+      throw new AuthenticationError('Unauthorized');
     }
     const studentId = req.query['studentId'] as string | undefined;
     const sourceId = req.query['sourceId'] as string | undefined;
     if (!studentId || !sourceId) {
-      res.status(400).json({ success: false, error: 'Missing studentId or sourceId' });
-      return;
+      throw new ValidationError('Missing studentId or sourceId');
     }
     const clientId = process.env['GOOGLE_CLASSROOM_CLIENT_ID'];
     if (!clientId) {
+      // Deliberate 503: OAuth not configured (no matching AppError class).
       res.status(503).json({ success: false, error: 'Google Classroom OAuth is not configured' });
       return;
     }
@@ -115,93 +116,97 @@ export function createGoogleOAuthRouter(config: IGoogleOAuthConfig): Router {
    * GET /api/oauth/google/callback?code=&state=
    * Exchanges code for tokens, encrypts and stores on student data source, redirects to success.
    */
-  router.get('/google/callback', async (req: Request, res: Response) => {
-    const code = req.query['code'] as string | undefined;
-    const state = req.query['state'] as string | undefined;
-    const errorParam = req.query['error'] as string | undefined;
-    if (errorParam) {
-      res.redirect(
-        302,
-        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errorParam)}`
+  // Browser-facing OAuth callback: error responses are redirects / plain-text by design.
+  router.get(
+    '/google/callback',
+    asyncHandler(async (req: Request, res: Response) => {
+      const code = req.query['code'] as string | undefined;
+      const state = req.query['state'] as string | undefined;
+      const errorParam = req.query['error'] as string | undefined;
+      if (errorParam) {
+        res.redirect(
+          302,
+          `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errorParam)}`
+        );
+        return;
+      }
+      if (!code || !state) {
+        res.status(400).send('Missing code or state');
+        return;
+      }
+      const payload = verifyState(state, jwtSecret);
+      if (!payload) {
+        res.status(400).send('Invalid or expired state');
+        return;
+      }
+      const clientId = process.env['GOOGLE_CLASSROOM_CLIENT_ID'];
+      const clientSecret = process.env['GOOGLE_CLASSROOM_CLIENT_SECRET'];
+      if (!clientId || !clientSecret) {
+        res.status(503).send('Google Classroom OAuth is not configured');
+        return;
+      }
+      const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/oauth/google/callback`;
+      const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        }),
+      });
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        res.redirect(
+          302,
+          `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errText.slice(0, 100))}`
+        );
+        return;
+      }
+      const tokenBody = (await tokenRes.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+        expires_in?: number;
+      };
+      const accessToken = tokenBody.access_token;
+      const refreshToken = tokenBody.refresh_token;
+      if (!accessToken) {
+        res.redirect(
+          302,
+          `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=no_access_token`
+        );
+        return;
+      }
+      const student = await studentRepository.findById(payload.studentId);
+      if (!student || !student.hasAccess(payload.userId)) {
+        res.status(404).send('Student not found');
+        return;
+      }
+      const idx = student.dataSources.findIndex((ds) => ds.id === payload.sourceId);
+      if (idx === -1) {
+        res.status(404).send('Source not found');
+        return;
+      }
+      const credentials = {
+        authType: 'api' as const,
+        accessToken,
+        ...(refreshToken && { refreshToken }),
+      };
+      const plain = JSON.stringify(credentials);
+      const encrypted = encryptCredentials(plain);
+      if (!encrypted) {
+        res.status(503).send('Credential encryption is not configured');
+        return;
+      }
+      const dataSourcesUpdated = student.dataSources.map((d, i) =>
+        i === idx ? { ...d, credentials: { encrypted: encrypted.encrypted, iv: encrypted.iv } } : d
       );
-      return;
-    }
-    if (!code || !state) {
-      res.status(400).send('Missing code or state');
-      return;
-    }
-    const payload = verifyState(state, jwtSecret);
-    if (!payload) {
-      res.status(400).send('Invalid or expired state');
-      return;
-    }
-    const clientId = process.env['GOOGLE_CLASSROOM_CLIENT_ID'];
-    const clientSecret = process.env['GOOGLE_CLASSROOM_CLIENT_SECRET'];
-    if (!clientId || !clientSecret) {
-      res.status(503).send('Google Classroom OAuth is not configured');
-      return;
-    }
-    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/oauth/google/callback`;
-    const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    });
-    if (!tokenRes.ok) {
-      const errText = await tokenRes.text();
-      res.redirect(
-        302,
-        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=${encodeURIComponent(errText.slice(0, 100))}`
-      );
-      return;
-    }
-    const tokenBody = (await tokenRes.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
-    const accessToken = tokenBody.access_token;
-    const refreshToken = tokenBody.refresh_token;
-    if (!accessToken) {
-      res.redirect(
-        302,
-        `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=error&message=no_access_token`
-      );
-      return;
-    }
-    const student = await studentRepository.findById(payload.studentId);
-    if (!student || !student.hasAccess(payload.userId)) {
-      res.status(404).send('Student not found');
-      return;
-    }
-    const idx = student.dataSources.findIndex((ds) => ds.id === payload.sourceId);
-    if (idx === -1) {
-      res.status(404).send('Source not found');
-      return;
-    }
-    const credentials = {
-      authType: 'api' as const,
-      accessToken,
-      ...(refreshToken && { refreshToken }),
-    };
-    const plain = JSON.stringify(credentials);
-    const encrypted = encryptCredentials(plain);
-    if (!encrypted) {
-      res.status(503).send('Credential encryption is not configured');
-      return;
-    }
-    const dataSourcesUpdated = student.dataSources.map((d, i) =>
-      i === idx ? { ...d, credentials: { encrypted: encrypted.encrypted, iv: encrypted.iv } } : d
-    );
-    await studentRepository.update(payload.studentId, { dataSources: dataSourcesUpdated });
-    res.redirect(302, `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=google_success`);
-  });
+      await studentRepository.update(payload.studentId, { dataSources: dataSourcesUpdated });
+      res.redirect(302, `${baseUrl.replace(/\/$/, '')}/dashboard?oauth=google_success`);
+    })
+  );
 
   return router;
 }
