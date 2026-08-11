@@ -3,7 +3,7 @@
  */
 
 import { FakePageDriver } from '@scholaracle/scraper-core';
-import { runSyncPipeline } from './SyncOrchestrator';
+import { runSyncPipeline, SyncError } from './SyncOrchestrator';
 import type { IEnvelopeUploader, IRunRecorder } from '../api/interfaces';
 
 jest.mock('@scholaracle/scraper-core', () => {
@@ -91,5 +91,105 @@ describe('runSyncPipeline', () => {
     );
     expect(recorder.fails).toBe(1);
     expect(uploader.reportRunFailure).toHaveBeenCalled();
+  });
+
+  describe('SyncError phases', () => {
+    async function captureError(
+      uploader: IEnvelopeUploader,
+      recorder: IRunRecorder
+    ): Promise<unknown> {
+      const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+      return runSyncPipeline(driver, config, uploader, 'token', recorder).then(
+        () => {
+          throw new Error('expected pipeline to reject');
+        },
+        (err: unknown) => err
+      );
+    }
+
+    it('should tag scrape failures as phase "portal" and preserve the cause', async () => {
+      const { runCanvasRecipe } = require('@scholaracle/scraper-core');
+      const underlying = new Error('portal timed out');
+      runCanvasRecipe.mockRejectedValueOnce(underlying);
+      const err = await captureError(makeUploader(), makeRecorder());
+      expect(err).toBeInstanceOf(SyncError);
+      expect((err as SyncError).phase).toBe('portal');
+      expect((err as SyncError).message).toBe('portal timed out');
+      expect((err as SyncError).cause).toBe(underlying);
+    });
+
+    it('should tag transform failures as phase "local" and preserve the cause', async () => {
+      const { transformCanvasExtract } = require('@scholaracle/scraper-core');
+      const underlying = new Error('bad extract shape');
+      transformCanvasExtract.mockImplementationOnce(() => {
+        throw underlying;
+      });
+      const err = await captureError(makeUploader(), makeRecorder());
+      expect(err).toBeInstanceOf(SyncError);
+      expect((err as SyncError).phase).toBe('local');
+      expect((err as SyncError).message).toBe('bad extract shape');
+      expect((err as SyncError).cause).toBe(underlying);
+    });
+
+    it('should tag validation failures as phase "local"', async () => {
+      const { validateEnvelope } = require('@scholaracle/scraper-core');
+      validateEnvelope.mockReturnValueOnce({ passed: false, errorCount: 3, warnings: [] });
+      const err = await captureError(makeUploader(), makeRecorder());
+      expect(err).toBeInstanceOf(SyncError);
+      expect((err as SyncError).phase).toBe('local');
+      expect((err as SyncError).message).toMatch(/validation failed/);
+    });
+
+    it('should tag upload failures as phase "upload" and preserve the cause', async () => {
+      const underlying = new Error('HTTP 503');
+      const uploader: IEnvelopeUploader = {
+        uploadEnvelope: jest.fn(async () => {
+          throw underlying;
+        }),
+        reportRunFailure: jest.fn(async () => undefined),
+      };
+      const err = await captureError(uploader, makeRecorder());
+      expect(err).toBeInstanceOf(SyncError);
+      expect((err as SyncError).phase).toBe('upload');
+      expect((err as SyncError).message).toBe('HTTP 503');
+      expect((err as SyncError).cause).toBe(underlying);
+    });
+  });
+
+  it('should resolve addPhase before the next pipeline step runs', async () => {
+    const events: string[] = [];
+    const recorder: IRunRecorder = {
+      startRun: jest.fn(async () => {
+        events.push('startRun');
+      }),
+      addPhase: jest.fn(async (_runId: string, phase: { phase: string }) => {
+        // Resolve on a later tick so an un-awaited addPhase would land
+        // after the next pipeline step in the event log.
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        events.push(`addPhase:${phase.phase}`);
+      }),
+      completeRun: jest.fn(async (_runId, result) => {
+        events.push(`completeRun:${result.status}`);
+      }),
+    };
+    const uploader: IEnvelopeUploader = {
+      uploadEnvelope: jest.fn(async () => {
+        events.push('uploadEnvelope');
+      }),
+      reportRunFailure: jest.fn(async () => undefined),
+    };
+    const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+    await runSyncPipeline(driver, config, uploader, 'token', recorder);
+    expect(events).toEqual([
+      'startRun',
+      'addPhase:extracting',
+      'addPhase:transforming',
+      'addPhase:transforming',
+      'addPhase:validating',
+      'addPhase:uploading',
+      'uploadEnvelope',
+      'completeRun:success',
+      'addPhase:complete',
+    ]);
   });
 });

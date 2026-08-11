@@ -2,7 +2,7 @@
  * DashboardScreen — student detail view with assignments, grades, and sync history.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,42 +12,20 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { apiClient } from '../api/client';
-
-interface IAssignment {
-  readonly _id: string;
-  readonly title: string;
-  readonly dueAt?: string;
-  readonly status?: string;
-  readonly courseName?: string;
-  readonly courseExternalId?: string;
-}
-
-interface IGradeSnapshot {
-  readonly _id: string;
-  readonly courseExternalId: string;
-  readonly asOfDate: string;
-  readonly percentGrade?: number;
-  readonly letterGrade?: string;
-  readonly courseName?: string;
-}
-
-interface ISyncRun {
-  readonly _id: string;
-  readonly provider: string;
-  readonly status: string;
-  readonly startedAt: string;
-  readonly opCount?: number;
-}
+import { apiClient, type IAssignmentItem, type ISyncRunItem } from '../api/client';
+import { ApiError } from '../api/ApiError';
+import type { ICourseGrade } from '@scholaracle/contracts';
 
 interface IDashboardData {
-  readonly assignments: IAssignment[];
-  readonly grades: IGradeSnapshot[];
-  readonly recentRuns: ISyncRun[];
+  readonly assignments: IAssignmentItem[];
+  readonly overallGPA: number | null;
+  readonly grades: readonly ICourseGrade[];
+  readonly recentRuns: ISyncRunItem[];
 }
 
 interface IDashboardScreenProps {
-  readonly studentExternalId: string;
+  /** Mongo `id` from GET /api/students — used for all API calls. */
+  readonly studentId: string;
   readonly studentName: string;
   onSync(): void;
   onBack(): void;
@@ -55,7 +33,7 @@ interface IDashboardScreenProps {
 }
 
 export function DashboardScreen({
-  studentExternalId,
+  studentId,
   studentName,
   onSync,
   onBack,
@@ -73,23 +51,30 @@ export function DashboardScreen({
       setError(null);
       try {
         const [assignmentsRes, gradesRes, runsRes] = await Promise.all([
-          apiClient.getStudentAssignments(studentExternalId),
-          apiClient.getStudentGrades(studentExternalId),
-          apiClient.getStudentRuns(studentExternalId),
+          apiClient.getStudentAssignments(studentId),
+          apiClient.getStudentGrades(studentId),
+          apiClient.getStudentRuns(studentId),
         ]);
         setData({
           assignments: assignmentsRes,
-          grades: gradesRes,
+          overallGPA: gradesRes.overallGPA ?? null,
+          grades: gradesRes.courseGrades,
           recentRuns: runsRes,
         });
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        const message =
+          err instanceof ApiError && err.requestId
+            ? `${err.message} (ref: ${err.requestId})`
+            : err instanceof Error
+              ? err.message
+              : 'Failed to load data';
+        setError(message);
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [studentExternalId]
+    [studentId]
   );
 
   useEffect(() => {
@@ -99,6 +84,17 @@ export function DashboardScreen({
   const handleRefresh = (): void => {
     setIsRefreshing(true);
     void load(true);
+  };
+
+  // Double-tap guard: a fast second tap on Sync used to push two sync flows.
+  const syncTapGuardRef = useRef(false);
+  const handleSyncPress = (): void => {
+    if (syncTapGuardRef.current) return;
+    syncTapGuardRef.current = true;
+    setTimeout(() => {
+      syncTapGuardRef.current = false;
+    }, 1000);
+    onSync();
   };
 
   if (isLoading) {
@@ -122,7 +118,7 @@ export function DashboardScreen({
               <Text style={styles.historyText}>Runs</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.syncBtn} onPress={onSync}>
+          <TouchableOpacity style={styles.syncBtn} onPress={handleSyncPress}>
             <Text style={styles.syncText}>Sync</Text>
           </TouchableOpacity>
         </View>
@@ -142,9 +138,29 @@ export function DashboardScreen({
         ))}
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {/* No data at all: blocking error box replaces the content. */}
+      {error && data === null && (
+        <View style={styles.errorBox} testID="dashboard-error">
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => void load()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {activeTab === 'assignments' && (
+      {/* Stale data available: slim dismissible banner, content stays visible. */}
+      {error && data !== null && (
+        <View style={[styles.errorBox, styles.errorBanner]} testID="dashboard-error-banner">
+          <Text style={styles.error} numberOfLines={2}>
+            {error}
+          </Text>
+          <TouchableOpacity onPress={() => setError(null)} testID="dashboard-error-dismiss">
+            <Text style={styles.dismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {data !== null && activeTab === 'assignments' && (
         <SectionList
           sections={groupAssignmentsByStatus(data?.assignments ?? [])}
           keyExtractor={(item) => item._id}
@@ -167,30 +183,41 @@ export function DashboardScreen({
         />
       )}
 
-      {activeTab === 'grades' && (
+      {data !== null && activeTab === 'grades' && (
         <SectionList
-          sections={[{ title: 'Current Grades', data: data?.grades ?? [] }]}
-          keyExtractor={(item) => item._id}
+          sections={[{ title: 'Grades', data: [...(data?.grades ?? [])] }]}
+          keyExtractor={(item) => item.courseExternalId}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          ListHeaderComponent={
+            data?.overallGPA != null ? (
+              <View style={styles.gpaCard} testID="gpa-header">
+                <Text style={styles.gpaLabel}>Overall</Text>
+                <Text style={styles.gpaValue}>{data.overallGPA.toFixed(1)}</Text>
+              </View>
+            ) : null
+          }
           renderSectionHeader={({ section }) => (
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardRow}>
-                <Text style={styles.cardTitle}>{item.courseName ?? item.courseExternalId}</Text>
+                <Text style={styles.cardTitle}>{item.courseName}</Text>
                 <Text style={styles.gradeBadge}>
                   {item.letterGrade ??
-                    (item.percentGrade != null ? `${item.percentGrade.toFixed(1)}%` : 'N/A')}
+                    (item.officialGrade != null ? `${item.officialGrade.toFixed(1)}%` : 'N/A')}
                 </Text>
               </View>
-              <Text style={styles.cardSub}>As of {item.asOfDate}</Text>
+              <Text style={styles.cardSub}>
+                {item.gradedAssignments}/{item.totalAssignments} graded
+                {item.missingAssignments > 0 ? `  ·  ${item.missingAssignments} missing` : ''}
+              </Text>
             </View>
           )}
         />
       )}
 
-      {activeTab === 'runs' && (
+      {data !== null && activeTab === 'runs' && (
         <SectionList
           sections={[{ title: 'Recent Syncs', data: data?.recentRuns ?? [] }]}
           keyExtractor={(item) => item._id}
@@ -205,9 +232,6 @@ export function DashboardScreen({
                 <Text style={[styles.statusBadge, runStatusColor(item.status)]}>{item.status}</Text>
               </View>
               <Text style={styles.cardSub}>{formatDate(item.startedAt)}</Text>
-              {item.opCount !== undefined && (
-                <Text style={styles.cardSub}>{item.opCount} operations</Text>
-              )}
             </View>
           )}
         />
@@ -217,8 +241,8 @@ export function DashboardScreen({
 }
 
 function groupAssignmentsByStatus(
-  items: IAssignment[]
-): Array<{ title: string; data: IAssignment[] }> {
+  items: IAssignmentItem[]
+): Array<{ title: string; data: IAssignmentItem[] }> {
   const missing = items.filter((a) => a.status === 'missing');
   const upcoming = items.filter(
     (a) => a.status !== 'missing' && (!a.dueAt || new Date(a.dueAt) > new Date())
@@ -261,7 +285,11 @@ function statusColor(status?: string): { color: string } {
 }
 
 function runStatusColor(status: string): { color: string } {
-  return status === 'success' ? { color: '#28a745' } : { color: '#dc3545' };
+  // Server run statuses: started/uploaded are in-flight, committed is the
+  // terminal success state, failed is the only true failure.
+  if (status === 'success' || status === 'committed') return { color: '#28a745' };
+  if (status === 'failed') return { color: '#dc3545' };
+  return { color: '#6c757d' };
 }
 
 const styles = StyleSheet.create({
@@ -329,5 +357,37 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 13, color: '#6c757d', marginTop: 3 },
   statusBadge: { fontSize: 12, fontWeight: '600' },
   gradeBadge: { fontSize: 16, fontWeight: '700', color: '#4361ee' },
-  error: { color: '#dc3545', padding: 16 },
+  error: { color: '#dc3545', flex: 1 },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff5f5',
+    borderColor: '#f5c2c7',
+    borderWidth: 1,
+    borderRadius: 10,
+    margin: 16,
+    padding: 12,
+    gap: 12,
+  },
+  retryButton: {
+    backgroundColor: '#4361ee',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  errorBanner: { marginVertical: 6, paddingVertical: 6 },
+  dismissText: { color: '#4361ee', fontWeight: '600', fontSize: 13 },
+  gpaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#4361ee',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 16,
+  },
+  gpaLabel: { color: '#dbe2ff', fontSize: 14, fontWeight: '600' },
+  gpaValue: { color: '#fff', fontSize: 24, fontWeight: '700' },
 });

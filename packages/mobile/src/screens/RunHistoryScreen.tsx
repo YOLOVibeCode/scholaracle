@@ -179,16 +179,16 @@ function StatusChip({ status }: { status: string }): React.ReactElement {
 }
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+  // Date never throws — invalid input yields an Invalid Date whose getTime()
+  // is NaN (the old try/catch was dead code). Fall back to the raw string.
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 const styles = StyleSheet.create({

@@ -26,6 +26,8 @@ import {
   buildCredentialKey,
   ADAPTER_IDS,
 } from '../sources/ConnectedSourceStore';
+import { apiClient } from '../api/client';
+import { extractHostname } from '../utils/urlNormalize';
 
 type Provider = 'canvas' | 'skyward' | 'aeries';
 
@@ -81,6 +83,7 @@ export function ConnectSourceScreen({
   const [step, setStep] = useState<'provider' | 'url' | 'credentials'>('provider');
   const [selectedProvider, setSelectedProvider] = useState<IProviderInfo | null>(null);
   const [portalUrl, setPortalUrl] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -88,15 +91,19 @@ export function ConnectSourceScreen({
   const handleSelectProvider = (provider: IProviderInfo): void => {
     setSelectedProvider(provider);
     setPortalUrl(provider.urlPlaceholder);
+    setUrlError(null);
     setStep('url');
   };
 
   const handleUrlNext = (): void => {
     const trimmed = portalUrl.trim();
-    if (!trimmed.startsWith('http')) {
-      Alert.alert('Invalid URL', 'Please enter a full URL starting with https://');
+    // Pure string parsing — RN's URL polyfill never throws and returns ''
+    // hostnames for anything it can't parse.
+    if (extractHostname(trimmed) === '') {
+      setUrlError('Enter a full portal address like https://school.example.com');
       return;
     }
+    setUrlError(null);
     setPortalUrl(trimmed);
     setStep('credentials');
   };
@@ -124,11 +131,12 @@ export function ConnectSourceScreen({
         keychainAccessible: SecureStore.WHEN_UNLOCKED,
       });
 
-      const institutionExternalId = new URL(portalUrl).hostname;
+      const institutionExternalId = extractHostname(portalUrl);
       const sourceId = `local-${selectedProvider.id}-${institutionExternalId}`;
+      const adapterId = ADAPTER_IDS[selectedProvider.id] ?? `com.${selectedProvider.id}`;
       await connectedSourceStore.upsert({
         provider: selectedProvider.id,
-        adapterId: ADAPTER_IDS[selectedProvider.id] ?? `com.${selectedProvider.id}`,
+        adapterId,
         baseUrl: portalUrl,
         sourceId,
         credentialKey: key,
@@ -137,6 +145,20 @@ export function ConnectSourceScreen({
         studentId,
         adapterVersion: '0.1.0',
       });
+
+      // Register the source server-side so it appears in GET /:id/sources and
+      // sync history. Non-fatal: SyncScreen re-registers before every upload.
+      try {
+        await apiClient.registerIngestSource({
+          sourceId,
+          provider: selectedProvider.id,
+          adapterId,
+          displayName: `${selectedProvider.name} (${institutionExternalId})`,
+          portalBaseUrl: portalUrl,
+        });
+      } catch {
+        // Offline or token issue — the sync-time re-register heals this.
+      }
 
       Alert.alert(
         'Connected!',
@@ -184,12 +206,20 @@ export function ConnectSourceScreen({
           <TextInput
             style={styles.input}
             value={portalUrl}
-            onChangeText={setPortalUrl}
+            onChangeText={(text): void => {
+              setPortalUrl(text);
+              setUrlError(null);
+            }}
             autoCapitalize="none"
             keyboardType="url"
             returnKeyType="next"
             onSubmitEditing={handleUrlNext}
           />
+          {urlError && (
+            <Text style={styles.urlError} testID="url-error">
+              {urlError}
+            </Text>
+          )}
           <TouchableOpacity style={styles.button} onPress={handleUrlNext}>
             <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
@@ -266,6 +296,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
   stepTitle: { fontSize: 20, fontWeight: '700', color: '#1a1a2e', marginBottom: 8 },
   stepHint: { fontSize: 14, color: '#6c757d', marginBottom: 20 },
+  urlError: { color: '#dc3545', fontSize: 13, marginTop: -8, marginBottom: 12 },
   providerCard: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -39,7 +39,9 @@ export class ConnectedSourceStore implements IConnectedSourceStore {
 
   async getForStudent(studentExternalId: string): Promise<IConnectedSource | null> {
     const all = await this.list();
-    return all.find((s) => s.studentExternalId === studentExternalId) ?? all[0] ?? null;
+    // No fallback to another student's source: syncing the wrong portal is
+    // worse than prompting the user to connect one.
+    return all.find((s) => s.studentExternalId === studentExternalId) ?? null;
   }
 
   async upsert(source: IConnectedSource): Promise<void> {

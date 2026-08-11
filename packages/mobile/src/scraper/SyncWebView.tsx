@@ -9,11 +9,13 @@
  * When visible=true it is shown for user-facing login.
  */
 
-import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent, WebViewNavigation, WebViewProps } from 'react-native-webview';
 import type { WebViewPageDriver } from './WebViewPageDriver';
+import { extractHostname } from '../utils/urlNormalize';
+import { shouldTreatAsLoginSuccess, shouldBlockPopupNavigation } from './loginDetect';
 
 // react-native-webview's class component types collapse to `never` under
 // React 19 typings; re-type the component with its documented props.
@@ -35,9 +37,13 @@ export interface ISyncWebViewRef {
 export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
   ({ driver, visible, initialUrl = 'about:blank', onLoginSuccess }, ref) => {
     const webViewRef = useRef<WebView>(null);
+    // True once the first onLoadEnd has fired. Login detection and popup
+    // blocking must never trigger on the initial page load.
+    const hasCompletedLoadRef = useRef(false);
+    const portalHostname = useMemo(() => extractHostname(initialUrl), [initialUrl]);
 
     useImperativeHandle(ref, () => ({
-      get webView() {
+      get webView(): WebView | null {
         return webViewRef.current;
       },
     }));
@@ -58,6 +64,7 @@ export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
 
     const handleLoadEnd = useCallback<NonNullable<WebViewProps['onLoadEnd']>>(
       (event) => {
+        hasCompletedLoadRef.current = true;
         // The driver ignores the payload; error events are safe to pass through.
         driver.webViewHandlers.onLoadEnd(event.nativeEvent as WebViewNavigation);
       },
@@ -65,13 +72,21 @@ export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
     );
 
     const handleNavChange = useCallback(
-      (state: WebViewNavigation) => {
+      (state: WebViewNavigation): void => {
         driver.webViewHandlers.onNavigationStateChange(state);
-        if (onLoginSuccess && state.url && state.url !== initialUrl) {
+        if (
+          onLoginSuccess &&
+          shouldTreatAsLoginSuccess({
+            url: state.url,
+            initialUrl,
+            hasCompletedLoad: hasCompletedLoadRef.current,
+            portalHostname,
+          })
+        ) {
           onLoginSuccess(state.url);
         }
       },
-      [driver, initialUrl, onLoginSuccess]
+      [driver, initialUrl, onLoginSuccess, portalHostname]
     );
 
     return (
@@ -83,14 +98,19 @@ export const SyncWebView = forwardRef<ISyncWebViewRef, ISyncWebViewProps>(
           onMessage={handleMessage}
           onLoadEnd={handleLoadEnd}
           onNavigationStateChange={handleNavChange}
-          onShouldStartLoadWithRequest={(request) => {
+          onShouldStartLoadWithRequest={(request): boolean => {
             // Intercept Skyward-style popup navigations (target="_blank" or JS window.open)
             // and handle them in-frame instead of opening a new window.
-            if (request.navigationType === 'other' && request.url !== initialUrl) {
-              if (request.url.includes('skyward') && request.url !== initialUrl) {
-                void driver.handlePopupNavigation(request.url);
-                return false;
-              }
+            if (
+              shouldBlockPopupNavigation({
+                requestUrl: request.url,
+                initialUrl,
+                navigationType: request.navigationType,
+                hasCompletedLoad: hasCompletedLoadRef.current,
+              })
+            ) {
+              void driver.handlePopupNavigation(request.url);
+              return false;
             }
             return true;
           }}

@@ -41,6 +41,9 @@
         "appleId": "apple@darkware.net",
         "appleTeamId": "N42FM5L5KD",
         "ascAppId": "6798499288",
+        "ascApiKeyPath": "/Users/admin/Dev/YOLOProjects/scholarmancy/AuthKey_RA29BTM8KJ.p8",
+        "ascApiKeyIssuerId": "69a6de75-883e-47e3-e053-5b8c7c11a4d1",
+        "ascApiKeyId": "RA29BTM8KJ",
         "language": "en-US",
         "metadataPath": "./store-metadata"
       }

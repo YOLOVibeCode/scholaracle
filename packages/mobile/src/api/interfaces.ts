@@ -3,24 +3,27 @@
  * One concrete client may implement all; consumers depend on the slice they need.
  */
 
-import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
+import type {
+  ISlcIngestEnvelopeV1,
+  IStudentListItem,
+  IStudentGradesResponse,
+  IAuthLoginResponse,
+} from '@scholaracle/contracts';
 
 export interface IAuthSession {
-  login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string }>;
+  login(email: string, password: string): Promise<IAuthLoginResponse>;
   logout(): Promise<void>;
   isLoggedIn(): Promise<boolean>;
 }
 
 export interface IConnectorTokenProvider {
-  getOrMintConnectorToken(): Promise<string>;
+  getOrMintConnectorToken(options?: { forceRefresh?: boolean }): Promise<string>;
 }
 
 export interface IStudentReadApi {
-  getStudents(): Promise<
-    ReadonlyArray<{ readonly _id: string; readonly name: string; readonly externalId: string }>
-  >;
+  getStudents(): Promise<IStudentListItem[]>;
   getStudentAssignments(studentId: string): Promise<readonly unknown[]>;
-  getStudentGrades(studentId: string): Promise<readonly unknown[]>;
+  getStudentGrades(studentId: string): Promise<IStudentGradesResponse>;
   getStudentRuns(studentId: string): Promise<readonly unknown[]>;
 }
 

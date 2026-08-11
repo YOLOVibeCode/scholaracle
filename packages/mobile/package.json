@@ -7,11 +7,12 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@scholaracle/contracts": "file:../contracts",
     "@scholaracle/scraper-core": "file:../scraper-core",
-    "expo": "~57.0.9",
+    "expo": "~57.0.11",
     "expo-constants": "^57.0.9",
     "expo-crypto": "~57.0.1",
     "expo-dev-client": "~57.0.10",
-    "expo-notifications": "~57.0.8",
+    "expo-linking": "~57.0.5",
+    "expo-notifications": "~57.0.9",
     "expo-secure-store": "~57.0.1",
     "expo-splash-screen": "~57.0.5",
     "expo-status-bar": "~57.0.1",
@@ -34,6 +35,13 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
-    "type-check": "tsc --noEmit"
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src App.tsx --ext .ts,.tsx",
+    "lint:strict": "eslint src App.tsx --ext .ts,.tsx --max-warnings=0",
+    "lint:fix": "eslint src App.tsx --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" App.tsx",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" App.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf coverage dist .expo"
   }
 }

@@ -27,6 +27,33 @@ import type { IEnvelopeUploader, IRunRecorder } from '../api/interfaces';
 export type SyncPhase =
   'idle' | 'extracting' | 'transforming' | 'validating' | 'uploading' | 'complete' | 'error';
 
+/** Where in the pipeline a sync failure originated. */
+export type SyncFailurePhase = 'portal' | 'upload' | 'local';
+
+/**
+ * Typed pipeline failure. `phase` tells callers where it broke:
+ *  - 'portal': scraping/extraction against the school portal (session issues live here)
+ *  - 'local':  on-device transform/validation
+ *  - 'upload': HTTP upload to Scholaracle
+ * The underlying error is preserved in `cause`.
+ */
+export class SyncError extends Error {
+  readonly phase: SyncFailurePhase;
+
+  constructor(message: string, phase: SyncFailurePhase, cause?: unknown) {
+    super(message);
+    this.name = 'SyncError';
+    this.phase = phase;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+function toSyncError(err: unknown, phase: SyncFailurePhase, fallbackMessage: string): SyncError {
+  if (err instanceof SyncError) return err;
+  const message = err instanceof Error ? err.message : fallbackMessage;
+  return new SyncError(message, phase, err);
+}
+
 export interface ISyncProgress {
   readonly phase: SyncPhase;
   readonly message: string;
@@ -71,9 +98,13 @@ export async function runSyncPipeline(
   });
 
   const phaseStart = { current: Date.now() };
-  const emitPhase = (phase: SyncPhase, message: string, extra?: { opCount?: number }): void => {
+  const emitPhase = async (
+    phase: SyncPhase,
+    message: string,
+    extra?: { opCount?: number }
+  ): Promise<void> => {
     const now = Date.now();
-    void recorder.addPhase(runId, {
+    await recorder.addPhase(runId, {
       phase,
       message,
       timestamp: new Date().toISOString(),
@@ -82,8 +113,8 @@ export async function runSyncPipeline(
     phaseStart.current = now;
     onProgress?.({ phase, message, ...extra });
   };
-  const emitProgress: SyncProgressCallback = (progress) => {
-    emitPhase(progress.phase, progress.message, { opCount: progress.opCount });
+  const emitProgress = async (progress: ISyncProgress): Promise<void> => {
+    await emitPhase(progress.phase, progress.message, { opCount: progress.opCount });
   };
 
   const ctx = {
@@ -95,25 +126,27 @@ export async function runSyncPipeline(
 
   let ops: ISlcDeltaOp[];
   try {
-    emitPhase('extracting', 'Extracting data from portal...');
+    await emitPhase('extracting', 'Extracting data from portal...');
     ops = await extractAndTransform(driver, config, ctx, emitProgress);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Extract/transform failed';
-    await recorder.completeRun(runId, { status: 'failed', errorMessage: msg });
+    // extractAndTransform already tags portal vs local; anything else that
+    // escapes this block is treated as a portal-side extraction failure.
+    const syncErr = toSyncError(err, 'portal', 'Extract/transform failed');
+    await recorder.completeRun(runId, { status: 'failed', errorMessage: syncErr.message });
     await uploader
       .reportRunFailure({
         runId,
         sourceId: config.sourceId,
         connectorToken,
-        error: msg,
+        error: syncErr.message,
         clientMeta,
       })
       .catch(() => undefined);
-    throw err;
+    throw syncErr;
   }
 
-  emitPhase('transforming', `Produced ${ops.length} operations`, { opCount: ops.length });
-  emitPhase('validating', 'Validating envelope...');
+  await emitPhase('transforming', `Produced ${ops.length} operations`, { opCount: ops.length });
+  await emitPhase('validating', 'Validating envelope...');
 
   const now = new Date().toISOString();
   const envelope: ISlcIngestEnvelopeV1 = {
@@ -150,21 +183,43 @@ export async function runSyncPipeline(
         clientMeta,
       })
       .catch(() => undefined);
-    throw new Error(msg);
+    throw new SyncError(msg, 'local');
   }
 
-  emitPhase('uploading', 'Uploading to Scholaracle...');
+  await emitPhase('uploading', 'Uploading to Scholaracle...');
   try {
     await uploader.uploadEnvelope(envelope, connectorToken);
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Upload failed';
-    await recorder.completeRun(runId, { status: 'failed', opCount: ops.length, errorMessage: msg });
-    throw err;
+    const syncErr = toSyncError(err, 'upload', 'Upload failed');
+    await recorder.completeRun(runId, {
+      status: 'failed',
+      opCount: ops.length,
+      errorMessage: syncErr.message,
+    });
+    throw syncErr;
   }
 
   await recorder.completeRun(runId, { status: 'success', opCount: ops.length });
-  emitPhase('complete', `Sync complete — ${ops.length} ops`, { opCount: ops.length });
+  await emitPhase('complete', `Sync complete — ${ops.length} ops`, { opCount: ops.length });
   return envelope;
+}
+
+/** Run a portal-facing step; failures become SyncError phase 'portal'. */
+async function runPortalStep<T>(step: () => Promise<T>): Promise<T> {
+  try {
+    return await step();
+  } catch (err: unknown) {
+    throw toSyncError(err, 'portal', 'Portal extraction failed');
+  }
+}
+
+/** Run an on-device step; failures become SyncError phase 'local'. */
+function runLocalStep<T>(step: () => T): T {
+  try {
+    return step();
+  } catch (err: unknown) {
+    throw toSyncError(err, 'local', 'Transform failed');
+  }
 }
 
 async function extractAndTransform(
@@ -176,29 +231,37 @@ async function extractAndTransform(
     studentExternalId: string;
     institutionExternalId: string;
   },
-  emit: SyncProgressCallback
+  emit: (progress: ISyncProgress) => Promise<void>
 ): Promise<ISlcDeltaOp[]> {
   if (config.provider === 'canvas') {
-    const raw: ICanvasBrowserExtract = await runCanvasRecipe(driver, config.baseUrl);
-    emit({ phase: 'transforming', message: 'Converting data...' });
-    return transformCanvasExtract(raw, ctx);
+    const raw: ICanvasBrowserExtract = await runPortalStep(() =>
+      runCanvasRecipe(driver, config.baseUrl)
+    );
+    await emit({ phase: 'transforming', message: 'Converting data...' });
+    return runLocalStep(() => transformCanvasExtract(raw, ctx));
   }
   if (config.provider === 'skyward') {
-    const raw: ISkywardFullExtract = await runSkywardRecipe(driver, config.baseUrl);
-    emit({ phase: 'transforming', message: 'Converting data...' });
-    return transformSkywardExtract(raw, ctx);
+    const raw: ISkywardFullExtract = await runPortalStep(() =>
+      runSkywardRecipe(driver, config.baseUrl)
+    );
+    await emit({ phase: 'transforming', message: 'Converting data...' });
+    return runLocalStep(() => transformSkywardExtract(raw, ctx));
   }
   if (config.provider === 'aeries') {
-    const raw: IAeriesFullExtract = await runAeriesRecipe(driver, config.baseUrl);
-    emit({ phase: 'transforming', message: 'Converting data...' });
-    const filtered: IAeriesFullExtract =
-      config.studentExternalId === 'default'
-        ? raw
-        : {
-            ...raw,
-            students: raw.students.filter((s) => s.studentId === config.studentExternalId),
-          };
-    return transformAeriesExtract(filtered.students.length > 0 ? filtered : raw, ctx);
+    const raw: IAeriesFullExtract = await runPortalStep(() =>
+      runAeriesRecipe(driver, config.baseUrl)
+    );
+    await emit({ phase: 'transforming', message: 'Converting data...' });
+    return runLocalStep(() => {
+      const filtered: IAeriesFullExtract =
+        config.studentExternalId === 'default'
+          ? raw
+          : {
+              ...raw,
+              students: raw.students.filter((s) => s.studentId === config.studentExternalId),
+            };
+      return transformAeriesExtract(filtered.students.length > 0 ? filtered : raw, ctx);
+    });
   }
-  throw new Error(`Unknown provider: ${config.provider}`);
+  throw new SyncError(`Unknown provider: ${config.provider as string}`, 'local');
 }

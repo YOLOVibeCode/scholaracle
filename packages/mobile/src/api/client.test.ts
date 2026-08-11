@@ -85,17 +85,6 @@ describe('ScholarmancyApiClient auth', () => {
       expect(secureStoreData.get('slc_refresh_token')).toBe('refresh-token-1');
     });
 
-    it('should also accept a legacy `accessToken` field', async () => {
-      mockFetchSequence({
-        status: 200,
-        body: makeLoginBody({ token: undefined, accessToken: 'jwt-legacy' }),
-      });
-
-      await client.login('demo@scholarmancy.com', 'pw');
-
-      expect(secureStoreData.get('slc_access_token')).toBe('jwt-legacy');
-    });
-
     it('should throw a readable error when the response has no token', async () => {
       mockFetchSequence({
         status: 200,
@@ -150,13 +139,18 @@ describe('ScholarmancyApiClient auth', () => {
         { status: 401, body: { error: 'Unauthorized' } },
         // refresh
         { status: 200, body: { success: true, token: 'jwt-fresh', refreshToken: 'rt-2' } },
-        // retried GET
-        { status: 200, body: [{ _id: 's1', name: 'Emma', externalId: 'stu-1' }] }
+        // retried GET — REAL wire shape: id/userId/name/grade/studentId/stats
+        {
+          status: 200,
+          body: [{ id: 's1', userId: 'u1', name: 'Emma', grade: 9, studentId: 'stu-1' }],
+        }
       );
 
       const students = await client.getStudents();
 
-      expect(students).toEqual([{ _id: 's1', name: 'Emma', externalId: 'stu-1' }]);
+      expect(students).toEqual([
+        { id: 's1', userId: 'u1', name: 'Emma', grade: 9, studentId: 'stu-1' },
+      ]);
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(secureStoreData.get('slc_access_token')).toBe('jwt-fresh');
     });
@@ -214,12 +208,14 @@ describe('ScholarmancyApiClient auth', () => {
       secureStoreData.set('slc_access_token', 'a');
       secureStoreData.set('slc_refresh_token', 'b');
       secureStoreData.set('slc_connector_token', 'c');
+      secureStoreData.set('slc_connector_token_v2', JSON.stringify({ token: 'd', mintedAt: 1 }));
 
       await client.logout();
 
       expect(secureStoreData.has('slc_access_token')).toBe(false);
       expect(secureStoreData.has('slc_refresh_token')).toBe(false);
       expect(secureStoreData.has('slc_connector_token')).toBe(false);
+      expect(secureStoreData.has('slc_connector_token_v2')).toBe(false);
     });
   });
 
@@ -235,7 +231,7 @@ describe('ScholarmancyApiClient auth', () => {
    * Client was reading `data.courses[].{externalId, name, currentGrade}` —
    * those fields don't exist, so grades always returned [].
    */
-  describe('getStudentGrades mapper', () => {
+  describe('getStudentGrades (contracts passthrough)', () => {
     const STUDENT_ID = 'stu-abc123';
 
     function makeGradesResponse(overrides?: Record<string, unknown>): Record<string, unknown> {
@@ -243,6 +239,7 @@ describe('ScholarmancyApiClient auth', () => {
         studentId: STUDENT_ID,
         studentName: 'Emma Lewis',
         overallGPA: 3.8,
+        atRiskCourses: 0,
         courseGrades: [
           {
             courseExternalId: 'course-1',
@@ -254,8 +251,12 @@ describe('ScholarmancyApiClient auth', () => {
             gradedAssignments: 10,
             missingAssignments: 1,
             lateAssignments: 0,
+            totalPointsPossible: 100,
+            totalPointsEarned: 95,
             recentTrend: 'stable',
             riskLevel: 'low',
+            materialCount: 0,
+            assignments: [],
           },
           {
             courseExternalId: 'course-2',
@@ -267,54 +268,84 @@ describe('ScholarmancyApiClient auth', () => {
             gradedAssignments: 0,
             missingAssignments: 0,
             lateAssignments: 0,
-            recentTrend: 'unknown',
+            totalPointsPossible: 0,
+            totalPointsEarned: 0,
+            recentTrend: 'stable',
             riskLevel: 'low',
+            materialCount: 0,
+            assignments: [],
           },
         ],
         ...overrides,
       };
     }
 
-    it('should map courseGrades array using courseExternalId and officialGrade', async () => {
+    it('should return the full grades response including overallGPA', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
       mockFetchSequence({ status: 200, body: makeGradesResponse() });
 
-      const grades = await client.getStudentGrades(STUDENT_ID);
+      const res = await client.getStudentGrades(STUDENT_ID);
 
-      expect(grades).toHaveLength(2);
-      expect(grades[0]).toMatchObject({
+      expect(res.overallGPA).toBe(3.8);
+      expect(res.courseGrades).toHaveLength(2);
+      expect(res.courseGrades[0]).toMatchObject({
         courseExternalId: 'course-1',
         courseName: 'AP Calculus',
-        percentGrade: 95.5,
+        officialGrade: 95.5,
         letterGrade: 'A',
       });
     });
 
-    it('should set asOfDate from the top-level response, not a per-course field', async () => {
+    it('should tolerate null officialGrade/letterGrade (no crash)', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
       mockFetchSequence({ status: 200, body: makeGradesResponse() });
 
-      const grades = await client.getStudentGrades(STUDENT_ID);
+      const res = await client.getStudentGrades(STUDENT_ID);
 
-      // asOfDate must be a valid ISO date string (defaults to today if absent)
-      expect(grades[0].asOfDate).toMatch(/^\d{4}-\d{2}-\d{2}/);
+      expect(res.courseGrades[1]?.officialGrade).toBeNull();
+      expect(res.courseGrades[1]?.letterGrade).toBeNull();
     });
 
-    it('should tolerate null officialGrade (no crash)', async () => {
+    it('should fall back to all grading periods when current-only is empty (summer)', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
-      mockFetchSequence({ status: 200, body: makeGradesResponse() });
+      const fetchMock = mockFetchSequence(
+        // current-only default: all terms ended -> server filters everything out
+        { status: 200, body: makeGradesResponse({ courseGrades: [], overallGPA: 0 }) },
+        // fallback with ?currentOnly=false returns the last term's grades
+        { status: 200, body: makeGradesResponse() }
+      );
 
-      const grades = await client.getStudentGrades(STUDENT_ID);
+      const res = await client.getStudentGrades(STUDENT_ID);
 
-      expect(grades[1].percentGrade).toBeUndefined();
-      expect(grades[1].letterGrade).toBeUndefined();
+      expect(res.courseGrades).toHaveLength(2);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][0]).toContain('currentOnly=false');
     });
 
-    it('should return [] when the request fails', async () => {
+    it('should NOT fall back when current grades exist', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
-      mockFetchSequence({ status: 500, body: { error: 'server error' } });
+      const fetchMock = mockFetchSequence({ status: 200, body: makeGradesResponse() });
 
-      await expect(client.getStudentGrades(STUDENT_ID)).resolves.toEqual([]);
+      const res = await client.getStudentGrades(STUDENT_ID);
+
+      expect(res.courseGrades).toHaveLength(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should THROW an ApiError with the server message on failure (no silent [])', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({
+        status: 500,
+        body: { success: false, error: 'Internal error', code: 'INTERNAL_ERROR', requestId: 'r-1' },
+      });
+
+      await expect(client.getStudentGrades(STUDENT_ID)).rejects.toMatchObject({
+        name: 'ApiError',
+        message: 'Internal error',
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        requestId: 'r-1',
+      });
     });
   });
 
@@ -422,11 +453,269 @@ describe('ScholarmancyApiClient auth', () => {
       );
     });
 
-    it('should return [] when sources request fails', async () => {
+    it('should THROW when the sources request fails (no silent [])', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
-      mockFetchSequence({ status: 500, body: {} });
+      mockFetchSequence({
+        status: 500,
+        body: { success: false, error: 'boom', code: 'INTERNAL_ERROR' },
+      });
 
-      await expect(client.getStudentRuns(STUDENT_ID)).resolves.toEqual([]);
+      await expect(client.getStudentRuns(STUDENT_ID)).rejects.toMatchObject({
+        name: 'ApiError',
+        message: 'boom',
+      });
     });
+
+    it('should tolerate one failing source but throw when ALL sources fail', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      // Partial failure: first source runs fail, second succeeds
+      mockFetchSequence(
+        { status: 200, body: makeSourcesResponse() },
+        { status: 500, body: { success: false, error: 'src1 down' } },
+        { status: 200, body: makeRunsResponse('skyward') }
+      );
+      const partial = await client.getStudentRuns(STUDENT_ID);
+      expect(partial.length).toBeGreaterThan(0);
+
+      // Total failure: every source's runs fail
+      mockFetchSequence(
+        { status: 200, body: makeSourcesResponse() },
+        { status: 500, body: { success: false, error: 'src1 down' } },
+        { status: 500, body: { success: false, error: 'src2 down' } }
+      );
+      await expect(client.getStudentRuns(STUDENT_ID)).rejects.toMatchObject({ name: 'ApiError' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Connector token healing + ingest source registration
+  // ---------------------------------------------------------------------------
+
+  describe('connector token', () => {
+    it('should reuse the cached v2 token without minting', async () => {
+      secureStoreData.set('slc_connector_token_v2', JSON.stringify({ token: 'ct-1', mintedAt: 1 }));
+      const fetchMock = mockFetchSequence();
+
+      await expect(client.getOrMintConnectorToken()).resolves.toBe('ct-1');
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('should migrate a legacy plain-string cache to v2', async () => {
+      secureStoreData.set('slc_connector_token', 'ct-legacy');
+      const fetchMock = mockFetchSequence();
+
+      await expect(client.getOrMintConnectorToken()).resolves.toBe('ct-legacy');
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(secureStoreData.has('slc_connector_token')).toBe(false);
+      expect(JSON.parse(secureStoreData.get('slc_connector_token_v2') ?? '{}').token).toBe(
+        'ct-legacy'
+      );
+    });
+
+    it('should re-mint once and retry when an ingest call gets a 401 (revoked token)', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      secureStoreData.set(
+        'slc_connector_token_v2',
+        JSON.stringify({ token: 'ct-revoked', mintedAt: 1 })
+      );
+      const fetchMock = mockFetchSequence(
+        // registerIngestSource with revoked token → 401
+        { status: 401, body: { success: false, error: 'Invalid token' } },
+        // re-mint (scraper-token)
+        {
+          status: 200,
+          body: { success: true, token: 'ct-fresh', jti: 'j2', expiresIn: '365 days' },
+        },
+        // retried register → ok
+        { status: 200, body: { success: true, source: {} } }
+      );
+
+      await client.registerIngestSource({
+        sourceId: 'local-canvas-x',
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        displayName: 'Canvas (mobile)',
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(JSON.parse(secureStoreData.get('slc_connector_token_v2') ?? '{}').token).toBe(
+        'ct-fresh'
+      );
+    });
+
+    it('should surface an ApiError when the retry also fails', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      secureStoreData.set(
+        'slc_connector_token_v2',
+        JSON.stringify({ token: 'ct-revoked', mintedAt: 1 })
+      );
+      mockFetchSequence(
+        { status: 401, body: { success: false, error: 'Invalid token' } },
+        { status: 200, body: { success: true, token: 'ct-2', jti: 'j', expiresIn: '365 days' } },
+        { status: 401, body: { success: false, error: 'Still invalid', code: 'UNAUTHENTICATED' } }
+      );
+
+      await expect(
+        client.registerIngestSource({
+          sourceId: 'local-canvas-x',
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas (mobile)',
+        })
+      ).rejects.toMatchObject({ name: 'ApiError', code: 'UNAUTHENTICATED' });
+    });
+  });
+
+  describe('unregisterPushToken', () => {
+    it('should DELETE with the deviceId and clear the local token', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      secureStoreData.set('slc_push_token', 'ExponentPushToken[old]');
+      const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+
+      await client.unregisterPushToken();
+
+      const call = fetchMock.mock.calls[0] as [string, { method: string; body: string }];
+      expect(call[0]).toContain('/api/account/push-token');
+      expect(call[1].method).toBe('DELETE');
+      const body = JSON.parse(call[1].body) as Record<string, unknown>;
+      expect(typeof body['deviceId']).toBe('string');
+      expect(secureStoreData.has('slc_push_token')).toBe(false);
+    });
+  });
+
+  describe('registerPushToken', () => {
+    it('should send deviceId and platform type with the push token', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+
+      await client.registerPushToken('ExponentPushToken[xyz]');
+
+      const call = fetchMock.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body) as Record<string, unknown>;
+      expect(body['expoPushToken']).toBe('ExponentPushToken[xyz]');
+      expect(typeof body['deviceId']).toBe('string');
+      expect((body['deviceId'] as string).length).toBeGreaterThan(0);
+      expect(body['type']).toBe('ios');
+      expect(secureStoreData.get('slc_push_token')).toBe('ExponentPushToken[xyz]');
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session hardening: single-flight refresh + session epochs
+// ---------------------------------------------------------------------------
+
+describe('session hardening', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+    client = new ScholarmancyApiClient(BASE_URL);
+  });
+
+  /** Route-keyed fetch mock: responses resolved by URL suffix, per-call queues. */
+  function mockFetchRoutes(routes: Record<string, IMockResponseSpec[]>): jest.Mock {
+    const fetchMock = jest.fn(async (url: string) => {
+      for (const [suffix, queue] of Object.entries(routes)) {
+        if (url.endsWith(suffix) || url.includes(suffix)) {
+          const spec = queue.length > 1 ? queue.shift()! : queue[0]!;
+          return makeResponse(spec);
+        }
+      }
+      throw new Error(`no route for ${url}`);
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
+  }
+
+  it('should share ONE refresh across concurrent 401s (single-flight)', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-expired');
+    secureStoreData.set('slc_refresh_token', 'rt-1');
+    let refreshCalls = 0;
+    const fetchMock = jest.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+      if (url.endsWith('/api/auth/refresh')) {
+        refreshCalls += 1;
+        return makeResponse({
+          status: 200,
+          body: { success: true, token: 'jwt-fresh', refreshToken: 'rt-2', rememberMe: true },
+        });
+      }
+      const auth = init?.headers?.['Authorization'] ?? '';
+      return auth.includes('jwt-fresh')
+        ? makeResponse({ status: 200, body: [] })
+        : makeResponse({ status: 401, body: { success: false, error: 'expired' } });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const results = await Promise.all([
+      client.getStudents(),
+      client.getStudents(),
+      client.getStudents(),
+    ]);
+
+    expect(results).toEqual([[], [], []]);
+    expect(refreshCalls).toBe(1);
+    expect(secureStoreData.get('slc_refresh_token')).toBe('rt-2');
+  });
+
+  it('should NOT fire onSessionExpired when there is simply no refresh token', async () => {
+    const expired = jest.fn();
+    client.onSessionExpired = expired;
+    mockFetchRoutes({});
+
+    await expect(client.getStudents()).rejects.toThrow('Not logged in');
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('should fire onSessionExpired with the captured epoch when the server rejects a refresh', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-expired');
+    secureStoreData.set('slc_refresh_token', 'rt-dead');
+    const epochs: number[] = [];
+    client.onSessionExpired = (epoch) => epochs.push(epoch);
+    mockFetchRoutes({
+      '/api/students': [{ status: 401, body: { success: false, error: 'expired' } }],
+      '/api/auth/refresh': [{ status: 401, body: { success: false, error: 'revoked' } }],
+    });
+
+    await expect(client.getStudents()).rejects.toThrow(/log in again/i);
+    expect(epochs).toEqual([client.sessionEpoch]);
+  });
+
+  it('should report a STALE epoch when a login lands mid-refresh (guard scenario)', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-expired');
+    secureStoreData.set('slc_refresh_token', 'rt-dead');
+    const seen: Array<{ fired: number; current: number }> = [];
+    client.onSessionExpired = (epoch) => seen.push({ fired: epoch, current: client.sessionEpoch });
+
+    let releaseRefresh: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const fetchMock = jest.fn(async (url: string) => {
+      if (url.endsWith('/api/auth/refresh')) {
+        await gate; // hold the refresh open while a login completes
+        return makeResponse({ status: 401, body: { success: false, error: 'revoked' } });
+      }
+      if (url.endsWith('/api/auth/login')) {
+        return makeResponse({ status: 200, body: makeLoginBody() });
+      }
+      return makeResponse({ status: 401, body: { success: false, error: 'expired' } });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const failing = client.getStudents().catch(() => undefined);
+    await client.login('demo@scholarmancy.com', 'pw'); // bumps epoch
+    releaseRefresh();
+    await failing;
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.fired).not.toBe(seen[0]!.current);
+  });
+
+  it('logout should bump the session epoch', async () => {
+    const before = client.sessionEpoch;
+    await client.logout();
+    expect(client.sessionEpoch).toBe(before + 1);
   });
 });
