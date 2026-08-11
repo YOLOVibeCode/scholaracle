@@ -13,7 +13,10 @@ export interface IIngestRunData {
   readonly startedAt: Date;
   readonly uploadedAt?: Date;
   readonly committedAt?: Date;
+  readonly failedAt?: Date;
   readonly error?: string | null;
+  /** Client identity stamp (app/extension/CLI + versions). */
+  readonly clientMeta?: Readonly<Record<string, string>> | null;
 }
 
 export class IngestRun {
@@ -28,7 +31,9 @@ export class IngestRun {
   public readonly startedAt: Date;
   public readonly uploadedAt?: Date;
   public readonly committedAt?: Date;
+  public readonly failedAt?: Date;
   public readonly error?: string | null;
+  public readonly clientMeta?: Readonly<Record<string, string>> | null;
 
   constructor(data: IIngestRunData, id?: ObjectId) {
     this._id = id;
@@ -42,6 +47,8 @@ export class IngestRun {
     this.startedAt = data.startedAt;
     this.uploadedAt = data.uploadedAt;
     this.committedAt = data.committedAt;
+    this.failedAt = data.failedAt;
     this.error = data.error ?? null;
+    this.clientMeta = data.clientMeta ?? null;
   }
 }
