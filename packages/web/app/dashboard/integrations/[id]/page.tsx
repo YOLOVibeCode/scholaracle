@@ -24,6 +24,7 @@ export default function IntegrationDetailPage() {
   const [assignSheetOpen, setAssignSheetOpen] = useState(false);
   const [credentialsStudentId, setCredentialsStudentId] = useState<string | null>(null);
   const [runsStudentId, setRunsStudentId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchIntegration = useCallback(() => integrationsApi.get(integrationId), [integrationId]);
   const { data: integration, isLoading, error, retry, refresh } = useAsyncData(fetchIntegration, {
@@ -51,17 +52,29 @@ export default function IntegrationDetailPage() {
 
   const handleUnlink = useCallback(async (studentId: string) => {
     if (!integrationId) return;
-    const ok = await integrationsApi.unlinkStudent(integrationId, studentId);
-    if (ok) {
-      refresh();
-      refreshStudents();
+    setActionError(null);
+    try {
+      const ok = await integrationsApi.unlinkStudent(integrationId, studentId);
+      if (ok) {
+        refresh();
+        refreshStudents();
+      } else {
+        setActionError('Failed to unlink student');
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to unlink student');
     }
   }, [integrationId, refresh, refreshStudents]);
 
   const handleTriggerSync = useCallback(async (studentId: string) => {
     if (!integrationId) return;
-    await sourcesApi.triggerSync(studentId, integrationId);
-    refreshStudents();
+    setActionError(null);
+    try {
+      await sourcesApi.triggerSync(studentId, integrationId);
+      refreshStudents();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to trigger sync');
+    }
   }, [integrationId, refreshStudents]);
 
   const linkedColumns: ColumnDef<IIntegrationLinkedStudent, unknown>[] = useMemo(
@@ -177,6 +190,7 @@ export default function IntegrationDetailPage() {
 
   return (
     <div className="space-y-6" data-testid="integration-detail-page">
+      {actionError && <ErrorDisplay error={actionError} title="Action failed" />}
       <div className="flex items-center gap-4">
         <Button asChild variant="ghost" size="icon">
           <Link href="/dashboard/integrations" aria-label="Back to Integrations">

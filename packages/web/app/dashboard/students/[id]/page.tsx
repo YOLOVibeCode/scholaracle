@@ -103,15 +103,19 @@ export default function EditStudentPage() {
     lowGradeThreshold?: number;
     frequency?: string;
   }) => {
-    const result = await studentsApi.update(studentId, {
-      alertPreferences: {
-        useCustomSettings: prefs.useCustomSettings,
-        gradeDrop: prefs.gradeDrop,
-        lowGradeThreshold: prefs.lowGradeThreshold,
-        frequency: prefs.frequency,
-      },
-    });
-    if (result) setStudent(result);
+    try {
+      const result = await studentsApi.update(studentId, {
+        alertPreferences: {
+          useCustomSettings: prefs.useCustomSettings,
+          gradeDrop: prefs.gradeDrop,
+          lowGradeThreshold: prefs.lowGradeThreshold,
+          frequency: prefs.frequency,
+        },
+      });
+      if (result) setStudent(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save alert settings');
+    }
   };
 
   if (isLoading) {

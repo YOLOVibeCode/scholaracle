@@ -60,19 +60,31 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
 
   const handleToggleAdmin = async (email: string, currentlyAdmin: boolean) => {
     setToggling(email);
-    const success = await studentsApi.setParentAdmin(studentId, email, !currentlyAdmin);
-    setToggling(null);
-    if (success) {
-      refreshParents();
+    setInviteError(null);
+    try {
+      const success = await studentsApi.setParentAdmin(studentId, email, !currentlyAdmin);
+      if (success) {
+        refreshParents();
+      }
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to update parent role');
+    } finally {
+      setToggling(null);
     }
   };
 
   const handleRemove = async (email: string) => {
     setRemoving(email);
-    const success = await studentsApi.removeParent(studentId, email);
-    setRemoving(null);
-    if (success) {
-      refreshParents();
+    setInviteError(null);
+    try {
+      const success = await studentsApi.removeParent(studentId, email);
+      if (success) {
+        refreshParents();
+      }
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to remove parent');
+    } finally {
+      setRemoving(null);
     }
   };
 

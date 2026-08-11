@@ -74,12 +74,10 @@ describe('integrationsApi', () => {
       expect(result).toEqual(list);
     });
 
-    it('returns empty array when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Network error'));
 
-      const result = await integrationsApi.list();
-
-      expect(result).toEqual([]);
+      await expect(integrationsApi.list()).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -107,12 +105,10 @@ describe('integrationsApi', () => {
       expect(result).toEqual(integration);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Not found'));
 
-      const result = await integrationsApi.get('missing');
-
-      expect(result).toBeNull();
+      await expect(integrationsApi.get('missing')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -146,16 +142,16 @@ describe('integrationsApi', () => {
       expect(result).toEqual(created);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Validation error'));
 
-      const result = await integrationsApi.create({
-        provider: 'canvas',
-        adapterId: 'com.instructure.canvas',
-        displayName: 'Canvas',
-      });
-
-      expect(result).toBeNull();
+      await expect(
+        integrationsApi.create({
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas',
+        })
+      ).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -187,12 +183,12 @@ describe('integrationsApi', () => {
       expect(result).toEqual(updated);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Update failed'));
 
-      const result = await integrationsApi.update('int-1', { displayName: 'Nope' });
-
-      expect(result).toBeNull();
+      await expect(integrationsApi.update('int-1', { displayName: 'Nope' })).rejects.toThrow(
+        'Unable to reach the server. Check your connection and try again.'
+      );
     });
   });
 
@@ -209,12 +205,10 @@ describe('integrationsApi', () => {
       expect(result).toEqual({ success: true, unlinkedCount: 0 });
     });
 
-    it('returns success: false when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Delete failed'));
 
-      const result = await integrationsApi.delete('int-1');
-
-      expect(result).toEqual({ success: false });
+      await expect(integrationsApi.delete('int-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -240,12 +234,10 @@ describe('integrationsApi', () => {
       expect(result).toEqual(list);
     });
 
-    it('returns empty array when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Network error'));
 
-      const result = await integrationsApi.listStudents('int-1');
-
-      expect(result).toEqual([]);
+      await expect(integrationsApi.listStudents('int-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -296,12 +288,10 @@ describe('integrationsApi', () => {
       expect(result).toEqual(responseBody);
     });
 
-    it('returns null when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Assign failed'));
 
-      const result = await integrationsApi.assignStudent('int-1', 'stu-1');
-
-      expect(result).toBeNull();
+      await expect(integrationsApi.assignStudent('int-1', 'stu-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -318,12 +308,10 @@ describe('integrationsApi', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when the request fails', async () => {
+    it('rejects when the request fails', async () => {
       fetchSpy.mockRejectedValue(new Error('Unlink failed'));
 
-      const result = await integrationsApi.unlinkStudent('int-1', 'stu-1');
-
-      expect(result).toBe(false);
+      await expect(integrationsApi.unlinkStudent('int-1', 'stu-1')).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
     });
   });
 });

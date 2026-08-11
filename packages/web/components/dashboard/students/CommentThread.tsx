@@ -59,13 +59,17 @@ export function CommentThread({
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const list = await studentsApi.getAssignmentComments(studentId, assignmentExternalId);
       setComments(list);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load comments');
     } finally {
       setLoading(false);
     }
@@ -83,6 +87,7 @@ export function CommentThread({
     const trimmed = body.trim();
     if (!trimmed || sending) return;
     setSending(true);
+    setError(null);
     try {
       const created = await studentsApi.addAssignmentComment(
         studentId,
@@ -94,6 +99,8 @@ export function CommentThread({
         setBody('');
         onCommentAdded?.();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send comment');
     } finally {
       setSending(false);
     }
@@ -103,6 +110,7 @@ export function CommentThread({
     async (commentId: string) => {
       if (deletingId) return;
       setDeletingId(commentId);
+      setError(null);
       try {
         const ok = await studentsApi.deleteAssignmentComment(
           studentId,
@@ -113,6 +121,8 @@ export function CommentThread({
           setComments((prev) => prev.filter((c) => c.id !== commentId));
           onCommentAdded?.();
         }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete comment');
       } finally {
         setDeletingId(null);
       }
@@ -131,6 +141,11 @@ export function CommentThread({
 
   return (
     <div className="flex flex-col gap-3" data-testid="comment-thread">
+      {error && (
+        <p className="text-sm text-red-600 dark:text-red-400" data-testid="comment-thread-error">
+          {error}
+        </p>
+      )}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
         {comments.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">

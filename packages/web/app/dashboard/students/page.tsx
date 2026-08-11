@@ -6,7 +6,7 @@ import { Plus, GraduationCap, Edit, Trash2, LayoutDashboard } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
-import { ConfirmDialog } from '@/components/common';
+import { ConfirmDialog, ErrorDisplay } from '@/components/common';
 import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
 
 export default function StudentsPage() {
@@ -15,6 +15,7 @@ export default function StudentsPage() {
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadStudents();
@@ -22,12 +23,12 @@ export default function StudentsPage() {
 
   const loadStudents = async () => {
     setIsLoading(true);
+    setActionError(null);
     try {
       const data = await studentsApi.getAll();
       setStudents(data);
     } catch (error) {
-       
-      console.error('Failed to load students:', error);
+      setActionError(error instanceof Error ? error.message : 'Failed to load students');
     } finally {
       setIsLoading(false);
     }
@@ -40,11 +41,16 @@ export default function StudentsPage() {
   const confirmDelete = async () => {
     if (!deleteStudentId) return;
     setIsDeleting(true);
+    setActionError(null);
     try {
       const success = await studentsApi.delete(deleteStudentId);
       if (success) {
         void loadStudents();
+      } else {
+        setActionError('Failed to delete student');
       }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to delete student');
     } finally {
       setIsDeleting(false);
       setDeleteStudentId(null);
@@ -57,6 +63,9 @@ export default function StudentsPage() {
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <ErrorDisplay error={actionError} title="Error" onRetry={() => void loadStudents()} />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>

@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Readable stack traces in production error reports.
+  productionBrowserSourceMaps: true,
 };
 
 export default nextConfig;
