@@ -115,3 +115,7 @@ local/
 
 # App Store demo account credentials (public repo — never commit)
 .demo-credentials
+
+# Expo scratch dirs
+.tmp-expo-go/
+.tmp-expo-go-app/

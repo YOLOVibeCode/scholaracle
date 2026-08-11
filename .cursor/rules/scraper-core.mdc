@@ -1,0 +1,11 @@
+---
+description: Scraper-core package edit conventions (prefer src, recipes pattern, no real browsers in tests)
+globs: packages/scraper-core/**/*.ts,packages/scraper-playwright/**/*.ts
+alwaysApply: false
+---
+
+# Scraper-core (scholarmancy/scholaracle)
+
+- Prefer editing `src/` over `dist/`; do not hand-edit generated build output.
+- Reuse the extractors / recipes / transformers pattern already in the packages.
+- Never launch a real Playwright browser or hit real school portals / Scholaracle APIs in tests — mock them.
