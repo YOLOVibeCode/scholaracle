@@ -1,9 +1,17 @@
 /**
  * LoginScreen — email + password form, wires to AuthContext.
- * Prefills saved credentials, offers a show/hide password toggle.
+ *
+ * Hard-won invariants (each reverses a shipped bug):
+ * - The screen must stay MOUNTED during login (spinner renders in-button);
+ *   auth errors come from context (single channel) and render below the
+ *   button, where the keyboard cannot clip them.
+ * - Saved-credential prefill only fills fields that are empty AND untouched;
+ *   it must never overwrite what the user is typing.
+ * - A 401 invalidates the saved password — otherwise the form silently
+ *   resubmits a dead credential forever.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Text,
@@ -13,34 +21,71 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  View,
 } from 'react-native';
+import { View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
-import { loadSavedLogin, saveLogin } from '../credentials/savedLoginStore';
+import {
+  loadSavedLogin,
+  saveLogin,
+  clearSavedPassword,
+  resolvePrefill,
+} from '../credentials/savedLoginStore';
+import { ApiError } from '../api/ApiError';
 
 export function LoginScreen(): React.ReactElement {
-  const { login, isLoading } = useAuth();
+  const { login, isAuthenticating, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const userEdited = useRef({ email: false, password: false });
+  const currentValues = useRef({ email: '', password: '' });
+  const isSubmitting = useRef(false);
 
   useEffect(() => {
-    void loadSavedLogin().then((saved) => {
-      if (saved) {
-        setEmail(saved.email);
-        setPassword(saved.password);
-      }
-    });
+    loadSavedLogin()
+      .then((saved) => {
+        const fill = resolvePrefill(saved, currentValues.current, userEdited.current);
+        if (fill.email !== undefined) {
+          currentValues.current.email = fill.email;
+          setEmail(fill.email);
+        }
+        if (fill.password !== undefined) {
+          currentValues.current.password = fill.password;
+          setPassword(fill.password);
+        }
+      })
+      .catch(() => {
+        // Keychain unavailable — start with an empty form.
+      });
   }, []);
 
+  const handleEmailChange = (value: string): void => {
+    userEdited.current.email = true;
+    currentValues.current.email = value;
+    setEmail(value);
+  };
+
+  const handlePasswordChange = (value: string): void => {
+    userEdited.current.password = true;
+    currentValues.current.password = value;
+    setPassword(value);
+  };
+
   const handleLogin = async (): Promise<void> => {
-    setError(null);
+    if (isSubmitting.current || isAuthenticating) return;
+    isSubmitting.current = true;
+    const trimmedEmail = email.trim();
     try {
-      await login(email.trim(), password);
-      await saveLogin({ email: email.trim(), password });
+      await login(trimmedEmail, password);
+      await saveLogin({ email: trimmedEmail, password }).catch(() => undefined);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      // Context owns the error display. A 401 means the stored password is
+      // dead — invalidate it so the next mount doesn't resubmit it.
+      if (err instanceof ApiError && err.status === 401) {
+        void clearSavedPassword(trimmedEmail);
+      }
+    } finally {
+      isSubmitting.current = false;
     }
   };
 
@@ -58,8 +103,6 @@ export function LoginScreen(): React.ReactElement {
       <Text style={styles.title}>Scholarmancy</Text>
       <Text style={styles.subtitle}>Sign in to your account</Text>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -70,7 +113,8 @@ export function LoginScreen(): React.ReactElement {
         textContentType="username"
         returnKeyType="next"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={handleEmailChange}
+        testID="input-email"
       />
       <View style={styles.passwordRow}>
         <TextInput
@@ -79,10 +123,15 @@ export function LoginScreen(): React.ReactElement {
           placeholderTextColor="#999"
           secureTextEntry={!showPassword}
           textContentType="password"
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="current-password"
           returnKeyType="done"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={handlePasswordChange}
           onSubmitEditing={handleLogin}
+          testID="input-password"
         />
         <TouchableOpacity
           style={styles.eyeButton}
@@ -95,16 +144,23 @@ export function LoginScreen(): React.ReactElement {
       </View>
 
       <TouchableOpacity
-        style={[styles.button, isLoading && styles.buttonDisabled]}
+        style={[styles.button, isAuthenticating && styles.buttonDisabled]}
         onPress={handleLogin}
-        disabled={isLoading}
+        disabled={isAuthenticating}
+        testID="button-login"
       >
-        {isLoading ? (
+        {isAuthenticating ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.buttonText}>Sign In</Text>
         )}
       </TouchableOpacity>
+
+      {error && (
+        <Text style={styles.error} testID="text-login-error">
+          {error}
+        </Text>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -192,7 +248,7 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#dc3545',
-    marginBottom: 16,
+    marginTop: 16,
     textAlign: 'center',
   },
 });

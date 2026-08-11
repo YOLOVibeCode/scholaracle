@@ -1,43 +1,41 @@
 /**
  * Scholaracle API client for the mobile app.
  *
- * Handles JWT auth (access + refresh tokens), connector token minting,
- * and ingest envelope upload.
+ * Handles JWT auth (access + refresh tokens), connector token minting with
+ * 401 self-healing, and ingest envelope upload.
+ *
+ * All response types come from @scholaracle/contracts (types/api/*) — the
+ * same definitions the server compiles against. Do NOT redeclare response
+ * shapes here; that is how the app shipped reading fields that never existed.
  */
 
 import * as SecureStore from 'expo-secure-store';
-import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
+import { Platform } from 'react-native';
+import type {
+  ISlcIngestEnvelopeV1,
+  IStudentListItem,
+  IStudentGradesResponse,
+  IActionBoardResponse,
+  ISourceListItem,
+  IRunListItem,
+  IAuthLoginResponse,
+  IAuthRefreshResponse,
+  IConnectorTokenResponse,
+  IIngestSourceRegisterRequest,
+  IIngestRunStartResponse,
+} from '@scholaracle/contracts';
+import { ApiError } from './ApiError';
+import { getDeviceId } from '../device/deviceId';
+
+export type { IStudentListItem } from '@scholaracle/contracts';
 
 const ACCESS_TOKEN_KEY = 'slc_access_token';
 const REFRESH_TOKEN_KEY = 'slc_refresh_token';
-const CONNECTOR_TOKEN_KEY = 'slc_connector_token';
+const LEGACY_CONNECTOR_TOKEN_KEY = 'slc_connector_token';
+const CONNECTOR_TOKEN_KEY = 'slc_connector_token_v2';
+const PUSH_TOKEN_KEY = 'slc_push_token';
 
-/**
- * Auth response from the Scholarmancy API. Production returns the access
- * token in `token`; `accessToken` is accepted as a legacy/alternate field.
- * `refreshToken` may be rotated on refresh and must be re-persisted.
- */
-interface IAuthResponse {
-  readonly success?: boolean;
-  readonly token?: string;
-  readonly accessToken?: string;
-  readonly refreshToken?: string;
-  readonly user?: { readonly id: string; readonly email: string; readonly name?: string };
-}
-
-export interface IStudentListItem {
-  readonly _id: string;
-  readonly name: string;
-  readonly externalId: string;
-  readonly grade?: string;
-}
-
-interface IConnectorTokenResponse {
-  readonly token: string;
-  readonly jti?: string;
-  readonly expiresIn?: string;
-}
-
+/** Flattened assignment view-model consumed by DashboardScreen. */
 export interface IAssignmentItem {
   readonly _id: string;
   readonly title: string;
@@ -47,105 +45,64 @@ export interface IAssignmentItem {
   readonly courseExternalId?: string;
 }
 
-export interface IGradeItem {
-  readonly _id: string;
-  readonly courseExternalId: string;
-  readonly asOfDate: string;
-  readonly percentGrade?: number;
-  readonly letterGrade?: string;
-  readonly courseName?: string;
-}
-
+/** Run view-model consumed by DashboardScreen (provider comes from the source). */
 export interface ISyncRunItem {
   readonly _id: string;
   readonly provider: string;
   readonly status: string;
   readonly startedAt: string;
-  readonly opCount?: number;
 }
 
-/**
- * Real API shape: sources use `id`, not `sourceId`.
- * provider + displayName are on the source, not on individual runs.
- */
-interface ISourceItem {
-  readonly id: string;
-  readonly provider: string;
-  readonly displayName?: string;
-}
-
-/**
- * Real API shape: runs use `runId`, not `_id`.
- * There is no `opCount` or `provider` field on runs — provider comes from the source.
- */
-interface IRunItem {
-  readonly runId: string;
-  readonly status: string;
-  readonly startedAt: string;
-  readonly uploadedAt?: string;
-  readonly committedAt?: string;
-  readonly error?: string;
-}
-
-interface IActionBoardResponse {
-  readonly buckets: ReadonlyArray<{
-    readonly items: ReadonlyArray<{
-      readonly assignmentExternalId: string;
-      readonly title: string;
-      readonly dueAt?: string;
-      readonly status: string;
-      readonly course: { readonly externalId: string; readonly name: string };
-    }>;
-  }>;
-}
-
-/**
- * Real API shape: top-level key is `courseGrades`, not `courses`.
- * Each entry uses `courseExternalId`/`courseName`/`officialGrade`, not
- * `externalId`/`name`/`currentGrade`.
- */
-interface IStudentGradesResponse {
-  readonly studentId?: string;
-  readonly overallGPA?: number;
-  readonly courseGrades?: ReadonlyArray<{
-    readonly courseExternalId: string;
-    readonly courseName: string;
-    readonly officialGrade?: number | null;
-    readonly letterGrade?: string | null;
-    readonly gradeSource?: string;
-    readonly totalAssignments?: number;
-    readonly gradedAssignments?: number;
-  }>;
+interface IStoredConnectorToken {
+  readonly token: string;
+  readonly mintedAt: number;
 }
 
 export class ScholarmancyApiClient {
   private readonly baseUrl: string;
+  private _refreshPromise: Promise<string> | null = null;
+  private _sessionEpoch = 0;
+
+  /**
+   * Invoked when the SERVER rejects a refresh — the session is
+   * unrecoverable and the UI should return to the login screen. Receives
+   * the epoch the dead session belonged to; compare against sessionEpoch
+   * to ignore stragglers from a superseded session.
+   */
+  public onSessionExpired?: (epoch: number) => void;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+  }
+
+  /** Increments on every login/logout; identifies the current session. */
+  get sessionEpoch(): number {
+    return this._sessionEpoch;
   }
 
   // ---------------------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------------------
 
-  async login(email: string, password: string): Promise<IAuthResponse> {
-    const res = await this._post<IAuthResponse>('/api/auth/login', { email, password }, false);
-    const accessToken = res.token ?? res.accessToken;
-    if (!accessToken) {
+  async login(email: string, password: string): Promise<IAuthLoginResponse> {
+    const res = await this._post<IAuthLoginResponse>('/api/auth/login', { email, password }, false);
+    if (!res.token) {
       throw new Error('Login response did not include an access token');
     }
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, res.token);
     if (res.refreshToken) {
       await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
     }
+    this._sessionEpoch += 1;
     return res;
   }
 
   async logout(): Promise<void> {
-    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(CONNECTOR_TOKEN_KEY);
+    this._sessionEpoch += 1;
+    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(CONNECTOR_TOKEN_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(LEGACY_CONNECTOR_TOKEN_KEY).catch(() => undefined);
   }
 
   async isLoggedIn(): Promise<boolean> {
@@ -157,20 +114,73 @@ export class ScholarmancyApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Connector token
+  // Connector token (mint revokes previous tokens server-side, so a cached
+  // token can be invalidated at any time by another device — heal on 401)
   // ---------------------------------------------------------------------------
 
-  async getOrMintConnectorToken(): Promise<string> {
-    const cached = await SecureStore.getItemAsync(CONNECTOR_TOKEN_KEY);
-    if (cached) return cached;
+  async getOrMintConnectorToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
+    if (!options.forceRefresh) {
+      const cached = await this._readCachedConnectorToken();
+      if (cached) return cached;
+    }
 
     const res = await this._post<IConnectorTokenResponse>(
       '/api/integrations/scraper-token',
       {},
       true
     );
-    await SecureStore.setItemAsync(CONNECTOR_TOKEN_KEY, res.token);
+    const stored: IStoredConnectorToken = { token: res.token, mintedAt: Date.now() };
+    await SecureStore.setItemAsync(CONNECTOR_TOKEN_KEY, JSON.stringify(stored));
     return res.token;
+  }
+
+  private async _readCachedConnectorToken(): Promise<string | null> {
+    const raw = await SecureStore.getItemAsync(CONNECTOR_TOKEN_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<IStoredConnectorToken>;
+        if (typeof parsed.token === 'string' && parsed.token.length > 0) return parsed.token;
+      } catch {
+        // corrupt cache — fall through to re-mint
+      }
+      await SecureStore.deleteItemAsync(CONNECTOR_TOKEN_KEY);
+      return null;
+    }
+    // Migrate the legacy plain-string cache once.
+    const legacy = await SecureStore.getItemAsync(LEGACY_CONNECTOR_TOKEN_KEY);
+    if (legacy) {
+      const migrated: IStoredConnectorToken = { token: legacy, mintedAt: 0 };
+      await SecureStore.setItemAsync(CONNECTOR_TOKEN_KEY, JSON.stringify(migrated));
+      await SecureStore.deleteItemAsync(LEGACY_CONNECTOR_TOKEN_KEY);
+      return legacy;
+    }
+    return null;
+  }
+
+  /**
+   * Connector-authenticated fetch with one-shot 401 healing: on 401 the
+   * cached token is discarded, a fresh one is minted, and the request is
+   * retried once. Covers server-side revocation (minting from another
+   * device revokes this one's token).
+   */
+  private async _connectorFetch(
+    path: string,
+    init: { method: string; body?: string },
+    initialToken?: string
+  ): Promise<Response> {
+    const doFetch = async (token: string): Promise<Response> =>
+      fetch(`${this.baseUrl}${path}`, {
+        method: init.method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: init.body,
+      });
+
+    let res = await doFetch(initialToken ?? (await this.getOrMintConnectorToken()));
+    if (res.status === 401) {
+      const fresh = await this.getOrMintConnectorToken({ forceRefresh: true });
+      res = await doFetch(fresh);
+    }
+    return res;
   }
 
   // ---------------------------------------------------------------------------
@@ -182,127 +192,143 @@ export class ScholarmancyApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Student data
+  // Student data (studentId = the Mongo `id` from GET /api/students —
+  // NEVER the external/SIS id)
   // ---------------------------------------------------------------------------
 
   async getStudentAssignments(studentId: string): Promise<IAssignmentItem[]> {
-    try {
-      const board = await this._get<IActionBoardResponse>(
-        `/api/students/${studentId}/action-board`
-      );
-      return board.buckets.flatMap((b) =>
-        b.items.map((item) => ({
-          _id: item.assignmentExternalId,
-          title: item.title,
-          dueAt: item.dueAt,
-          status: item.status,
-          courseName: item.course.name,
-          courseExternalId: item.course.externalId,
-        }))
-      );
-    } catch {
-      return [];
-    }
+    const board = await this._get<IActionBoardResponse>(`/api/students/${studentId}/action-board`);
+    return board.buckets.flatMap((b) =>
+      b.items.map((item) => ({
+        // Keyed per course so the same assignment id in two courses stays unique
+        _id: `${item.course.externalId}:${item.assignmentExternalId}`,
+        title: item.title,
+        dueAt: item.dueAt,
+        status: item.status,
+        courseName: item.course.name,
+        courseExternalId: item.course.externalId,
+      }))
+    );
   }
 
-  async getStudentGrades(studentId: string): Promise<IGradeItem[]> {
-    try {
-      const data = await this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades`);
-      const today = new Date().toISOString().slice(0, 10);
-      return (data.courseGrades ?? []).map((c) => ({
-        _id: c.courseExternalId,
-        courseExternalId: c.courseExternalId,
-        asOfDate: today,
-        percentGrade: c.officialGrade ?? undefined,
-        letterGrade: c.letterGrade ?? undefined,
-        courseName: c.courseName,
-      }));
-    } catch {
-      return [];
-    }
+  async getStudentGrades(studentId: string): Promise<IStudentGradesResponse> {
+    const current = await this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades`);
+    if (current.courseGrades.length > 0) return current;
+    // Off-season (e.g. summer): every term has ended, so the server's
+    // current-only default filters ALL courses out. Fall back to all
+    // grading periods so the most recent term's grades still render.
+    return this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades?currentOnly=false`);
   }
 
   async getStudentRuns(studentId: string): Promise<ISyncRunItem[]> {
-    try {
-      const sources = await this._get<ISourceItem[]>(`/api/students/${studentId}/sources`);
-      const allRuns: ISyncRunItem[] = [];
-      for (const source of sources) {
-        try {
-          const runs = await this._get<IRunItem[]>(
-            `/api/students/${studentId}/sources/${source.id}/runs`
-          );
-          allRuns.push(
-            ...runs.map((r) => ({
-              _id: r.runId,
-              provider: source.provider,
-              status: r.status,
-              startedAt: r.startedAt,
-            }))
-          );
-        } catch {
-          // skip individual failing sources — others may succeed
-        }
+    const sources = await this._get<ISourceListItem[]>(`/api/students/${studentId}/sources`);
+    const allRuns: ISyncRunItem[] = [];
+    let lastSourceError: unknown = null;
+    let failedSources = 0;
+
+    for (const source of sources) {
+      try {
+        const runs = await this._get<IRunListItem[]>(
+          `/api/students/${studentId}/sources/${source.id}/runs`
+        );
+        allRuns.push(
+          ...runs.map((r) => ({
+            _id: r.runId,
+            provider: source.provider,
+            status: r.status,
+            startedAt: r.startedAt,
+          }))
+        );
+      } catch (err) {
+        // Partial failure tolerated — but if EVERY source fails, surface it.
+        lastSourceError = err;
+        failedSources += 1;
       }
-      return allRuns
-        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-        .slice(0, 20);
-    } catch {
-      return [];
     }
+
+    if (sources.length > 0 && failedSources === sources.length) {
+      throw lastSourceError instanceof Error
+        ? lastSourceError
+        : new Error('Failed to load sync history');
+    }
+
+    return allRuns
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      .slice(0, 20);
   }
 
+  // ---------------------------------------------------------------------------
+  // Push
+  // ---------------------------------------------------------------------------
+
   async getPushToken(): Promise<string | null> {
-    return SecureStore.getItemAsync('slc_push_token');
+    return SecureStore.getItemAsync(PUSH_TOKEN_KEY);
   }
 
   async registerPushToken(expoPushToken: string): Promise<void> {
-    await this._post('/api/account/push-token', { expoPushToken }, true);
-    await SecureStore.setItemAsync('slc_push_token', expoPushToken);
+    const deviceId = await getDeviceId();
+    const type = Platform.OS === 'android' ? 'android' : 'ios';
+    await this._post('/api/account/push-token', { expoPushToken, deviceId, type }, true);
+    await SecureStore.setItemAsync(PUSH_TOKEN_KEY, expoPushToken);
+  }
+
+  /**
+   * Remove this device's push registration server-side (sign-out). Must run
+   * while the auth token is still valid.
+   */
+  async unregisterPushToken(): Promise<void> {
+    const deviceId = await getDeviceId();
+    await this._delete('/api/account/push-token', { deviceId });
+    await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(() => undefined);
   }
 
   // ---------------------------------------------------------------------------
-  // Ingest (three-step: runs → envelope → complete)
+  // Ingest (source registration + three-step run: runs → envelope → complete)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Register (upsert) the ingest source server-side. Without this,
+   * GET /api/students/:id/sources filters the source out and the sync
+   * history stays empty. Safe to call repeatedly.
+   */
+  async registerIngestSource(source: IIngestSourceRegisterRequest): Promise<void> {
+    const res = await this._connectorFetch('/api/ingest/v1/sources', {
+      method: 'POST',
+      body: JSON.stringify(source),
+    });
+    if (!res.ok) throw await ApiError.fromResponse(res, 'Source registration');
+  }
+
   async uploadEnvelope(envelope: ISlcIngestEnvelopeV1, connectorToken: string): Promise<void> {
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${connectorToken}`,
-    };
     const runId = envelope.run.runId;
 
-    const runRes = await fetch(`${this.baseUrl}/api/ingest/v1/runs`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        runId,
-        provider: envelope.run.provider,
-        adapterId: envelope.run.adapterId,
-        sourceId: envelope.source.sourceId,
-        startedAt: envelope.run.startedAt,
-        clientMeta: envelope.run.meta ?? { clientType: 'mobile' },
-      }),
-    });
-    if (!runRes.ok) throw new Error(`Run registration failed: ${runRes.status}`);
-    const runBody = (await runRes.json()) as { runId?: string };
+    const runRes = await this._connectorFetch(
+      '/api/ingest/v1/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          runId,
+          sourceId: envelope.source.sourceId,
+          clientMeta: envelope.run.meta ?? { clientType: 'mobile' },
+        }),
+      },
+      connectorToken
+    );
+    if (!runRes.ok) throw await ApiError.fromResponse(runRes, 'Run registration');
+    const runBody = (await runRes.json()) as Partial<IIngestRunStartResponse>;
     const serverRunId = runBody.runId ?? runId;
 
-    const envelopeRes = await fetch(`${this.baseUrl}/api/ingest/v1/runs/${serverRunId}/envelope`, {
+    const envelopeRes = await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/envelope`, {
       method: 'POST',
-      headers,
-      body: JSON.stringify({
-        ...envelope,
-        run: { ...envelope.run, runId: serverRunId },
-      }),
+      body: JSON.stringify({ ...envelope, run: { ...envelope.run, runId: serverRunId } }),
     });
-    if (!envelopeRes.ok) throw new Error(`Envelope upload failed: ${envelopeRes.status}`);
+    if (!envelopeRes.ok) throw await ApiError.fromResponse(envelopeRes, 'Envelope upload');
 
-    const completeRes = await fetch(`${this.baseUrl}/api/ingest/v1/runs/${serverRunId}/complete`, {
+    const completeRes = await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ status: 'success' }),
     });
-    if (!completeRes.ok) throw new Error(`Run completion failed: ${completeRes.status}`);
+    if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
   }
 
   async reportRunFailure(params: {
@@ -312,26 +338,24 @@ export class ScholarmancyApiClient {
     readonly error: string;
     readonly clientMeta?: Readonly<Record<string, string>>;
   }): Promise<void> {
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.connectorToken}`,
-    };
-    const runRes = await fetch(`${this.baseUrl}/api/ingest/v1/runs`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        runId: params.runId,
-        sourceId: params.sourceId,
-        clientMeta: params.clientMeta ?? { clientType: 'mobile' },
-      }),
-    });
+    const runRes = await this._connectorFetch(
+      '/api/ingest/v1/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          runId: params.runId,
+          sourceId: params.sourceId,
+          clientMeta: params.clientMeta ?? { clientType: 'mobile' },
+        }),
+      },
+      params.connectorToken
+    );
     const runBody = runRes.ok
-      ? ((await runRes.json()) as { runId?: string })
+      ? ((await runRes.json()) as Partial<IIngestRunStartResponse>)
       : { runId: params.runId };
     const serverRunId = runBody.runId ?? params.runId;
-    await fetch(`${this.baseUrl}/api/ingest/v1/runs/${serverRunId}/complete`, {
+    await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
-      headers,
       body: JSON.stringify({ status: 'failed', error: params.error }),
     });
   }
@@ -346,27 +370,52 @@ export class ScholarmancyApiClient {
     return this._refreshAccessToken();
   }
 
-  private async _refreshAccessToken(): Promise<string> {
+  /**
+   * Single-flight: concurrent 401s (e.g. the dashboard's parallel fetches)
+   * share ONE refresh. Without this, each spends the same rotating refresh
+   * token and the server treats the reuse as an attack, revoking the whole
+   * token family.
+   */
+  private _refreshAccessToken(): Promise<string> {
+    if (!this._refreshPromise) {
+      this._refreshPromise = this._doRefresh().finally(() => {
+        this._refreshPromise = null;
+      });
+    }
+    return this._refreshPromise;
+  }
+
+  private async _doRefresh(): Promise<string> {
+    const epoch = this._sessionEpoch;
     const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    if (!refreshToken) throw new Error('Not logged in');
+    if (!refreshToken) {
+      // Simply not logged in — that is NOT a session expiry. Firing the
+      // expiry callback here made stragglers purge freshly-written tokens.
+      throw new Error('Not logged in');
+    }
 
     const res = await fetch(`${this.baseUrl}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) throw new Error('Session expired — please log in again');
+    if (!res.ok) {
+      this.onSessionExpired?.(epoch);
+      throw new Error('Session expired — please log in again');
+    }
 
-    const data = (await res.json()) as IAuthResponse;
-    const accessToken = data.token ?? data.accessToken;
-    if (!accessToken) throw new Error('Session expired — please log in again');
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    const data = (await res.json()) as IAuthRefreshResponse;
+    if (!data.token) {
+      this.onSessionExpired?.(epoch);
+      throw new Error('Session expired — please log in again');
+    }
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, data.token);
     // The server rotates refresh tokens; persist the new one or the next
     // refresh will fail with an invalidated token.
     if (data.refreshToken) {
       await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken);
     }
-    return accessToken;
+    return data.token;
   }
 
   private async _get<T>(path: string): Promise<T> {
@@ -380,7 +429,23 @@ export class ScholarmancyApiClient {
       // Access token expired (15 min TTL) — refresh once and retry.
       res = await doGet(await this._refreshAccessToken());
     }
-    if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+    if (!res.ok) throw await ApiError.fromResponse(res, `GET ${path}`);
+    return res.json() as Promise<T>;
+  }
+
+  private async _delete<T>(path: string, body: unknown): Promise<T> {
+    const doDelete = async (authToken: string): Promise<Response> =>
+      fetch(`${this.baseUrl}${path}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify(body),
+      });
+
+    let res = await doDelete(await this._getAccessToken());
+    if (res.status === 401) {
+      res = await doDelete(await this._refreshAccessToken());
+    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `DELETE ${path}`);
     return res.json() as Promise<T>;
   }
 
@@ -399,10 +464,7 @@ export class ScholarmancyApiClient {
     if (requireAuth && res.status === 401) {
       res = await doPost(await this._refreshAccessToken());
     }
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText);
-      throw new Error(text || `POST ${path} failed: ${res.status}`);
-    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `POST ${path}`);
     return res.json() as Promise<T>;
   }
 }

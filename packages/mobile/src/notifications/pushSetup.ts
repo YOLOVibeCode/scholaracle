@@ -22,34 +22,40 @@ Notifications.setNotificationHandler({
   }),
 });
 
-/** Register for push notifications and upload the token to the server. */
+/**
+ * Register for push notifications and upload the token to the server.
+ * Fully best-effort: callers fire-and-forget this, so nothing here may
+ * escape as an unhandled rejection (native modules throw on simulators
+ * and on builds without APNs entitlements).
+ */
 export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') return null;
-
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-
   try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return null;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+
     const alreadyRegistered = await apiClient.getPushToken();
     if (alreadyRegistered !== token) {
       await apiClient.registerPushToken(token);
     }
-  } catch {
-    // Token upload is best-effort: the backend route may not be deployed yet.
-    // Local notifications still work; upload retries on next login.
+    return token;
+  } catch (err) {
+    // Best-effort: permission/native/upload failures must never crash the
+    // app. Registration retries on the next login.
+    console.warn('[push] registration skipped:', err instanceof Error ? err.message : err);
+    return null;
   }
-
-  return token;
 }
 
 /** Subscribe to incoming push notifications (foreground). */

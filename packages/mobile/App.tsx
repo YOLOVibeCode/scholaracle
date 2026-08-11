@@ -2,9 +2,10 @@
  * Scholaracle Mobile App — Root component.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, Alert } from 'react-native';
+import { useLinkingURL } from 'expo-linking';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -13,12 +14,14 @@ import { ConnectSourceScreen } from './src/screens/ConnectSourceScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
-import { registerForPushNotifications } from './src/notifications/pushSetup';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { registerForPushNotifications, addResponseListener } from './src/notifications/pushSetup';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
-import type { IStudentListItem } from './src/api/client';
+import { type IStudentListItem } from './src/api/client';
+import { isDemoDeepLink, DEMO_EMAIL, DEMO_PASSWORD } from './src/demo/demoLogin';
 
-type AppView = 'students' | 'connect-source' | 'dashboard' | 'sync' | 'run-history';
+type AppView = 'students' | 'connect-source' | 'dashboard' | 'sync' | 'run-history' | 'settings';
 
 interface INavState {
   readonly view: AppView;
@@ -27,8 +30,27 @@ interface INavState {
 }
 
 function AppContent(): React.ReactElement {
-  const { isLoggedIn, isLoading } = useAuth();
+  const { isLoggedIn, isLoading, login, accountEpoch } = useAuth();
   const [nav, setNav] = useState<INavState>({ view: 'students' });
+  const linkingUrl = useLinkingURL();
+  const handledDemoUrl = useRef<string | null>(null);
+
+  // scholarmancy://demo — quick-login to the public demo account. No
+  // pre-logout: a successful login overwrites the tokens anyway, and a
+  // failed one must leave the existing session untouched.
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isDemoDeepLink(linkingUrl) || handledDemoUrl.current === linkingUrl) return;
+    handledDemoUrl.current = linkingUrl ?? null;
+    void (async (): Promise<void> => {
+      try {
+        await login(DEMO_EMAIL, DEMO_PASSWORD);
+        setNav({ view: 'students' });
+      } catch {
+        Alert.alert('Demo unavailable', 'Could not sign in to the demo account right now.');
+      }
+    })();
+  }, [isLoading, linkingUrl, login]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -37,12 +59,31 @@ function AppContent(): React.ReactElement {
     }
   }, [isLoggedIn]);
 
+  // Notification taps open the app at the students list (data refetches on
+  // mount, so the fresh alert context is visible immediately).
+  useEffect(() => {
+    const subscription = addResponseListener(() => {
+      setNav({ view: 'students' });
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Reset navigation when the session ends so the next login starts clean.
+  useEffect(() => {
+    if (!isLoggedIn) setNav({ view: 'students' });
+  }, [isLoggedIn]);
+
   const startSync = useCallback(async (student: IStudentListItem) => {
-    const source = await connectedSourceStore.getForStudent(student.externalId);
+    // Sources are keyed by the external (SIS/portal) student id.
+    const source = student.studentId
+      ? await connectedSourceStore.getForStudent(student.studentId)
+      : null;
     if (!source) {
-      Alert.alert('No portal connected', 'Connect a school portal first, then sync.', [
-        { text: 'Connect', onPress: () => setNav({ view: 'connect-source', student }) },
-      ]);
+      Alert.alert(
+        'No portal connected',
+        `Connect a school portal for ${student.name} first, then sync.`,
+        [{ text: 'Connect', onPress: () => setNav({ view: 'connect-source', student }) }]
+      );
       return;
     }
     setNav({ view: 'sync', student, syncSource: source });
@@ -54,8 +95,8 @@ function AppContent(): React.ReactElement {
   if (nav.view === 'connect-source') {
     return (
       <ConnectSourceScreen
-        studentExternalId={nav.student?.externalId}
-        studentId={nav.student?._id}
+        studentExternalId={nav.student?.studentId}
+        studentId={nav.student?.id}
         onConnected={() =>
           setNav({ view: nav.student ? 'dashboard' : 'students', student: nav.student })
         }
@@ -69,7 +110,7 @@ function AppContent(): React.ReactElement {
   if (nav.view === 'dashboard' && nav.student) {
     return (
       <DashboardScreen
-        studentExternalId={nav.student.externalId}
+        studentId={nav.student.id}
         studentName={nav.student.name}
         onSync={() => {
           void startSync(nav.student!);
@@ -108,10 +149,16 @@ function AppContent(): React.ReactElement {
     );
   }
 
+  if (nav.view === 'settings') {
+    return <SettingsScreen onBack={() => setNav({ view: 'students' })} />;
+  }
+
   return (
     <StudentsScreen
+      key={accountEpoch}
       onSelectStudent={(student) => setNav({ view: 'dashboard', student })}
       onAddSource={() => setNav({ view: 'connect-source' })}
+      onOpenSettings={() => setNav({ view: 'settings' })}
     />
   );
 }
