@@ -1,6 +1,8 @@
 import type { Db, Collection } from 'mongodb';
 import { MongoQueue } from '../../queue/MongoQueue';
 import type { ISyncJobData } from '../../worker/SyncWorker';
+import { getErrorReporter } from '@scholaracle/contracts';
+import { logger } from '../../logger';
 
 // ---------------------------------------------------------------------------
 // SyncScheduler — enqueues 'sync' jobs on a schedule or immediately.
@@ -70,16 +72,14 @@ export class SyncScheduler {
     if (this._running) return;
     this._running = true;
     this._loopPromise = this._loop();
-    // eslint-disable-next-line no-console
-    console.log('[SyncScheduler] started');
+    logger.info('sync scheduler started');
   }
 
   public async stop(): Promise<void> {
     if (!this._running) return;
     this._running = false;
     if (this._loopPromise) await this._loopPromise;
-    // eslint-disable-next-line no-console
-    console.log('[SyncScheduler] stopped');
+    logger.info('sync scheduler stopped');
   }
 
   // -----------------------------------------------------------------------
@@ -115,9 +115,9 @@ export class SyncScheduler {
       { priority: 1, maxAttempts: 2 }
     );
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `[SyncScheduler] manual sync enqueued: job=${jobId} student=${params.studentId} provider=${params.provider}`
+    logger.info(
+      { jobId, studentId: params.studentId, provider: params.provider },
+      'manual sync enqueued'
     );
     return jobId;
   }
@@ -236,8 +236,7 @@ export class SyncScheduler {
     }
 
     if (enqueued > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[SyncScheduler] tick: enqueued ${enqueued} sync jobs`);
+      logger.info({ enqueued }, 'scheduler tick enqueued sync jobs');
     }
     return enqueued;
   }
@@ -251,7 +250,8 @@ export class SyncScheduler {
       try {
         await this.tick();
       } catch (err) {
-        console.error('[SyncScheduler] tick error:', err);
+        logger.error({ err, job: 'sync-scheduler' }, 'scheduler tick failed');
+        getErrorReporter().captureException(err, { job: 'sync-scheduler' });
       }
       await sleep(this._tickMs);
     }

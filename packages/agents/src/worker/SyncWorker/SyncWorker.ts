@@ -1,5 +1,7 @@
 import { MongoQueue, type IJob } from '../../queue/MongoQueue';
 import type { Db, Collection } from 'mongodb';
+import { getErrorReporter } from '@scholaracle/contracts';
+import { logger } from '../../logger';
 
 // ---------------------------------------------------------------------------
 // Sync job data shape (stored in MongoQueue job.data)
@@ -144,8 +146,7 @@ export class SyncWorker {
     if (this._running) return;
     this._running = true;
     this._loopPromise = this._loop();
-    // eslint-disable-next-line no-console
-    console.log('[SyncWorker] started');
+    logger.info('sync worker started');
   }
 
   public async stop(): Promise<void> {
@@ -153,8 +154,7 @@ export class SyncWorker {
     this._running = false;
     while (this._activeJobs > 0) await sleep(200);
     if (this._loopPromise) await this._loopPromise;
-    // eslint-disable-next-line no-console
-    console.log('[SyncWorker] stopped');
+    logger.info('sync worker stopped');
   }
 
   // -----------------------------------------------------------------------
@@ -355,12 +355,18 @@ export class SyncWorker {
         }
         this._activeJobs++;
         this.processJob(job)
-          .catch((e) => console.error('[SyncWorker] job error:', e))
+          .catch((e: unknown) => {
+            logger.error({ err: e, jobId: job._id.toString(), job: 'sync-worker' }, 'job failed');
+            getErrorReporter().captureException(e, {
+              jobId: job._id.toString(),
+              job: 'sync-worker',
+            });
+          })
           .finally(() => {
             this._activeJobs--;
           });
       } catch (err) {
-        console.error('[SyncWorker] loop error:', err);
+        logger.error({ err, job: 'sync-worker' }, 'worker loop error');
         await sleep(this._pollMs * 2);
       }
     }

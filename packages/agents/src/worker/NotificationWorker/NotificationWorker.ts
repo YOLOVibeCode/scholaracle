@@ -1,6 +1,7 @@
 import { MongoQueue, type IJob } from '../../queue/MongoQueue';
 import { NotificationService, type IResolvedRecipient } from '../../service/NotificationService';
-import { Alert, AlertType, NotificationChannel } from '@scholaracle/contracts';
+import { Alert, AlertType, NotificationChannel, getErrorReporter } from '@scholaracle/contracts';
+import { logger } from '../../logger';
 
 /** @deprecated Use resolveAllAlertRecipients. Resolved parent email/phone for delivery. */
 export interface IResolvedRecipients {
@@ -123,7 +124,7 @@ export class NotificationWorker {
         try {
           resolved = await this._resolveAllAlertRecipients(alert.studentId);
         } catch (err) {
-          console.error('Failed to resolve alert recipients:', err);
+          logger.error({ err, job: 'notification-worker' }, 'failed to resolve alert recipients');
         }
       } else if (this._resolveParentRecipients) {
         const parentUserId = (alert as Alert & { userId?: string }).userId;
@@ -132,7 +133,10 @@ export class NotificationWorker {
             const one = await this._resolveParentRecipients(parentUserId);
             resolved = one.parentEmail || one.parentPhone ? [one] : undefined;
           } catch (err) {
-            console.error('Failed to resolve parent recipients:', err);
+            logger.error(
+              { err, job: 'notification-worker' },
+              'failed to resolve parent recipients'
+            );
           }
         }
       }
@@ -188,14 +192,21 @@ export class NotificationWorker {
 
         this._activeJobs++;
         this.processJob(job)
-          .catch((error) => {
-            console.error('Error processing job:', error);
+          .catch((error: unknown) => {
+            logger.error(
+              { err: error, jobId: job._id.toString(), job: 'notification-worker' },
+              'job processing failed'
+            );
+            getErrorReporter().captureException(error, {
+              jobId: job._id.toString(),
+              job: 'notification-worker',
+            });
           })
           .finally(() => {
             this._activeJobs--;
           });
       } catch (error) {
-        console.error('Error in processing loop:', error);
+        logger.error({ err: error, job: 'notification-worker' }, 'processing loop error');
         await this._sleep(this._pollIntervalMs * 2);
       }
     }
