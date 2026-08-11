@@ -10,6 +10,7 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useAsyncData } from './useAsyncData';
+import { ApiClientError } from '@/lib/api/client';
 
 function suppressActWarnings(): () => void {
   const orig = console.error;
@@ -127,6 +128,62 @@ describe('useAsyncData Hook (ISP)', () => {
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
+  });
+
+  it('should expose structured errorInfo from ApiClientError while keeping error string', async () => {
+    const fetchFn = jest
+      .fn()
+      .mockRejectedValue(
+        new ApiClientError('Forbidden', 403, 'FORBIDDEN', undefined, 'req-42')
+      );
+
+    const { result } = renderHook(() => useAsyncData(fetchFn));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('Forbidden');
+    });
+
+    expect(result.current.errorInfo).toEqual({
+      message: 'Forbidden',
+      status: 403,
+      code: 'FORBIDDEN',
+      requestId: 'req-42',
+    });
+  });
+
+  it('should populate errorInfo with only a message for plain errors', async () => {
+    const fetchFn = jest.fn().mockRejectedValue(new Error('plain failure'));
+
+    const { result } = renderHook(() => useAsyncData(fetchFn));
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('plain failure');
+    });
+
+    expect(result.current.errorInfo).toEqual({ message: 'plain failure' });
+  });
+
+  it('should clear errorInfo after a successful retry', async () => {
+    const fetchFn = jest
+      .fn()
+      .mockRejectedValueOnce(new ApiClientError('Down', 503, 'EXTERNAL_SERVICE_ERROR'))
+      .mockResolvedValue('recovered');
+
+    const { result } = renderHook(() => useAsyncData(fetchFn));
+
+    await waitFor(() => {
+      expect(result.current.errorInfo).not.toBeNull();
+    });
+
+    await act(async () => {
+      result.current.retry();
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toBe('recovered');
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.errorInfo).toBeNull();
   });
 });
 

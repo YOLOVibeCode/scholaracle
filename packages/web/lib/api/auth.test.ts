@@ -165,8 +165,9 @@ describe('authApi', () => {
 
       const result = await authApi.register('dup@b.c', 'pass', 'C');
 
+      // Raw fetch rejections are normalized so internal messages never leak to the UI.
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Email in use');
+      expect(result.error).toBe('Unable to reach the server. Check your connection and try again.');
     });
   });
 
@@ -221,7 +222,7 @@ describe('authApi', () => {
       const result = await authApi.requestPasswordReset('user@example.com');
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Network error');
+      expect(result.error).toBe('Unable to reach the server. Check your connection and try again.');
     });
   });
 

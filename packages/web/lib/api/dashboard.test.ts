@@ -216,12 +216,10 @@ describe('dashboardApi', () => {
   // Error handling
   // -------------------------------------------------------------------------
 
-  it('returns zeroed stats when the students request fails', async () => {
+  it('rejects when the students request fails', async () => {
     fetchSpy.mockRejectedValue(new Error('Network failure'));
 
-    const stats = await dashboardApi.getStats();
-
-    expect(stats).toEqual(ZEROED_STATS);
+    await expect(dashboardApi.getStats()).rejects.toThrow('Unable to reach the server. Check your connection and try again.');
   });
 
   // -------------------------------------------------------------------------

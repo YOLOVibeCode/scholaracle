@@ -6,11 +6,22 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { ApiClientError } from '@/lib/api/client';
+
+/** Structured error info preserved from ApiClientError (status/code/requestId). */
+export interface IAsyncError {
+  readonly message: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly requestId?: string;
+}
 
 export interface IUseAsyncDataResult<T> {
   readonly data: T | null;
   readonly isLoading: boolean;
   readonly error: string | null;
+  /** Structured error details — lets pages branch on 403 vs 500, show requestId, etc. */
+  readonly errorInfo: IAsyncError | null;
   readonly retry: () => void;
   readonly refresh: () => void;
 }
@@ -38,6 +49,7 @@ export function useAsyncData<T>(
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<IAsyncError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,15 +65,22 @@ export function useAsyncData<T>(
 
     setIsLoading(true);
     setError(null);
+    setErrorInfo(null);
 
     try {
       const result = await fetchFnRef.current();
       setData(result);
       setError(null);
+      setErrorInfo(null);
       setAttempt(0);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
       setError(errorMessage);
+      setErrorInfo(
+        err instanceof ApiClientError
+          ? { message: err.message, status: err.status, code: err.code, requestId: err.requestId }
+          : { message: errorMessage }
+      );
       setData(null);
 
       // Retry logic - only auto-retry if we haven't exceeded retry count
@@ -107,6 +126,7 @@ export function useAsyncData<T>(
     }
     setAttempt(0);
     setError(null);
+    setErrorInfo(null);
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
@@ -118,6 +138,7 @@ export function useAsyncData<T>(
     data,
     isLoading,
     error,
+    errorInfo,
     retry,
     refresh,
   };
