@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { PasswordResetTokenRepository, RefreshTokenRepository } from '@scholaracle/database';
 import { authRouter } from './auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 const noOpEmailSender = {
   sendResetLink: async (): Promise<void> => {},
@@ -47,6 +48,7 @@ describe('Auth API Routes', () => {
         refreshTokenExpiresIn: '30d',
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -95,6 +97,7 @@ describe('Auth API Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('Missing required fields');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should reject duplicate email registration', async () => {

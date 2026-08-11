@@ -18,6 +18,7 @@ import { AlertType } from '@scholaracle/contracts';
 import type { NotificationService, MongoQueue } from '@scholaracle/agents';
 import { alertsRouter } from './alerts';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('POST /api/alerts — DEF-003 (auth + IDOR)', () => {
   let app: Express;
@@ -58,6 +59,7 @@ describe('POST /api/alerts — DEF-003 (auth + IDOR)', () => {
         studentReader: studentRepository,
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {

@@ -2,6 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { communicationsWebhooksRouter } from './communications';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 import { CommunicationLogRepository } from '@scholaracle/database';
 
 describe('Communications Webhooks', () => {
@@ -21,6 +22,7 @@ describe('Communications Webhooks', () => {
       '/api/webhooks/communications',
       communicationsWebhooksRouter({ database, webhookSecret: 'test-secret' })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -74,6 +76,7 @@ describe('Communications Webhooks', () => {
       .send({ status: 'opened' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('logId and status are required');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 when status is missing', async () => {

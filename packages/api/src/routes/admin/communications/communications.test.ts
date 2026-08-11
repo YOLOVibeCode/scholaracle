@@ -5,6 +5,7 @@ import { communicationsRouter } from './communications';
 import { UserRepository, AdminStepUpChallengeRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Communications Routes', () => {
   let app: Express;
@@ -67,6 +68,7 @@ describe('Admin Communications Routes', () => {
       '/api/admin/communications',
       communicationsRouter({ database, jwtSecret: 'test-secret' })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -191,6 +193,19 @@ describe('Admin Communications Routes', () => {
       expect(listRes.body.data[0].templateId).toBe(templateId);
       expect(listRes.body.data[0].templateName).toBe('Templated');
       expect(listRes.body.data[0].subject).toBe('Templated Subject');
+    });
+
+    it('should return 404 with NOT_FOUND code for unknown recipient', async () => {
+      const sendRes = await request(app)
+        .post('/api/admin/communications/send')
+        .set('Authorization', `Bearer ${supportToken}`)
+        .send({
+          recipientEmail: 'no-such-user@example.com',
+          content: 'Hello',
+        });
+      expect(sendRes.status).toBe(404);
+      expect(sendRes.body.success).toBe(false);
+      expect(sendRes.body.code).toBe('NOT_FOUND');
     });
   });
 

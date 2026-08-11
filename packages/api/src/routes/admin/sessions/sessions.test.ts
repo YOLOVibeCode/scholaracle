@@ -5,6 +5,7 @@ import { SessionRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
 import { adminSessionsRouter } from './sessions';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Sessions Routes', () => {
   let app: Express;
@@ -45,6 +46,7 @@ describe('Admin Sessions Routes', () => {
         adminJwtSecret: 'test-secret',
       })
     );
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -117,6 +119,7 @@ describe('Admin Sessions Routes', () => {
         .delete('/api/admin/sessions/507f1f77bcf86cd799439011')
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(404);
+      expect(res.body.code).toBe('NOT_FOUND');
     });
   });
 });

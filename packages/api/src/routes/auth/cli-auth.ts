@@ -14,7 +14,9 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'node:crypto';
 import type { Db, Collection } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { authMiddleware, type IAuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { UserRepository } from '@scholaracle/database';
 
 const DEVICE_CODE_BYTES = 32;
@@ -69,171 +71,156 @@ export function cliAuthRouter(config: ICliAuthRouterConfig): Router {
    * POST /api/auth/cli/request
    * Generate a new device authorization request. No auth required.
    */
-  router.post('/request', (_req: Request, res: Response) => {
-    void (async (): Promise<void> => {
-      try {
-        const deviceCode = crypto.randomBytes(DEVICE_CODE_BYTES).toString('hex');
-        const userCode = generateUserCode();
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + EXPIRY_MS);
+  router.post(
+    '/request',
+    asyncHandler(async (_req: Request, res: Response) => {
+      const deviceCode = crypto.randomBytes(DEVICE_CODE_BYTES).toString('hex');
+      const userCode = generateUserCode();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + EXPIRY_MS);
 
-        await getCollection(database).insertOne({
-          deviceCode,
-          userCode,
-          status: 'pending',
-          createdAt: now,
-          expiresAt,
-        });
+      await getCollection(database).insertOne({
+        deviceCode,
+        userCode,
+        status: 'pending',
+        createdAt: now,
+        expiresAt,
+      });
 
-        const verificationUrl = `${baseUrl}/cli-auth?code=${userCode}`;
+      const verificationUrl = `${baseUrl}/cli-auth?code=${userCode}`;
 
-        res.json({
-          success: true,
-          deviceCode,
-          userCode,
-          verificationUrl,
-          expiresIn: Math.floor(EXPIRY_MS / 1000),
-          pollInterval: POLL_INTERVAL_S,
-        });
-      } catch {
-        res.status(500).json({ success: false, error: 'Failed to create device auth request' });
-      }
-    })();
-  });
+      res.json({
+        success: true,
+        deviceCode,
+        userCode,
+        verificationUrl,
+        expiresIn: Math.floor(EXPIRY_MS / 1000),
+        pollInterval: POLL_INTERVAL_S,
+      });
+    })
+  );
 
   /**
    * GET /api/auth/cli/poll/:deviceCode
    * Poll for authorization status. No auth required (deviceCode is secret).
    */
-  router.get('/poll/:deviceCode', (req: Request, res: Response) => {
-    void (async (): Promise<void> => {
-      try {
-        const { deviceCode } = req.params;
-        const record = await getCollection(database).findOne({ deviceCode });
+  router.get(
+    '/poll/:deviceCode',
+    asyncHandler(async (req: Request, res: Response) => {
+      const { deviceCode } = req.params;
+      const record = await getCollection(database).findOne({ deviceCode });
 
-        if (!record) {
-          res.status(404).json({ success: false, error: 'Device code not found or expired' });
-          return;
-        }
-
-        if (record.expiresAt < new Date()) {
-          res.status(410).json({ success: false, error: 'Device code expired', status: 'expired' });
-          return;
-        }
-
-        if (record.status === 'denied') {
-          res.json({ success: false, status: 'denied' });
-          return;
-        }
-
-        if (record.status === 'approved' && record.token) {
-          // Delete the record after successful retrieval (one-time use)
-          await getCollection(database).deleteOne({ deviceCode });
-          res.json({
-            success: true,
-            status: 'approved',
-            token: record.token,
-            refreshToken: record.refreshToken,
-          });
-          return;
-        }
-
-        res.json({ success: true, status: 'pending', pollInterval: POLL_INTERVAL_S });
-      } catch {
-        res.status(500).json({ success: false, error: 'Poll failed' });
+      if (!record) {
+        throw new NotFoundError('Device code not found or expired');
       }
-    })();
-  });
+
+      if (record.expiresAt < new Date()) {
+        res.status(410).json({ success: false, error: 'Device code expired', status: 'expired' });
+        return;
+      }
+
+      if (record.status === 'denied') {
+        res.json({ success: false, status: 'denied' });
+        return;
+      }
+
+      if (record.status === 'approved' && record.token) {
+        // Delete the record after successful retrieval (one-time use)
+        await getCollection(database).deleteOne({ deviceCode });
+        res.json({
+          success: true,
+          status: 'approved',
+          token: record.token,
+          refreshToken: record.refreshToken,
+        });
+        return;
+      }
+
+      res.json({ success: true, status: 'pending', pollInterval: POLL_INTERVAL_S });
+    })
+  );
 
   /**
    * POST /api/auth/cli/approve
    * Approve a device code. Requires authenticated user.
    */
-  router.post('/approve', authMiddleware(authService), (req: Request, res: Response) => {
-    void (async (): Promise<void> => {
-      try {
-        const authReq = req as IAuthenticatedRequest;
-        const { userCode } = req.body as { userCode?: string };
+  router.post(
+    '/approve',
+    authMiddleware(authService),
+    asyncHandler(async (req: Request, res: Response) => {
+      const authReq = req as IAuthenticatedRequest;
+      const { userCode } = req.body as { userCode?: string };
 
-        if (!userCode || typeof userCode !== 'string') {
-          res.status(400).json({ success: false, error: 'userCode is required' });
-          return;
-        }
-
-        const normalizedCode = userCode.toUpperCase().trim();
-        const record = await getCollection(database).findOne({
-          userCode: normalizedCode,
-          status: 'pending',
-          expiresAt: { $gt: new Date() },
-        });
-
-        if (!record) {
-          res.status(404).json({ success: false, error: 'Invalid or expired code' });
-          return;
-        }
-
-        const userId = authReq.userId!;
-        const email = authReq.userEmail!;
-
-        // Issue a long-lived token for CLI use (7 days)
-        const token = authService.issueTokenForUser(userId, email);
-
-        // Look up user name for response
-        const userRepo = new UserRepository(database);
-        const user = await userRepo.findById(userId);
-
-        await getCollection(database).updateOne(
-          { userCode: normalizedCode, status: 'pending' },
-          {
-            $set: {
-              status: 'approved' as const,
-              approvedByUserId: userId,
-              approvedByEmail: email,
-              token,
-            },
-          }
-        );
-
-        res.json({
-          success: true,
-          message: `CLI authorized for ${user?.name ?? email}`,
-        });
-      } catch {
-        res.status(500).json({ success: false, error: 'Approval failed' });
+      if (!userCode || typeof userCode !== 'string') {
+        throw new ValidationError('userCode is required');
       }
-    })();
-  });
+
+      const normalizedCode = userCode.toUpperCase().trim();
+      const record = await getCollection(database).findOne({
+        userCode: normalizedCode,
+        status: 'pending',
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (!record) {
+        throw new NotFoundError('Invalid or expired code');
+      }
+
+      const userId = authReq.userId!;
+      const email = authReq.userEmail!;
+
+      // Issue a long-lived token for CLI use (7 days)
+      const token = authService.issueTokenForUser(userId, email);
+
+      // Look up user name for response
+      const userRepo = new UserRepository(database);
+      const user = await userRepo.findById(userId);
+
+      await getCollection(database).updateOne(
+        { userCode: normalizedCode, status: 'pending' },
+        {
+          $set: {
+            status: 'approved' as const,
+            approvedByUserId: userId,
+            approvedByEmail: email,
+            token,
+          },
+        }
+      );
+
+      res.json({
+        success: true,
+        message: `CLI authorized for ${user?.name ?? email}`,
+      });
+    })
+  );
 
   /**
    * POST /api/auth/cli/deny
    * Deny a device code. Requires authenticated user.
    */
-  router.post('/deny', authMiddleware(authService), (req: Request, res: Response) => {
-    void (async (): Promise<void> => {
-      try {
-        const { userCode } = req.body as { userCode?: string };
-        if (!userCode || typeof userCode !== 'string') {
-          res.status(400).json({ success: false, error: 'userCode is required' });
-          return;
-        }
-
-        const normalizedCode = userCode.toUpperCase().trim();
-        const result = await getCollection(database).updateOne(
-          { userCode: normalizedCode, status: 'pending', expiresAt: { $gt: new Date() } },
-          { $set: { status: 'denied' as const } }
-        );
-
-        if (result.matchedCount === 0) {
-          res.status(404).json({ success: false, error: 'Invalid or expired code' });
-          return;
-        }
-
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ success: false, error: 'Deny failed' });
+  router.post(
+    '/deny',
+    authMiddleware(authService),
+    asyncHandler(async (req: Request, res: Response) => {
+      const { userCode } = req.body as { userCode?: string };
+      if (!userCode || typeof userCode !== 'string') {
+        throw new ValidationError('userCode is required');
       }
-    })();
-  });
+
+      const normalizedCode = userCode.toUpperCase().trim();
+      const result = await getCollection(database).updateOne(
+        { userCode: normalizedCode, status: 'pending', expiresAt: { $gt: new Date() } },
+        { $set: { status: 'denied' as const } }
+      );
+
+      if (result.matchedCount === 0) {
+        throw new NotFoundError('Invalid or expired code');
+      }
+
+      res.json({ success: true });
+    })
+  );
 
   return router;
 }

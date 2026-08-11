@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { agendaRouter } from './agenda';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Agenda API', () => {
   let app: Express;
@@ -32,6 +33,7 @@ describe('Agenda API', () => {
     app = express();
     app.use(express.json());
     app.use('/api/agenda', agendaRouter({ database }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -95,6 +97,7 @@ describe('Agenda API', () => {
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toBe('Missing from/to ISO timestamps');
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns empty items when no assignments exist', async () => {

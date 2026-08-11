@@ -9,6 +9,7 @@ import {
 import { AuthService } from '@scholaracle/auth';
 import { authRouter } from '../auth/auth';
 import { sessionsRouter } from './sessions';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 const noOpEmailSender = {
   sendResetLink: async (): Promise<void> => {},
@@ -71,6 +72,7 @@ describe('Sessions API Routes', () => {
       })
     );
     app.use('/api/sessions', sessionsRouter({ database, authService }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -153,6 +155,7 @@ describe('Sessions API Routes', () => {
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toContain('not found');
+      expect(response.body.code).toBe('NOT_FOUND');
     });
   });
 

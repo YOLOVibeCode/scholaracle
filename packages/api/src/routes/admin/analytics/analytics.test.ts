@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { analyticsRouter } from './analytics';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler, notFoundHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Analytics Routes', () => {
   let app: Express;
@@ -27,6 +28,8 @@ describe('Admin Analytics Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/admin/analytics', analyticsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(notFoundHandler);
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -116,6 +119,16 @@ describe('Admin Analytics Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.churnRate).toBeDefined();
+    });
+  });
+
+  describe('error envelope', () => {
+    it('should return NOT_FOUND code for unknown route', async () => {
+      const response = await request(app)
+        .get('/api/admin/analytics/does-not-exist')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(response.status).toBe(404);
+      expect(response.body.code).toBe('NOT_FOUND');
     });
   });
 });

@@ -2,6 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { seedRouter } from './seed';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Seed API Routes', () => {
   let app: Express;
@@ -25,6 +26,7 @@ describe('Seed API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/seed', seedRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -85,6 +87,7 @@ describe('Seed API Routes', () => {
           expect(response.status).toBe(403);
           expect(response.body.success).toBe(false);
           expect(response.body.error).toBe('Seeding is not allowed in production');
+          expect(response.body.code).toBe('FORBIDDEN');
         } finally {
           process.env['NODE_ENV'] = originalEnv;
         }

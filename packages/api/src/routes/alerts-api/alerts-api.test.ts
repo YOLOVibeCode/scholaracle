@@ -5,6 +5,7 @@ import { AuthService } from '@scholaracle/auth';
 import { AlertRepository } from '@scholaracle/database';
 import { alertsApiRouter } from './alerts-api';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Alerts API Routes', () => {
   let app: Express;
@@ -37,6 +38,7 @@ describe('Alerts API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -161,6 +163,7 @@ describe('Alerts API Routes', () => {
       expect(response.status).toBe(403);
       expect(response.body.success).toBe(false);
       expect(response.body.error).toBe('Forbidden');
+      expect(response.body.code).toBe('FORBIDDEN');
     });
   });
 

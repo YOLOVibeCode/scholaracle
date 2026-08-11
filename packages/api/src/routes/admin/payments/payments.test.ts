@@ -5,6 +5,7 @@ import { paymentsRouter } from './payments';
 import { AdminStepUpChallengeRepository, PaymentRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Payment Routes', () => {
   let app: Express;
@@ -48,6 +49,7 @@ describe('Admin Payment Routes', () => {
       })
     );
     app.use('/api/admin/payments', paymentsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -189,6 +191,7 @@ describe('Admin Payment Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('reason');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should require step-up when MFA is enabled', async () => {

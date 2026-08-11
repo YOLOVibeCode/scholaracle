@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { billingRouter } from './billing';
+import { createErrorHandler } from '../../middleware/errorHandler';
 import type { SquareService } from '../../services/SquareService';
 
 // Mock @scholaracle/database
@@ -62,6 +63,7 @@ describe('Billing Routes', () => {
         squareService: mockSquareService as unknown as SquareService,
       })
     );
+    app.use(createErrorHandler());
   });
 
   describe('POST /api/billing/checkout', () => {
@@ -119,6 +121,7 @@ describe('Billing Routes', () => {
       const res = await request(app).post('/api/billing/portal').send({}).expect(404);
 
       expect(res.body.error).toContain('No billing account');
+      expect(res.body.code).toBe('NOT_FOUND');
     });
   });
 

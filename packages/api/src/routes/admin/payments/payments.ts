@@ -2,11 +2,13 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { PaymentRepository, AuditLogRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
+import { ExternalServiceError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import {
   adminAuthMiddleware,
   type IAdminAuthenticatedRequest,
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 import type { SquareService } from '../../../services/SquareService';
 
 export interface IPaymentsRouterConfig {
@@ -20,56 +22,49 @@ async function handleGetPayments(
   res: Response,
   paymentRepository: PaymentRepository
 ): Promise<void> {
-  try {
-    const status = req.query['status'] as string | undefined;
-    const userId = req.query['userId'] as string | undefined;
+  const status = req.query['status'] as string | undefined;
+  const userId = req.query['userId'] as string | undefined;
 
-    let payments;
-    if (userId) {
-      payments = await paymentRepository.findByUserId(userId);
-    } else {
-      // Get all payments (limited)
-      const collection = paymentRepository['_collection'];
-      const filter: Record<string, unknown> = {};
+  let payments;
+  if (userId) {
+    payments = await paymentRepository.findByUserId(userId);
+  } else {
+    // Get all payments (limited)
+    const collection = paymentRepository['_collection'];
+    const filter: Record<string, unknown> = {};
 
-      if (status) {
-        filter['status'] = status;
-      }
-
-      const docs = await collection.find(filter).sort({ createdAt: -1 }).limit(100).toArray();
-      payments = docs.map((doc: unknown) => doc);
+    if (status) {
+      filter['status'] = status;
     }
 
-    res.status(200).json({
-      success: true,
-      data: Array.isArray(payments)
-        ? payments.map(
-            (payment: {
-              _id?: { toString: () => string };
-              userId: string;
-              amount: number;
-              currency: string;
-              status: string;
-              paymentMethod: string;
-              createdAt?: Date;
-            }) => ({
-              id: payment._id?.toString(),
-              userId: payment.userId,
-              amount: payment.amount / 100, // Convert to dollars
-              currency: payment.currency,
-              status: payment.status,
-              paymentMethod: payment.paymentMethod,
-              createdAt: payment.createdAt?.toISOString(),
-            })
-          )
-        : [],
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+    const docs = await collection.find(filter).sort({ createdAt: -1 }).limit(100).toArray();
+    payments = docs.map((doc: unknown) => doc);
   }
+
+  res.status(200).json({
+    success: true,
+    data: Array.isArray(payments)
+      ? payments.map(
+          (payment: {
+            _id?: { toString: () => string };
+            userId: string;
+            amount: number;
+            currency: string;
+            status: string;
+            paymentMethod: string;
+            createdAt?: Date;
+          }) => ({
+            id: payment._id?.toString(),
+            userId: payment.userId,
+            amount: payment.amount / 100, // Convert to dollars
+            currency: payment.currency,
+            status: payment.status,
+            paymentMethod: payment.paymentMethod,
+            createdAt: payment.createdAt?.toISOString(),
+          })
+        )
+      : [],
+  });
 }
 
 async function handleGetPayment(
@@ -77,42 +72,30 @@ async function handleGetPayment(
   res: Response,
   paymentRepository: PaymentRepository
 ): Promise<void> {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({ success: false, error: 'Payment ID is required' });
-      return;
-    }
-
-    const payment = await paymentRepository.findById(id);
-
-    if (!payment) {
-      res.status(404).json({
-        success: false,
-        error: 'Payment not found',
-      });
-      return;
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        id: payment._id?.toString(),
-        userId: payment.userId,
-        amount: payment.amount / 100,
-        currency: payment.currency,
-        status: payment.status,
-        paymentMethod: payment.paymentMethod,
-        amountRefunded: payment.amountRefunded / 100,
-        createdAt: payment.createdAt.toISOString(),
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Payment ID is required');
   }
+
+  const payment = await paymentRepository.findById(id);
+
+  if (!payment) {
+    throw new NotFoundError('Payment not found');
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      id: payment._id?.toString(),
+      userId: payment.userId,
+      amount: payment.amount / 100,
+      currency: payment.currency,
+      status: payment.status,
+      paymentMethod: payment.paymentMethod,
+      amountRefunded: payment.amountRefunded / 100,
+      createdAt: payment.createdAt.toISOString(),
+    },
+  });
 }
 
 async function handleRefundPayment(
@@ -124,76 +107,57 @@ async function handleRefundPayment(
   adminEmail: string,
   config: IPaymentsRouterConfig
 ): Promise<void> {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({ success: false, error: 'Payment ID is required' });
-      return;
-    }
-
-    const { amount, reason } = req.body;
-
-    if (!amount || !reason) {
-      res.status(400).json({
-        success: false,
-        error: 'Amount and reason are required',
-      });
-      return;
-    }
-
-    const amountInCents = Math.round(amount * 100);
-
-    // Attempt real refund via Square if configured
-    const payment = await paymentRepository.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, error: 'Payment not found' });
-      return;
-    }
-
-    if (config.squareService && payment.squarePaymentId) {
-      try {
-        await config.squareService.refundPayment(payment.squarePaymentId, amountInCents, reason);
-      } catch (err) {
-        res.status(502).json({
-          success: false,
-          error: `Square refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        });
-        return;
-      }
-    }
-
-    const success = await paymentRepository.recordRefund(id, amountInCents, adminId, reason);
-
-    if (!success) {
-      res.status(404).json({
-        success: false,
-        error: 'Payment not found',
-      });
-      return;
-    }
-
-    // Create audit log
-    await auditLogRepository.create({
-      adminUserId: adminId,
-      adminEmail,
-      action: 'payment:refund',
-      entityType: 'payment',
-      entityId: id,
-      reason,
-      metadata: { amount: amountInCents },
-      ipAddress: req.ip ?? 'unknown',
-      userAgent: req.headers['user-agent'] ?? 'unknown',
-    });
-
-    res.status(200).json({
-      success: true,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Payment ID is required');
   }
+
+  const { amount, reason } = req.body;
+
+  if (!amount || !reason) {
+    throw new ValidationError('Amount and reason are required');
+  }
+
+  const amountInCents = Math.round(amount * 100);
+
+  // Attempt real refund via Square if configured
+  const payment = await paymentRepository.findById(id);
+  if (!payment) {
+    throw new NotFoundError('Payment not found');
+  }
+
+  if (config.squareService && payment.squarePaymentId) {
+    try {
+      await config.squareService.refundPayment(payment.squarePaymentId, amountInCents, reason);
+    } catch (err) {
+      throw new ExternalServiceError(
+        `Square refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  const success = await paymentRepository.recordRefund(id, amountInCents, adminId, reason);
+
+  if (!success) {
+    throw new NotFoundError('Payment not found');
+  }
+
+  // Create audit log
+  await auditLogRepository.create({
+    adminUserId: adminId,
+    adminEmail,
+    action: 'payment:refund',
+    entityType: 'payment',
+    entityId: id,
+    reason,
+    metadata: { amount: amountInCents },
+    ipAddress: req.ip ?? 'unknown',
+    userAgent: req.headers['user-agent'] ?? 'unknown',
+  });
+
+  res.status(200).json({
+    success: true,
+  });
 }
 
 async function handleRetryPayment(
@@ -204,47 +168,37 @@ async function handleRetryPayment(
   adminId: string,
   adminEmail: string
 ): Promise<void> {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      res.status(400).json({ success: false, error: 'Payment ID is required' });
-      return;
-    }
-
-    const payment = await paymentRepository.findById(id);
-    if (!payment) {
-      res.status(404).json({ success: false, error: 'Payment not found' });
-      return;
-    }
-
-    if (payment.status === 'succeeded') {
-      res.status(400).json({ success: false, error: 'Payment already succeeded — cannot retry' });
-      return;
-    }
-
-    await paymentRepository.updateStatus(id, 'retry_pending');
-
-    // Create audit log
-    await auditLogRepository.create({
-      adminUserId: adminId,
-      adminEmail,
-      action: 'payment:retry',
-      entityType: 'payment',
-      entityId: id,
-      ipAddress: req.ip ?? 'unknown',
-      userAgent: req.headers['user-agent'] ?? 'unknown',
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Payment marked for retry. Customer will need to complete a new checkout.',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const { id } = req.params;
+  if (!id) {
+    throw new ValidationError('Payment ID is required');
   }
+
+  const payment = await paymentRepository.findById(id);
+  if (!payment) {
+    throw new NotFoundError('Payment not found');
+  }
+
+  if (payment.status === 'succeeded') {
+    throw new ValidationError('Payment already succeeded — cannot retry');
+  }
+
+  await paymentRepository.updateStatus(id, 'retry_pending');
+
+  // Create audit log
+  await auditLogRepository.create({
+    adminUserId: adminId,
+    adminEmail,
+    action: 'payment:retry',
+    entityType: 'payment',
+    entityId: id,
+    ipAddress: req.ip ?? 'unknown',
+    userAgent: req.headers['user-agent'] ?? 'unknown',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment marked for retry. Customer will need to complete a new checkout.',
+  });
 }
 
 export function paymentsRouter(config: IPaymentsRouterConfig): Router {
@@ -256,20 +210,22 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
   // Apply admin auth middleware to all routes
   router.use(adminAuthMiddleware(adminAuthService));
 
-  router.get('/', (req: Request, res: Response) => {
-    void handleGetPayments(req, res, paymentRepository);
-  });
+  router.get(
+    '/',
+    asyncHandler((req: Request, res: Response) => handleGetPayments(req, res, paymentRepository))
+  );
 
-  router.get('/:id', (req: Request, res: Response) => {
-    void handleGetPayment(req, res, paymentRepository);
-  });
+  router.get(
+    '/:id',
+    asyncHandler((req: Request, res: Response) => handleGetPayment(req, res, paymentRepository))
+  );
 
   router.post(
     '/:id/refund',
     requireAdminStepUp({ database: config.database, jwtSecret: config.jwtSecret }),
-    (req: Request, res: Response) => {
+    asyncHandler((req: Request, res: Response) => {
       const authReq = req as IAdminAuthenticatedRequest;
-      void handleRefundPayment(
+      return handleRefundPayment(
         req,
         res,
         paymentRepository,
@@ -278,20 +234,23 @@ export function paymentsRouter(config: IPaymentsRouterConfig): Router {
         authReq.adminEmail!,
         config
       );
-    }
+    })
   );
 
-  router.post('/:id/retry', (req: Request, res: Response) => {
-    const authReq = req as IAdminAuthenticatedRequest;
-    void handleRetryPayment(
-      req,
-      res,
-      paymentRepository,
-      auditLogRepository,
-      authReq.adminId!,
-      authReq.adminEmail!
-    );
-  });
+  router.post(
+    '/:id/retry',
+    asyncHandler((req: Request, res: Response) => {
+      const authReq = req as IAdminAuthenticatedRequest;
+      return handleRetryPayment(
+        req,
+        res,
+        paymentRepository,
+        auditLogRepository,
+        authReq.adminId!,
+        authReq.adminEmail!
+      );
+    })
+  );
 
   return router;
 }

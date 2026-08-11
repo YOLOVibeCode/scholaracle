@@ -5,6 +5,7 @@ import { UserRepository } from '@scholaracle/database';
 import { AuthService } from '@scholaracle/auth';
 import { settingsRouter } from './settings';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Settings API Routes', () => {
   let app: Express;
@@ -59,6 +60,7 @@ describe('Settings API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/settings', authMiddleware(authService), settingsRouter({ database }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -236,6 +238,7 @@ describe('Settings API Routes', () => {
         .send(updateData);
 
       expect(response.status).toBe(400);
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
   });
 

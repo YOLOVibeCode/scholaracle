@@ -4,6 +4,7 @@ import { MongoClient, type Db } from 'mongodb';
 import { notesRouter } from './notes';
 import { UserRepository } from '@scholaracle/database';
 import { createTestAdmin } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Notes Routes', () => {
   let app: Express;
@@ -38,6 +39,7 @@ describe('Admin Notes Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/admin', notesRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -90,6 +92,7 @@ describe('Admin Notes Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('required');
+      expect(response.body.code).toBe('VALIDATION_ERROR');
     });
   });
 

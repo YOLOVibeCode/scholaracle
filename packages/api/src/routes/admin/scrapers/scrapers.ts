@@ -3,7 +3,9 @@ import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { UserRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
+import { NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 import {
   connectStep,
   crawlStep,
@@ -29,8 +31,9 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
    * GET /api/admin/scrapers/stats
    * Summary card data: total caches, jobs by status, failure counts, unique platforms.
    */
-  router.get('/stats', async (_req: Request, res: Response) => {
-    try {
+  router.get(
+    '/stats',
+    asyncHandler(async (_req: Request, res: Response) => {
       const now = new Date();
       const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -73,20 +76,16 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
           jobsByStatus: statusCounts,
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/scrapers/caches
    * List generated_scrapers with pagination and filters.
    */
-  router.get('/caches', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/caches',
+    asyncHandler(async (req: Request, res: Response) => {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
       const limit = Math.min(
         100,
@@ -148,24 +147,19 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         limit,
         totalPages: Math.ceil(total / limit),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/scrapers/caches/:id
    * Single cache entry with full scraperCode, transformerCode, metadata.
    */
-  router.get('/caches/:id', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/caches/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const id = req.params['id'];
       if (!id) {
-        res.status(400).json({ success: false, error: 'Cache ID required' });
-        return;
+        throw new ValidationError('Cache ID required');
       }
       let doc;
       try {
@@ -174,8 +168,7 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         doc = null;
       }
       if (!doc) {
-        res.status(404).json({ success: false, error: 'Cache not found' });
-        return;
+        throw new NotFoundError('Cache not found');
       }
       const d = doc as Record<string, unknown>;
       res.status(200).json({
@@ -194,24 +187,19 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
           pageFingerprint: d['pageFingerprint'],
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/admin/scrapers/caches/:id
    * Purge a cached scraper.
    */
-  router.delete('/caches/:id', async (req: Request, res: Response) => {
-    try {
+  router.delete(
+    '/caches/:id',
+    asyncHandler(async (req: Request, res: Response) => {
       const id = req.params['id'];
       if (!id) {
-        res.status(400).json({ success: false, error: 'Cache ID required' });
-        return;
+        throw new ValidationError('Cache ID required');
       }
       let result;
       try {
@@ -220,24 +208,19 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         result = { deletedCount: 0 };
       }
       if (result.deletedCount === 0) {
-        res.status(404).json({ success: false, error: 'Cache not found' });
-        return;
+        throw new NotFoundError('Cache not found');
       }
       res.status(200).json({ success: true, deleted: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/scrapers/jobs
    * List scraper_generation_jobs with pagination and filters.
    */
-  router.get('/jobs', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/jobs',
+    asyncHandler(async (req: Request, res: Response) => {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
       const limit = Math.min(
         100,
@@ -285,29 +268,23 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         limit,
         totalPages: Math.ceil(total / limit),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/scrapers/jobs/:jobId
    * Single job with full step details.
    */
-  router.get('/jobs/:jobId', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/jobs/:jobId',
+    asyncHandler(async (req: Request, res: Response) => {
       const jobId = req.params['jobId'];
       if (!jobId) {
-        res.status(400).json({ success: false, error: 'Job ID required' });
-        return;
+        throw new ValidationError('Job ID required');
       }
       const doc = await scraperGenerationJobsCollection.findOne({ jobId });
       if (!doc) {
-        res.status(404).json({ success: false, error: 'Job not found' });
-        return;
+        throw new NotFoundError('Job not found');
       }
       const d = doc as Record<string, unknown>;
       res.status(200).json({
@@ -327,20 +304,16 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
           updatedAt: (d['updatedAt'] as Date)?.toISOString?.(),
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/admin/scrapers/reports
    * List scraper_reports (failure feed) with optional cacheKey filter.
    */
-  router.get('/reports', async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/reports',
+    asyncHandler(async (req: Request, res: Response) => {
       const page = Math.max(1, parseInt((req.query['page'] as string) || '1') || 1);
       const limit = Math.min(
         100,
@@ -387,26 +360,21 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
         limit,
         totalPages: Math.ceil(total / limit),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/admin/scrapers/test
    * Test a scraper: connect + crawl + auth check (no actual login).
    * Body: { loginUrl, username?, password? } (credentials not used for login, only for future use if needed).
    */
-  router.post('/test', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/test',
+    asyncHandler(async (req: Request, res: Response) => {
       const body = req.body ?? {};
       const loginUrl = (body['loginUrl'] as string)?.trim();
       if (!loginUrl) {
-        res.status(400).json({ success: false, error: 'loginUrl is required' });
-        return;
+        throw new ValidationError('loginUrl is required');
       }
 
       const connectResult = await connectStep(loginUrl);
@@ -457,13 +425,8 @@ export function scrapersAdminRouter(config: IScrapersAdminRouterConfig): Router 
             : authResult.error,
         },
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   return router;
 }

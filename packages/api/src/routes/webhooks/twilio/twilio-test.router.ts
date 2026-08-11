@@ -1,8 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { CommunicationLogRepository } from '@scholaracle/database';
+import { InternalError, ValidationError } from '@scholaracle/contracts';
 import twilio from 'twilio';
 import { applyTwilioApiBaseUrl } from '@scholaracle/agents';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface ITwilioTestRouterConfig {
   readonly database: Db;
@@ -18,8 +20,9 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
   const commLogRepo = new CommunicationLogRepository(config.database);
 
   // GET /test/simulate-inbound-sms?from=+1234567890&body=STOP
-  router.get('/simulate-inbound-sms', async (req: Request, res: Response): Promise<void> => {
-    try {
+  router.get(
+    '/simulate-inbound-sms',
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const from = (req.query['from'] as string) ?? '+15005550006';
       const body = (req.query['body'] as string) ?? 'Test message';
       const to = (req.query['to'] as string) ?? '+18449003903';
@@ -35,17 +38,13 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
         note: 'Send this payload as POST to /api/webhooks/twilio/sms to test inbound handler',
         curl: `curl -X POST https://api.scholarmancy.com/api/webhooks/twilio/sms -H "Content-Type: application/x-www-form-urlencoded" -d "From=${encodeURIComponent(from)}&To=${encodeURIComponent(to)}&Body=${encodeURIComponent(body)}&MessageSid=SM_TEST_${Date.now()}"`,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
+    })
+  );
 
   // GET /test/simulate-status-callback?messageSid=SM123&status=delivered
-  router.get('/simulate-status-callback', async (req: Request, res: Response): Promise<void> => {
-    try {
+  router.get(
+    '/simulate-status-callback',
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const messageSid = (req.query['messageSid'] as string) ?? 'SM_TEST_123';
       const status = (req.query['status'] as string) ?? 'delivered';
 
@@ -58,17 +57,13 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
         note: 'Send this payload as POST to /api/webhooks/twilio/status to test status callback handler',
         curl: `curl -X POST https://api.scholarmancy.com/api/webhooks/twilio/status -H "Content-Type: application/x-www-form-urlencoded" -d "MessageSid=${messageSid}&MessageStatus=${status}"`,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
+    })
+  );
 
   // GET /test/comm-logs?limit=10
-  router.get('/comm-logs', async (req: Request, res: Response): Promise<void> => {
-    try {
+  router.get(
+    '/comm-logs',
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const limit = parseInt((req.query['limit'] as string) ?? '10', 10);
       const logs = await commLogRepo.filterByChannel('sms');
       const recent = logs.slice(0, limit);
@@ -89,22 +84,17 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
           createdAt: log.createdAt,
         })),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
+    })
+  );
 
   // POST /test/send-sms (requires Twilio credentials in env)
-  router.post('/send-sms', async (req: Request, res: Response): Promise<void> => {
-    try {
+  router.post(
+    '/send-sms',
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const { to, body } = req.body as { to?: string; body?: string };
 
       if (!to || !body) {
-        res.status(400).json({ error: 'to and body are required' });
-        return;
+        throw new ValidationError('to and body are required');
       }
 
       const twilioAccountSid = process.env['TWILIO_ACCOUNT_SID'];
@@ -113,8 +103,7 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
       const messagingServiceSid = process.env['TWILIO_MESSAGING_SERVICE_SID'];
 
       if (!twilioAccountSid || !twilioApiKeySid || !twilioApiKeySecret || !messagingServiceSid) {
-        res.status(500).json({ error: 'Twilio credentials not configured' });
-        return;
+        throw new InternalError('Twilio credentials not configured');
       }
 
       const client = applyTwilioApiBaseUrl(
@@ -137,13 +126,8 @@ export function twilioTestRouter(config: ITwilioTestRouterConfig): Router {
         from: message.from,
         to: message.to,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
+    })
+  );
 
   // GET /test/twilio-config
   router.get('/twilio-config', (_req: Request, res: Response): void => {

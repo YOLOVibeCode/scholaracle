@@ -14,6 +14,11 @@ import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
+import { requestIdMiddleware } from './middleware/requestId';
+import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
+import { installProcessHandlers } from './utils/processHandlers';
+import { initSentry } from './sentry';
+import { logger } from './logger';
 import { AuthService, AdminAuthService } from '@scholaracle/auth';
 import {
   AdminMFATokenRepository,
@@ -43,6 +48,7 @@ import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
 import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
+import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
@@ -50,6 +56,7 @@ import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
 import { seedRouter } from './routes/seed/seed';
+import { createAccountRouter } from './routes/account/account';
 import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
@@ -97,20 +104,6 @@ export interface IServerConfig {
   readonly squareWebhookNotificationUrl?: string;
   /** Optional Square API host override (e.g. Noctusoft relay). */
   readonly squareBaseUrl?: string;
-}
-
-/**
- * Error handling middleware.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function errorHandler(error: Error, _req: Request, res: Response, _next: NextFunction): void {
-  // eslint-disable-next-line no-console
-  console.error('Error:', error);
-
-  res.status(500).json({
-    success: false,
-    error: error.message ?? 'Internal server error',
-  });
 }
 
 /**
@@ -294,6 +287,10 @@ async function initializeDatabase(config: IServerConfig): Promise<Db> {
 export function createApp(config: IServerConfig = {}, database?: Db): Express {
   const app = express();
 
+  // Correlation ID first: every request gets an x-request-id bound to the
+  // async context so all log lines and error responses can be tied together.
+  app.use(requestIdMiddleware);
+
   // Security headers
   app.use(helmet());
 
@@ -431,6 +428,20 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       })
     );
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
+    // Account routes (push tokens, email transfer). Mobile push registration
+    // depends on this mount.
+    app.use(
+      '/api/account',
+      authMiddleware(authService),
+      createAccountRouter({ database, baseUrl })
+    );
+    app.use(
+      '/api/scrapers',
+      createScrapersRouter({
+        database,
+        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
+      })
+    );
 
     app.use(
       '/api/oauth',
@@ -621,7 +632,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     }
   }
 
-  app.use(errorHandler);
+  // Unknown routes get the standard JSON envelope; the error handler is last.
+  app.use(notFoundHandler);
+  app.use(createErrorHandler());
 
   return app;
 }
@@ -632,21 +645,35 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
  * @param config - Server configuration
  */
 export async function startServer(config: IServerConfig = {}): Promise<void> {
+  initSentry();
+  installProcessHandlers(logger);
+
   const database = await initializeDatabase(config);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
 
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Server running on port ${port}`);
+  const server = app.listen(port, () => {
+    logger.info({ port }, 'server running');
   });
+
+  // Graceful shutdown: stop accepting connections, then exit. Railway sends
+  // SIGTERM on redeploys; in-flight requests get a chance to finish.
+  const shutdown = (signal: string): void => {
+    logger.info({ signal }, 'shutting down');
+    server.close(() => {
+      process.exit(0);
+    });
+    // Force-exit if connections refuse to drain.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 // Start server if this file is run directly
 if (require.main === module) {
-  startServer().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('Failed to start server:', error);
+  startServer().catch((error: unknown) => {
+    logger.fatal({ err: error }, 'failed to start server');
     process.exit(1);
   });
 }

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import type { AuthService } from '@scholaracle/auth';
+import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { IngestSourceRepository } from '@scholaracle/database';
 import {
   connectorAuthMiddleware,
@@ -52,11 +53,7 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
       const sourceId = (req.query['sourceId'] as string)?.trim();
       const contentHash = (req.query['contentHash'] as string)?.trim();
       if (!sourceId || !contentHash) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing query parameters: sourceId, contentHash',
-        });
-        return;
+        throw new ValidationError('Missing query parameters: sourceId, contentHash');
       }
       const existing = await assetRepo.findBySourceIdAndHash(sourceId, contentHash);
       if (existing) {
@@ -76,13 +73,11 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
       const userId = req.connectorUserId ?? '';
       if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
+        throw new AuthenticationError('Unauthorized');
       }
       const file = req.file;
       if (!file?.buffer) {
-        res.status(400).json({ success: false, error: 'Missing file' });
-        return;
+        throw new ValidationError('Missing file');
       }
       const sourceId = (req.body?.sourceId as string)?.trim();
       const provider = (req.body?.provider as string)?.trim();
@@ -101,12 +96,9 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
         !entityType ||
         !entityExternalId
       ) {
-        res.status(400).json({
-          success: false,
-          error:
-            'Missing required fields: sourceId, provider, originalUrl, contentHash, entityType, entityExternalId',
-        });
-        return;
+        throw new ValidationError(
+          'Missing required fields: sourceId, provider, originalUrl, contentHash, entityType, entityExternalId'
+        );
       }
 
       const existing = await assetRepo.findBySourceIdAndHash(sourceId, contentHash);
@@ -177,13 +169,11 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
       const userId = req.assetUserId ?? '';
       const assetId = req.params['assetId'];
       if (!assetId) {
-        res.status(400).json({ success: false, error: 'Missing assetId' });
-        return;
+        throw new ValidationError('Missing assetId');
       }
       const asset = await assetRepo.findByAssetId(assetId);
       if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
-        res.status(404).json({ success: false, error: 'Asset not found' });
-        return;
+        throw new NotFoundError('Asset not found');
       }
       const etag = `"${asset.contentHash}"`;
       const lastModified =
@@ -246,8 +236,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         cascade?: boolean;
       };
       if (!sourceId?.trim()) {
-        res.status(400).json({ success: false, error: 'Missing sourceId' });
-        return;
+        throw new ValidationError('Missing sourceId');
       }
       const sid = sourceId.trim();
       let count = 0;
@@ -257,8 +246,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
           const sourceRepo = new IngestSourceRepository(config.database);
           const source = await sourceRepo.findByUserIdAndSourceId(userId, sid);
           if (!source) {
-            res.status(404).json({ success: false, error: 'Source not found' });
-            return;
+            throw new NotFoundError('Source not found');
           }
           const termIds = await resolveTermIdsIncludingDescendants(
             config.database,

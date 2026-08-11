@@ -1,8 +1,17 @@
 import { Router, type Request, type Response } from 'express';
 import { NotificationService, type IProcessAlertResult, MongoQueue } from '@scholaracle/agents';
 import type { IStudentReader } from '@scholaracle/database';
-import { Alert, AlertType, NotificationError } from '@scholaracle/contracts';
+import {
+  Alert,
+  AlertType,
+  AuthenticationError,
+  ForbiddenError,
+  NotFoundError,
+  NotificationError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
+import { asyncHandler } from '../../middleware/asyncHandler';
 
 export interface ICreateAlertRequest {
   readonly studentId: string;
@@ -93,95 +102,81 @@ async function handleCreateAlert(
   notificationService: NotificationService,
   options: IAlertsRouterOptions = {}
 ): Promise<void> {
-  try {
-    const alertData = req.body as ICreateAlertRequest;
+  const alertData = req.body as ICreateAlertRequest;
 
-    const validationError = validateAlertRequest(alertData);
-    if (validationError) {
-      res.status(400).json({
-        success: false,
-        error: validationError,
-      });
-      return;
-    }
-
-    const authUserId = (req as IAuthenticatedRequest).userId;
-    if (!authUserId) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return;
-    }
-
-    if (options.studentReader) {
-      let student;
-      try {
-        student = await options.studentReader.findById(alertData.studentId);
-      } catch {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
-      }
-      if (!student) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
-      }
-      if (!student.hasAccess(authUserId)) {
-        res.status(403).json({ success: false, error: 'Forbidden' });
-        return;
-      }
-    }
-
-    const alert = new Alert({
-      studentId: alertData.studentId,
-      type: alertData.type as AlertType,
-      severity: alertData.severity,
-      userId: authUserId,
-      relatedData: alertData.relatedData ?? {},
-    });
-
-    if (options.queue) {
-      const jobId = await options.queue.add(
-        'notify',
-        'deliver-notification',
-        {
-          alert: {
-            studentId: alert.studentId,
-            type: alert.type,
-            severity: alert.severity,
-            relatedData: alert.relatedData,
-            ...(alert.userId != null && { userId: alert.userId }),
-          },
-        },
-        { maxAttempts: 5 }
-      );
-      res.status(202).json({
-        jobId,
-        message: 'Notification queued',
-      });
-      return;
-    }
-
-    const result = await notificationService.processAlert(alert);
-
-    if (!result) {
-      throw new Error('Invalid result from notification service');
-    }
-
-    const response = formatNotificationResponse(result);
-
-    res.status(201).json(response);
-  } catch (error) {
-    if (error instanceof NotificationError) {
-      res.status(400).json({
-        success: false,
-        error: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
+  const validationError = validateAlertRequest(alertData);
+  if (validationError) {
+    throw new ValidationError(validationError);
   }
+
+  const authUserId = (req as IAuthenticatedRequest).userId;
+  if (!authUserId) {
+    throw new AuthenticationError('Unauthorized');
+  }
+
+  if (options.studentReader) {
+    let student;
+    try {
+      student = await options.studentReader.findById(alertData.studentId);
+    } catch {
+      throw new NotFoundError('Student not found');
+    }
+    if (!student) {
+      throw new NotFoundError('Student not found');
+    }
+    if (!student.hasAccess(authUserId)) {
+      throw new ForbiddenError('Forbidden');
+    }
+  }
+
+  const alert = new Alert({
+    studentId: alertData.studentId,
+    type: alertData.type as AlertType,
+    severity: alertData.severity,
+    userId: authUserId,
+    relatedData: alertData.relatedData ?? {},
+  });
+
+  if (options.queue) {
+    const jobId = await options.queue.add(
+      'notify',
+      'deliver-notification',
+      {
+        alert: {
+          studentId: alert.studentId,
+          type: alert.type,
+          severity: alert.severity,
+          relatedData: alert.relatedData,
+          ...(alert.userId != null && { userId: alert.userId }),
+        },
+      },
+      { maxAttempts: 5 }
+    );
+    res.status(202).json({
+      jobId,
+      message: 'Notification queued',
+    });
+    return;
+  }
+
+  let result;
+  try {
+    result = await notificationService.processAlert(alert);
+  } catch (error) {
+    // Preserve the legacy NotificationError -> 400 mapping (same message).
+    if (error instanceof NotificationError) {
+      throw new ValidationError(error.message);
+    }
+    throw error;
+  }
+
+  if (!result) {
+    throw new Error('Invalid result from notification service');
+  }
+
+  const response = formatNotificationResponse(result);
+
+  res.status(201).json(response);
 }
 
 /**
@@ -198,9 +193,12 @@ export function alertsRouter(
 ): Router {
   const router = Router();
 
-  router.post('/', (req: Request, res: Response) => {
-    void handleCreateAlert(req, res, notificationService, options);
-  });
+  router.post(
+    '/',
+    asyncHandler((req: Request, res: Response) =>
+      handleCreateAlert(req, res, notificationService, options)
+    )
+  );
 
   return router;
 }

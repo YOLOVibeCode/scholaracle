@@ -8,6 +8,15 @@ import {
   type IDataSourceCredentials,
 } from '@scholaracle/database';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import {
+  AuthenticationError,
+  ConflictError,
+  InternalError,
+  NotFoundError,
+  ValidationError,
+  type IConnectorTokenResponse,
+} from '@scholaracle/contracts';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
 import {
@@ -40,6 +49,12 @@ export interface IIntegrationsRouterConfig {
 
 function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
+}
+
+function requireUserId(req: Request): string {
+  const userId = getUserId(req);
+  if (!userId) throw new AuthenticationError('Unauthorized');
+  return userId;
 }
 
 interface ITestResult {
@@ -300,13 +315,10 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * GET /api/integrations
    * List all integrations for the authenticated user.
    */
-  router.get('/', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const sources = await ingestSourceRepository.listByUserId(userId);
       const students = await studentRepository.findByUserId(userId);
@@ -331,63 +343,43 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       });
 
       res.status(200).json(list);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/test-connection
    * Test credentials against an LMS without persisting anything.
    * Returns success/failure with a human-readable message.
    */
-  router.post('/test-connection', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/test-connection',
+    asyncHandler(async (req: Request, res: Response) => {
+      requireUserId(req);
 
       const parsed = testConnectionSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const { provider, baseUrl, credentials } = parsed.data;
 
       const testResult = await testConnectionForProvider(provider, baseUrl ?? '', credentials);
 
       res.status(200).json(testResult);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations
    * Create a new integration (account-level provider).
    */
-  router.post('/', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const parsed = createIntegrationSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const body = parsed.data;
 
@@ -416,13 +408,8 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   const PENDING_RECONCILIATION_COLLECTION = 'slc_pending_student_reconciliation';
 
@@ -467,13 +454,10 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * GET /api/integrations/reconciliation/pending
    * List pending student reconciliations (students found in sync but not yet linked).
    */
-  router.get('/reconciliation/pending', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/reconciliation/pending',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
       const docs = await coll
         .find({ userId, linkedStudentId: { $in: [null, undefined, ''] } })
@@ -487,30 +471,21 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         createdAt: (d['createdAt'] as Date)?.toISOString?.(),
       }));
       res.status(200).json({ success: true, pending: list });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/reconciliation/:id/link
    * Link a pending reconciliation to an existing student.
    */
-  router.post('/reconciliation/:id/link', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/reconciliation/:id/link',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const pendingId = req.params['id'];
       const { studentId } = (req.body ?? {}) as { studentId?: string };
       if (!pendingId || !studentId) {
-        res.status(400).json({ success: false, error: 'Missing pending id or studentId' });
-        return;
+        throw new ValidationError('Missing pending id or studentId');
       }
       const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
       const pending = await coll.findOne({
@@ -518,13 +493,11 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         userId,
       });
       if (!pending) {
-        res.status(404).json({ success: false, error: 'Pending reconciliation not found' });
-        return;
+        throw new NotFoundError('Pending reconciliation not found');
       }
       const student = await studentRepository.findById(studentId);
       if (!student || student.userId?.toString() !== userId) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
       await coll.updateOne(
         { _id: new ObjectId(pendingId), userId },
@@ -539,30 +512,21 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         });
       }
       res.status(200).json({ success: true, linkedStudentId: studentId });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/reconciliation/:id/create
    * Create a new student and link to this pending reconciliation.
    */
-  router.post('/reconciliation/:id/create', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/reconciliation/:id/create',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const pendingId = req.params['id'];
       const { name } = (req.body ?? {}) as { name?: string };
       if (!pendingId || !name?.trim()) {
-        res.status(400).json({ success: false, error: 'Missing pending id or name' });
-        return;
+        throw new ValidationError('Missing pending id or name');
       }
       const coll = config.database.collection(PENDING_RECONCILIATION_COLLECTION);
       const pending = await coll.findOne({
@@ -570,8 +534,7 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         userId,
       });
       if (!pending) {
-        res.status(404).json({ success: false, error: 'Pending reconciliation not found' });
-        return;
+        throw new NotFoundError('Pending reconciliation not found');
       }
       const studentExternalId = pending['studentExternalId'] as string;
       const created = await studentRepository.create({
@@ -598,13 +561,8 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         },
         linkedStudentId: linkedId,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   // -------------------------------------------------------------------------
   // Server-Side Scraper Generation (registered before /:id so /generate-status is matched)
@@ -625,21 +583,14 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * POST /api/integrations/generate-scraper
    * Queue a generation job for unknown platforms; return cached/reference for known/cached.
    */
-  router.post('/generate-scraper', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/generate-scraper',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const { platformName, loginUrl, loginMethod } = req.body ?? {};
       if (!platformName || !loginUrl || !loginMethod) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing required fields: platformName, loginUrl, loginMethod',
-        });
-        return;
+        throw new ValidationError('Missing required fields: platformName, loginUrl, loginMethod');
       }
 
       const cacheKey = createHash('sha256').update(`${platformName}|${loginUrl}`).digest('hex');
@@ -730,34 +681,24 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         fromCache: false,
         status: 'queued',
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/integrations/generate-status?jobId=...
    * Poll job status for dashboard real-time progress.
    */
-  router.get('/generate-status', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/generate-status',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const jobId = req.query['jobId'] as string | undefined;
       if (!jobId) {
-        res.status(400).json({ success: false, error: 'Missing jobId' });
-        return;
+        throw new ValidationError('Missing jobId');
       }
       const job = await scraperGenerationJobsCollection.findOne({ jobId, userId });
       if (!job) {
-        res.status(404).json({ success: false, error: 'Job not found' });
-        return;
+        throw new NotFoundError('Job not found');
       }
       res.status(200).json({
         success: job['status'] === 'ready' || job['status'] === 'failed',
@@ -769,13 +710,8 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         platformName: job['platformName'],
         loginUrl: job['loginUrl'],
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/scraper-report
@@ -783,36 +719,40 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    */
   const scraperReportsCollection = config.database.collection('scraper_reports');
 
-  router.post('/scraper-report', async (req: Request, res: Response) => {
-    try {
-      const body = req.body ?? {};
-      const {
-        cacheKey,
-        status,
-        error: reportError,
-        generatedAt,
-      } = body as {
-        cacheKey?: string;
-        status?: string;
-        error?: string;
-        generatedAt?: string;
-      };
-      if (!cacheKey || status !== 'failed') {
+  router.post(
+    '/scraper-report',
+    asyncHandler(async (req: Request, res: Response) => {
+      // Deliberately always returns 200 — phone-home must never fail the script.
+      try {
+        const body = req.body ?? {};
+        const {
+          cacheKey,
+          status,
+          error: reportError,
+          generatedAt,
+        } = body as {
+          cacheKey?: string;
+          status?: string;
+          error?: string;
+          generatedAt?: string;
+        };
+        if (!cacheKey || status !== 'failed') {
+          res.status(200).json({ success: true });
+          return;
+        }
+        await scraperReportsCollection.insertOne({
+          cacheKey,
+          status: 'failed',
+          error: (reportError ?? '').slice(0, 500),
+          generatedAt: generatedAt ? new Date(generatedAt) : new Date(),
+          reportedAt: new Date(),
+        });
         res.status(200).json({ success: true });
-        return;
+      } catch {
+        res.status(200).json({ success: true });
       }
-      await scraperReportsCollection.insertOne({
-        cacheKey,
-        status: 'failed',
-        error: (reportError ?? '').slice(0, 500),
-        generatedAt: generatedAt ? new Date(generatedAt) : new Date(),
-        reportedAt: new Date(),
-      });
-      res.status(200).json({ success: true });
-    } catch {
-      res.status(200).json({ success: true });
-    }
-  });
+    })
+  );
 
   // -------------------------------------------------------------------------
   // Scraper Token Management (must come BEFORE /:id to avoid route collision)
@@ -826,13 +766,10 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * Generate a new scraper connector token (1yr expiry).
    * Revokes any previous scraper token for this user.
    */
-  router.post('/scraper-token', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/scraper-token',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       // Revoke previous scraper token(s) for this user
       await revokedTokensCollection.updateMany(
@@ -858,26 +795,18 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         token,
         jti,
         expiresIn: '365 days',
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+      } satisfies IConnectorTokenResponse);
+    })
+  );
 
   /**
    * GET /api/integrations/scraper-token
    * Get current scraper token status (active/expiring/expired/none).
    */
-  router.get('/scraper-token', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/scraper-token',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const tokenDoc = await revokedTokensCollection.findOne(
         { userId, tokenPurpose: 'scraper', revokedAt: null },
@@ -895,25 +824,17 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         createdAt: tokenDoc['createdAt'],
         jti: tokenDoc['jti'],
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/integrations/scraper-token
    * Revoke the current scraper token.
    */
-  router.delete('/scraper-token', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.delete(
+    '/scraper-token',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const result = await revokedTokensCollection.updateMany(
         { userId, tokenPurpose: 'scraper', revokedAt: null },
@@ -924,25 +845,17 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
         success: true,
         revoked: result.modifiedCount,
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/integrations/scraper-script
    * Download a personalized setup script with the user's token baked in.
    */
-  router.get('/scraper-script', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/scraper-script',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       // Generate a fresh token for the script
       const jti = randomUUID();
@@ -1010,13 +923,8 @@ echo ""
       res.setHeader('Content-Type', 'application/x-sh');
       res.setHeader('Content-Disposition', 'attachment; filename="scholaracle-setup.sh"');
       res.status(200).send(script);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/scraper-download
@@ -1025,14 +933,11 @@ echo ""
    * Body: { os, students?: [{ studentId, studentName, platforms: [{ platform, loginUrl, scraperId?, credentials }] }] } for multi.
    * If students is omitted, server builds from all user's students and their dataSources (self-hosted).
    */
-  /* eslint-disable-next-line max-lines-per-function, complexity -- download route; refactor in follow-up */
-  router.post('/scraper-download', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/scraper-download',
+    /* eslint-disable-next-line max-lines-per-function, complexity -- download route; refactor in follow-up */
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
 
       const body = req.body ?? {};
       const os = body.os === 'windows' ? 'windows' : ('mac' as TargetOS);
@@ -1174,11 +1079,9 @@ echo ""
         }
 
         if (studentsForMulti.length === 0) {
-          res.status(400).json({
-            success: false,
-            error: 'No students or platforms configured. Add data sources on student pages first.',
-          });
-          return;
+          throw new ValidationError(
+            'No students or platforms configured. Add data sources on student pages first.'
+          );
         }
 
         const script = packageMultiStudent({
@@ -1198,8 +1101,7 @@ echo ""
       const platformName = body.platform as string | undefined;
       const scraperId = body.scraperId as string | undefined;
       const credentials = body.credentials as
-        | { studentName?: string; username?: string; password?: string }
-        | undefined;
+        { studentName?: string; username?: string; password?: string } | undefined;
 
       let scraperCode: {
         scraperCode: string;
@@ -1216,8 +1118,7 @@ echo ""
         const { ObjectId } = await import('mongodb');
         const doc = await generatedScrapersCollection.findOne({ _id: new ObjectId(scraperId) });
         if (!doc) {
-          res.status(404).json({ success: false, error: 'Scraper not found' });
-          return;
+          throw new NotFoundError('Scraper not found');
         }
         scraperCode = {
           scraperCode: doc['scraperCode'] as string,
@@ -1257,11 +1158,7 @@ echo ""
       }
 
       if (!scraperCode) {
-        res.status(400).json({
-          success: false,
-          error: 'Either scraperId, platformName, or students array is required',
-        });
-        return;
+        throw new ValidationError('Either scraperId, platformName, or students array is required');
       }
 
       const script = packageSingleFile({
@@ -1285,35 +1182,25 @@ echo ""
       res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.status(200).send(script);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/integrations/:id
    * Get one integration.
    */
-  router.get('/:id', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId } = req.params;
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID' });
-        return;
+        throw new ValidationError('Missing integration ID');
       }
 
       const src = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!src) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       res.status(200).json({
@@ -1328,43 +1215,31 @@ echo ""
         createdAt: src.createdAt.toISOString(),
         updatedAt: src.updatedAt.toISOString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * PUT /api/integrations/:id
    * Update integration config.
    */
-  router.put('/:id', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.put(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId } = req.params;
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID' });
-        return;
+        throw new ValidationError('Missing integration ID');
       }
 
       const parsed = updateIntegrationSchema.safeParse(req.body);
       if (!parsed.success) {
-        const msg = parsed.error.issues.map((e: { message: string }) => e.message).join('; ');
-        res.status(400).json({ success: false, error: msg });
-        return;
+        throw ValidationError.fromZod(parsed.error);
       }
       const updates = parsed.data;
 
       const existing = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!existing) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       const updated = await ingestSourceRepository.upsert({
@@ -1394,35 +1269,25 @@ echo ""
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/integrations/:id
    * Delete integration and unlink from all students.
    */
-  router.delete('/:id', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.delete(
+    '/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId } = req.params;
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID' });
-        return;
+        throw new ValidationError('Missing integration ID');
       }
 
       const existing = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!existing) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       const students = await studentRepository.findByUserId(userId);
@@ -1436,35 +1301,25 @@ echo ""
       await ingestSourceRepository.deleteByUserIdAndSourceId(userId, sourceId);
 
       res.status(200).json({ success: true, unlinkedCount: linked.length });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * GET /api/integrations/:id/students
    * List students linked to this integration.
    */
-  router.get('/:id/students', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.get(
+    '/:id/students',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId } = req.params;
       if (!sourceId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID' });
-        return;
+        throw new ValidationError('Missing integration ID');
       }
 
       const src = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!src) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       const students = await studentRepository.findByUserId(userId);
@@ -1484,30 +1339,21 @@ echo ""
       });
 
       res.status(200).json(list);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * POST /api/integrations/:id/students/:studentId
    * Assign integration to a student (optional credentials).
    */
-  /* eslint-disable-next-line complexity -- route handler branches */
-  router.post('/:id/students/:studentId', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.post(
+    '/:id/students/:studentId',
+    /* eslint-disable-next-line complexity -- route handler branches */
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId, studentId } = req.params;
       if (!sourceId || !studentId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID or student ID' });
-        return;
+        throw new ValidationError('Missing integration ID or student ID');
       }
 
       const bodyParsed = assignStudentSchema.safeParse(req.body || {});
@@ -1516,21 +1362,16 @@ echo ""
 
       const integration = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!integration) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       if (student.dataSources.some((ds) => ds.id === sourceId)) {
-        res
-          .status(409)
-          .json({ success: false, error: 'Student already linked to this integration' });
-        return;
+        throw new ConflictError('Student already linked to this integration');
       }
 
       let credentialsPayload: IDataSourceCredentials | undefined;
@@ -1561,8 +1402,7 @@ echo ""
         dataSources: updatedDataSources,
       });
       if (!updated) {
-        res.status(500).json({ success: false, error: 'Failed to link student' });
-        return;
+        throw new InternalError('Failed to link student');
       }
 
       res.status(201).json({
@@ -1570,61 +1410,42 @@ echo ""
         integrationId: sourceId,
         hasCredentials: Boolean(credentialsPayload),
       });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   /**
    * DELETE /api/integrations/:id/students/:studentId
    * Unlink student from integration (does not delete integration).
    */
-  router.delete('/:id/students/:studentId', async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        res.status(401).json({ success: false, error: 'Unauthorized' });
-        return;
-      }
+  router.delete(
+    '/:id/students/:studentId',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
       const { id: sourceId, studentId } = req.params;
       if (!sourceId || !studentId) {
-        res.status(400).json({ success: false, error: 'Missing integration ID or student ID' });
-        return;
+        throw new ValidationError('Missing integration ID or student ID');
       }
 
       const integration = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
       if (!integration) {
-        res.status(404).json({ success: false, error: 'Integration not found' });
-        return;
+        throw new NotFoundError('Integration not found');
       }
 
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
-        res.status(404).json({ success: false, error: 'Student not found' });
-        return;
+        throw new NotFoundError('Student not found');
       }
 
       const newDataSources = student.dataSources.filter((ds) => ds.id !== sourceId);
       if (newDataSources.length === student.dataSources.length) {
-        res
-          .status(404)
-          .json({ success: false, error: 'Student is not linked to this integration' });
-        return;
+        throw new NotFoundError('Student is not linked to this integration');
       }
 
       await studentRepository.update(studentId, { dataSources: newDataSources });
 
       res.status(200).json({ success: true });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Internal server error',
-      });
-    }
-  });
+    })
+  );
 
   return router;
 }

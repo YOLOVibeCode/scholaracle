@@ -5,6 +5,7 @@ import { auditLogsRouter } from './audit-logs';
 import { AdminStepUpChallengeRepository, AuditLogRepository } from '@scholaracle/database';
 import { adminAuthRouter } from '../auth/auth';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler, notFoundHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Audit Logs Routes', () => {
   let app: Express;
@@ -39,6 +40,8 @@ describe('Admin Audit Logs Routes', () => {
       })
     );
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(notFoundHandler);
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -189,6 +192,16 @@ describe('Admin Audit Logs Routes', () => {
         .set('x-admin-stepup', stepUpToken);
       expect(ok.status).toBe(200);
       expect(String(ok.headers['content-type'] ?? '')).toContain('text/csv');
+    });
+  });
+
+  describe('error envelope', () => {
+    it('should return NOT_FOUND code for unknown route', async () => {
+      const res = await request(app)
+        .get('/api/admin/audit-logs/does-not-exist')
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('NOT_FOUND');
     });
   });
 });

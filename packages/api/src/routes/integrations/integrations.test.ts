@@ -5,6 +5,7 @@ import { AuthService } from '@scholaracle/auth';
 import { studentsRouter } from '../students/students';
 import { integrationsRouter } from './integrations';
 import { authMiddleware } from '../../middleware/auth';
+import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Integrations API Routes', () => {
   let app: Express;
@@ -33,6 +34,7 @@ describe('Integrations API Routes', () => {
     app.use(express.json());
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
     app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -546,6 +548,7 @@ describe('Integrations API Routes', () => {
         .send({ provider: 'canvas' });
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('should return 200 with success false for unsupported provider', async () => {

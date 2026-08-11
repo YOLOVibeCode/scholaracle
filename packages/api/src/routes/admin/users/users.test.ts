@@ -5,6 +5,7 @@ import { adminUsersRouter } from './users';
 import { adminAuthRouter } from '../auth/auth';
 import { AdminUserRepository, AdminStepUpChallengeRepository } from '@scholaracle/database';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
+import { createErrorHandler } from '../../../middleware/errorHandler';
 
 describe('Admin Users Routes', () => {
   let app: Express;
@@ -41,6 +42,7 @@ describe('Admin Users Routes', () => {
       })
     );
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
@@ -71,6 +73,18 @@ describe('Admin Users Routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data?.id).toBeTruthy();
+  });
+
+  it('should reject create with missing fields', async () => {
+    const stepUpToken = await getStepUpToken(app, superToken, superMfaSecret);
+    const res = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${superToken}`)
+      .set('x-admin-stepup', stepUpToken)
+      .send({ email: `missing.${Date.now()}@test.com` });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
   it('should update admin role', async () => {

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { AnalyticsService } from '../../../services/AnalyticsService';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
+import { asyncHandler } from '../../../middleware/asyncHandler';
 import { AdminAuthService } from '@scholaracle/auth';
 
 export interface IAnalyticsRouterConfig {
@@ -14,33 +15,26 @@ async function handleGetOverview(
   res: Response,
   analyticsService: AnalyticsService
 ): Promise<void> {
-  try {
-    const [mrr, churnRate, arpu, customerStats, squarePlusRecommendation] = await Promise.all([
-      analyticsService.calculateMRR(),
-      analyticsService.calculateChurnRate(),
-      analyticsService.calculateARPU(),
-      Promise.resolve({ totalUsers: 0, activeUsers: 0, newUsers: 0 }),
-      analyticsService.getSquarePlusRecommendation(),
-    ]);
+  const [mrr, churnRate, arpu, customerStats, squarePlusRecommendation] = await Promise.all([
+    analyticsService.calculateMRR(),
+    analyticsService.calculateChurnRate(),
+    analyticsService.calculateARPU(),
+    Promise.resolve({ totalUsers: 0, activeUsers: 0, newUsers: 0 }),
+    analyticsService.getSquarePlusRecommendation(),
+  ]);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        mrr,
-        churnRate,
-        arpu,
-        totalCustomers: customerStats.totalUsers,
-        activeCustomers: customerStats.activeUsers,
-        newCustomers: customerStats.newUsers,
-        squarePlusRecommendation,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
+  res.status(200).json({
+    success: true,
+    data: {
+      mrr,
+      churnRate,
+      arpu,
+      totalCustomers: customerStats.totalUsers,
+      activeCustomers: customerStats.activeUsers,
+      newCustomers: customerStats.newUsers,
+      squarePlusRecommendation,
+    },
+  });
 }
 
 async function handleGetRevenue(
@@ -48,27 +42,20 @@ async function handleGetRevenue(
   res: Response,
   analyticsService: AnalyticsService
 ): Promise<void> {
-  try {
-    const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
-    const startDateStr = req.query['startDate'] as string | undefined;
-    const endDateStr = req.query['endDate'] as string | undefined;
+  const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
+  const startDateStr = req.query['startDate'] as string | undefined;
+  const endDateStr = req.query['endDate'] as string | undefined;
 
-    const startDate = startDateStr ? new Date(startDateStr) : new Date();
-    startDate.setMonth(startDate.getMonth() - 1);
-    const endDate = endDateStr ? new Date(endDateStr) : new Date();
+  const startDate = startDateStr ? new Date(startDateStr) : new Date();
+  startDate.setMonth(startDate.getMonth() - 1);
+  const endDate = endDateStr ? new Date(endDateStr) : new Date();
 
-    const revenue = await analyticsService.getRevenueByPeriod(period, startDate, endDate);
+  const revenue = await analyticsService.getRevenueByPeriod(period, startDate, endDate);
 
-    res.status(200).json({
-      success: true,
-      data: revenue,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
+  res.status(200).json({
+    success: true,
+    data: revenue,
+  });
 }
 
 async function handleGetCustomers(
@@ -76,22 +63,15 @@ async function handleGetCustomers(
   res: Response,
   analyticsService: AnalyticsService
 ): Promise<void> {
-  try {
-    const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
-    const months = parseInt((req.query['months'] as string) || '6') || 6;
+  const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
+  const months = parseInt((req.query['months'] as string) || '6') || 6;
 
-    const growth = await analyticsService.getCustomerGrowth(period, months);
+  const growth = await analyticsService.getCustomerGrowth(period, months);
 
-    res.status(200).json({
-      success: true,
-      data: growth,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
+  res.status(200).json({
+    success: true,
+    data: growth,
+  });
 }
 
 async function handleGetSubscriptions(
@@ -99,22 +79,15 @@ async function handleGetSubscriptions(
   res: Response,
   analyticsService: AnalyticsService
 ): Promise<void> {
-  try {
-    const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
-    const months = parseInt((req.query['months'] as string) || '6') || 6;
+  const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'month';
+  const months = parseInt((req.query['months'] as string) || '6') || 6;
 
-    const growth = await analyticsService.getSubscriptionGrowth(period, months);
+  const growth = await analyticsService.getSubscriptionGrowth(period, months);
 
-    res.status(200).json({
-      success: true,
-      data: growth,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
+  res.status(200).json({
+    success: true,
+    data: growth,
+  });
 }
 
 async function handleGetChurn(
@@ -122,21 +95,14 @@ async function handleGetChurn(
   res: Response,
   analyticsService: AnalyticsService
 ): Promise<void> {
-  try {
-    const churnRate = await analyticsService.calculateChurnRate();
+  const churnRate = await analyticsService.calculateChurnRate();
 
-    res.status(200).json({
-      success: true,
-      data: {
-        churnRate,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error',
-    });
-  }
+  res.status(200).json({
+    success: true,
+    data: {
+      churnRate,
+    },
+  });
 }
 
 export function analyticsRouter(config: IAnalyticsRouterConfig): Router {
@@ -147,25 +113,32 @@ export function analyticsRouter(config: IAnalyticsRouterConfig): Router {
   // Apply admin auth middleware to all routes
   router.use(adminAuthMiddleware(adminAuthService));
 
-  router.get('/overview', (req: Request, res: Response) => {
-    void handleGetOverview(req, res, analyticsService);
-  });
+  router.get(
+    '/overview',
+    asyncHandler((req: Request, res: Response) => handleGetOverview(req, res, analyticsService))
+  );
 
-  router.get('/revenue', (req: Request, res: Response) => {
-    void handleGetRevenue(req, res, analyticsService);
-  });
+  router.get(
+    '/revenue',
+    asyncHandler((req: Request, res: Response) => handleGetRevenue(req, res, analyticsService))
+  );
 
-  router.get('/customers', (req: Request, res: Response) => {
-    void handleGetCustomers(req, res, analyticsService);
-  });
+  router.get(
+    '/customers',
+    asyncHandler((req: Request, res: Response) => handleGetCustomers(req, res, analyticsService))
+  );
 
-  router.get('/subscriptions', (req: Request, res: Response) => {
-    void handleGetSubscriptions(req, res, analyticsService);
-  });
+  router.get(
+    '/subscriptions',
+    asyncHandler((req: Request, res: Response) =>
+      handleGetSubscriptions(req, res, analyticsService)
+    )
+  );
 
-  router.get('/churn', (req: Request, res: Response) => {
-    void handleGetChurn(req, res, analyticsService);
-  });
+  router.get(
+    '/churn',
+    asyncHandler((req: Request, res: Response) => handleGetChurn(req, res, analyticsService))
+  );
 
   return router;
 }
