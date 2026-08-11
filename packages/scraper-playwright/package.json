@@ -1,0 +1,21 @@
+{
+  "name": "@scholaracle/scraper-playwright",
+  "version": "0.1.0",
+  "description": "Playwright implementation of IPageDriver for CLI and server workers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@scholaracle/contracts": "workspace:*",
+    "@scholaracle/scraper-core": "workspace:*",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}
