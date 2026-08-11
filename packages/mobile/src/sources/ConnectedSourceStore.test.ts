@@ -56,6 +56,14 @@ describe('ConnectedSourceStore', () => {
     expect(found?.sourceId).toBe('b');
   });
 
+  it('should return null for an unknown student instead of falling back to another source', async () => {
+    // Regression: the old `?? all[0]` fallback silently synced the WRONG
+    // student's portal when no source matched.
+    await store.upsert(makeSource({ studentExternalId: 'stu-a', sourceId: 'a' }));
+    const found = await store.getForStudent('stu-unknown');
+    expect(found).toBeNull();
+  });
+
   it('should remove by sourceId', async () => {
     await store.upsert(makeSource());
     await store.remove('src-1');

@@ -17,7 +17,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } fr
 import * as SecureStore from 'expo-secure-store';
 import { SyncWebView } from '../scraper/SyncWebView';
 import { WebViewPageDriver } from '../scraper/WebViewPageDriver';
-import { runSyncPipeline, type ISyncProgress } from '../scraper/SyncOrchestrator';
+import { runSyncPipeline, SyncError, type ISyncProgress } from '../scraper/SyncOrchestrator';
 import { apiClient } from '../api/client';
 import { runLedger } from '../ledger/RunLedger';
 
@@ -68,6 +68,9 @@ export function SyncScreen({
   const [error, setError] = useState<string | null>(null);
   const [showWebView, setShowWebView] = useState(false);
   const hasStartedSync = useRef(false);
+  // Set when the user cancels mid-sync; suppresses further state updates
+  // from the (still running) pipeline after we leave the screen.
+  const cancelledRef = useRef(false);
 
   // Load credentials from Keychain on mount
   useEffect(() => {
@@ -90,15 +93,11 @@ export function SyncScreen({
   }, [credentialKey]);
 
   const handleLoginSuccess = useCallback(
-    async (url: string): Promise<void> => {
-      // Detect login success: URL no longer contains login path
-      const isPortalHome =
-        !url.includes('/login') &&
-        !url.includes('accounts.google.com') &&
-        url !== 'about:blank' &&
-        (credential ? url.includes(new URL(credential.baseUrl).hostname) : true);
-
-      if (!isPortalHome || hasStartedSync.current) return;
+    async (_url: string): Promise<void> => {
+      // SyncWebView only invokes onLoginSuccess after shouldTreatAsLoginSuccess
+      // passes (first load complete, off the initial URL, on the portal host,
+      // not a login/SSO page) — no re-detection needed here.
+      if (hasStartedSync.current) return;
       hasStartedSync.current = true;
 
       setSyncState('syncing');
@@ -106,6 +105,21 @@ export function SyncScreen({
 
       try {
         const connectorToken = await apiClient.getOrMintConnectorToken();
+        // Idempotent upsert: guarantees the source exists server-side so the
+        // run appears in GET /:id/sources history (heals older installs whose
+        // sources were only stored locally). Best-effort — a registration
+        // failure must not block the sync itself.
+        try {
+          await apiClient.registerIngestSource({
+            sourceId: config.sourceId,
+            provider: config.provider,
+            adapterId: ADAPTER_IDS[config.provider] ?? config.adapterId,
+            displayName: `${config.provider} (${config.institutionExternalId})`,
+            portalBaseUrl: config.baseUrl,
+          });
+        } catch (registerErr: unknown) {
+          console.warn('registerIngestSource failed; continuing with sync', registerErr);
+        }
         await runSyncPipeline(
           driverRef.current,
           {
@@ -120,19 +134,23 @@ export function SyncScreen({
           apiClient,
           connectorToken,
           runLedger,
-          (p) => setProgress(p)
+          (p: ISyncProgress) => {
+            if (!cancelledRef.current) setProgress(p);
+          }
         );
+        if (cancelledRef.current) return;
         setSyncState('done');
       } catch (err: unknown) {
+        if (cancelledRef.current) return;
         const msg = err instanceof Error ? err.message : 'Sync failed';
         setError(msg);
         setSyncState('error');
 
-        if (msg.includes('session') || msg.includes('login') || msg.includes('auth')) {
+        if (err instanceof SyncError && err.phase === 'portal') {
           Alert.alert('Session Expired', 'Your portal session has expired. Please log in again.', [
             {
               text: 'OK',
-              onPress: () => {
+              onPress: (): void => {
                 hasStartedSync.current = false;
                 setSyncState('login');
                 setShowWebView(true);
@@ -142,8 +160,13 @@ export function SyncScreen({
         }
       }
     },
-    [config, credential]
+    [config]
   );
+
+  const handleCancelSync = useCallback((): void => {
+    cancelledRef.current = true;
+    (onCancel ?? onDone)();
+  }, [onCancel, onDone]);
 
   return (
     <View style={styles.container}>
@@ -174,6 +197,9 @@ export function SyncScreen({
               {progress?.opCount !== undefined && (
                 <Text style={styles.subText}>{progress.opCount} operations</Text>
               )}
+              <TouchableOpacity onPress={handleCancelSync} testID="button-cancel-sync">
+                <Text style={styles.cancelLink}>Cancel</Text>
+              </TouchableOpacity>
             </>
           )}
 

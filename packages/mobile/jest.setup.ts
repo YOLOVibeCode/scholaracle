@@ -11,6 +11,8 @@ jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),
   setItemAsync: jest.fn().mockResolvedValue(undefined),
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
+  WHEN_UNLOCKED: 'whenUnlocked',
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'whenUnlockedThisDeviceOnly',
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -39,6 +41,15 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000001'),
+}));
+
+// react-native ships Flow-typed sources jest can't parse; mock the pieces used.
+jest.mock('react-native', () => ({
+  Platform: { OS: 'ios', select: (spec: { ios?: unknown }) => spec.ios },
+}));
+
+jest.mock('expo-linking', () => ({
+  useLinkingURL: jest.fn(() => null),
 }));
 
 jest.mock('expo-notifications', () => ({

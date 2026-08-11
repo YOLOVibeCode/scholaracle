@@ -12,25 +12,20 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { apiClient } from '../api/client';
-
-interface IStudent {
-  readonly _id: string;
-  readonly name: string;
-  readonly externalId: string;
-  readonly grade?: string;
-}
+import { apiClient, type IStudentListItem } from '../api/client';
 
 interface IStudentsScreenProps {
-  onSelectStudent(student: IStudent): void;
+  onSelectStudent(student: IStudentListItem): void;
   onAddSource(): void;
+  onOpenSettings?(): void;
 }
 
 export function StudentsScreen({
   onSelectStudent,
   onAddSource,
+  onOpenSettings,
 }: IStudentsScreenProps): React.ReactElement {
-  const [students, setStudents] = useState<IStudent[]>([]);
+  const [students, setStudents] = useState<IStudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +35,7 @@ export function StudentsScreen({
     setError(null);
     try {
       const data = await apiClient.getStudents();
-      setStudents(data);
+      setStudents([...data]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load students');
     } finally {
@@ -70,16 +65,30 @@ export function StudentsScreen({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Students</Text>
-        <TouchableOpacity style={styles.addButton} onPress={onAddSource}>
-          <Text style={styles.addButtonText}>+ Connect Source</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.addButton} onPress={onAddSource}>
+            <Text style={styles.addButtonText}>+ Connect Source</Text>
+          </TouchableOpacity>
+          {onOpenSettings && (
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={onOpenSettings}
+              accessibilityLabel="Settings"
+              testID="button-settings"
+            >
+              <Text style={styles.settingsIcon}>⚙︎</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {/* Inline error for refresh failures while a stale list is showing;
+          the empty-list error state below owns the zero-student case. */}
+      {error && students.length > 0 && <Text style={styles.error}>{error}</Text>}
 
       <FlatList
         data={students}
-        keyExtractor={(item) => item._id}
+        keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={students.length === 0 ? styles.emptyContainer : undefined}
         renderItem={({ item }) => (
@@ -89,19 +98,34 @@ export function StudentsScreen({
             </View>
             <View style={styles.cardInfo}>
               <Text style={styles.cardName}>{item.name}</Text>
-              {item.grade && <Text style={styles.cardGrade}>Grade {item.grade}</Text>}
+              <Text style={styles.cardGrade}>
+                {item.grade != null ? `Grade ${item.grade}` : ''}
+                {item.grade != null && item.stats?.currentGPA != null ? '  ·  ' : ''}
+                {/* currentGPA is a 0-100 grade average, not a 4.0-scale GPA. */}
+                {item.stats?.currentGPA != null ? `Avg ${item.stats.currentGPA.toFixed(1)}` : ''}
+              </Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No students yet</Text>
-            <Text style={styles.emptyText}>Connect a school portal to start syncing data.</Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={onAddSource}>
-              <Text style={styles.emptyButtonText}>Connect Portal</Text>
-            </TouchableOpacity>
-          </View>
+          error ? (
+            <View style={styles.empty} testID="students-error">
+              <Text style={styles.emptyTitle}>Could not load students</Text>
+              <Text style={styles.emptyText}>{error}</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={() => void load()}>
+                <Text style={styles.emptyButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No students yet</Text>
+              <Text style={styles.emptyText}>Connect a school portal to start syncing data.</Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={onAddSource}>
+                <Text style={styles.emptyButtonText}>Connect Portal</Text>
+              </TouchableOpacity>
+            </View>
+          )
         }
       />
     </View>
@@ -122,6 +146,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#dee2e6',
   },
   title: { fontSize: 22, fontWeight: '700', color: '#1a1a2e' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   addButton: {
     backgroundColor: '#4361ee',
     paddingHorizontal: 14,
@@ -129,6 +154,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  settingsButton: { padding: 6 },
+  settingsIcon: { fontSize: 22, color: '#6c757d' },
   error: { color: '#dc3545', padding: 16 },
   card: {
     flexDirection: 'row',
