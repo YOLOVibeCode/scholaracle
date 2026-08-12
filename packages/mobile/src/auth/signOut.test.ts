@@ -82,6 +82,19 @@ describe('fullSignOut', () => {
     secureStoreData.clear();
     wireSecureStoreMock();
     await AsyncStorage.clear();
+    // No test in this file may leave the process: unmocked fullSignOut steps
+    // (unregisterPushToken, logout) fetch against the PROD API by default,
+    // which once hung this suite past its timeout during a live deploy.
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true }),
+      text: async () => '',
+    } as unknown as Response);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should purge credentials, sources, ledger, push token, and auth tokens', async () => {
