@@ -51,7 +51,7 @@ const chromeMock = {
   },
 };
 
-(globalThis as { chrome: typeof chromeMock }).chrome = chromeMock;
+(globalThis as unknown as { chrome: typeof chromeMock }).chrome = chromeMock;
 
 export function resetChromeMock(): void {
   for (const k of Object.keys(localStore)) delete localStore[k];
