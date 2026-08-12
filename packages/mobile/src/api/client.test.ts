@@ -349,6 +349,88 @@ describe('ScholarmancyApiClient auth', () => {
     });
   });
 
+  describe('getAssignmentMaterials', () => {
+    const STUDENT_ID = 'stu-abc123';
+
+    function makeMaterialsResponse(): Record<string, unknown> {
+      return {
+        studentId: STUDENT_ID,
+        studentName: 'Emma Lewis',
+        totalMaterials: 2,
+        courses: [
+          {
+            courseExternalId: 'course-1',
+            courseName: 'AP Calculus',
+            materials: [
+              {
+                externalId: 'm-1',
+                title: 'Worksheet 5',
+                type: 'file',
+                downloadUrl: `${BASE_URL}/api/assets/m-1?sig=abc`,
+                assignmentExternalId: 'a 1/#&x',
+              },
+              {
+                externalId: 'm-2',
+                title: 'Syllabus',
+                type: 'file',
+                assignmentExternalId: null,
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    it('should build the materials URL with an encoded assignment id', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: makeMaterialsResponse() });
+
+      await client.getAssignmentMaterials(STUDENT_ID, 'a 1/#&x');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/students/${STUDENT_ID}/materials?assignment=a%201%2F%23%26x`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+    });
+
+    it('should return the server response untouched (contracts passthrough)', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({ status: 200, body: makeMaterialsResponse() });
+
+      const res = await client.getAssignmentMaterials(STUDENT_ID, 'a 1/#&x');
+
+      expect(res.totalMaterials).toBe(2);
+      expect(res.courses[0]?.materials[0]).toMatchObject({
+        externalId: 'm-1',
+        downloadUrl: `${BASE_URL}/api/assets/m-1?sig=abc`,
+        assignmentExternalId: 'a 1/#&x',
+      });
+      expect(res.courses[0]?.materials[1]?.assignmentExternalId).toBeNull();
+    });
+
+    it('should THROW an ApiError with the server message on a 500', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({
+        status: 500,
+        body: { success: false, error: 'Internal error', code: 'INTERNAL_ERROR', requestId: 'r-9' },
+      });
+
+      await expect(client.getAssignmentMaterials(STUDENT_ID, 'a-1')).rejects.toMatchObject({
+        name: 'ApiError',
+        message: 'Internal error',
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        requestId: 'r-9',
+      });
+    });
+
+    it('should expose the configured base URL via baseUrlValue (for host classification)', () => {
+      expect(client.baseUrlValue).toBe(BASE_URL);
+    });
+  });
+
   /**
    * Real production sources/runs shape (from API research):
    *   Sources: [{ id, provider, displayName, pluginId, ... }]  — field is `id` not `sourceId`

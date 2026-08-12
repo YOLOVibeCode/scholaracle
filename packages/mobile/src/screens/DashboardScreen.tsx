@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { apiClient, type IAssignmentItem, type ISyncRunItem } from '../api/client';
 import { ApiError } from '../api/ApiError';
+import { formatDate, statusColor } from '../grades/format';
 import type { ICourseGrade } from '@scholaracle/contracts';
 
 interface IDashboardData {
@@ -29,6 +30,7 @@ interface IDashboardScreenProps {
   readonly studentName: string;
   onSync(): void;
   onBack(): void;
+  onOpenCourse(course: ICourseGrade): void;
   onRunHistory?(): void;
 }
 
@@ -37,13 +39,14 @@ export function DashboardScreen({
   studentName,
   onSync,
   onBack,
+  onOpenCourse,
   onRunHistory,
 }: IDashboardScreenProps): React.ReactElement {
   const [data, setData] = useState<IDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'grades' | 'runs'>('assignments');
+  const [activeTab, setActiveTab] = useState<'assignments' | 'grades' | 'runs'>('grades');
 
   const load = useCallback(
     async (silent = false) => {
@@ -125,14 +128,14 @@ export function DashboardScreen({
       </View>
 
       <View style={styles.tabs}>
-        {(['assignments', 'grades', 'runs'] as const).map((tab) => (
+        {(['grades', 'assignments', 'runs'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'assignments' ? 'Assignments' : tab === 'grades' ? 'Grades' : 'History'}
+              {tab === 'grades' ? 'Grades' : tab === 'assignments' ? 'Assignments' : 'History'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -200,19 +203,24 @@ export function DashboardScreen({
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity style={styles.card} onPress={() => onOpenCourse(item)}>
               <View style={styles.cardRow}>
                 <Text style={styles.cardTitle}>{item.courseName}</Text>
                 <Text style={styles.gradeBadge}>
                   {item.letterGrade ??
                     (item.officialGrade != null ? `${item.officialGrade.toFixed(1)}%` : 'N/A')}
                 </Text>
+                <Text style={styles.chevron}>›</Text>
               </View>
               <Text style={styles.cardSub}>
                 {item.gradedAssignments}/{item.totalAssignments} graded
-                {item.missingAssignments > 0 ? `  ·  ${item.missingAssignments} missing` : ''}
+                {item.missingAssignments > 0 && (
+                  <Text
+                    style={styles.missingCount}
+                  >{`  ·  ${item.missingAssignments} missing`}</Text>
+                )}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -255,33 +263,6 @@ function groupAssignmentsByStatus(
     ...(upcoming.length > 0 ? [{ title: 'Upcoming', data: upcoming }] : []),
     ...(past.length > 0 ? [{ title: 'Past', data: past }] : []),
   ];
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function statusColor(status?: string): { color: string } {
-  switch (status) {
-    case 'missing':
-      return { color: '#dc3545' };
-    case 'late':
-      return { color: '#fd7e14' };
-    case 'graded':
-      return { color: '#28a745' };
-    case 'submitted':
-      return { color: '#4361ee' };
-    default:
-      return { color: '#6c757d' };
-  }
 }
 
 function runStatusColor(status: string): { color: string } {
@@ -357,6 +338,8 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 13, color: '#6c757d', marginTop: 3 },
   statusBadge: { fontSize: 12, fontWeight: '600' },
   gradeBadge: { fontSize: 16, fontWeight: '700', color: '#4361ee' },
+  chevron: { color: '#adb5bd', fontSize: 22, marginLeft: 8 },
+  missingCount: { color: '#dc3545' },
   error: { color: '#dc3545', flex: 1 },
   errorBox: {
     flexDirection: 'row',
