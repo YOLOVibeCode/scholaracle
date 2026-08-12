@@ -20,9 +20,13 @@ on:
         default: false
         type: boolean
 
+# Newest push wins: dev auto-deploys every push immediately, so a run for a
+# superseded commit can never see its own SHA on dev again — it would only
+# burn its timeout and fail. Cancelling it is correct: Railway's prod gate
+# releases per-commit, and only the head commit's deploys should release.
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   DEV_API_URL: https://api-dev-c268.up.railway.app
