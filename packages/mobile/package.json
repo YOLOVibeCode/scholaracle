@@ -34,14 +34,15 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "ensure-dev-seed": "node scripts/ensure-companion-dev-seed.js",
+    "test": "npm run ensure-dev-seed && jest",
+    "test:coverage": "npm run ensure-dev-seed && jest --coverage",
     "lint": "eslint src App.tsx --ext .ts,.tsx",
     "lint:strict": "eslint src App.tsx --ext .ts,.tsx --max-warnings=0",
     "lint:fix": "eslint src App.tsx --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" App.tsx",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" App.tsx",
-    "type-check": "tsc --noEmit",
+    "type-check": "npm run ensure-dev-seed && tsc --noEmit",
     "clean": "rm -rf coverage dist .expo"
   }
 }
