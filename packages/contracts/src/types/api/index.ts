@@ -6,3 +6,4 @@ export * from './auth';
 export * from './integrations';
 export * from './account';
 export * from './ingest';
+export * from './materials';

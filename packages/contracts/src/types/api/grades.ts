@@ -19,6 +19,17 @@ export interface ICourseGradeRubricScore {
   readonly comments?: string;
 }
 
+export interface ICourseGradeAttachment {
+  readonly name: string;
+  readonly url?: string;
+  readonly type?: string;
+  /**
+   * Signed URL for attachments hosted on our own asset server (24h TTL, no
+   * auth header needed). Absent for raw school-portal URLs. Never cache.
+   */
+  readonly downloadUrl?: string;
+}
+
 export interface ICourseGradeAssignment {
   readonly externalId: string;
   readonly title: string;
@@ -31,11 +42,7 @@ export interface ICourseGradeAssignment {
   readonly category?: string;
   readonly categoryWeight?: number;
   readonly rubricScores?: readonly ICourseGradeRubricScore[];
-  readonly attachments?: ReadonlyArray<{
-    readonly name: string;
-    readonly url?: string;
-    readonly type?: string;
-  }>;
+  readonly attachments?: readonly ICourseGradeAttachment[];
 }
 
 export interface ICourseGrade {
