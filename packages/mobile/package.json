@@ -45,6 +45,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" App.tsx",
     "type-check": "npm run ensure-dev-seed && tsc --noEmit",
     "preflight": "expo-doctor && expo install --check && expo export --platform ios --output-dir /tmp/expo-preflight-export",
+    "build:ios": "pnpm preflight && npx eas-cli build -p ios --profile production --non-interactive",
+    "submit:ios": "npx eas-cli submit -p ios --latest --non-interactive",
     "clean": "rm -rf coverage dist .expo /tmp/expo-preflight-export"
   }
 }
