@@ -1,7 +1,41 @@
-import { extractOwnAssetId, signOwnAssetAttachments } from './attachmentSigning';
+import { extractOwnAssetId, resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
 
 const BASE = 'https://api.test.example';
 const SECRET = 'mock-signing-secret';
+
+describe('resolveApiBaseUrl', () => {
+  const savedApiBaseUrl = process.env['API_BASE_URL'];
+  const savedRailwayDomain = process.env['RAILWAY_PUBLIC_DOMAIN'];
+
+  afterEach(() => {
+    if (savedApiBaseUrl === undefined) delete process.env['API_BASE_URL'];
+    else process.env['API_BASE_URL'] = savedApiBaseUrl;
+    if (savedRailwayDomain === undefined) delete process.env['RAILWAY_PUBLIC_DOMAIN'];
+    else process.env['RAILWAY_PUBLIC_DOMAIN'] = savedRailwayDomain;
+  });
+
+  it('should prefer an explicit API_BASE_URL over everything', () => {
+    process.env['API_BASE_URL'] = 'https://override.example';
+    process.env['RAILWAY_PUBLIC_DOMAIN'] = 'api.railway.example';
+
+    expect(resolveApiBaseUrl('https://web.example')).toBe('https://override.example');
+  });
+
+  it('should build https origin from RAILWAY_PUBLIC_DOMAIN, ignoring the web baseUrl', () => {
+    delete process.env['API_BASE_URL'];
+    process.env['RAILWAY_PUBLIC_DOMAIN'] = 'api.railway.example';
+
+    expect(resolveApiBaseUrl('https://web.example')).toBe('https://api.railway.example');
+  });
+
+  it('should fall back to the config baseUrl outside Railway (local dev, tests)', () => {
+    delete process.env['API_BASE_URL'];
+    delete process.env['RAILWAY_PUBLIC_DOMAIN'];
+
+    expect(resolveApiBaseUrl('http://localhost:2801')).toBe('http://localhost:2801');
+    expect(resolveApiBaseUrl(undefined)).toBe('');
+  });
+});
 
 describe('extractOwnAssetId', () => {
   it.each([
