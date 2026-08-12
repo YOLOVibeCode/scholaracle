@@ -39,7 +39,7 @@ import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schema
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
-import { signOwnAssetAttachments } from './attachmentSigning';
+import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -968,7 +968,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const { id: studentDbId } = req.params;
       // Filter to current grading period by default; pass ?currentOnly=false to show all
       const currentOnly = req.query['currentOnly'] !== 'false';
-      const attachmentBaseUrl = config.baseUrl ?? process.env['API_BASE_URL'] ?? '';
+      const attachmentBaseUrl = resolveApiBaseUrl(config.baseUrl);
       if (!studentDbId) {
         throw new ValidationError('Missing student ID');
       }
@@ -1574,7 +1574,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const studentExternalId = student.studentId ?? '';
       const studentDbIdStr = student._id?.toString() ?? '';
-      const baseUrl = config.baseUrl ?? process.env['API_BASE_URL'] ?? '';
+      const baseUrl = resolveApiBaseUrl(config.baseUrl);
 
       const materialsColl = config.database.collection('slc_course_materials');
       const coursesColl = config.database.collection('slc_courses');
@@ -1887,7 +1887,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const studentExternalId = student.studentId ?? '';
       const studentDbIdStr = student._id?.toString() ?? '';
-      const baseUrl = config.baseUrl ?? '';
+      const baseUrl = resolveApiBaseUrl(config.baseUrl);
 
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
