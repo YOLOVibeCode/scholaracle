@@ -28,6 +28,7 @@ import {
   type IStudentGradesResponse,
   type ISourceListItem,
   type IRunListItem,
+  type IStudentMaterialsResponse,
 } from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -38,6 +39,7 @@ import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schema
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
+import { signOwnAssetAttachments } from './attachmentSigning';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -966,6 +968,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const { id: studentDbId } = req.params;
       // Filter to current grading period by default; pass ?currentOnly=false to show all
       const currentOnly = req.query['currentOnly'] !== 'false';
+      const attachmentBaseUrl = config.baseUrl ?? process.env['API_BASE_URL'] ?? '';
       if (!studentDbId) {
         throw new ValidationError('Missing student ID');
       }
@@ -1172,7 +1175,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               rating?: string;
               comments?: string;
             }>;
-            attachments?: Array<{ name: string; url?: string; type?: string }>;
+            attachments?: Array<{
+              name: string;
+              url?: string;
+              type?: string;
+              downloadUrl?: string;
+            }>;
           }>;
           recentPointsPossible: number;
           recentPointsEarned: number;
@@ -1201,9 +1209,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           typeof record?.['pointsEarned'] === 'number' ? record!['pointsEarned'] : undefined;
         const title = (record?.['title'] as string) ?? 'Assignment';
         const externalId = (doc['externalId'] as string) ?? '';
-        const attachments =
+        const attachments = signOwnAssetAttachments(
           (record?.['attachments'] as Array<{ name: string; url?: string; type?: string }>) ??
-          undefined;
+            undefined,
+          attachmentBaseUrl,
+          config.jwtSecret
+        );
         const category = (record?.['category'] as string) ?? undefined;
         const categoryWeight =
           typeof record?.['categoryWeight'] === 'number' ? record!['categoryWeight'] : undefined;
@@ -1322,7 +1333,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             rating?: string;
             comments?: string;
           }>;
-          attachments?: Array<{ name: string; url?: string; type?: string }>;
+          attachments?: Array<{ name: string; url?: string; type?: string; downloadUrl?: string }>;
         }>;
       }> = [];
 
@@ -1636,6 +1647,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           fileSize?: number;
           assetId?: string;
           downloadUrl?: string;
+          linkAccessibility?: 'public' | 'authenticated' | 'unknown';
+          assignmentExternalId: string | null;
         }>
       >();
 
@@ -1674,6 +1687,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
                 : undefined,
           linkAccessibility: rec?.['linkAccessibility'] as
             'public' | 'authenticated' | 'unknown' | undefined,
+          assignmentExternalId: (rec?.['assignmentExternalId'] as string | undefined) ?? null,
         };
 
         const list = grouped.get(courseExtId);
@@ -1697,7 +1711,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentName: student.name,
         totalMaterials,
         courses,
-      });
+      } satisfies IStudentMaterialsResponse);
     })
   );
 

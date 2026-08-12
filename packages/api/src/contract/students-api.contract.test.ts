@@ -40,7 +40,11 @@ describe('students API contract', () => {
     app.use(
       '/api/students',
       authMiddleware(authService),
-      studentsRouter({ database, baseUrl: 'http://test.example' })
+      studentsRouter({
+        database,
+        baseUrl: 'http://test.example',
+        jwtSecret: 'mock-contract-jwt-secret',
+      })
     );
     app.use(createErrorHandler());
 
@@ -50,6 +54,7 @@ describe('students API contract', () => {
     await database.collection('slc_assignments').deleteMany({});
     await database.collection('slc_grade_snapshots').deleteMany({});
     await database.collection('slc_sources').deleteMany({});
+    await database.collection('slc_course_materials').deleteMany({});
     await database.collection('slc_runs').deleteMany({});
 
     const registerResult = await authService.register(EMAIL, 'password123', 'Contract User');
@@ -123,6 +128,20 @@ describe('students API contract', () => {
           dueAt: dueSoon,
           pointsPossible: 10,
           pointsEarned: 9,
+          category: 'Homework',
+          categoryWeight: 40,
+          attachments: [
+            {
+              name: 'own.png',
+              url: 'http://test.example/api/assets/asset-uuid-1',
+              type: 'image/png',
+            },
+            {
+              name: 'portal.pdf',
+              url: 'https://school.example.com/doc/1',
+              type: 'application/pdf',
+            },
+          ],
         },
       },
       {
@@ -132,6 +151,31 @@ describe('students API contract', () => {
         externalId: 'a-missing',
         deletedAt: null,
         record: { title: 'Missing HW', status: 'missing', dueAt: dueSoon },
+      },
+    ]);
+
+    // Course materials: one linked to an assignment, one course-scoped
+    await database.collection('slc_course_materials').insertMany([
+      {
+        userId,
+        studentId: studentDbId,
+        courseExternalId: 'course-1',
+        externalId: 'mat-tagged',
+        deletedAt: null,
+        record: {
+          title: 'Worksheet for Graded HW',
+          type: 'file',
+          assignmentExternalId: 'a-graded',
+          postedAt: now.toISOString(),
+        },
+      },
+      {
+        userId,
+        studentId: studentDbId,
+        courseExternalId: 'course-1',
+        externalId: 'mat-course',
+        deletedAt: null,
+        record: { title: 'Course Syllabus', type: 'file', postedAt: now.toISOString() },
       },
     ]);
 
@@ -242,6 +286,70 @@ describe('students API contract', () => {
       ],
       'ICourseGradeAssignment'
     );
+  });
+
+  it('GET /api/students/:id/grades — own-asset attachments are signed, portal URLs are not', async () => {
+    const res = await request(app)
+      .get(`/api/students/${studentDbId}/grades`)
+      .set('Authorization', `Bearer ${testToken}`);
+
+    expect(res.status).toBe(200);
+    const withAttachments = (res.body.courseGrades as Array<Record<string, unknown>>)
+      .flatMap((c) => (c['assignments'] as Array<Record<string, unknown>>) ?? [])
+      .find((a) => Array.isArray(a['attachments']) && (a['attachments'] as unknown[]).length > 0);
+    expect(withAttachments).toBeDefined();
+
+    const attachments = withAttachments!['attachments'] as Array<Record<string, unknown>>;
+    for (const att of attachments) {
+      assertKeys(att, ['name'], ['url', 'type', 'downloadUrl'], 'ICourseGradeAttachment');
+    }
+    const own = attachments.find((a) => (a['url'] as string).includes('/api/assets/'));
+    const portal = attachments.find((a) => (a['url'] as string).includes('school.example.com'));
+    expect(own?.['downloadUrl']).toContain('/api/assets/asset-uuid-1?sig=');
+    expect(own?.['downloadUrl']).toContain('&exp=');
+    expect(portal?.['downloadUrl']).toBeUndefined();
+  });
+
+  it('GET /api/students/:id/materials?assignment= — exact keys + assignment tagging (OR semantics)', async () => {
+    const res = await request(app)
+      .get(`/api/students/${studentDbId}/materials?assignment=a-graded`)
+      .set('Authorization', `Bearer ${testToken}`);
+
+    expect(res.status).toBe(200);
+    assertKeys(
+      res.body as Record<string, unknown>,
+      ['studentId', 'studentName', 'totalMaterials', 'courses'],
+      [],
+      'IStudentMaterialsResponse'
+    );
+    const group = (res.body.courses as Array<Record<string, unknown>>)[0]!;
+    assertKeys(group, ['courseExternalId', 'courseName', 'materials'], [], 'ICourseMaterials');
+
+    const materials = group['materials'] as Array<Record<string, unknown>>;
+    // OR semantics: the assignment-tagged material AND the course-scoped one both return
+    expect(materials).toHaveLength(2);
+    for (const material of materials) {
+      assertKeys(
+        material,
+        ['externalId', 'title', 'type', 'assignmentExternalId'],
+        [
+          'url',
+          'fileName',
+          'mimeType',
+          'postedAt',
+          'description',
+          'fileSize',
+          'assetId',
+          'downloadUrl',
+          'linkAccessibility',
+        ],
+        'ICourseMaterial'
+      );
+    }
+    const tagged = materials.find((m) => m['externalId'] === 'mat-tagged');
+    const untagged = materials.find((m) => m['externalId'] === 'mat-course');
+    expect(tagged?.['assignmentExternalId']).toBe('a-graded');
+    expect(untagged?.['assignmentExternalId']).toBeNull();
   });
 
   it('GET /api/students/:id/action-board — exact response/bucket/item keys', async () => {
