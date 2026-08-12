@@ -9,25 +9,13 @@ export type CommunicationChannel = 'email' | 'sms' | 'push' | 'in_app' | 'phone'
  * Communication type categories.
  */
 export type CommunicationType =
-  | 'notification'
-  | 'marketing'
-  | 'support'
-  | 'billing'
-  | 'system'
-  | 'alert';
+  'notification' | 'marketing' | 'support' | 'billing' | 'system' | 'alert';
 
 /**
  * Communication delivery status.
  */
 export type CommunicationStatus =
-  | 'pending'
-  | 'sent'
-  | 'delivered'
-  | 'failed'
-  | 'bounced'
-  | 'opened'
-  | 'clicked'
-  | 'preview';
+  'pending' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'opened' | 'clicked' | 'preview';
 
 /**
  * Communication trigger source.

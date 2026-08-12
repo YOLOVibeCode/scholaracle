@@ -91,7 +91,7 @@ function sha256Hex(message: string): string {
   let h6 = 0x1f83d9ab;
   let h7 = 0x5be0cd19;
   const w = new Uint32Array(64);
-  const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+  const rotr = (x: number, n: number): number => (x >>> n) | (x << (32 - n));
 
   for (let i = 0; i < withPad.length; i += 64) {
     for (let j = 0; j < 16; j++) w[j] = view.getUint32(i + j * 4, false);
