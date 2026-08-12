@@ -15,6 +15,7 @@ import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
   IStudentGradesResponse,
+  IStudentMaterialsResponse,
   IActionBoardResponse,
   ISourceListItem,
   IRunListItem,
@@ -78,6 +79,11 @@ export class ScholarmancyApiClient {
   /** Increments on every login/logout; identifies the current session. */
   get sessionEpoch(): number {
     return this._sessionEpoch;
+  }
+
+  /** The configured API base URL (used to classify resource-link hosts). */
+  get baseUrlValue(): string {
+    return this.baseUrl;
   }
 
   // ---------------------------------------------------------------------------
@@ -218,6 +224,21 @@ export class ScholarmancyApiClient {
     // current-only default filters ALL courses out. Fall back to all
     // grading periods so the most recent term's grades still render.
     return this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades?currentOnly=false`);
+  }
+
+  /**
+   * Materials for one assignment. The server's ?assignment= filter is an OR
+   * (exact matches plus the whole course) — callers partition the result via
+   * partitionMaterials. Responses carry signed URLs with a 24h TTL, so this
+   * must be re-fetched on every mount and never cached.
+   */
+  async getAssignmentMaterials(
+    studentId: string,
+    assignmentExternalId: string
+  ): Promise<IStudentMaterialsResponse> {
+    return this._get<IStudentMaterialsResponse>(
+      `/api/students/${studentId}/materials?assignment=${encodeURIComponent(assignmentExternalId)}`
+    );
   }
 
   async getStudentRuns(studentId: string): Promise<ISyncRunItem[]> {
