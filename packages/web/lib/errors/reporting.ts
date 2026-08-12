@@ -10,7 +10,6 @@ import { isDevBuild } from './types';
  */
 export function reportClientError(error: unknown, context?: Record<string, unknown>): void {
   if (isDevBuild) {
-    // eslint-disable-next-line no-console
     console.error('[client-error]', error, context ?? '');
     return;
   }

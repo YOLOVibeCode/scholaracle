@@ -59,11 +59,7 @@ export interface IOneRosterResult {
   readonly student: { readonly sourcedId: string };
   readonly score?: number;
   readonly scoreStatus:
-    | 'exempt'
-    | 'fully graded'
-    | 'not submitted'
-    | 'partially graded'
-    | 'submitted';
+    'exempt' | 'fully graded' | 'not submitted' | 'partially graded' | 'submitted';
   readonly scoreDate?: string;
   readonly comment?: string;
 }

@@ -176,8 +176,7 @@ describe('processScraperGenerationJob', () => {
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-happy' });
       expect(job?.['status']).toBe('ready');
       const result = job?.['result'] as
-        | { scraperCode?: string; transformerCode?: string }
-        | undefined;
+        { scraperCode?: string; transformerCode?: string } | undefined;
       expect(result?.scraperCode).toContain('PowerSchoolScraper');
       expect(result?.transformerCode).toContain('ISlcDeltaOp');
       expect(job?.['error']).toBeNull();

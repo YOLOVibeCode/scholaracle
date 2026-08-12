@@ -1,5 +1,3 @@
-import { type IDashboardStats } from './dashboard';
-
 // ---------------------------------------------------------------------------
 // Mock the cache module so we can control it per-test.
 // The mock must be declared before the module under test is imported.
@@ -136,15 +134,6 @@ const AGENDA_RESPONSE = {
       },
     ],
   },
-};
-
-const ZEROED_STATS: IDashboardStats = {
-  totalStudents: 0,
-  totalCourses: 0,
-  totalAlerts: 0,
-  averageGPA: null,
-  recentAlerts: [],
-  upcomingDeadlines: [],
 };
 
 // ---------------------------------------------------------------------------
