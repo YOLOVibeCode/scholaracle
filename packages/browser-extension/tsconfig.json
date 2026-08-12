@@ -6,7 +6,7 @@
     "strict": true,
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["chrome"],
+    "types": ["chrome", "jest", "node"],
     "baseUrl": ".",
     "paths": {
       "@scholaracle/contracts": ["../contracts/src/index"],
