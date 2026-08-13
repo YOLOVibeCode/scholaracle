@@ -1,0 +1,19 @@
+---
+description: Global Expo best-practices rule library — consult before payments, EAS builds, store submission, testing, or CI work
+alwaysApply: true
+---
+
+# Best Practices Library
+
+Follow the rules in `~/Dev/BestPractices/` — read the relevant file before working on that domain:
+
+- `payments/store-compliance.md` — READ FIRST for any payment work (IAP vs Apple Pay/Google Pay rail decision)
+- `payments/apple-pay.md` / `payments/google-pay.md` — Stripe PlatformPay implementation
+- `expo/eas-build-efficiency.md` — EAS Update vs rebuild rule, caching, credit minimization
+- `expo/project-standards.md` — SDK baseline, New Architecture, expo-router conventions
+- `testing/release-gate.md` — layered gate every build/update/submission must pass
+- `platform/apple.md` / `platform/google.md` — signing, privacy, store review pre-flight
+- `ci-cd/pipeline-efficiency.md` — CI-minute efficiency
+- `ai-development/efficient-ai-workflow.md` — cheapest-feedback-loop rules
+
+Project-specific rules in this repo override the library where they conflict.

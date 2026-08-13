@@ -16,6 +16,7 @@
     "expo-secure-store": "~57.0.1",
     "expo-splash-screen": "~57.0.6",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.13",
     "react": "19.2.3",
     "react-native": "0.86.2",
     "react-native-safe-area-context": "^5.7.0",
@@ -44,9 +45,13 @@
     "format": "prettier --write \"src/**/*.{ts,tsx}\" App.tsx",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" App.tsx",
     "type-check": "npm run ensure-dev-seed && tsc --noEmit",
-    "preflight": "expo-doctor && expo install --check && expo export --platform ios --output-dir /tmp/expo-preflight-export",
+    "preflight": "expo-doctor && expo install --check && tsc --noEmit && expo export --platform ios --output-dir /tmp/expo-preflight-export",
     "build:ios": "pnpm preflight && npx eas-cli build -p ios --profile production --non-interactive",
+    "build:android": "pnpm preflight && npx eas-cli build -p android --profile production --non-interactive",
     "submit:ios": "npx eas-cli submit -p ios --latest --non-interactive",
+    "submit:android": "npx eas-cli submit -p android --latest --non-interactive",
+    "update:preview": "pnpm preflight && npx eas-cli update --channel preview --environment preview --non-interactive",
+    "update:production": "pnpm preflight && npx eas-cli update --channel production --environment production --non-interactive",
     "clean": "rm -rf coverage dist .expo /tmp/expo-preflight-export"
   }
 }
