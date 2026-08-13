@@ -56,8 +56,28 @@ describe('Health Router', () => {
         status: 'ok',
         commit: 'abc123def456',
         branch: 'main',
+        builtAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
         timestamp: expect.any(String),
       });
+    });
+
+    it('should report a stable builtAt across requests', async () => {
+      const first = await request(app).get('/api/health/version');
+      const second = await request(app).get('/api/health/version');
+      expect(first.body.builtAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(first.body.builtAt).toBe(second.body.builtAt);
+    });
+
+    it('should prefer SCHOLARMANCY_BUILT_AT when set', async () => {
+      const saved = process.env['SCHOLARMANCY_BUILT_AT'];
+      process.env['SCHOLARMANCY_BUILT_AT'] = '2026-08-13T15:04:22Z';
+      try {
+        const response = await request(app).get('/api/health/version');
+        expect(response.body.builtAt).toBe('2026-08-13T15:04:22Z');
+      } finally {
+        if (saved === undefined) delete process.env['SCHOLARMANCY_BUILT_AT'];
+        else process.env['SCHOLARMANCY_BUILT_AT'] = saved;
+      }
     });
 
     it('should report unknown when Railway env vars are absent', async () => {
