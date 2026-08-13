@@ -63,8 +63,16 @@ export async function runCanvasRecipe(
     const courseId = String(raw.id);
     const courseUrl = `${cleanBaseUrl}/courses/${courseId}`;
 
-    // Navigate to course page first (sets context for subsequent API calls)
-    await driver.goto(courseUrl, { waitUntil: 'networkidle' });
+    // Navigate to course page first (sets context for subsequent API calls).
+    // Only the origin context matters here, and Canvas SPA pages hold
+    // long-poll connections open, so never wait for networkidle — and a slow
+    // course page shouldn't kill the whole run.
+    try {
+      await driver.goto(courseUrl, { waitUntil: 'load', timeout: 30000 });
+    } catch {
+      // Page is typically usable for same-origin API calls even when the
+      // load event never settled.
+    }
     await driver.sleep(1500);
 
     // Assignments
