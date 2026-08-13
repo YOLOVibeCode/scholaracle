@@ -36,6 +36,7 @@ ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN pnpm --filter @scholaracle/web build
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/BUILT_AT
 
 # ─── Stage 3: Runtime ────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
@@ -46,6 +47,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/BUILT_AT ./BUILT_AT
 
 ENV NODE_ENV=production
 EXPOSE 3000

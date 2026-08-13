@@ -77,7 +77,7 @@ export function snapshotEnv(): DiagEnv {
   };
   const cfg = Constants.expoConfig;
   return {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:2801',
+    apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'https://api.scholarmancy.com',
     appVersion: cfg?.version ?? null,
     nativeBuild: Constants.nativeBuildVersion ?? cfg?.ios?.buildNumber ?? null,
     runtimeVersion: cfg?.runtimeVersion ?? null,

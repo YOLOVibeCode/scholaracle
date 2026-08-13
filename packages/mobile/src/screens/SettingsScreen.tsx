@@ -7,9 +7,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
+import { DeployStamp } from '../components/DeployStamp';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -74,9 +74,6 @@ export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactEle
     );
   };
 
-  const appVersion =
-    Constants.expoConfig?.version ?? Constants.manifest2?.extra?.expoClient?.version ?? '1.0.0';
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -136,7 +133,7 @@ export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactEle
           <Text style={styles.signOutText}>{isSigningOut ? 'Signing out…' : 'Sign Out'}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>Scholarmancy v{String(appVersion)}</Text>
+        <DeployStamp />
       </ScrollView>
     </View>
   );
@@ -200,5 +197,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   signOutText: { color: '#dc3545', fontWeight: '700', fontSize: 16 },
-  version: { textAlign: 'center', color: '#adb5bd', fontSize: 12, marginTop: 24 },
 });

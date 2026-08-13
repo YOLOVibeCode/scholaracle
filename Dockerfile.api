@@ -42,6 +42,9 @@ CMD ["pnpm", "--filter", "@scholaracle/api", "dev"]
 FROM base AS production
 COPY . .
 RUN pnpm --filter @scholaracle/api... build
+# Image-build UTC stamp for GET /api/health/version `builtAt`. After COPY so
+# a new commit always gets a new time (layer cache busts with source).
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/BUILT_AT
 ENV NODE_ENV=production
 EXPOSE 3002
 CMD ["node", "packages/api/dist/server.js"]

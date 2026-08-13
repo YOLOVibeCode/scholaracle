@@ -31,6 +31,7 @@ import {
   resolvePrefill,
 } from '../credentials/savedLoginStore';
 import { ApiError } from '../api/ApiError';
+import { DeployStamp } from '../components/DeployStamp';
 
 export function LoginScreen(): React.ReactElement {
   const { login, isAuthenticating, error } = useAuth();
@@ -94,73 +95,76 @@ export function LoginScreen(): React.ReactElement {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Image
-        source={require('../../assets/icon.png')}
-        style={styles.logo}
-        resizeMode="contain"
-        accessibilityLabel="Scholarmancy logo"
-      />
-      <Text style={styles.title}>Scholarmancy</Text>
-      <Text style={styles.subtitle}>Sign in to your account</Text>
+      <View style={styles.body}>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Scholarmancy logo"
+        />
+        <Text style={styles.title}>Scholarmancy</Text>
+        <Text style={styles.subtitle}>Sign in to your account</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#999"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        textContentType="username"
-        returnKeyType="next"
-        value={email}
-        onChangeText={handleEmailChange}
-        testID="input-email"
-      />
-      <View style={styles.passwordRow}>
         <TextInput
-          style={styles.passwordInput}
-          placeholder="Password"
+          style={styles.input}
+          placeholder="Email"
           placeholderTextColor="#999"
-          secureTextEntry={!showPassword}
-          textContentType="password"
           autoCapitalize="none"
           autoCorrect={false}
-          spellCheck={false}
-          autoComplete="current-password"
-          returnKeyType="done"
-          value={password}
-          onChangeText={handlePasswordChange}
-          onSubmitEditing={handleLogin}
-          testID="input-password"
+          keyboardType="email-address"
+          textContentType="username"
+          returnKeyType="next"
+          value={email}
+          onChangeText={handleEmailChange}
+          testID="input-email"
         />
+        <View style={styles.passwordRow}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry={!showPassword}
+            textContentType="password"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="current-password"
+            returnKeyType="done"
+            value={password}
+            onChangeText={handlePasswordChange}
+            onSubmitEditing={handleLogin}
+            testID="input-password"
+          />
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={() => setShowPassword((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          >
+            <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
-          style={styles.eyeButton}
-          onPress={() => setShowPassword((v) => !v)}
-          accessibilityRole="button"
-          accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          style={[styles.button, isAuthenticating && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={isAuthenticating}
+          testID="button-login"
         >
-          <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
+          {isAuthenticating ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Sign In</Text>
+          )}
         </TouchableOpacity>
-      </View>
 
-      <TouchableOpacity
-        style={[styles.button, isAuthenticating && styles.buttonDisabled]}
-        onPress={handleLogin}
-        disabled={isAuthenticating}
-        testID="button-login"
-      >
-        {isAuthenticating ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign In</Text>
+        {error && (
+          <Text style={styles.error} testID="text-login-error">
+            {error}
+          </Text>
         )}
-      </TouchableOpacity>
-
-      {error && (
-        <Text style={styles.error} testID="text-login-error">
-          {error}
-        </Text>
-      )}
+      </View>
+      <DeployStamp />
     </KeyboardAvoidingView>
   );
 }
@@ -169,6 +173,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
+  },
+  body: {
+    flex: 1,
     justifyContent: 'center',
     padding: 24,
   },
