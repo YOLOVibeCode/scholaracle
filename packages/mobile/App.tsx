@@ -22,7 +22,13 @@ import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
 import { type IStudentListItem } from './src/api/client';
 import { isDemoDeepLink, DEMO_EMAIL, DEMO_PASSWORD } from './src/demo/demoLogin';
+import { isDiagDeepLink } from './src/demo/diagDeepLink';
+import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
+import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
+
+// Install capture taps once at module load — before any other code runs.
+installDiagCapture();
 
 type AppView =
   | 'students'
@@ -47,6 +53,19 @@ function AppContent(): React.ReactElement {
   const [nav, setNav] = useState<INavState>({ view: 'students' });
   const linkingUrl = useLinkingURL();
   const handledDemoUrl = useRef<string | null>(null);
+  const handledDiagUrl = useRef<string | null>(null);
+
+  // Trace navigation changes into the diag ring buffer.
+  useEffect(() => {
+    log('info', 'nav', nav.view);
+  }, [nav.view]);
+
+  // scholarmancy://diag — unlock and open the diagnostic overlay.
+  useEffect(() => {
+    if (!isDiagDeepLink(linkingUrl) || handledDiagUrl.current === linkingUrl) return;
+    handledDiagUrl.current = linkingUrl ?? null;
+    void unlockDiag().then(() => openDiagPanel());
+  }, [linkingUrl]);
 
   // scholarmancy://demo — quick-login to the public demo account. No
   // pre-logout: a successful login overwrites the tokens anyway, and a
@@ -213,6 +232,9 @@ export default function App(): React.ReactElement {
           <AppContent />
         </SafeAreaView>
         <StatusBar style="auto" />
+        {/* DebugOverlay is outside SafeAreaView so it floats over everything,
+            but inside AuthProvider so AuthTrace can call useAuth(). */}
+        <DebugOverlay />
       </AuthProvider>
     </SafeAreaProvider>
   );

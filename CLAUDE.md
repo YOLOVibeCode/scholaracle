@@ -2,17 +2,76 @@
 
 PNPM monorepo. Ports: 2800 web / 2801 api / 2802 mongo. Stack: TS strict, Express 4, MongoDB, Next.js 16, Expo SDK 57 / RN 0.86.
 
-## Shipping the mobile app (TestFlight)
+Follow the rules in ~/Dev/BestPractices/ — read the relevant file before working
+on that domain (payments, EAS builds, store submission, testing, CI).
+
+## Shipping the mobile app
+
+### Decision: update vs rebuild
+
+Check whether the native fingerprint changed before choosing a ship path:
+
+```bash
+npx @expo/fingerprint .       # compare to last deployed build's fingerprint
+```
+
+**Rebuild required** (native fingerprint changes) when:
+- Native module added or removed
+- Config plugin added, changed, or removed
+- Permissions, entitlements, icons, or splash changed
+- Expo SDK or React Native version upgraded
+
+**OTA update** (fingerprint unchanged) for everything else — JS, assets, styling, copy.
+
+### JS/asset change → OTA (no build credits)
+
+From `packages/mobile`, in this order:
+
+```bash
+pnpm update:preview      # preflight + eas update --channel preview
+# QA on the preview TestFlight build, then:
+pnpm update:production   # preflight + eas update --channel production
+```
+
+Rollback: `npx eas-cli update:republish --branch production` to restore the last good bundle. Never delete an update.
+
+### Native change → full binary
 
 From `packages/mobile`, always in this order:
 
+**iOS:**
 ```bash
-pnpm build:ios     # preflight (doctor + version check + bundle export) THEN eas build
-pnpm submit:ios    # push latest build to TestFlight (non-interactive, ASC key in eas.json)
+export ASC_API_KEY_PATH=/Users/admin/Dev/YOLOProjects/scholarmancy/AuthKey_RA29BTM8KJ.p8
+pnpm build:ios     # preflight (doctor + tsc + version check + bundle export) THEN eas build (~5 min)
+pnpm submit:ios    # push latest build to TestFlight
 ```
 
-- **Never call `eas build` directly** — `build:ios` exists so a build cannot start without preflight. If preflight fails, fix it first; each skipped preflight historically cost a full remote build to discover the same error.
-- Build numbers auto-increment (`appVersionSource: remote`). Total build time is ~5 min.
+**Android:**
+```bash
+export GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/path/to/play-service-account.json
+pnpm build:android  # preflight THEN eas build (~8 min); EAS manages the upload keystore
+pnpm submit:android # push latest AAB to Play internal testing track
+```
+
+- **Never call `eas build` directly** — the `build:*` scripts run preflight first; each skipped preflight historically cost a full remote build to discover the same error.
+- Build numbers auto-increment: iOS `buildNumber` and Android `versionCode` both increment via `appVersionSource: remote`.
+- The iOS ASC key (`AuthKey_RA29BTM8KJ.p8`) lives at workspace root (gitignored). The Android service account JSON is a separate file — see Play Console setup below.
+
+### Android Play Console setup (one-time, manual)
+
+Before `submit:android` will work you need a Google service account key:
+
+1. Open [Google Play Console](https://play.google.com/console) → create the Scholarmancy app (package `com.scholarmancy.app`) if not done.
+2. Go to [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → Create service account.
+3. Grant the service account **Release Manager** access in Play Console → Setup → API access.
+4. Download the JSON key → save it somewhere outside of git (e.g. `~/keys/play-service-account.json`).
+5. Export `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` pointing to that file before running `submit:android`.
+
+**Track promotion path:** internal → closed testing (≥12 opted-in testers × 14 days if NoctuSoft Inc is a personal account created after Nov 13, 2023) → production with staged rollout (≤20% to start).
+
+**API level:** SDK 57 targets Android API 36 by default — compliant with the Aug 31, 2026 Play deadline. No additional configuration needed.
+
+**Data Safety form:** fill it in Play Console to match what `expo-updates`, `expo-notifications`, and `expo-secure-store` actually collect. Update it any time a new SDK is added.
 
 ## Shipping backend/web (Railway)
 
