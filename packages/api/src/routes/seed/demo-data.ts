@@ -1171,3 +1171,50 @@ export function buildDemoAlerts(userId: string, emmaStudentDbId: string, liamStu
     },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Two-parent fixture — owner-scoped data model verification
+// ---------------------------------------------------------------------------
+
+/**
+ * A second household (Dad) who has accepted shared access to Emma's record.
+ * Used to verify that `student.dataUserId()` correctly routes reads to the
+ * owner's (Sarah Mitchell's) slc_* partition so Dad sees the same gradebook.
+ *
+ * In tests / dev seed:
+ *   1. Register DEMO_COACCESS_USER (or look them up).
+ *   2. Add them to Emma's `sharedWith` array with status 'accepted'.
+ *   3. Assert GET /students/:emmaId/grades under DEMO_COACCESS_USER returns
+ *      the same courses/assignments as under DEMO_USER.
+ */
+export const DEMO_COACCESS_USER = {
+  email: 'david.mitchell.demo@scholarmancy.com',
+  password: 'DemoPass123!',
+  name: 'David Mitchell',
+} as const;
+
+/** Build the sharedWith entry to add to Emma's student record. */
+export function buildDemoCoAccessEntry(
+  coAccessUserId: string,
+  now: Date = new Date()
+): {
+  userId: string;
+  email: string;
+  name: string;
+  role: 'parent';
+  status: 'accepted';
+  isAdmin: false;
+  invitedAt: Date;
+  acceptedAt: Date;
+} {
+  return {
+    userId: coAccessUserId,
+    email: DEMO_COACCESS_USER.email,
+    name: DEMO_COACCESS_USER.name,
+    role: 'parent',
+    status: 'accepted',
+    isAdmin: false,
+    invitedAt: now,
+    acceptedAt: now,
+  };
+}
