@@ -123,7 +123,7 @@ async function migrateStudent(
 
   // slc_sources
   {
-    const coll = db.collection('ingestSources');
+    const coll = db.collection('slc_sources');
     const sourceDocs = await coll.find({ userId: coParentUserId }).toArray();
     for (const src of sourceDocs) {
       stats.sourcesMigrated++;

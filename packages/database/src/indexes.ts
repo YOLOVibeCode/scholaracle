@@ -86,6 +86,7 @@ export async function createIndexes(database: Db): Promise<void> {
   const slcRuns = database.collection('slc_runs');
   await slcRuns.createIndex({ userId: 1, runId: 1 }, { unique: true });
   await slcRuns.createIndex({ userId: 1, sourceId: 1, committedAt: -1 });
+  await slcRuns.createIndex({ runId: 1 });
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
@@ -175,9 +176,17 @@ export async function createIndexes(database: Db): Promise<void> {
   const slcAcademicTerms = database.collection('slc_academic_terms');
   await slcAcademicTerms.createIndex({ userId: 1, deletedAt: 1 });
 
+  const slcGradeHistory = database.collection('slc_grade_history');
+  await slcGradeHistory.createIndex({ userId: 1, studentExternalId: 1, date: 1 });
+  await slcGradeHistory.createIndex({ userId: 1, courseExternalId: 1, date: 1 });
+
   const slcAssets = database.collection('slc_assets');
   await slcAssets.createIndex({ userId: 1, entityType: 1, entityExternalId: 1 });
   await slcAssets.createIndex({ userId: 1, sourceId: 1, contentHash: 1 });
+
+  const slcComments = database.collection('slc_assignment_comments');
+  await slcComments.createIndex({ userId: 1, assignmentExternalId: 1, deletedAt: 1 });
+  await slcComments.createIndex({ authorUserId: 1 });
 
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');

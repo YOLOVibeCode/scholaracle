@@ -57,3 +57,5 @@ export * from './repositories/AdminMFATokenRepository';
 export * from './repositories/AdminStepUpChallengeRepository';
 export * from './repositories/SessionRepository';
 export * from './repositories/OAuthAccountRepository';
+
+export { createIndexes } from './indexes';
