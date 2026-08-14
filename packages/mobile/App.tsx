@@ -25,6 +25,7 @@ import { isDemoDeepLink, DEMO_EMAIL, DEMO_PASSWORD } from './src/demo/demoLogin'
 import { isDiagDeepLink } from './src/demo/diagDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
+import { DeployStamp } from './src/components/DeployStamp';
 import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
 
 // Install capture taps once at module load — before any other code runs.
@@ -230,6 +231,7 @@ export default function App(): React.ReactElement {
       <AuthProvider>
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           <AppContent />
+          <DeployStamp />
         </SafeAreaView>
         <StatusBar style="auto" />
         {/* DebugOverlay is outside SafeAreaView so it floats over everything,
