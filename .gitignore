@@ -119,3 +119,8 @@ local/
 # Expo scratch dirs
 .tmp-expo-go/
 .tmp-expo-go-app/
+
+# Apple code-signing — never commit private keys
+*.p8
+*.p12
+*.mobileprovision
