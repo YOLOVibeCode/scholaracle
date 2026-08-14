@@ -97,6 +97,7 @@ export class SyncScheduler {
     adapterId: string;
     baseUrl: string;
     userId: string;
+    triggeredByUserId?: string;
   }): Promise<string> {
     const jobData: ISyncJobData = {
       studentId: params.studentId,
@@ -106,6 +107,7 @@ export class SyncScheduler {
       baseUrl: params.baseUrl,
       trigger: 'manual',
       userId: params.userId,
+      triggeredByUserId: params.triggeredByUserId ?? params.userId,
     };
 
     const jobId = await this._queue.add(
@@ -134,7 +136,8 @@ export class SyncScheduler {
       config?: { institutionUrl?: string };
       baseUrl?: string;
       enabled?: boolean;
-    }>
+    }>,
+    triggeredByUserId?: string
   ): Promise<string[]> {
     const jobIds: string[] = [];
     for (let i = 0; i < dataSources.length; i++) {
@@ -150,6 +153,7 @@ export class SyncScheduler {
         adapterId,
         baseUrl,
         userId,
+        triggeredByUserId,
       });
       jobIds.push(jid);
     }

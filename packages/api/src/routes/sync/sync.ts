@@ -76,7 +76,12 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
         throw new ValidationError('Student has no data sources configured');
       }
 
-      const jobIds = await syncScheduler.triggerAllForStudent(studentId!, userId, dataSources);
+      const jobIds = await syncScheduler.triggerAllForStudent(
+        studentId!,
+        ownerId!,
+        dataSources,
+        userId
+      );
 
       // Fetch queue position for the first job to give the user an ETA
       const queueStats = await queue.getStatsByType('sync');
@@ -151,7 +156,8 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
         provider,
         adapterId: ds.pluginId,
         baseUrl: ds.config?.institutionUrl ?? ds.baseUrl ?? '',
-        userId,
+        userId: ownerId!,
+        triggeredByUserId: userId,
       });
 
       const position = await queue.getJobPosition(jobId);

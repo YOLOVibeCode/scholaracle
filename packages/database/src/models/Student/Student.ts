@@ -223,6 +223,15 @@ export class Student {
     return this.userId.toString() === userId;
   }
 
+  /**
+   * The userId to use as the tenant key for slc_* reads and writes.
+   * Always returns the primary owner's userId, regardless of who triggered the operation.
+   * Use this after a successful `hasAccess` check instead of the requesting user's id.
+   */
+  public dataUserId(): string {
+    return this.userId.toString();
+  }
+
   /** Check if a given user ID can administer this student (owner or admin-promoted shared parent). */
   public canAdmin(userId: string): boolean {
     if (this.isOwner(userId)) return true;
