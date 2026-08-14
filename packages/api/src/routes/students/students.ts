@@ -977,6 +977,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const studentDbIdStr = student._id?.toString() ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
@@ -1003,13 +1004,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentOrClauses.push({ studentExternalId });
       }
       const assignmentFilter: Record<string, unknown> = {
-        userId,
+        userId: dataUserId,
         deletedAt: null,
         $or: studentOrClauses,
       };
 
       const studentScopeFilter: Record<string, unknown> = {
-        userId,
+        userId: dataUserId,
         deletedAt: null,
         $or: studentOrClauses,
       };
@@ -1034,7 +1035,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           })
           .toArray(),
         termsColl
-          .find({ userId, deletedAt: null })
+          .find({ userId: dataUserId, deletedAt: null })
           .project({
             externalId: 1,
             'record.startDate': 1,
@@ -1098,7 +1099,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       >();
       if (courseIds.length > 0) {
         const courseDocs = await coursesColl
-          .find({ userId, externalId: { $in: courseIds } })
+          .find({ userId: dataUserId, externalId: { $in: courseIds } })
           .project({
             externalId: 1,
             provider: 1,
@@ -1572,6 +1573,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const studentExternalId = student.studentId ?? '';
       const studentDbIdStr = student._id?.toString() ?? '';
       const baseUrl = resolveApiBaseUrl(config.baseUrl);
@@ -1582,14 +1584,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const materialFilter = studentDbIdStr
         ? {
-            userId,
+            userId: dataUserId,
             deletedAt: null,
             $or: [
               { studentId: studentDbIdStr },
               ...(studentExternalId ? [{ studentExternalId }] : []),
             ],
           }
-        : { userId, studentExternalId, deletedAt: null };
+        : { userId: dataUserId, studentExternalId, deletedAt: null };
 
       const courseQueryParam = req.query['course'] as string | undefined;
       const assignmentParam = req.query['assignment'] as string | undefined;
@@ -1597,7 +1599,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       let assignmentCourseId: string | null = null;
       if (assignmentParam) {
         const assignmentDoc = await config.database.collection('slc_assignments').findOne({
-          userId,
+          userId: dataUserId,
           deletedAt: null,
           externalId: assignmentParam,
           $or: [
@@ -1610,8 +1612,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const [materialDocs, courseDocs, assetDocs] = await Promise.all([
         materialsColl.find(materialFilter).toArray(),
-        coursesColl.find({ userId, deletedAt: null }).toArray(),
-        assetsColl.find({ userId, deletedAt: null, entityType: 'courseMaterial' }).toArray(),
+        coursesColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
+        assetsColl
+          .find({ userId: dataUserId, deletedAt: null, entityType: 'courseMaterial' })
+          .toArray(),
       ]);
 
       const courseMap = new Map<string, string>();
@@ -1733,6 +1737,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const courseFilter = req.query['course'] as string | undefined;
       const fromParam = req.query['from'] as string | undefined;
       const toParam = req.query['to'] as string | undefined;
@@ -1744,7 +1749,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const query: Record<string, unknown> = {
-        userId,
+        userId: dataUserId,
         studentExternalId: student.studentId != null ? student.studentId : { $ne: null },
       };
       if (courseFilter) {
@@ -1760,7 +1765,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       } else if (termParam) {
         const termDocs = await config.database
           .collection('slc_academic_terms')
-          .find({ userId })
+          .find({ userId: dataUserId })
           .toArray();
         const term = termDocs.find(
           (t) => (t['record'] as Record<string, unknown>)?.['title'] === termParam
@@ -1796,7 +1801,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const courseNames = new Map<string, string>();
-      const courseDocs = await config.database.collection('slc_courses').find({ userId }).toArray();
+      const courseDocs = await config.database
+        .collection('slc_courses')
+        .find({ userId: dataUserId })
+        .toArray();
       for (const cd of courseDocs) {
         const eid = (cd['externalId'] as string) ?? (cd['courseExternalId'] as string) ?? '';
         const title = (cd['record'] as Record<string, unknown> | undefined)?.['title'] as
@@ -1885,6 +1893,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const studentExternalId = student.studentId ?? '';
       const studentDbIdStr = student._id?.toString() ?? '';
       const baseUrl = resolveApiBaseUrl(config.baseUrl);
@@ -1898,29 +1907,29 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const assignmentFilter = studentDbIdStr
         ? {
-            userId,
+            userId: dataUserId,
             deletedAt: null,
             $or: [
               { studentId: studentDbIdStr },
               ...(studentExternalId ? [{ studentExternalId }] : []),
             ],
           }
-        : { userId, studentExternalId, deletedAt: null };
+        : { userId: dataUserId, studentExternalId, deletedAt: null };
 
       const [assignmentDocs, courseDocs, gradeDocs, materialDocs, assetDocs, termDocs] =
         await Promise.all([
           assignmentsColl.find(assignmentFilter).toArray(),
-          coursesColl.find({ userId, deletedAt: null }).toArray(),
-          gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
-          materialsColl.find({ userId, deletedAt: null }).toArray(),
+          coursesColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
+          gradeSnapshotsColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
+          materialsColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
           assetsColl
             .find({
-              userId,
+              userId: dataUserId,
               deletedAt: null,
               entityType: { $in: ['assignment', 'courseMaterial'] },
             })
             .toArray(),
-          termsColl.find({ userId, deletedAt: null }).toArray(),
+          termsColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
         ]);
 
       const termEndDates = new Map<string, string>();
@@ -2105,9 +2114,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const dataUserId = student.dataUserId();
       const studentExternalId = student.studentId ?? '';
       const assignmentFilter = {
-        userId,
+        userId: dataUserId,
         deletedAt: null,
         $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
       };
@@ -2142,10 +2152,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const [assignmentDocs, courseDocs, activityDocs, alertDocs, commentDocs, gradeHistoryDocs] =
         await Promise.all([
           assignmentsColl.find(assignFilter).toArray(),
-          coursesColl.find({ userId, deletedAt: null }).toArray(),
+          coursesColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
           activityLogColl
             .find({
-              userId,
+              userId: dataUserId,
               ...(studentExternalId ? { studentExternalId } : {}),
               ...(courseParam ? { courseExternalId: courseParam } : {}),
               ...(assignmentParam ? { assignmentExternalId: assignmentParam } : {}),
@@ -2163,7 +2173,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             .toArray(),
           commentsColl
             .find({
-              userId,
+              userId: dataUserId,
               deletedAt: { $in: [null, undefined] },
               ...(assignmentParam ? { assignmentExternalId: assignmentParam } : {}),
               ...(fromDate ? { createdAt: { $gte: fromDate } } : {}),
@@ -2172,7 +2182,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             .toArray(),
           gradeHistoryColl
             .find({
-              userId,
+              userId: dataUserId,
               studentExternalId: studentExternalId || null,
               ...(courseParam ? { courseExternalId: courseParam } : {}),
               ...(fromParam ? { date: { $gte: fromParam } } : {}),
@@ -2377,9 +2387,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const studentExternalId = student.studentId ?? '';
       const assignmentFilter = {
-        userId,
+        userId: dataUserId,
         deletedAt: null,
         $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
       };
@@ -2390,8 +2401,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const [assignmentDocs, courseDocs, gradeDocs] = await Promise.all([
         assignmentsColl.find(assignmentFilter).toArray(),
-        coursesColl.find({ userId, deletedAt: null }).toArray(),
-        gradeSnapshotsColl.find({ userId, deletedAt: null }).toArray(),
+        coursesColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
+        gradeSnapshotsColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
       ]);
 
       const courseMap = new Map<string, string>();
@@ -2556,12 +2567,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const studentExternalId = student.studentId ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
       const coursesColl = config.database.collection('slc_courses');
 
       const doc = await assignmentsColl.findOne({
-        userId,
+        userId: dataUserId,
         externalId: assignmentExternalId,
         deletedAt: null,
         $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
@@ -2577,7 +2589,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       let courseName = courseExternalId;
       if (courseExternalId) {
         const courseDoc = await coursesColl.findOne({
-          userId,
+          userId: dataUserId,
           externalId: courseExternalId,
           deletedAt: null,
         });
@@ -2623,6 +2635,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const body = req.body as { note?: string };
       const note = typeof body.note === 'string' ? body.note.trim() : '';
 
@@ -2631,7 +2644,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const result = await assignmentsColl.updateOne(
         {
-          userId,
+          userId: dataUserId,
           externalId: assignmentExternalId,
           deletedAt: null,
           $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
@@ -2669,6 +2682,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
+      const dataUserId = student.dataUserId();
       const body = req.body as { status?: string | null };
       const status = body.status === null || body.status === '' ? null : body.status;
       if (status !== null && (typeof status !== 'string' || !VALID_STUDENT_STATUSES.has(status))) {
@@ -2682,7 +2696,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const result = await assignmentsColl.updateOne(
         {
-          userId,
+          userId: dataUserId,
           externalId: assignmentExternalId,
           deletedAt: null,
           $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
@@ -2719,9 +2733,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const dataUserId = student.dataUserId();
       const assignmentsColl = config.database.collection('slc_assignments');
       const assignmentDoc = await assignmentsColl.findOne({
-        userId,
+        userId: dataUserId,
         externalId: assignmentExternalId,
         deletedAt: null,
         $or: [
@@ -2739,7 +2754,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const commentsColl = config.database.collection(COMMENTS_COLLECTION);
       const cursor = commentsColl.find(
         {
-          userId,
+          userId: dataUserId,
           assignmentExternalId,
           courseExternalId,
           deletedAt: { $in: [null, undefined] },
@@ -2780,9 +2795,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const dataUserId = student.dataUserId();
       const assignmentsColl = config.database.collection('slc_assignments');
       const assignmentDoc = await assignmentsColl.findOne({
-        userId,
+        userId: dataUserId,
         externalId: assignmentExternalId,
         deletedAt: null,
         $or: [
@@ -2816,7 +2832,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const commentsColl = config.database.collection(COMMENTS_COLLECTION);
       const now = new Date();
       const insertResult = await commentsColl.insertOne({
-        userId,
+        userId: dataUserId, // tenant = owner (household comment thread)
+        authorUserId: userId, // actor who wrote it
         assignmentExternalId,
         courseExternalId,
         studentExternalId: student.studentId ?? undefined,
@@ -2858,6 +2875,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const dataUserId = student.dataUserId();
       let commentObjectId: ObjectId;
       try {
         commentObjectId = new ObjectId(commentId);
@@ -2867,14 +2885,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const commentsColl = config.database.collection(COMMENTS_COLLECTION);
       const doc = await commentsColl.findOne({
         _id: commentObjectId,
-        userId,
+        userId: dataUserId,
         assignmentExternalId,
         deletedAt: { $in: [null, undefined] },
       });
       if (!doc) {
         throw new NotFoundError('Comment not found');
       }
-      const isAuthor = (doc['userId'] as string) === userId;
+      const isAuthor =
+        (doc['authorUserId'] as string | undefined) === userId ||
+        (doc['userId'] as string) === userId;
       const isOwner = student.userId.toString() === userId;
       if (!isAuthor && !isOwner) {
         throw new ForbiddenError('Not allowed to delete this comment');
@@ -3043,7 +3063,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const sources: ISourceListItem[] = [];
 
       for (const ds of student.dataSources) {
-        const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, ds.id);
+        const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(
+          student.dataUserId(),
+          ds.id
+        );
         if (!ingestSource) continue;
         sources.push({
           id: ds.id,
@@ -3094,7 +3117,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const sourceId = randomUUID();
       await ingestSourceRepository.upsert({
-        userId,
+        userId: student.dataUserId(),
         sourceId,
         provider: body.provider,
         adapterId: body.adapterId,
@@ -3125,7 +3148,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         return;
       }
 
-      const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
+      const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(
+        student.dataUserId(),
+        sourceId
+      );
       res.status(201).json({
         id: sourceId,
         pluginId: body.adapterId,
@@ -3172,11 +3198,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const ds = student.dataSources[idx]!;
-      const existingIngest = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
+      const existingIngest = await ingestSourceRepository.findByUserIdAndSourceId(
+        student.dataUserId(),
+        sourceId
+      );
 
       if (updates.displayName !== undefined || updates.portalBaseUrl !== undefined) {
         await ingestSourceRepository.upsert({
-          userId,
+          userId: student.dataUserId(),
           sourceId,
           provider: existingIngest?.provider ?? '',
           adapterId: ds.pluginId,
@@ -3197,7 +3226,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       );
       await studentRepository.update(studentId, { dataSources: dataSourcesUpdated });
 
-      const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(userId, sourceId);
+      const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(
+        student.dataUserId(),
+        sourceId
+      );
       const updatedDs = dataSourcesUpdated[idx]!;
       res.status(200).json({
         id: sourceId,
@@ -3294,7 +3326,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       await studentRepository.update(studentId, { dataSources: [...newDataSources] });
-      await ingestSourceRepository.deleteByUserIdAndSourceId(userId, sourceId);
+      await ingestSourceRepository.deleteByUserIdAndSourceId(student.dataUserId(), sourceId);
 
       res.status(200).json({ success: true });
     })
@@ -3327,7 +3359,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const limitParam = req.query['limit'];
       const limit = typeof limitParam === 'string' ? parseInt(limitParam, 10) : 50;
-      const runs = await ingestRunRepository.listByUserIdAndSourceId(userId, sourceId, limit);
+      const runs = await ingestRunRepository.listByUserIdAndSourceId(
+        student.dataUserId(),
+        sourceId,
+        limit
+      );
 
       res.status(200).json(
         runs.map(
@@ -3415,9 +3451,18 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Source not found');
       }
 
-      const lastCursor = await ingestRunRepository.findLastCommittedCursor(userId, sourceId);
+      const lastCursor = await ingestRunRepository.findLastCommittedCursor(
+        student.dataUserId(),
+        sourceId
+      );
       const runId = randomUUID();
-      const run = await ingestRunRepository.startRun({ userId, sourceId, runId, lastCursor });
+      const run = await ingestRunRepository.startRun({
+        userId: student.dataUserId(),
+        actorUserId: userId,
+        sourceId,
+        runId,
+        lastCursor,
+      });
 
       // Also enqueue a sync job if syncScheduler is available (for internal adapters)
       if (config.syncScheduler) {
@@ -3432,7 +3477,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               provider,
               adapterId: ds.pluginId,
               baseUrl: ds.config?.institutionUrl ?? ds.baseUrl ?? '',
-              userId,
+              userId: student.dataUserId(),
+              triggeredByUserId: userId,
             });
           }
         }

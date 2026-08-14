@@ -3,7 +3,13 @@ import type { ObjectId } from 'mongodb';
 export type IngestRunStatus = 'started' | 'uploaded' | 'committed' | 'failed';
 
 export interface IIngestRunData {
+  /** Owner userId — the slc_* tenant partition for this run's data. */
   readonly userId: ObjectId | string;
+  /**
+   * The userId of the account that initiated this run (may differ from userId when
+   * a co-parent triggers a sync: actorUserId = co-parent, userId = student owner).
+   */
+  readonly actorUserId?: ObjectId | string;
   readonly sourceId: string;
   readonly runId: string;
   readonly mode: 'delta';
@@ -22,6 +28,7 @@ export interface IIngestRunData {
 export class IngestRun {
   public readonly _id?: ObjectId;
   public readonly userId: ObjectId | string;
+  public readonly actorUserId?: ObjectId | string;
   public readonly sourceId: string;
   public readonly runId: string;
   public readonly mode: 'delta';
@@ -38,6 +45,7 @@ export class IngestRun {
   constructor(data: IIngestRunData, id?: ObjectId) {
     this._id = id;
     this.userId = data.userId;
+    this.actorUserId = data.actorUserId;
     this.sourceId = data.sourceId;
     this.runId = data.runId;
     this.mode = data.mode;

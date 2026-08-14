@@ -20,8 +20,16 @@ export interface ISyncJobData {
   readonly baseUrl: string;
   /** How this run was triggered. */
   readonly trigger: 'manual' | 'scheduled';
-  /** Owner user ID (for notifications). */
+  /**
+   * Owner userId — the slc_* tenant partition.  The connector token is minted with this userId
+   * so that ingest writes land in the owner's partition.
+   */
   readonly userId: string;
+  /**
+   * The userId of the account that triggered the sync (may differ from userId when a co-parent
+   * taps Sync).  Stored on the run document for audit; does not affect data routing.
+   */
+  readonly triggeredByUserId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +46,10 @@ export interface ISyncRun {
   adapterId: string;
   baseUrl: string;
   trigger: 'manual' | 'scheduled';
+  /** Owner userId — slc_* tenant partition. */
   userId: string;
+  /** The account that triggered the sync (may differ from userId for co-parent runs). */
+  triggeredByUserId?: string;
   status: SyncRunStatus;
   startedAt?: Date;
   completedAt?: Date;
@@ -173,6 +184,7 @@ export class SyncWorker {
       baseUrl: data.baseUrl,
       trigger: data.trigger,
       userId: data.userId,
+      triggeredByUserId: data.triggeredByUserId ?? data.userId,
       status: 'running',
       startedAt: new Date(),
       createdAt: new Date(),

@@ -167,6 +167,10 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
       for (const s of students) {
         if (s.studentId) studentNameByExternalId.set(s.studentId, s.name);
       }
+
+      // Collect all unique owner userIds for slc_* data queries.
+      const dataUserIds = [...new Set(students.map((s) => s.dataUserId()))];
+
       const pendingColl = config.database.collection('slc_pending_student_reconciliation');
       const linkedPending = await pendingColl
         .find({ userId, linkedStudentId: { $nin: [null, undefined, ''] } })
@@ -182,7 +186,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
 
       const courseDocs = await config.database
         .collection('slc_courses')
-        .find({ userId, deletedAt: null })
+        .find({ userId: { $in: dataUserIds }, deletedAt: null })
         .toArray();
       const courseMap = new Map<string, string>();
       for (const courseDoc of courseDocs) {
@@ -199,7 +203,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
       const assignmentDocs = await config.database
         .collection('slc_assignments')
         .find({
-          userId,
+          userId: { $in: dataUserIds },
           deletedAt: null,
           'record.dueAt': { $gte: from.toISOString(), $lte: to.toISOString() },
         })
@@ -251,7 +255,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
 
       const seriesDocs = await config.database
         .collection('slc_event_series')
-        .find({ userId, deletedAt: null })
+        .find({ userId: { $in: dataUserIds }, deletedAt: null })
         .toArray();
 
       for (const series of seriesDocs) {

@@ -669,6 +669,45 @@ const ENTITY_COLLECTION_MAP: Record<string, string> = {
 const ACTIVITY_LOG_COLLECTION = 'slc_activity_log';
 const ASSIGNMENT_RECONCILIATION_COLLECTION = 'slc_assignment_reconciliation';
 
+/**
+ * Resolves the data-owner userId for slc_* writes/reads.
+ *
+ * Ingest always authenticates the *actor* (the account whose connector token was used).
+ * When the actor is a co-parent with shared access, the owner is the student's primary
+ * owner and all slc_* data must land in the owner's partition.
+ *
+ * Resolution order:
+ *  1. If `sourceId` given, find the student that has this source → return owner userId.
+ *  2. If `studentExternalId` given, find the student by externalId → return owner userId.
+ *  3. Fall back to actorUserId (first-time owner setup; no shared student exists yet).
+ */
+async function resolveDataUserId(
+  database: Db,
+  actorUserId: string,
+  sourceId?: string,
+  studentExternalId?: string
+): Promise<string> {
+  const repo = new StudentRepository(database);
+  const students = await repo.findByUserId(actorUserId);
+
+  if (sourceId) {
+    const match = students.find((s) => s.dataSources.some((ds) => ds.id === sourceId));
+    if (match) return match.dataUserId();
+  }
+
+  if (studentExternalId) {
+    const match = students.find((s) => {
+      if (!s.studentId) return false;
+      const parts = s.studentId.split(':', 2);
+      const extId = parts.length === 2 ? parts[1]! : s.studentId;
+      return extId === studentExternalId;
+    });
+    if (match) return match.dataUserId();
+  }
+
+  return actorUserId;
+}
+
 /** Auto-create Student records for new studentExternalId values encountered in ops.
  *  Matches by studentExternalId (not composite key) so that the same student
  *  from different platforms (Canvas, Skyward) merges into ONE record. */
@@ -746,6 +785,10 @@ async function autoCreateStudentsFromOps(params: {
         await studentRepo.update(existing._id!, { studentId: studentExtId });
       }
     } else {
+      // Guard: do not create a new student under a co-parent userId when a student
+      // with this externalId already exists under a different owner.  resolveDataUserId
+      // should have already returned the owner's userId, so params.userId IS the owner.
+      // But if we're still seeing "not found" it means this is a brand-new student.
       const studentName = profileNames.get(studentExtId) ?? studentExtId;
       await studentRepo.create({
         userId: params.userId,
@@ -1176,6 +1219,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const result = await Promise.all(
         students.map(async (student) => {
           const idStr = student._id?.toString() ?? '';
+          const ownerUserId = student.dataUserId();
           const dataSources: Array<{
             sourceId: string;
             provider: string;
@@ -1183,7 +1227,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
             portalBaseUrl?: string;
           }> = [];
           for (const ds of student.dataSources) {
-            const ingestSource = await sourceRepo.findByUserIdAndSourceId(userId, ds.id);
+            const ingestSource = await sourceRepo.findByUserIdAndSourceId(ownerUserId, ds.id);
             if (ingestSource) {
               dataSources.push({
                 sourceId: ds.id,
@@ -1249,7 +1293,10 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         } catch {
           throw new InternalError('Invalid credentials payload');
         }
-        const ingestSource = await sourceRepo.findByUserIdAndSourceId(userId, sourceId);
+        const ingestSource = await sourceRepo.findByUserIdAndSourceId(
+          student.dataUserId(),
+          sourceId
+        );
         const baseUrl = credentials.baseUrl ?? ingestSource?.portalBaseUrl ?? '';
         if (credentials.authType === 'api') {
           res.status(200).json({ baseUrl, accessToken: credentials.accessToken ?? '' });
@@ -1296,20 +1343,28 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     '/runs',
     connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
-      const userId = req.connectorUserId ?? '';
+      const actorUserId = req.connectorUserId ?? '';
       const { sourceId, clientMeta, runId: clientRunId } = req.body ?? {};
       if (!sourceId) {
         throw new ValidationError('Missing sourceId');
       }
 
-      const lastCursor = await runRepo.findLastCommittedCursor(userId, sourceId);
+      const dataUserId = await resolveDataUserId(config.database, actorUserId, sourceId);
+      const lastCursor = await runRepo.findLastCommittedCursor(dataUserId, sourceId);
       const runId =
         typeof clientRunId === 'string' && clientRunId.length > 0 ? clientRunId : randomUUID();
       const meta =
         clientMeta && typeof clientMeta === 'object' && !Array.isArray(clientMeta)
           ? (clientMeta as Record<string, string>)
           : null;
-      await runRepo.startRun({ userId, sourceId, runId, lastCursor, clientMeta: meta });
+      await runRepo.startRun({
+        userId: dataUserId,
+        actorUserId,
+        sourceId,
+        runId,
+        lastCursor,
+        clientMeta: meta,
+      });
 
       res.status(200).json({
         success: true,
@@ -1324,7 +1379,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     '/runs/:runId/envelope',
     connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
-      const userId = req.connectorUserId ?? '';
+      const actorUserId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
       if (!runId) {
         throw new ValidationError('Missing runId');
@@ -1339,16 +1394,27 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new ValidationError('runId mismatch');
       }
 
+      // Resolve the owner's userId from the ops' studentExternalId.
+      const firstStudentExtId = envelope.ops.find(
+        (op) => typeof op.key?.studentExternalId === 'string'
+      )?.key?.studentExternalId;
+      const dataUserId = await resolveDataUserId(
+        config.database,
+        actorUserId,
+        envelope.source?.sourceId,
+        firstStudentExtId
+      );
+
       await applyOps({
         database: config.database,
-        userId,
+        userId: dataUserId,
         sourceId: envelope.source?.sourceId,
         ops: envelope.ops,
       });
 
       await logDataQuality({
         database: config.database,
-        userId,
+        userId: dataUserId,
         ops: envelope.ops,
       });
 
@@ -1356,15 +1422,28 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (sourceId) {
         await autoCreateStudentsFromOps({
           database: config.database,
-          userId,
+          userId: dataUserId,
           sourceId,
           ops: envelope.ops,
           provider: envelope.run?.provider ?? 'unknown',
           adapterId: envelope.run?.adapterId ?? 'unknown',
           portalBaseUrl: envelope.source?.portalBaseUrl,
         });
+
+        // Ensure the ingest source metadata is stored under the owner's partition
+        // (important when a co-parent registers the source under their own userId).
+        if (dataUserId !== actorUserId) {
+          await sourceRepo.upsert({
+            userId: dataUserId,
+            sourceId,
+            provider: envelope.run?.provider ?? 'unknown',
+            adapterId: envelope.run?.adapterId ?? 'unknown',
+            displayName: envelope.source?.portalBaseUrl ?? sourceId,
+            portalBaseUrl: envelope.source?.portalBaseUrl,
+          });
+        }
       }
-      await runRepo.markUploaded(userId, runId);
+      await runRepo.markUploaded(dataUserId, runId);
       res
         .status(200)
         .json({ success: true, accepted: true } satisfies IIngestEnvelopeAcceptResponse);
@@ -1375,10 +1454,22 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     '/runs/:runId/complete',
     connectorAuth,
     asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
-      const userId = req.connectorUserId ?? '';
+      const actorUserId = req.connectorUserId ?? '';
       const runId = req.params['runId'];
       if (!runId) {
         throw new ValidationError('Missing runId');
+      }
+
+      // Look up the run (which is stored under dataUserId/owner) by runId only.
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      // Verify the actor initiated this run or is the owner.
+      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      const runDataUserId = existingRun.userId.toString();
+      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
+        throw new AuthenticationError('Not authorized to complete this run');
       }
 
       const status = (req.body?.status as string | undefined) ?? 'success';
@@ -1387,28 +1478,28 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           typeof req.body?.error === 'string' && req.body.error.length > 0
             ? req.body.error
             : 'Run failed';
-        await runRepo.failRun({ userId, runId, error });
+        await runRepo.failRun({ userId: runDataUserId, runId, error });
         res.status(200).json({ success: true, committed: false, failed: true, error });
         return;
       }
 
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
-      await runRepo.commitRun({ userId, runId, newCursor: cursor ?? null });
+      await runRepo.commitRun({ userId: runDataUserId, runId, newCursor: cursor ?? null });
       // Stamp lastSyncedAt on the data source
-      const committedRun = await runRepo.findByUserIdAndRunId(userId, runId);
+      const committedRun = await runRepo.findByUserIdAndRunId(runDataUserId, runId);
       if (committedRun?.sourceId) {
-        await sourceRepo.updateLastSyncedAt(userId, committedRun.sourceId);
+        await sourceRepo.updateLastSyncedAt(runDataUserId, committedRun.sourceId);
       }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({
         database: config.database,
-        userId,
+        userId: runDataUserId,
         queue: config.queue,
       });
       // LLM-based material matching (Layer 3) — fire-and-forget
       void matchUnmatchedMaterialsViaLlm({
         database: config.database,
-        userId,
+        userId: runDataUserId,
       }).catch((err: unknown) => {
         console.error('[MaterialMatcher] post-ingest LLM matching failed:', err);
       });

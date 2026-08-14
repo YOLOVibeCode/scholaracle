@@ -3,6 +3,7 @@ import { IngestRun, type IIngestRunData, type IngestRunStatus } from '../../mode
 
 export interface IIngestRunReader {
   findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null>;
+  findByRunId(runId: string): Promise<IngestRun | null>;
   findLastCommittedCursor(
     userId: ObjectId | string,
     sourceId: string
@@ -17,6 +18,7 @@ export interface IIngestRunReader {
 export interface IIngestRunWriter {
   startRun(params: {
     readonly userId: ObjectId | string;
+    readonly actorUserId?: ObjectId | string;
     readonly sourceId: string;
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
@@ -44,6 +46,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
 
   async startRun(params: {
     readonly userId: ObjectId | string;
+    readonly actorUserId?: ObjectId | string;
     readonly sourceId: string;
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
@@ -51,6 +54,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
   }): Promise<IngestRun> {
     const doc: IIngestRunData = {
       userId: params.userId,
+      actorUserId: params.actorUserId ?? params.userId,
       sourceId: params.sourceId,
       runId: params.runId,
       mode: 'delta',
@@ -109,6 +113,13 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
 
   async findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null> {
     const doc = await this._collection.findOne({ userId, runId });
+    if (!doc) return null;
+    return new IngestRun(doc, doc._id as unknown as ObjectId);
+  }
+
+  /** Find a run by runId only (no userId filter). Used when dataUserId is not yet known. */
+  async findByRunId(runId: string): Promise<IngestRun | null> {
+    const doc = await this._collection.findOne({ runId });
     if (!doc) return null;
     return new IngestRun(doc, doc._id as unknown as ObjectId);
   }
