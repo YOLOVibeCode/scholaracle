@@ -18,6 +18,15 @@ import { extractHostname } from '../utils/urlNormalize';
 
 export const DEFAULT_API_URL = 'https://api.scholarmancy.com';
 
+/** Derive a human-readable lane name from the baked-in API URL. */
+export function laneFrom(apiUrl: string): string {
+  const host = extractHostname(resolveApiBaseUrl(apiUrl));
+  if (host === 'api.scholarmancy.com') return 'www';
+  if (host === 'api-uat.scholarmancy.com' || host === 'api-dev-c268.up.railway.app') return 'uat';
+  if (host === 'localhost' || host === '127.0.0.1') return 'dev';
+  return host || 'unknown';
+}
+
 export interface ILocalStamp {
   readonly version: string;
   readonly build: string;
@@ -66,6 +75,10 @@ export function formatBuiltAt(iso: string): string {
   const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso);
   if (!match || !match[1] || !match[2]) return iso;
   return `${match[1]} ${match[2]} UTC`;
+}
+
+export function formatLaneLine(apiUrl: string): string {
+  return `Lane ${laneFrom(apiUrl)}`;
 }
 
 export function formatAppLine(stamp: ILocalStamp): string {
