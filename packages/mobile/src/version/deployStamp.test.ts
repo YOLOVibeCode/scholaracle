@@ -3,6 +3,8 @@ import {
   formatApiLine,
   formatAppLine,
   formatBuiltAt,
+  formatLaneLine,
+  laneFrom,
   localStampFromEnv,
   shortId,
 } from './deployStamp';
@@ -15,6 +17,44 @@ const env = {
   updateId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   apiUrl: 'https://api.scholarmancy.com',
 };
+
+describe('laneFrom', () => {
+  it('returns www for the prod API host', () => {
+    expect(laneFrom('https://api.scholarmancy.com')).toBe('www');
+  });
+
+  it('returns uat for the Railway dev host (preview IPA lane)', () => {
+    expect(laneFrom('https://api-dev-c268.up.railway.app')).toBe('uat');
+  });
+
+  it('returns uat for the api-uat subdomain', () => {
+    expect(laneFrom('https://api-uat.scholarmancy.com')).toBe('uat');
+  });
+
+  it('returns dev for localhost', () => {
+    expect(laneFrom('http://localhost:2801')).toBe('dev');
+  });
+
+  it('returns dev for 127.0.0.1', () => {
+    expect(laneFrom('http://127.0.0.1:2801')).toBe('dev');
+  });
+
+  it('returns the host as-is for unknown URLs', () => {
+    expect(laneFrom('https://staging.example.com')).toBe('staging.example.com');
+  });
+
+  it('falls back to www when apiUrl is empty (resolveApiBaseUrl default)', () => {
+    expect(laneFrom('')).toBe('www');
+  });
+});
+
+describe('formatLaneLine', () => {
+  it('prefixes the lane name with "Lane"', () => {
+    expect(formatLaneLine('https://api.scholarmancy.com')).toBe('Lane www');
+    expect(formatLaneLine('https://api-dev-c268.up.railway.app')).toBe('Lane uat');
+    expect(formatLaneLine('http://localhost:2801')).toBe('Lane dev');
+  });
+});
 
 describe('localStampFromEnv', () => {
   it('copies version, build, channel, update, and api url', () => {

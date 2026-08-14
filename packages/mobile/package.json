@@ -47,11 +47,12 @@
     "type-check": "npm run ensure-dev-seed && tsc --noEmit",
     "preflight": "expo-doctor && expo install --check && tsc --noEmit && expo export --platform ios --output-dir /tmp/expo-preflight-export",
     "build:ios": "pnpm preflight && npx eas-cli build -p ios --profile production --non-interactive",
+    "build:ios:preview": "pnpm preflight && npx eas-cli build -p ios --profile preview --auto-submit --non-interactive",
     "build:android": "pnpm preflight && npx eas-cli build -p android --profile production --non-interactive",
     "submit:ios": "npx eas-cli submit -p ios --latest --non-interactive",
     "submit:android": "npx eas-cli submit -p android --latest --non-interactive",
-    "update:preview": "pnpm preflight && npx eas-cli update --channel preview --environment preview --non-interactive",
-    "update:production": "pnpm preflight && npx eas-cli update --channel production --environment production --non-interactive",
+    "update:preview": "pnpm preflight && npx eas-cli update --channel preview --environment preview --message \"OTA update\" --non-interactive",
+    "update:production": "pnpm preflight && npx eas-cli update --channel production --environment production --message \"OTA update\" --non-interactive",
     "clean": "rm -rf coverage dist .expo /tmp/expo-preflight-export"
   }
 }

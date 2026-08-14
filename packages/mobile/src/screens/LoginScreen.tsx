@@ -31,7 +31,6 @@ import {
   resolvePrefill,
 } from '../credentials/savedLoginStore';
 import { ApiError } from '../api/ApiError';
-import { DeployStamp } from '../components/DeployStamp';
 
 export function LoginScreen(): React.ReactElement {
   const { login, isAuthenticating, error } = useAuth();
@@ -164,7 +163,6 @@ export function LoginScreen(): React.ReactElement {
           </Text>
         )}
       </View>
-      <DeployStamp />
     </KeyboardAvoidingView>
   );
 }

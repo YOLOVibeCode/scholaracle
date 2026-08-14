@@ -5,6 +5,7 @@ import {
   fetchBackendStamp,
   formatApiLine,
   formatAppLine,
+  formatLaneLine,
   localStampFromEnv,
   resolveApiBaseUrl,
   type IBackendStamp,
@@ -30,6 +31,9 @@ export function DeployStamp(): React.ReactElement {
 
   return (
     <View style={styles.wrap} testID="deploy-stamp">
+      <Text style={[styles.line, styles.lane]} testID="text-lane-stamp" selectable>
+        {formatLaneLine(local.apiUrl)}
+      </Text>
       <Text style={styles.line} testID="text-app-stamp" selectable>
         {formatAppLine(local)}
       </Text>
@@ -43,8 +47,12 @@ export function DeployStamp(): React.ReactElement {
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     alignItems: 'center',
+  },
+  lane: {
+    fontWeight: '600',
+    marginBottom: 2,
   },
   line: {
     color: '#6c757d',

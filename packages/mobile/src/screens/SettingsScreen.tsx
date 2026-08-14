@@ -9,7 +9,6 @@ import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
-import { DeployStamp } from '../components/DeployStamp';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -132,8 +131,6 @@ export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactEle
         >
           <Text style={styles.signOutText}>{isSigningOut ? 'Signing out…' : 'Sign Out'}</Text>
         </TouchableOpacity>
-
-        <DeployStamp />
       </ScrollView>
     </View>
   );
