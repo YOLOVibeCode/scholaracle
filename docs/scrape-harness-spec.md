@@ -8,6 +8,9 @@ The scrape test harness validates that **real data** from education platforms
 is scraped/fetched correctly and conforms to the application's ingest contract.
 It uses the **same adapter code** as production — no mocks, no stubs.
 
+Client scraper join keys and completeness gates:
+[`CLIENT_SCRAPER_SPEC.md`](./CLIENT_SCRAPER_SPEC.md).
+
 ## 2. Architecture
 
 ```

@@ -30,10 +30,20 @@ import {
   RefreshTokenRepository,
   SessionRepository,
   StudentRepository,
+  SourceInviteRepository,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
+import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
+import { SourceInviteService } from './services/source-invite/SourceInviteService';
+import { StudentRepositoryOwnerLookup } from './services/source-invite/studentOwnerLookup';
+import { SystemClock } from './services/source-invite/clock';
+import { CryptoTokenGenerator, Sha256TokenHasher } from './services/source-invite/tokens';
+import { InstallLandingRenderer } from './services/source-invite/InstallLandingRenderer';
+import { installSourceRouter, sourceInvitesRouter } from './routes/source-invites/source-invites';
+import { MemoryRateLimiter } from './middleware/rateLimit';
+import { resolveApiBaseUrl } from './routes/students/attachmentSigning';
 import { adminAuthRouter } from './routes/admin/auth';
 import { customersRouter } from './routes/admin/customers/customers';
 import { analyticsRouter } from './routes/admin/analytics';
@@ -501,6 +511,31 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret, queue: notificationQueue }));
+
+    const sourceInviteStore = new SourceInviteRepository(database);
+    const sourceInviteService = new SourceInviteService(
+      sourceInviteStore,
+      new SystemClock(),
+      new CryptoTokenGenerator(),
+      new Sha256TokenHasher(),
+      new StudentRepositoryOwnerLookup(new StudentRepository(database))
+    );
+    const sourceInviteMailer = new SendGridSourceInviteEmailSender(sendGridConfig, sendGrid);
+    const sourceInviteConfig = {
+      issuer: sourceInviteService,
+      redeemer: sourceInviteService,
+      mailer: sourceInviteMailer,
+      landing: new InstallLandingRenderer(),
+      apiPublicOrigin: resolveApiBaseUrl(baseUrl) || baseUrl,
+      webOrigin: baseUrl,
+      limiter: new MemoryRateLimiter(),
+    };
+    app.use(
+      '/api/source-invites',
+      authMiddleware(authService),
+      sourceInvitesRouter(sourceInviteConfig)
+    );
+    app.use('/install-source', installSourceRouter(sourceInviteConfig));
 
     // Asset upload (connector auth) — mount under ingest path. ASSET_STORE=local|s3; S3 uses Railway Buckets or R2/B2.
     const assetStore = createAssetStore();

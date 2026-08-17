@@ -24,6 +24,10 @@ import type {
   IConnectorTokenResponse,
   IIngestSourceRegisterRequest,
   IIngestRunStartResponse,
+  ISourceInviteIssueRequest,
+  ISourceInviteIssueResponse,
+  ISourceInvitePayload,
+  ISourceInviteRedeemResponse,
 } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
@@ -318,6 +322,19 @@ export class ScholarmancyApiClient {
       body: JSON.stringify(source),
     });
     if (!res.ok) throw await ApiError.fromResponse(res, 'Source registration');
+  }
+
+  async redeemSourceInvite(token: string): Promise<ISourceInvitePayload> {
+    const res = await this._post<ISourceInviteRedeemResponse>(
+      '/api/source-invites/redeem',
+      { token },
+      true
+    );
+    return res.invite;
+  }
+
+  async issueSourceInvite(request: ISourceInviteIssueRequest): Promise<ISourceInviteIssueResponse> {
+    return this._post<ISourceInviteIssueResponse>('/api/source-invites', request, true);
   }
 
   async uploadEnvelope(envelope: ISlcIngestEnvelopeV1, connectorToken: string): Promise<void> {

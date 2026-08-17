@@ -69,7 +69,7 @@ export interface ISyncRun {
 
 // ---------------------------------------------------------------------------
 // Adapter runner — this is the function the SyncWorker calls.
-// It is injected so the agents package doesn't depend on connector/playwright.
+// Injected to keep the agents package decoupled from connector implementations.
 // ---------------------------------------------------------------------------
 
 export interface IAdapterRunnerOptions {
@@ -193,6 +193,16 @@ export class SyncWorker {
     const { insertedId } = await this._runs.insertOne(run);
 
     try {
+      // Reject all client-side providers before touching credentials.
+      // Canvas, Skyward, Aeries, Google Classroom, and OneRoster are all synced client-side.
+      if (
+        ['canvas', 'skyward', 'aeries', 'google-classroom', 'oneroster'].includes(data.provider)
+      ) {
+        throw new Error(
+          `${data.provider} sync is client-side only (mobile app, browser extension, or local CLI). The server must not process sync jobs for this provider.`
+        );
+      }
+
       // 1. Resolve credentials from the student document
       const students = this._db.collection('students');
       const student = await students.findOne({

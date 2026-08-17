@@ -16,12 +16,10 @@ export interface IDataSource {
   readonly lastError?: string | null;
 }
 
-/** Credentials for API (token) or portal login (username/password for scraping). */
+/** API (OAuth token) credentials only. Portal username/password is never uploaded to the server. */
 export interface ISourceCredentialsRequest {
-  readonly authType: 'api' | 'login';
-  readonly accessToken?: string;
-  readonly username?: string;
-  readonly password?: string;
+  readonly authType: 'api';
+  readonly accessToken: string;
   readonly baseUrl?: string;
 }
 
