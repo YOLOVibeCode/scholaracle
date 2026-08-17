@@ -44,6 +44,7 @@ export * from './repositories/WebhookEventRepository';
 export * from './repositories/IngestDeviceAuthRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
+export * from './repositories/SourceInviteRepository';
 
 // Helpers (semester / term filtering)
 export { getCurrentSemesterStart } from './helpers/getCurrentSemesterStart';

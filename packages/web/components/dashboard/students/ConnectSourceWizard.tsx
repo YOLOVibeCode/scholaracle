@@ -12,6 +12,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { IAddSourceRequest, ISourceCredentialsRequest } from '@/lib/api/sources';
+import { sourceInvitesApi } from '@/lib/api/sourceInvites';
+import { isSourceInviteProvider } from '@scholaracle/contracts';
 
 export interface ConnectSourceWizardProps {
   open: boolean;
@@ -42,6 +44,7 @@ export function ConnectSourceWizard({
   const [schedule, setSchedule] = useState<IAddSourceRequest['schedule']>('every_6h');
   const [dataTypes, setDataTypes] = useState<string[]>(['grades', 'assignments', 'calendar']);
   const [submitting, setSubmitting] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   const handleClose = () => {
     setStep(1);
@@ -52,6 +55,8 @@ export function ConnectSourceWizard({
     setAccessToken('');
     setSchedule('every_6h');
     setDataTypes(['grades', 'assignments', 'calendar']);
+    setSubmitting(false);
+    setEmailStatus(null);
     onClose();
   };
 
@@ -59,6 +64,28 @@ export function ConnectSourceWizard({
     if (!p.available) return;
     setProvider(p);
     setStep(2);
+  };
+
+  const handleEmailInstallLink = async (): Promise<void> => {
+    if (!provider || !isSourceInviteProvider(provider.id)) return;
+    if (!portalBaseUrl.trim()) return;
+    setSubmitting(true);
+    setEmailStatus(null);
+    try {
+      const result = await sourceInvitesApi.issue({
+        studentId,
+        provider: provider.id,
+        portalBaseUrl: portalBaseUrl.trim(),
+        ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+      });
+      setEmailStatus(
+        `We emailed ${result.emailedTo}. Open it on your phone or in Chrome — same link.`
+      );
+    } catch (err: unknown) {
+      setEmailStatus(err instanceof Error ? err.message : 'Could not send install link');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleStep2Next = () => {
@@ -158,6 +185,19 @@ export function ConnectSourceWizard({
                   Next
                 </Button>
               </div>
+              {provider && isSourceInviteProvider(provider.id) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={submitting || !portalBaseUrl.trim()}
+                  onClick={() => void handleEmailInstallLink()}
+                  data-testid="button-email-install-link"
+                >
+                  Email me an install link
+                </Button>
+              )}
+              {emailStatus && <p className="text-sm text-muted-foreground">{emailStatus}</p>}
             </>
           )}
 

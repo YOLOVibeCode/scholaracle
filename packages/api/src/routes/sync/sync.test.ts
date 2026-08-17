@@ -190,17 +190,20 @@ describe('Sync API Routes', () => {
       expect(response.body.error).toContain('no data sources');
     });
 
-    it('should return 200 and enqueue sync jobs for owner', async () => {
+    it('should return 200 and enqueue sync jobs for owner (non-portal providers)', async () => {
       const studentId = new ObjectId();
       await database.collection('students').insertOne({
         _id: studentId,
         userId: testUserId,
         name: 'My Student',
         dataSources: [
-          { pluginId: 'canvas::default', config: { institutionUrl: 'https://canvas.example.com' } },
           {
-            pluginId: 'skyward::default',
-            config: { institutionUrl: 'https://skyward.example.com' },
+            pluginId: 'custom-provider-a::default',
+            config: { institutionUrl: 'https://provider-a.example.com' },
+          },
+          {
+            pluginId: 'custom-provider-b::default',
+            config: { institutionUrl: 'https://provider-b.example.com' },
           },
         ],
       });
@@ -216,7 +219,8 @@ describe('Sync API Routes', () => {
       expect(mockTriggerAllForStudent).toHaveBeenCalledWith(
         studentId.toString(),
         testUserId,
-        expect.any(Array)
+        expect.any(Array),
+        expect.anything()
       );
     });
   });
@@ -272,14 +276,17 @@ describe('Sync API Routes', () => {
       expect(response.body.error).toContain('not found');
     });
 
-    it('should return 200 and enqueue single source sync', async () => {
+    it('should return 200 and enqueue single source sync (non-portal provider)', async () => {
       const studentId = new ObjectId();
       await database.collection('students').insertOne({
         _id: studentId,
         userId: testUserId,
         name: 'Student',
         dataSources: [
-          { pluginId: 'canvas::default', config: { institutionUrl: 'https://canvas.example.com' } },
+          {
+            pluginId: 'custom-district-api::default',
+            config: { institutionUrl: 'https://district.api.example.com' },
+          },
         ],
       });
       const response = await request(app)
@@ -295,11 +302,104 @@ describe('Sync API Routes', () => {
         expect.objectContaining({
           studentId: studentId.toString(),
           dataSourceIndex: 0,
-          provider: 'canvas',
-          adapterId: 'canvas::default',
+          provider: 'custom-district-api',
+          adapterId: 'custom-district-api::default',
           userId: testUserId,
         })
       );
+    });
+
+    it('rejects sync trigger for HTML portal providers (canvas/skyward/aeries) with 400', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: testUserId,
+        name: 'Canvas Student',
+        dataSources: [
+          {
+            id: 'src-canvas',
+            pluginId: 'canvas::default',
+            config: { institutionUrl: 'https://canvas.example.com' },
+          },
+        ],
+      });
+
+      const res = await request(app)
+        .post(`/api/sync/students/${studentId}/0`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/client|device|app|extension/i);
+      expect(mockTriggerNow).not.toHaveBeenCalled();
+    });
+
+    it('rejects sync trigger for skyward with 400', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: testUserId,
+        name: 'Skyward Student',
+        dataSources: [
+          {
+            id: 'src-skyward',
+            pluginId: 'skyward::default',
+            config: { institutionUrl: 'https://skyward.example.com' },
+          },
+        ],
+      });
+
+      const res = await request(app)
+        .post(`/api/sync/students/${studentId}/0`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(400);
+      expect(mockTriggerNow).not.toHaveBeenCalled();
+    });
+
+    it('rejects sync trigger for google-classroom with 400', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: testUserId,
+        name: 'Classroom Student',
+        dataSources: [
+          {
+            id: 'src-gc',
+            pluginId: 'google-classroom::default',
+            config: { institutionUrl: 'https://classroom.googleapis.com' },
+          },
+        ],
+      });
+
+      const res = await request(app)
+        .post(`/api/sync/students/${studentId}/0`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(400);
+      expect(mockTriggerNow).not.toHaveBeenCalled();
+    });
+
+    it('rejects sync trigger for oneroster with 400', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: testUserId,
+        name: 'OneRoster Student',
+        dataSources: [
+          {
+            id: 'src-or',
+            pluginId: 'oneroster::default',
+            config: { institutionUrl: 'https://oneroster.example.com' },
+          },
+        ],
+      });
+
+      const res = await request(app)
+        .post(`/api/sync/students/${studentId}/0`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(400);
+      expect(mockTriggerNow).not.toHaveBeenCalled();
     });
   });
 

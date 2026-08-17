@@ -8,6 +8,9 @@ import type {
   IStudentListItem,
   IStudentGradesResponse,
   IAuthLoginResponse,
+  ISourceInviteIssueRequest,
+  ISourceInviteIssueResponse,
+  ISourceInvitePayload,
 } from '@scholaracle/contracts';
 
 export interface IAuthSession {
@@ -63,4 +66,9 @@ export interface IRunRecorder {
       errorMessage?: string;
     }
   ): Promise<void>;
+}
+
+export interface ISourceInviteApi {
+  redeemSourceInvite(token: string): Promise<ISourceInvitePayload>;
+  issueSourceInvite(request: ISourceInviteIssueRequest): Promise<ISourceInviteIssueResponse>;
 }

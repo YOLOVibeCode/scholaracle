@@ -43,10 +43,8 @@ export interface IIntegrationLinkedStudent {
 }
 
 export interface IAssignStudentCredentials {
-  readonly authType: 'api' | 'login';
+  readonly authType: 'api';
   readonly accessToken?: string;
-  readonly username?: string;
-  readonly password?: string;
   readonly baseUrl?: string;
 }
 
@@ -59,10 +57,8 @@ export interface ITestConnectionRequest {
   readonly adapterId: string;
   readonly baseUrl?: string;
   readonly credentials: {
-    readonly authType: 'api' | 'login' | 'oauth2' | 'api-key';
+    readonly authType: 'api' | 'oauth2' | 'api-key';
     readonly accessToken?: string;
-    readonly username?: string;
-    readonly password?: string;
     readonly clientId?: string;
     readonly clientSecret?: string;
     readonly apiKey?: string;

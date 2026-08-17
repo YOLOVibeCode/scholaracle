@@ -5,7 +5,7 @@
  * extractors, per-platform recipes, transformers, and envelope validator.
  *
  * Consumed by:
- *   - @scholaracle/scraper-playwright   (CLI + server workers)
+ *   - @scholaracle/scraper-playwright   (local CLI — runs on the user's machine)
  *   - packages/mobile                   (Expo/React Native WebView driver)
  *   - packages/extension                (Chrome/Edge MV3 content script driver)
  */
@@ -61,6 +61,33 @@ export type {
   IValidationCheck,
   IOpValidationResult,
 } from './validator/validator';
+
+// Unified client pipeline: runClientScrape, IClientScrapeHost, IIngestUploader, etc.
+export type {
+  SyncPhase,
+  ISyncProgress,
+  SyncProgressCallback,
+  SyncFailurePhase,
+  ClientType,
+  IClientScrapeConfig,
+  IIngestUploader,
+  IAssetHost,
+  IAIEnricher,
+  IStartRunParams,
+  IPhaseRecord,
+  IRunResult,
+  IRunRecorder,
+  IClientScrapeHost,
+} from './pipeline';
+export {
+  SyncError,
+  runClientScrape,
+  buildClientScrapeConfig,
+  JoinGapEnricher,
+  applyEnrichersFailOpen,
+  sanitizeEnrichedOps,
+  DEFAULT_ENRICHER_TIMEOUT_MS,
+} from './pipeline';
 
 // Community Scraper Platform (CSP-1): manifest + module contract + resolvers
 export type {
