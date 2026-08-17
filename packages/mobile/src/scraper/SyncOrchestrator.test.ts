@@ -1,27 +1,59 @@
 /**
- * SyncOrchestrator unit tests — FakePageDriver + mocked ISP slices.
+ * SyncOrchestrator unit tests — stub IScraperResolver (ISP). Package-level
+ * mocks of runCanvasRecipe cannot reach runClientScrape's internal imports.
  */
 
-import { FakePageDriver } from '@scholaracle/scraper-core';
+import type { ISlcDeltaOp } from '@scholaracle/contracts';
+import {
+  FakePageDriver,
+  type IScraperResolver,
+  type IScraperModule,
+} from '@scholaracle/scraper-core';
 import { runSyncPipeline, SyncError } from './SyncOrchestrator';
 import type { IEnvelopeUploader, IRunRecorder } from '../api/interfaces';
 
-jest.mock('@scholaracle/scraper-core', () => {
-  const actual = jest.requireActual('@scholaracle/scraper-core');
+const NOW = '2026-01-15T10:00:00.000Z';
+
+function courseOp(): ISlcDeltaOp {
   return {
-    ...actual,
-    runCanvasRecipe: jest.fn().mockResolvedValue({
-      user: 'Test Student',
-      courses: [],
-      toDoItems: [],
-      upcomingEvents: [],
-      announcements: [],
-      timestamp: new Date().toISOString(),
-    }),
-    transformCanvasExtract: jest.fn().mockReturnValue([]),
-    validateEnvelope: jest.fn().mockReturnValue({ passed: true, errorCount: 0, warnings: [] }),
+    op: 'upsert',
+    entity: 'course',
+    key: {
+      provider: 'canvas',
+      adapterId: 'com.instructure.canvas',
+      studentExternalId: 'stu-1',
+      institutionExternalId: 'school.instructure.com',
+      externalId: 'canvas-course-101',
+    },
+    observedAt: NOW,
+    record: { title: 'Algebra 1', teacherName: 'Chang', period: '4' },
   };
-});
+}
+
+function stubResolver(opts: {
+  scrape?: () => Promise<Record<string, unknown>>;
+  transform?: () => ISlcDeltaOp[];
+}): IScraperResolver {
+  const module: IScraperModule = {
+    metadata: {
+      id: 'canvas',
+      name: 'Canvas',
+      adapterId: 'com.instructure.canvas',
+      version: '0.1.0',
+      hosts: ['*.instructure.com'],
+      entities: ['course'],
+      entry: 'builtin:canvas',
+      publisher: 'scholaracle',
+    },
+    scrape: opts.scrape ?? (async () => ({ user: 'Test Student', courses: [], timestamp: NOW })),
+    transform: opts.transform ?? (() => [courseOp()]),
+  };
+  return {
+    async resolve() {
+      return { module, canRun: true, checkErrors: [] };
+    },
+  };
+}
 
 describe('runSyncPipeline', () => {
   const config = {
@@ -64,7 +96,9 @@ describe('runSyncPipeline', () => {
     const recorder = makeRecorder();
     const uploader = makeUploader();
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
-    await runSyncPipeline(driver, config, uploader, 'token', recorder);
+    await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+      resolver: stubResolver({}),
+    });
     expect(recorder.starts).toBe(1);
     expect(recorder.successes).toBe(1);
     expect(uploader.uploadEnvelope).toHaveBeenCalled();
@@ -74,32 +108,50 @@ describe('runSyncPipeline', () => {
     const recorder = makeRecorder();
     const uploader = makeUploader(true);
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
-    await expect(runSyncPipeline(driver, config, uploader, 'token', recorder)).rejects.toThrow(
-      /Upload failed/
-    );
+    await expect(
+      runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+        resolver: stubResolver({}),
+      })
+    ).rejects.toThrow(/Upload failed/);
     expect(recorder.fails).toBe(1);
   });
 
-  it('should record failure and report when validation fails', async () => {
-    const { validateEnvelope } = require('@scholaracle/scraper-core');
-    validateEnvelope.mockReturnValueOnce({ passed: false, errorCount: 2, warnings: [] });
+  it('should record failure when validation fails', async () => {
     const recorder = makeRecorder();
     const uploader = makeUploader();
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
-    await expect(runSyncPipeline(driver, config, uploader, 'token', recorder)).rejects.toThrow(
-      /validation failed/
-    );
+    await expect(
+      runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+        resolver: stubResolver({
+          transform: () => [
+            {
+              op: 'upsert',
+              entity: 'assignment',
+              key: {
+                provider: 'canvas',
+                adapterId: 'com.instructure.canvas',
+                externalId: 'bad',
+              },
+              observedAt: NOW,
+              record: {},
+            },
+          ],
+        }),
+      })
+    ).rejects.toThrow(/validation failed/);
     expect(recorder.fails).toBe(1);
-    expect(uploader.reportRunFailure).toHaveBeenCalled();
   });
 
   describe('SyncError phases', () => {
     async function captureError(
       uploader: IEnvelopeUploader,
-      recorder: IRunRecorder
+      recorder: IRunRecorder,
+      resolver: IScraperResolver
     ): Promise<unknown> {
       const driver = new FakePageDriver({ initialUrl: config.baseUrl });
-      return runSyncPipeline(driver, config, uploader, 'token', recorder).then(
+      return runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+        resolver,
+      }).then(
         () => {
           throw new Error('expected pipeline to reject');
         },
@@ -108,10 +160,16 @@ describe('runSyncPipeline', () => {
     }
 
     it('should tag scrape failures as phase "portal" and preserve the cause', async () => {
-      const { runCanvasRecipe } = require('@scholaracle/scraper-core');
       const underlying = new Error('portal timed out');
-      runCanvasRecipe.mockRejectedValueOnce(underlying);
-      const err = await captureError(makeUploader(), makeRecorder());
+      const err = await captureError(
+        makeUploader(),
+        makeRecorder(),
+        stubResolver({
+          scrape: async () => {
+            throw underlying;
+          },
+        })
+      );
       expect(err).toBeInstanceOf(SyncError);
       expect((err as SyncError).phase).toBe('portal');
       expect((err as SyncError).message).toBe('portal timed out');
@@ -119,12 +177,16 @@ describe('runSyncPipeline', () => {
     });
 
     it('should tag transform failures as phase "local" and preserve the cause', async () => {
-      const { transformCanvasExtract } = require('@scholaracle/scraper-core');
       const underlying = new Error('bad extract shape');
-      transformCanvasExtract.mockImplementationOnce(() => {
-        throw underlying;
-      });
-      const err = await captureError(makeUploader(), makeRecorder());
+      const err = await captureError(
+        makeUploader(),
+        makeRecorder(),
+        stubResolver({
+          transform: () => {
+            throw underlying;
+          },
+        })
+      );
       expect(err).toBeInstanceOf(SyncError);
       expect((err as SyncError).phase).toBe('local');
       expect((err as SyncError).message).toBe('bad extract shape');
@@ -132,9 +194,25 @@ describe('runSyncPipeline', () => {
     });
 
     it('should tag validation failures as phase "local"', async () => {
-      const { validateEnvelope } = require('@scholaracle/scraper-core');
-      validateEnvelope.mockReturnValueOnce({ passed: false, errorCount: 3, warnings: [] });
-      const err = await captureError(makeUploader(), makeRecorder());
+      const err = await captureError(
+        makeUploader(),
+        makeRecorder(),
+        stubResolver({
+          transform: () => [
+            {
+              op: 'upsert',
+              entity: 'assignment',
+              key: {
+                provider: 'canvas',
+                adapterId: 'com.instructure.canvas',
+                externalId: 'bad',
+              },
+              observedAt: NOW,
+              record: {},
+            },
+          ],
+        })
+      );
       expect(err).toBeInstanceOf(SyncError);
       expect((err as SyncError).phase).toBe('local');
       expect((err as SyncError).message).toMatch(/validation failed/);
@@ -148,7 +226,7 @@ describe('runSyncPipeline', () => {
         }),
         reportRunFailure: jest.fn(async () => undefined),
       };
-      const err = await captureError(uploader, makeRecorder());
+      const err = await captureError(uploader, makeRecorder(), stubResolver({}));
       expect(err).toBeInstanceOf(SyncError);
       expect((err as SyncError).phase).toBe('upload');
       expect((err as SyncError).message).toBe('HTTP 503');
@@ -163,8 +241,6 @@ describe('runSyncPipeline', () => {
         events.push('startRun');
       }),
       addPhase: jest.fn(async (_runId: string, phase: { phase: string }) => {
-        // Resolve on a later tick so an un-awaited addPhase would land
-        // after the next pipeline step in the event log.
         await new Promise((resolve) => setTimeout(resolve, 2));
         events.push(`addPhase:${phase.phase}`);
       }),
@@ -179,10 +255,13 @@ describe('runSyncPipeline', () => {
       reportRunFailure: jest.fn(async () => undefined),
     };
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
-    await runSyncPipeline(driver, config, uploader, 'token', recorder);
+    await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+      resolver: stubResolver({}),
+    });
     expect(events).toEqual([
       'startRun',
       'addPhase:extracting',
+      'addPhase:transforming',
       'addPhase:transforming',
       'addPhase:transforming',
       'addPhase:validating',

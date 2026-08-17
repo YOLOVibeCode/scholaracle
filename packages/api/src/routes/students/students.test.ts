@@ -1429,4 +1429,67 @@ describe('Students API Routes', () => {
       }
     });
   });
+
+  describe('PUT /api/students/:id/sources/:sourceId/credentials — portal login rejected', () => {
+    it('rejects authType:login with 400 (portal passwords not accepted by server)', async () => {
+      if (!database) return;
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Cred Test Student' });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+
+      const addRes = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas',
+          portalBaseUrl: 'https://school.instructure.com',
+          dataTypes: ['grades'],
+        });
+      expect(addRes.status).toBe(201);
+      const sourceId = addRes.body.id as string;
+
+      const res = await request(app)
+        .put(`/api/students/${studentId}/sources/${sourceId}/credentials`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ authType: 'login', username: 'parent', password: 'secret' });
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body)).toMatch(/client|device|app|extension/i);
+    });
+
+    it('rejects authType:login for skyward with 400', async () => {
+      if (!database) return;
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Skyward Cred Student' });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+
+      const addRes = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'skyward',
+          adapterId: 'com.skyward.iscorp',
+          displayName: 'Skyward',
+          portalBaseUrl: 'https://school.skyward.com',
+          dataTypes: ['grades'],
+        });
+      expect(addRes.status).toBe(201);
+      const sourceId = addRes.body.id as string;
+
+      const res = await request(app)
+        .put(`/api/students/${studentId}/sources/${sourceId}/credentials`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ authType: 'login', username: 'parent', password: 'secret' });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });

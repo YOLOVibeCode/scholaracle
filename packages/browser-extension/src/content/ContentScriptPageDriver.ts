@@ -3,6 +3,19 @@
  *
  * Runs in the page context — no browser automation needed.
  * Uses document APIs directly and navigates via window.location.
+ *
+ * ## waitUntil semantics
+ * `goto()` waits for the `load` event. For SPAs that navigate without a full
+ * page reload (e.g. Skyward hash routing), callers should use
+ * `waitForUrlIncludes()` after goto instead of relying on load events.
+ *
+ * ## onNewPage / popup degradation
+ * `onNewPage` is a no-op here. Extension content scripts cannot intercept
+ * popup windows. Recipes that open popups (e.g. Skyward's gradeInfoDialog
+ * click) MUST degrade gracefully when the dialog doesn't appear in-page —
+ * `extractSkywardCourseAssignments` handles this by returning `[]` when
+ * `#gradeInfoDialog` is absent. Do NOT rely on `onNewPage` in extension
+ * context; that interface is only honoured by Playwright and mobile WebView.
  */
 
 import type { IPageDriver, IGotoOptions, IWaitOptions, BrowserFn } from '@scholaracle/scraper-core';
@@ -60,6 +73,7 @@ export class ContentScriptPageDriver implements IPageDriver {
   }
 
   onNewPage(_handler: (page: IPageDriver) => Promise<void>): void {
-    // Not applicable in content script context
+    // No-op: extension content scripts cannot intercept popup windows.
+    // See module-level JSDoc for degradation guidance.
   }
 }

@@ -1,12 +1,14 @@
-# Deploy and Verify Sync Pipeline
+# Deploy and Verify Notification Pipeline
 
-After implementing the Fix Sync Pipeline plan, use this checklist to deploy and verify end-to-end.
+After deploying, use this checklist to confirm the notification pipeline works end-to-end.
+School-portal scraping now runs **client-side only** (iOS app, browser extension, or local CLI).
+Workers receive ingest envelopes and send alerts — they do not scrape.
 
 ## 1. Deploy to Railway
 
-Deploy the monorepo (or `api` and `workers` services) to your Railway project.
+Deploy the monorepo (`api` and `workers` services) to your Railway project.
 
-- Ensure `api` and `workers` both build and deploy (connector, agents, workers, api).
+- Ensure `api` and `workers` both build and deploy.
 - Workers need `@scholaracle/auth` and env for ingest submission.
 
 ## 2. Environment variables
@@ -15,47 +17,61 @@ Set on **both** `api` and `workers` where applicable:
 
 | Variable | Where | Notes |
 |----------|--------|--------|
-| `CREDENTIALS_ENCRYPTION_KEY` | api, workers | **Must be identical** so workers can decrypt credentials. |
 | `JWT_SECRET` | api, workers | Same secret so workers can create connector tokens for ingest. |
-| `API_BASE_URL` | workers | Base URL of the API (e.g. `https://your-api.railway.app`) for creating ingest runs and submitting envelopes. |
-| `GOOGLE_CLASSROOM_CLIENT_ID` | api | For OAuth authorize/callback. |
-| `GOOGLE_CLASSROOM_CLIENT_SECRET` | api | For OAuth token exchange. |
-| `GOOGLE_CLASSROOM_CLIENT_ID` / `GOOGLE_CLASSROOM_CLIENT_SECRET` | workers | For Google token refresh before sync. |
+| `API_BASE_URL` | workers | Base URL of the API for submitting envelopes. |
+| `SENDGRID_API_KEY` | api, workers | Notification emails. |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | workers | SMS alerts. |
+| `FIREBASE_PROJECT_ID` | workers | Push notifications. |
+| `CREDENTIALS_ENCRYPTION_KEY` | api, workers | For encrypting non-portal secrets (API tokens). |
 
-## 3. Trigger Skyward sync for Ava
+Note: `GOOGLE_CLASSROOM_CLIENT_ID` / `GOOGLE_CLASSROOM_CLIENT_SECRET` are no longer needed.
+Server-side Google Classroom sync has been discontinued. The `/api/oauth/google` endpoints return 410 Gone.
 
-- Student ID: `69a4f1b53671c632ca591c7f`
-- Skyward source ID: `7da26591-242d-401b-95c6-54eb2a1f7d1a`
-- Credentials (Jessica.Lewis / 123456789, Lake Dallas Skyward URL) should already be set.
+## 3. Submit a test ingest envelope
 
-Trigger sync via dashboard (student → source → Sync) or:
+Use the mobile app, browser extension, or local CLI to run a sync and submit an envelope:
 
 ```bash
-# If you have API access (replace BASE_URL and auth token)
-curl -X POST "https://<BASE_URL>/api/sync/students/69a4f1b53671c632ca591c7f/<dsIndex>" \
-  -H "Authorization: Bearer <JWT>"
+# CLI example
+slc run --source-id <id> --student-id <id>
 ```
 
-Use the data source index for Ava’s Skyward source (e.g. 0 if it’s the first source).
+Or submit a synthetic envelope directly:
+
+```bash
+curl -X POST "https://<API_BASE>/api/ingest/v1/runs/<runId>/envelope" \
+  -H "Authorization: Bearer <connector-token>" \
+  -H "Content-Type: application/json" \
+  -d '{ "schemaVersion": "slc.ingest.v1", ... }'
+```
 
 ## 4. Verify
 
-1. **Sync run**  
-   Check `sync_runs` (or dashboard) for a completed run for Ava’s Skyward source.
+1. **Ingest run**
+   Confirm an ingest run was created and envelope committed (check `slc_runs` collection or ingest APIs).
 
-2. **Ingest**  
-   Confirm an ingest run was created and envelope submitted (e.g. `slc_runs` or ingest APIs).
+2. **Alerts**
+   Confirm alerts were generated from ingested data (missing assignments, grade changes).
 
-3. **Alerts**  
-   Confirm alerts were generated from ingested data (e.g. missing assignments, grades).
+3. **Digest**
+   Confirm digest email is sent to recipients.
 
-4. **Digest**  
-   Confirm `email_digest_pending` (or equivalent) is populated and digest is sent to 3 recipients.
+## 5. Verify server rejects portal sync (guardrails)
 
-## 5. Optional: Google Classroom
+Confirm the server correctly refuses legacy server-scraping paths:
 
-To test Google Classroom:
+```bash
+# Should return 400 — server no longer scrapes Canvas
+curl -X POST "https://<API_BASE>/api/sync/students/<id>/0" \
+  -H "Authorization: Bearer <JWT>"
 
-1. Set `GOOGLE_CLASSROOM_CLIENT_ID` and `GOOGLE_CLASSROOM_CLIENT_SECRET` on the API (and workers for refresh).
-2. In Connect Source Wizard, choose Google Classroom and click “Authorize with Google”.
-3. Complete OAuth and run a sync; verify envelope and digest as above.
+# Should return 400 — server no longer accepts login credentials
+curl -X PUT "https://<API_BASE>/api/students/<id>/sources/<sid>/credentials" \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{ "authType": "login", "username": "x", "password": "y" }'
+
+# Should return 410 — Google Classroom server OAuth is discontinued
+curl "https://<API_BASE>/api/oauth/google/authorize" \
+  -H "Authorization: Bearer <JWT>"
+```

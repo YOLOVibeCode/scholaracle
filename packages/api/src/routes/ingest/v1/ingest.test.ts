@@ -265,6 +265,24 @@ describe('Ingest v1 API', () => {
     expect(res.body.error).toMatch(/not found|no credentials/i);
   });
 
+  it('GET /sources/:sourceId/credentials never returns username or password', async () => {
+    // This endpoint exists for OAuth/API-token credentials only.
+    // Even if a legacy login-credential blob somehow exists in the DB, the endpoint must
+    // not leak username or password in the response.
+    const connectorToken = await getConnectorToken();
+    const res = await request(app)
+      .get('/api/ingest/v1/sources/any-source-id/credentials')
+      .set('Authorization', `Bearer ${connectorToken}`);
+    // Either 404 (nothing found) or 410 (gone / portal creds removed) is acceptable.
+    // What is NOT acceptable: a 200 with username/password fields.
+    if (res.status === 200) {
+      expect(res.body).not.toHaveProperty('username');
+      expect(res.body).not.toHaveProperty('password');
+    } else {
+      expect([404, 410]).toContain(res.status);
+    }
+  });
+
   it('returns 400 on source registration with missing fields', async () => {
     const connectorToken = await getConnectorToken();
     const res = await request(app)

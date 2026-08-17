@@ -3247,7 +3247,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
   /**
    * PUT /api/students/:id/sources/:sourceId/credentials
-   * Set or update credentials for a source (API token or login for scraping). Stored encrypted.
+   * Set or update API-token credentials for a source. Portal username/password (authType:'login')
+   * is never accepted — school credentials are stored on the client device only.
    */
   router.put(
     '/:id/sources/:sourceId/credentials',
@@ -3260,6 +3261,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!studentId || !sourceId) {
         throw new ValidationError('Missing student ID or source ID');
       }
+
+      if ((req.body as { authType?: string })?.authType === 'login') {
+        throw new ValidationError(
+          'Portal login credentials are stored on the client device (app, extension, or local CLI) and must not be sent to the server.'
+        );
+      }
+
       const parsed = credentialsSchema.safeParse(req.body);
       if (!parsed.success) {
         throw ValidationError.fromZod(parsed.error);

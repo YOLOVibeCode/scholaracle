@@ -36,6 +36,15 @@ function parseDate(dateStr: string): string | undefined {
   return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`;
 }
 
+function slugify(s: string): string {
+  return (
+    s
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .toLowerCase() || 'unknown'
+  );
+}
+
 export function transformAeriesExtract(
   extract: IAeriesFullExtract,
   ctx: ITransformContext
@@ -49,6 +58,7 @@ export function transformAeriesExtract(
   if (students.length === 0) return ops;
 
   const student = students[0]!;
+  const studentId = student.studentId || ctx.studentExternalId;
   const baseKey = {
     provider: ctx.provider,
     adapterId: ctx.adapterId,
@@ -63,7 +73,7 @@ export function transformAeriesExtract(
       entity: 'studentProfile',
       key: {
         ...baseKey,
-        externalId: `aeries-profile-${student.studentId || ctx.studentExternalId}`,
+        externalId: `aeries-profile-${studentId}`,
       },
       observedAt: now,
       record: {
@@ -75,10 +85,41 @@ export function transformAeriesExtract(
     });
   }
 
+  // Academic terms — one per distinct, non-empty course.term value
+  const seenTerms = new Set<string>();
+  for (const course of student.courses) {
+    if (!course.term) continue;
+    const termExtId = `aeries-term-${slugify(course.term)}`;
+    if (!seenTerms.has(termExtId)) {
+      seenTerms.add(termExtId);
+      ops.push({
+        op: 'upsert',
+        entity: 'academicTerm',
+        key: { ...baseKey, externalId: termExtId },
+        observedAt: now,
+        record: {
+          title: course.term,
+          type: 'grading_period',
+        },
+      });
+    }
+  }
+
+  // Teachers — deduplicated by name+email
+  const seenTeachers = new Map<string, { name: string; email?: string; courseExtIds: string[] }>();
+
+  // Build course externalId lookup first for teacher/attendance joins
+  const courseExtIds: string[] = [];
+  for (const course of student.courses) {
+    // Stable ID: studentId + period + name-slug (no array index)
+    courseExtIds.push(`aeries-course-${studentId}-${course.period}-${slugify(course.name)}`);
+  }
+
   // Courses + grade snapshots + assignments
   for (let ci = 0; ci < student.courses.length; ci++) {
     const course = student.courses[ci]!;
-    const courseExtId = `aeries-course-${student.studentId || ctx.studentExternalId}-${ci}-${course.name.replace(/\s+/g, '-')}`;
+    const courseExtId = courseExtIds[ci]!;
+    const termExtId = course.term ? `aeries-term-${slugify(course.term)}` : undefined;
 
     ops.push({
       op: 'upsert',
@@ -91,8 +132,24 @@ export function transformAeriesExtract(
         teacherEmail: course.teacherEmail || undefined,
         period: course.period || undefined,
         room: course.room || undefined,
+        termExternalId: termExtId,
       },
     });
+
+    // Collect teacher for dedup pass below
+    if (course.teacher) {
+      const key = `${course.teacher}||${course.teacherEmail || ''}`;
+      const existing = seenTeachers.get(key);
+      if (existing) {
+        existing.courseExtIds.push(courseExtId);
+      } else {
+        seenTeachers.set(key, {
+          name: course.teacher,
+          email: course.teacherEmail || undefined,
+          courseExtIds: [courseExtId],
+        });
+      }
+    }
 
     // Grade snapshot per course (currentPercent -> percentGrade)
     if (course.currentPercent !== null || course.currentGrade !== null) {
@@ -114,10 +171,13 @@ export function transformAeriesExtract(
       });
     }
 
-    // Assignments
+    // Assignments — stable ID: studentId + period + assignment.number (or date+slug fallback)
     for (let ai = 0; ai < course.assignments.length; ai++) {
       const a = course.assignments[ai]!;
-      const aExtId = `aeries-${courseExtId}-assignment-${ai}`;
+      const assignSlug = a.number
+        ? a.number
+        : `${parseDate(a.dateDue) ?? 'nodate'}-${slugify(a.title).slice(0, 20)}`;
+      const aExtId = `aeries-assign-${studentId}-${course.period}-${assignSlug}`;
 
       let status:
         | 'missing'
@@ -148,18 +208,41 @@ export function transformAeriesExtract(
           category: a.category || undefined,
           isMissing: a.isMissing,
           courseExternalId: courseExtId,
+          termExternalId: termExtId,
         },
       });
     }
   }
 
-  // Attendance events
-  for (let ai = 0; ai < student.attendance.length; ai++) {
-    const att = student.attendance[ai]!;
-    const attExtId = `aeries-attendance-${student.studentId || ctx.studentExternalId}-${ai}-${att.date}`;
+  // Teacher ops (after course pass for courseExtIds)
+  for (const [, { name, email, courseExtIds: teacherCourseIds }] of seenTeachers) {
+    ops.push({
+      op: 'upsert',
+      entity: 'teacher',
+      key: { ...baseKey, externalId: `aeries-teacher-${studentId}-${slugify(name)}` },
+      observedAt: now,
+      record: {
+        name,
+        email,
+        courseExternalIds: teacherCourseIds,
+      },
+    });
+  }
 
+  // Build period→courseExtId lookup for attendance FK
+  const periodToCourseExtId = new Map<string, string>();
+  for (let ci = 0; ci < student.courses.length; ci++) {
+    const course = student.courses[ci]!;
+    if (course.period) periodToCourseExtId.set(course.period, courseExtIds[ci]!);
+  }
+
+  // Attendance events — stable ID: studentId + date + period
+  for (const att of student.attendance) {
     const dateStr = parseDate(att.date);
     if (!dateStr) continue;
+
+    const attExtId = `aeries-attendance-${studentId}-${dateStr}-${att.period || 'all'}`;
+    const courseExtId = att.period ? periodToCourseExtId.get(att.period) : undefined;
 
     ops.push({
       op: 'upsert',
@@ -171,6 +254,7 @@ export function transformAeriesExtract(
         status: normalizeAttendanceStatus(att.status),
         periodName: att.period || undefined,
         courseName: att.course || undefined,
+        courseExternalId: courseExtId || undefined,
         notes: att.reason || undefined,
         excuseReason: att.reason || undefined,
       },

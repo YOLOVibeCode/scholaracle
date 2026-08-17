@@ -79,7 +79,7 @@ services:
       SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:-}
       SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
       SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-}
-      # Credential encryption (for storing data-source login credentials)
+      # Credential encryption (for non-portal secrets, e.g. API tokens stored at rest)
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
       # AI (optional - for LLM material matching)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -132,10 +132,9 @@ services:
       - /app/node_modules
       - /app/.next
 
-  # Workers (background jobs + browser scrapers)
+  # Workers (background jobs: analysis, notifications, digests)
   # Scale with: docker-compose up -d --scale workers=3
   # Each instance competes for jobs via atomic MongoQueue — no double-processing.
-  # NOTE: Build with ./scripts/build-workers.sh first (copies scrapers into context).
   workers:
     image: scholaracle-workers:latest
     restart: unless-stopped
@@ -163,12 +162,9 @@ services:
       SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
       # AI (optional - for digest insights)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Scraping concurrency (Chromium instances per worker container)
-      # Each browser uses ~300-500MB RAM. With 2GB limit, max ~3 concurrent.
+      # Sync job concurrency (how many jobs workers process in parallel)
       SYNC_CONCURRENCY: ${SYNC_CONCURRENCY:-2}
       SYNC_POLL_INTERVAL_MS: ${SYNC_POLL_INTERVAL_MS:-5000}
-      # Playwright
-      PLAYWRIGHT_BROWSERS_PATH: /root/.cache/ms-playwright
     depends_on:
       mongodb:
         condition: service_healthy
@@ -180,7 +176,7 @@ services:
       start_period: 30s
     networks:
       - scholaracle-network
-    # Resource limits per instance (Playwright Chromium is memory-hungry)
+    # Resource limits per instance
     deploy:
       resources:
         limits:

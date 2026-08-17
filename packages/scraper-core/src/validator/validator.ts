@@ -279,7 +279,149 @@ export function validateEnvelope(envelope: ISlcIngestEnvelopeV1): IEnvelopeValid
     checks.push({ name: 'ops-valid', severity: 'pass', message: 'All ops pass validation' });
   }
 
+  addJoinCompletenessChecks(envelope, checks, entityCounts);
+
   return buildReport(checks, entityCounts);
+}
+
+const COURSE_SCOPED_ENTITIES: ReadonlySet<SlcEntityType> = new Set([
+  'assignment',
+  'gradeSnapshot',
+  'courseMaterial',
+]);
+
+const SIS_PROVIDERS: ReadonlySet<string> = new Set(['skyward', 'aeries']);
+const LMS_PROVIDERS: ReadonlySet<string> = new Set(['canvas', 'google-classroom']);
+
+function courseExternalIdOf(op: ISlcDeltaOp): string | undefined {
+  const fromKey = op.key?.courseExternalId?.trim();
+  if (fromKey) return fromKey;
+  const rec = op.record as Record<string, unknown> | undefined;
+  const fromRecord = rec?.['courseExternalId'];
+  return typeof fromRecord === 'string' && fromRecord.trim() ? fromRecord.trim() : undefined;
+}
+
+/**
+ * Join-graph warnings. These never fail the envelope (`passed` is error-only)
+ * but they tell scraper authors the payload cannot be joined to subjects,
+ * grades, or resources. See docs/CLIENT_SCRAPER_SPEC.md.
+ */
+function addJoinCompletenessChecks(
+  envelope: ISlcIngestEnvelopeV1,
+  checks: IValidationCheck[],
+  entityCounts: Record<string, number>
+): void {
+  const courseIds = new Set<string>();
+  const assignmentIds = new Set<string>();
+  for (const item of envelope.ops) {
+    if (item.op !== 'upsert') continue;
+    if (item.entity === 'course') courseIds.add(item.key.externalId);
+    if (item.entity === 'assignment') assignmentIds.add(item.key.externalId);
+  }
+
+  let missingCourseFk = 0;
+  let danglingCourseFk = 0;
+  let danglingAssignmentFk = 0;
+  let coursesMissingJoinHints = 0;
+
+  for (const item of envelope.ops) {
+    if (item.op !== 'upsert') continue;
+
+    if (COURSE_SCOPED_ENTITIES.has(item.entity)) {
+      const cid = courseExternalIdOf(item);
+      if (!cid) {
+        missingCourseFk += 1;
+      } else if (courseIds.size > 0 && !courseIds.has(cid)) {
+        danglingCourseFk += 1;
+      }
+    }
+
+    if (item.entity === 'courseMaterial') {
+      const rec = item.record as Record<string, unknown> | undefined;
+      const aid = rec?.['assignmentExternalId'];
+      if (
+        typeof aid === 'string' &&
+        aid.trim() &&
+        assignmentIds.size > 0 &&
+        !assignmentIds.has(aid)
+      ) {
+        danglingAssignmentFk += 1;
+      }
+    }
+
+    if (item.entity === 'course') {
+      const rec = item.record as Record<string, unknown> | undefined;
+      const teacher = typeof rec?.['teacherName'] === 'string' && rec['teacherName'].trim();
+      const period = typeof rec?.['period'] === 'string' && rec['period'].trim();
+      const code = typeof rec?.['courseCode'] === 'string' && rec['courseCode'].trim();
+      if (!teacher && !period && !code) {
+        coursesMissingJoinHints += 1;
+      }
+    }
+  }
+
+  if (missingCourseFk > 0) {
+    checks.push({
+      name: 'join-course-fk',
+      severity: 'warning',
+      message: `${missingCourseFk} assignment/grade/material op(s) missing courseExternalId`,
+    });
+  }
+
+  if (danglingCourseFk > 0) {
+    checks.push({
+      name: 'join-course-exists',
+      severity: 'warning',
+      message: `${danglingCourseFk} op(s) reference a courseExternalId with no matching course in this envelope`,
+    });
+  }
+
+  if (danglingAssignmentFk > 0) {
+    checks.push({
+      name: 'join-assignment-fk',
+      severity: 'warning',
+      message: `${danglingAssignmentFk} courseMaterial op(s) reference an assignmentExternalId with no matching assignment in this envelope`,
+    });
+  }
+
+  if (coursesMissingJoinHints > 0) {
+    checks.push({
+      name: 'join-hints-course',
+      severity: 'warning',
+      message: `${coursesMissingJoinHints} course(s) missing teacherName, period, and courseCode — cross-provider subject merge will be weak`,
+    });
+  }
+
+  const provider = envelope.run?.provider ?? '';
+  const courseCount = entityCounts['course'] ?? 0;
+  const gradeCount = entityCounts['gradeSnapshot'] ?? 0;
+  const assignmentCount = entityCounts['assignment'] ?? 0;
+  const materialCount = entityCounts['courseMaterial'] ?? 0;
+
+  if (SIS_PROVIDERS.has(provider) && courseCount > 0 && gradeCount === 0) {
+    checks.push({
+      name: 'join-role-sis-grades',
+      severity: 'warning',
+      message: 'SIS envelope has courses but no gradeSnapshot — official grades cannot be shown',
+    });
+  }
+
+  if (LMS_PROVIDERS.has(provider) && courseCount > 0 && assignmentCount === 0) {
+    checks.push({
+      name: 'join-role-lms-assignments',
+      severity: 'warning',
+      message: 'LMS envelope has courses but no assignments — action board will be empty',
+    });
+  }
+
+  if (LMS_PROVIDERS.has(provider) && courseCount > 0 && materialCount === 0) {
+    checks.push({
+      name: 'join-role-lms-materials',
+      severity: 'warning',
+      message:
+        'LMS envelope has courses but no courseMaterial — resources cannot be joined to subjects',
+    });
+  }
 }
 
 function buildReport(

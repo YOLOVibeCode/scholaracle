@@ -257,10 +257,14 @@ export function transformSkywardExtract(
     if (s.period) scheduleByPeriod.set(s.period, s);
   }
 
+  // Helper: stable course externalId — prefer native _cni, fallback to period+slug
+  const courseExtIdFor = (period: string, name: string, cni?: string): string =>
+    cni ? `skyward-course-${cni}` : `skyward-course-${period}-${slugify(name)}`;
+
   // Courses + grade snapshots (from gradebook)
   for (let i = 0; i < extract.courses.length; i++) {
     const course = extract.courses[i]!;
-    const courseExtId = `skyward-course-${course.period}-${slugify(course.name)}`;
+    const courseExtId = courseExtIdFor(course.period, course.name, course._cni);
     const sched = scheduleByPeriod.get(course.period);
     const { startTime, endTime } = parseTimeRange(sched?.time || course.time);
 
@@ -287,7 +291,7 @@ export function transformSkywardExtract(
         entity: 'gradeSnapshot',
         key: {
           ...baseKey,
-          externalId: `skyward-grade-${course.period}-${slugify(course.name)}`,
+          externalId: `skyward-grade-${course._cni ?? `${course.period}-${slugify(course.name)}`}`,
           courseExternalId: courseExtId,
         },
         observedAt: now,
@@ -329,12 +333,41 @@ export function transformSkywardExtract(
     }
   }
 
+  // Teacher ops from schedule (deduplicated by name)
+  const seenTeachers = new Map<string, { teacher: string; courseExtIds: string[] }>();
+  for (const s of extract.schedule) {
+    if (!s.teacher) continue;
+    const matchingCourse = extract.courses.find((c) => c.period === s.period);
+    const extId = matchingCourse
+      ? courseExtIdFor(matchingCourse.period, matchingCourse.name, matchingCourse._cni)
+      : `skyward-course-${s.period}-${slugify(s.course)}`;
+
+    const existing = seenTeachers.get(s.teacher);
+    if (existing) {
+      existing.courseExtIds.push(extId);
+    } else {
+      seenTeachers.set(s.teacher, { teacher: s.teacher, courseExtIds: [extId] });
+    }
+  }
+  for (const [, { teacher, courseExtIds }] of seenTeachers) {
+    ops.push({
+      op: 'upsert',
+      entity: 'teacher',
+      key: { ...baseKey, externalId: `skyward-teacher-${slugify(teacher)}` },
+      observedAt: now,
+      record: {
+        name: teacher,
+        courseExternalIds: courseExtIds,
+      },
+    });
+  }
+
   // Missing assignments -> assignment (status: missing); set termExternalId for expiration
   for (let i = 0; i < extract.missingAssignments.length; i++) {
     const ma = extract.missingAssignments[i]!;
     const course = extract.courses.find((c) => c.name === ma.course || c.period === ma.period);
     const courseExtId = course
-      ? `skyward-course-${course.period}-${slugify(course.name)}`
+      ? courseExtIdFor(course.period, course.name, course._cni)
       : `skyward-course-${ma.period}-${slugify(ma.course)}`;
     const dueDateIso = ma.dueDate ? parseDate(ma.dueDate) : undefined;
     const termExternalId = getTermExternalIdForDate(dueDateIso);
@@ -365,7 +398,7 @@ export function transformSkywardExtract(
       (c) => c.period === a.period || slugify(c.name) === slugify(a.course)
     );
     const courseExtId = course
-      ? `skyward-course-${course.period}-${slugify(course.name)}`
+      ? courseExtIdFor(course.period, course.name, course._cni)
       : `skyward-course-${a.period}-${slugify(a.course)}`;
     const dueDateIso = a.dueDate ? parseDate(a.dueDate) : undefined;
     const termExtId = getTermExternalIdForDate(dueDateIso ?? undefined);
@@ -397,7 +430,7 @@ export function transformSkywardExtract(
     const a = extract.attendance[i]!;
     const course = extract.courses.find((c) => c.period === a.period || c.name === a.course);
     const courseExtId = course
-      ? `skyward-course-${course.period}-${slugify(course.name)}`
+      ? courseExtIdFor(course.period, course.name, course._cni)
       : undefined;
 
     ops.push({

@@ -100,10 +100,10 @@ export function extractSkywardSchoolName(): string {
 }
 
 /** Extracts assignments from the Skyward gradeInfoDialog for a specific course. */
-export function extractSkywardCourseAssignments(
-  courseName: string,
-  coursePeriod: string
-): Array<{
+export function extractSkywardCourseAssignments(opts: {
+  courseName: string;
+  coursePeriod: string;
+}): Array<{
   title: string;
   course: string;
   period: string;
@@ -114,6 +114,7 @@ export function extractSkywardCourseAssignments(
   grade: string;
   status: 'graded' | 'missing' | 'late' | 'unknown';
 }> {
+  const { courseName, coursePeriod } = opts;
   const dialog = document.querySelector('#gradeInfoDialog');
   if (!dialog) return [];
 

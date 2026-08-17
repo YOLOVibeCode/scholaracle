@@ -3,8 +3,13 @@
 > Version 1.0 — 2026-02-16
 >
 > This checklist defines **everything** a scraper should extract from an educational platform.
-> It is embedded into AI prompts for scraper generation and serves as the authoritative
-> reference for what data the Scholaracle system can ingest.
+> It is embedded into AI prompts for scraper generation and serves as the field catalog
+> for what the Scholaracle system can ingest.
+>
+> **Join keys, provider roles, and intelligence layers** live in
+> [`CLIENT_SCRAPER_SPEC.md`](./CLIENT_SCRAPER_SPEC.md). Extract the fields below
+> **and** emit the join keys in that spec, or subjects / grades / resources
+> cannot be stitched together.
 >
 > **Rule: If the platform shows it on any page, scrape it. Navigate to every page necessary.
 > If a data point is not available on the platform, omit the field — but always check.**
@@ -56,6 +61,10 @@ Extract once per scraper run. This tells the system who the child is.
 
 Extract one record per course the student is enrolled in.
 
+`key.externalId` is the hub other entities point at. Prefer a native platform
+id (`canvas-course-12345`). Always emit `title` plus at least one join hint:
+`teacherName`, `period`, or `courseCode`.
+
 | Field | Type | Notes |
 |-------|------|-------|
 | **title** [required] | string | Course name: "AP Mathematics", "English 10 Honors" |
@@ -79,6 +88,9 @@ Extract one record per course the student is enrolled in.
 ### 3. Assignments (`assignment`)
 
 Extract **every assignment** for the current term at minimum. Historical terms are valuable too.
+
+`key.courseExternalId` and `record.courseExternalId` MUST equal the parent
+course's `key.externalId`. Prefer a native assignment id, never an array index.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -131,6 +143,9 @@ Extract **every assignment** for the current term at minimum. Historical terms a
 ### 4. Grade Snapshots (`gradeSnapshot`)
 
 Extract one per course per grading period. This is the "report card" view.
+
+`record.courseExternalId` MUST equal the parent course's `key.externalId`.
+SIS snapshots are the official grade; LMS snapshots are working grades.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -205,6 +220,10 @@ Extract one record per teacher the student has.
 ### 7. Course Materials (`courseMaterial`)
 
 Extract all documents, files, and resources posted to courses.
+
+`record.courseExternalId` is required. Set `record.assignmentExternalId` when
+the portal groups the file with an assignment (module, description link,
+attachment). Unmatched files still upload — server LLM matching fills the gap.
 
 | Field | Type | Notes |
 |-------|------|-------|

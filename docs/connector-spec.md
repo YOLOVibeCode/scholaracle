@@ -604,43 +604,41 @@ Parent → School Platform → Adapter → SLC Envelope → Scholaracle API → 
 
 | Platform Tier | Connection Method | Runs On | Parent Effort |
 |---------------|-------------------|---------|---------------|
-| Tier 1 (API) | OAuth or token via web UI | Server (workers) | Low: enter URL + auth |
-| Tier 2 (OneRoster) | District credentials via web UI | Server (workers) | Low: enter URL + auth |
-| Tier 3 (Partner) | API token via web UI (if granted) | Server (workers) | Low |
-| Tier 4 (Scrape) | Install local connector + Playwright | Parent's machine | Medium: install + run |
+| Tier 1 (API) | OAuth or API token — client-side only | Mobile app / extension / CLI | Low: authenticate in app |
+| Tier 2 (OneRoster) | District API token — client-side only | Mobile app / extension / CLI | Low: enter token in app |
+| Tier 3 (Partner) | API token — client-side only | Mobile app / extension / CLI | Low: enter token in app |
+| Tier 4 (Scrape) | Local Playwright-based connector | Parent's machine (CLI) | Medium: install + run |
 
-### 5.3 Server-Side Sync (Tiers 1–3)
+**All sync runs client-side.** School portal credentials and OAuth tokens are held on the
+client device (iOS Keychain, browser extension local storage, or CLI config file) and are
+never uploaded to the Scholaracle server. The server only receives normalized SLC envelopes.
 
-For platforms with APIs, syncing runs server-side:
+### 5.3 Client-Side Sync Flow
 
-1. Parent enters school URL in web UI
-2. Platform detector identifies the platform
-3. Parent completes auth flow (OAuth redirect, paste token, or enter credentials)
-4. Credentials encrypted and stored in `IngestCredential` collection
-5. Worker job `ingest-sync` runs on schedule (every 4–6 hours):
-   - Reads IngestSource records
-   - Instantiates adapter from registry
-   - Calls `fetchEnvelope()`
-   - Applies ops to database
-   - Updates IngestRun status
+For all platforms, extraction runs on the client:
 
-### 5.4 Local Connector (Tier 4)
+1. Parent authenticates in the iOS app, browser extension, or local CLI
+2. Credentials stored locally (Keychain / extension storage / `~/.scholaracle/`)
+3. Client runs adapter on schedule or on demand
+4. Client calls `fetchEnvelope()` and POSTs the SLC envelope to the ingest API
+5. Server validates, stores, and generates alerts — no scraping on the server
 
-For scraping, the connector runs on the parent's machine:
+### 5.4 Local CLI Connector (Tier 4 Scrape)
+
+For portal scraping, the connector runs on the parent's machine:
 
 1. Parent installs Node.js + `@scholaracle/connector` CLI
 2. `slc init` — device auth flow (get connector token)
 3. `slc add-source` — register the school portal
-4. `slc run --source-id <id> --scrape` — launches Playwright, logs in, scrapes data
+4. `slc run --source-id <id> --scrape` — launches Playwright locally, logs in, scrapes data
 5. Envelope uploaded to Scholaracle API
 
 ### 5.5 Credential Security
 
-- All credentials encrypted at rest using AES-256-GCM
-- OAuth tokens refreshed automatically; refresh tokens stored encrypted
-- API keys and passwords never logged or exposed in responses
-- Local connector stores `connectorToken` in `~/.scholaracle/slc.json`
-- Server-side credentials stored in separate `IngestCredential` collection
+- School portal credentials (username/password, OAuth tokens) are **never** sent to or stored by the Scholaracle server
+- Client devices store credentials locally using OS-level secure storage (iOS Keychain, extension storage, file system)
+- The server stores only normalized academic data and non-portal API tokens (e.g. integration API keys)
+- Connector tokens used by CLI clients are scoped to a single student source
 
 ---
 
