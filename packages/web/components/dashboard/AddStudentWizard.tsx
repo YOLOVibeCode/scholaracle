@@ -72,7 +72,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   // New provider: open ConnectProviderWizard; after download or add-to-bundle we update state
   const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
   const [bundleDownloading, setBundleDownloading] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
 
   // Created student tracking
@@ -91,7 +90,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   const resetCredentials = () => {
     setTestResult(null);
-    setTestingConnection(false);
   };
 
   const resetAll = () => {
