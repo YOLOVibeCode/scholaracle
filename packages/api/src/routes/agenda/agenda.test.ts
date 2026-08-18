@@ -2,6 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { StudentRepository } from '@scholaracle/database';
 import { agendaRouter } from './agenda';
 import { createErrorHandler } from '../../middleware/errorHandler';
 
@@ -21,14 +22,26 @@ describe('Agenda API', () => {
     database = mongoClient.db(dbName);
 
     await database.collection('users').deleteMany({ email: 'agenda@test.com' });
+    await database.collection('students').deleteMany({ studentId: 'student-ext-1' });
     await database.collection('slc_assignments').deleteMany({});
     await database.collection('slc_event_series').deleteMany({});
     await database.collection('agenda_overrides').deleteMany({});
 
     authService = new AuthService(database);
     const reg = await authService.register('agenda@test.com', 'password123', 'Agenda User');
-    if (!reg.success || !reg.token) throw new Error('Failed to create agenda test user');
+    if (!reg.success || !reg.token || !reg.user?.id) {
+      throw new Error('Failed to create agenda test user');
+    }
     testToken = reg.token;
+
+    // Agenda queries slc_* by student.dataUserId(); assignments without a student never surface.
+    const studentRepo = new StudentRepository(database);
+    await studentRepo.create({
+      userId: reg.user.id,
+      name: 'Agenda Student',
+      grade: 9,
+      studentId: 'student-ext-1',
+    });
 
     app = express();
     app.use(express.json());
