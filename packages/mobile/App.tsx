@@ -26,7 +26,11 @@ import { isDiagDeepLink } from './src/demo/diagDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import { DeployStamp } from './src/components/DeployStamp';
-import type { ICourseGrade, ICourseGradeAssignment, ISourceInvitePayload } from '@scholaracle/contracts';
+import type {
+  ICourseGrade,
+  ICourseGradeAssignment,
+  ISourceInvitePayload,
+} from '@scholaracle/contracts';
 import { handleInstallLink, redeemPendingInstall } from './src/install/handleInstallLink';
 import { installSourceLinkParser } from './src/install/installSourceDeepLink';
 import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore';
