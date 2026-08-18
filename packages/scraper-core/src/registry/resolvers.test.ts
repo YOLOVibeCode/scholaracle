@@ -57,8 +57,10 @@ describe('BuiltinScraperResolver', () => {
     ['com.instructure.canvas', 'com.instructure.canvas'],
     ['skyward', 'com.skyward.qmlativ'],
     ['com.skyward.qmlativ', 'com.skyward.qmlativ'],
+    ['com.skyward.iscorp', 'com.skyward.qmlativ'],
     ['aeries', 'com.aeries.sis'],
     ['com.aeries.sis', 'com.aeries.sis'],
+    ['com.aeries.portal', 'com.aeries.sis'],
   ] as const)('resolves %s → adapterId %s', async (key, adapterId) => {
     const result = await resolver.resolve(key);
     expect(result.module.metadata.adapterId).toBe(adapterId);

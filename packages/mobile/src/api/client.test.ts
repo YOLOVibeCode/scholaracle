@@ -801,3 +801,45 @@ describe('session hardening', () => {
     expect(client.sessionEpoch).toBe(before + 1);
   });
 });
+
+describe('ScholarmancyApiClient source invites', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+    client = new ScholarmancyApiClient(BASE_URL);
+    secureStoreData.set('slc_access_token', 'jwt-ok');
+  });
+
+  it('redeemSourceInvite maps invite from 200', async () => {
+    const invite = {
+      provider: 'skyward',
+      adapterId: 'com.skyward.iscorp',
+      portalBaseUrl: 'https://skyward.iscorp.com',
+      displayName: 'Skyward Family Access (skyward.iscorp.com)',
+      studentId: 'stu-1',
+      studentExternalId: 'ava-lewis',
+      institutionExternalId: 'skyward.iscorp.com',
+    };
+    mockFetchSequence({ status: 200, body: { success: true, invite } });
+    const result = await client.redeemSourceInvite('ab'.repeat(32));
+    expect(result).toEqual(invite);
+  });
+
+  it('redeemSourceInvite throws on 404', async () => {
+    mockFetchSequence({
+      status: 404,
+      body: { success: false, error: 'This install link expired or is not for this account.' },
+    });
+    await expect(client.redeemSourceInvite('ab'.repeat(32))).rejects.toThrow(/expired/i);
+  });
+
+  it('redeemSourceInvite throws on 401', async () => {
+    mockFetchSequence(
+      { status: 401, body: { success: false, error: 'expired' } },
+      { status: 401, body: { success: false, error: 'expired' } }
+    );
+    await expect(client.redeemSourceInvite('ab'.repeat(32))).rejects.toThrow();
+  });
+});

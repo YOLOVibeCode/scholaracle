@@ -8,8 +8,6 @@ export interface IBundleConnection {
   readonly platformId: string;
   readonly platformName: string;
   readonly loginUrl: string;
-  readonly username: string;
-  readonly password: string;
   /** Optional hint when the portal only shows one student's data. */
   readonly studentNameHint?: string;
   readonly scraperId: string | null;
@@ -23,8 +21,6 @@ export interface IBundleConnectionPayload {
   readonly loginUrl: string;
   readonly scraperId: string | null;
   readonly credentials: {
-    readonly username: string;
-    readonly password: string;
     readonly studentNameHint?: string;
   };
 }

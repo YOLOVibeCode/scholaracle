@@ -150,6 +150,13 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
       if (!ds) throw new NotFoundError(`Data source at index ${idx} not found`);
 
       const provider = ds.pluginId.split('::')[0] ?? ds.pluginId;
+
+      if (['canvas', 'skyward', 'aeries', 'google-classroom', 'oneroster'].includes(provider)) {
+        throw new ValidationError(
+          `${provider} sync runs on the client device (mobile app, browser extension, or local CLI), not on the server. Trigger a sync from the Scholarmancy app or run npx scholaracle-scraper run.`
+        );
+      }
+
       const jobId = await syncScheduler.triggerNow({
         studentId: studentId!,
         dataSourceIndex: idx,

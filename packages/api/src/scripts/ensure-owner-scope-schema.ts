@@ -106,10 +106,11 @@ async function main(): Promise<void> {
       for (const sp of shared) {
         const coparentId = sp.userId!;
         for (const collName of SLC_COLLECTIONS) {
-          const query: Record<string, unknown> = { userId: coparentId };
-          if (studentExternalId && collName !== 'slc_sources' && collName !== 'slc_runs') {
-            query['studentExternalId'] = studentExternalId;
-          }
+          const scopedToStudent =
+            Boolean(studentExternalId) && collName !== 'slc_sources' && collName !== 'slc_runs';
+          const query: Record<string, unknown> = scopedToStudent
+            ? { userId: coparentId, studentExternalId }
+            : { userId: coparentId };
           coparentKeyedRows += await db.collection(collName).countDocuments(query);
         }
       }

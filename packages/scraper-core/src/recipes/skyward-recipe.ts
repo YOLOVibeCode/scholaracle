@@ -165,11 +165,10 @@ export async function runSkywardRecipe(
       // Extract assignments from the gradeInfoDialog if visible after grade cell click
       for (const period of GRADE_PERIOD_PRIORITY) {
         void period; // iterate periods until assignments are found
-        const assignments = await driver.evaluate(
-          extractSkywardCourseAssignments,
-          course.name,
-          course.period
-        );
+        const assignments = await driver.evaluate(extractSkywardCourseAssignments, {
+          courseName: course.name,
+          coursePeriod: course.period,
+        });
         if (assignments.length > 0) {
           allAssignments.push(...assignments);
           break;

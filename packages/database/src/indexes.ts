@@ -188,6 +188,17 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcComments.createIndex({ userId: 1, assignmentExternalId: 1, deletedAt: 1 });
   await slcComments.createIndex({ authorUserId: 1 });
 
+  const sourceInvites = database.collection('source_invites');
+  await sourceInvites.createIndex({ tokenHash: 1 }, { unique: true });
+  await sourceInvites.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await sourceInvites.createIndex({
+    userId: 1,
+    'payload.studentId': 1,
+    'payload.provider': 1,
+    'payload.institutionExternalId': 1,
+    consumedAt: 1,
+  });
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }

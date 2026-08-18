@@ -43,13 +43,7 @@ export interface ICanvasBrowserAssignment {
 export interface ICanvasModuleItem {
   readonly title: string;
   readonly type:
-    | 'Assignment'
-    | 'File'
-    | 'Page'
-    | 'Discussion'
-    | 'ExternalUrl'
-    | 'ExternalTool'
-    | 'SubHeader';
+    'Assignment' | 'File' | 'Page' | 'Discussion' | 'ExternalUrl' | 'ExternalTool' | 'SubHeader';
   readonly contentId?: string;
   readonly position: number;
 }
@@ -77,6 +71,7 @@ export interface ICanvasBrowserAnnouncement {
   readonly title: string;
   readonly course: string;
   readonly date?: string;
+  readonly body?: string;
 }
 
 export interface ICanvasBrowserCourse {
