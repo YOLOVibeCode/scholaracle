@@ -113,6 +113,15 @@ function normalizeStatus(raw: string | undefined): string | undefined {
   return 'unknown';
 }
 
+function slugify(s: string): string {
+  return (
+    s
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .toLowerCase() || 'unknown'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Material-to-Assignment matching (Layers 1 + 2)
 // ---------------------------------------------------------------------------
@@ -122,62 +131,64 @@ function normalizeStatus(raw: string | undefined): string | undefined {
  *   Layer 1 — Canvas module structure (teacher-curated grouping)
  *   Layer 2 — File links in assignment descriptions
  *
- * Returns a Map from file name → assignment array index (as string).
+ * Returns a Map from fileId → native assignment externalId (e.g. "canvas-assignment-987").
+ * Files without a Canvas id are keyed by name and mapped to a name-based externalId.
  */
 export function matchMaterialsToAssignments(course: ICanvasBrowserCourse): Map<string, string> {
+  /** fileKey → nativeAssignmentExternalId */
   const fileToAssignment = new Map<string, string>();
 
-  // Lookup: Canvas file ID → file name
-  const fileIdToName = new Map<string, string>();
+  // Lookup: Canvas file contentId → stable file key (prefer id, fallback to name)
+  const contentIdToFileKey = new Map<string, string>();
   for (const f of course.files) {
-    if (f.id) fileIdToName.set(f.id, f.name);
+    if (f.id) contentIdToFileKey.set(f.id, f.id);
   }
 
-  // Lookup: Canvas assignment ID → assignment array index
-  const assignmentIdToIndex = new Map<string, number>();
+  // Helper: get stable assignment externalId from native Canvas assignment id
+  const assignmentExternalId = (
+    a: ICanvasBrowserCourse['assignments'][number],
+    idx: number
+  ): string => (a.id ? `canvas-assignment-${a.id}` : `canvas-assignment-${course.id}-${idx}`);
+
+  // Lookup: Canvas assignment contentId → assignment externalId
+  const assignmentIdToExtId = new Map<string, string>();
   for (let i = 0; i < course.assignments.length; i++) {
     const a = course.assignments[i]!;
-    if (a.id) assignmentIdToIndex.set(a.id, i);
+    if (a.id) assignmentIdToExtId.set(a.id, assignmentExternalId(a, i));
   }
 
   // --- Layer 1: Module co-occurrence ---
   for (const mod of course.modules) {
     const moduleAssignmentIds: string[] = [];
-    const moduleFileIds: string[] = [];
+    const moduleFileContentIds: string[] = [];
 
     for (const item of mod.items) {
-      if (item.type === 'Assignment' && item.contentId) {
-        moduleAssignmentIds.push(item.contentId);
-      }
-      if (item.type === 'File' && item.contentId) {
-        moduleFileIds.push(item.contentId);
-      }
+      if (item.type === 'Assignment' && item.contentId) moduleAssignmentIds.push(item.contentId);
+      if (item.type === 'File' && item.contentId) moduleFileContentIds.push(item.contentId);
     }
 
-    if (moduleFileIds.length === 0) continue;
+    if (moduleFileContentIds.length === 0) continue;
 
     if (moduleAssignmentIds.length === 1) {
-      // Single assignment in module → all files belong to it
-      const idx = assignmentIdToIndex.get(moduleAssignmentIds[0]!);
-      if (idx !== undefined) {
-        for (const fid of moduleFileIds) {
-          const fname = fileIdToName.get(fid);
-          if (fname && !fileToAssignment.has(fname)) {
-            fileToAssignment.set(fname, String(idx));
+      const extId = assignmentIdToExtId.get(moduleAssignmentIds[0]!);
+      if (extId) {
+        for (const fid of moduleFileContentIds) {
+          const fileKey = contentIdToFileKey.get(fid);
+          if (fileKey && !fileToAssignment.has(fileKey)) {
+            fileToAssignment.set(fileKey, extId);
           }
         }
       }
     } else if (moduleAssignmentIds.length > 1) {
-      // Multiple assignments → assign files to nearest preceding assignment by position
       const sorted = [...mod.items].sort((a, b) => a.position - b.position);
-      let currentIdx: number | undefined;
+      let currentExtId: string | undefined;
       for (const item of sorted) {
         if (item.type === 'Assignment' && item.contentId) {
-          currentIdx = assignmentIdToIndex.get(item.contentId);
-        } else if (item.type === 'File' && item.contentId && currentIdx !== undefined) {
-          const fname = fileIdToName.get(item.contentId);
-          if (fname && !fileToAssignment.has(fname)) {
-            fileToAssignment.set(fname, String(currentIdx));
+          currentExtId = assignmentIdToExtId.get(item.contentId);
+        } else if (item.type === 'File' && item.contentId && currentExtId !== undefined) {
+          const fileKey = contentIdToFileKey.get(item.contentId);
+          if (fileKey && !fileToAssignment.has(fileKey)) {
+            fileToAssignment.set(fileKey, currentExtId);
           }
         }
       }
@@ -189,24 +200,13 @@ export function matchMaterialsToAssignments(course: ICanvasBrowserCourse): Map<s
     const a = course.assignments[i]!;
     if (!a.description) continue;
 
-    // Match Canvas file URLs: /files/{fileId}
+    const extId = assignmentExternalId(a, i);
     const fileIdPattern = /\/files\/(\d+)/g;
     let match: RegExpExecArray | null;
     while ((match = fileIdPattern.exec(a.description)) !== null) {
       const fileId = match[1]!;
-      const fname = fileIdToName.get(fileId);
-      if (fname && !fileToAssignment.has(fname)) {
-        fileToAssignment.set(fname, String(i));
-      }
-    }
-
-    // Match by filename mentioned verbatim in description
-    for (const file of course.files) {
-      const nameNoExt = file.name.replace(/\.[^.]+$/, '');
-      if (nameNoExt.length >= 4 && a.description.includes(file.name)) {
-        if (!fileToAssignment.has(file.name)) {
-          fileToAssignment.set(file.name, String(i));
-        }
+      if (!fileToAssignment.has(fileId)) {
+        fileToAssignment.set(fileId, extId);
       }
     }
   }
@@ -324,7 +324,8 @@ export function transformCanvasExtract(
 
     for (let i = 0; i < course.assignments.length; i++) {
       const a = course.assignments[i]!;
-      const aExtId = `canvas-${course.id}-assignment-${i}`;
+      // Native Canvas assignment ID is stable; fall back to courseId+index only when missing.
+      const aExtId = a.id ? `canvas-assignment-${a.id}` : `canvas-assignment-${course.id}-${i}`;
       const termExternalId = getCanvasTermExternalIdForDueDate(a.dueDate, extract.timestamp || now);
 
       ops.push({
@@ -349,19 +350,24 @@ export function transformCanvasExtract(
     }
 
     // Match course files to assignments via modules + description links
+    // materialMatches: Map<fileId, nativeAssignmentExternalId>
     const materialMatches = matchMaterialsToAssignments(course);
 
-    for (const file of course.files) {
-      const matchedIdx = materialMatches.get(file.name);
-      const assignmentExternalId =
-        matchedIdx !== undefined ? `canvas-${course.id}-assignment-${matchedIdx}` : undefined;
+    for (let fi = 0; fi < course.files.length; fi++) {
+      const file = course.files[fi]!;
+      // Use native Canvas file ID when present; fall back to courseId+slug
+      const fileKey = file.id ?? `name-${slugify(file.name)}`;
+      const assignmentExternalId = materialMatches.get(file.id ?? fileKey);
+      const fileExtId = file.id
+        ? `canvas-file-${file.id}`
+        : `canvas-file-${course.id}-${slugify(file.name)}-${fi}`;
 
       ops.push({
         op: 'upsert',
         entity: 'courseMaterial',
         key: {
           ...baseKey,
-          externalId: `canvas-file-${course.id}-${file.name}`,
+          externalId: fileExtId,
           courseExternalId: courseExtId,
         },
         observedAt: now,
@@ -392,12 +398,50 @@ export function transformCanvasExtract(
       observedAt: now,
       record: {
         subject: ann.title,
-        body: ann.title,
+        body: ann.body || ann.title,
         senderName: 'Canvas',
         senderRole: 'system' as const,
         sentAt: ann.date || now,
         courseExternalId: courseExtId,
         category: 'academic' as const,
+      },
+    });
+  }
+
+  // Upcoming events -> eventSeries (one-off calendar events)
+  for (let i = 0; i < extract.upcomingEvents.length; i++) {
+    const ev = extract.upcomingEvents[i]!;
+    const course = extract.courses.find((c) => c.name === ev.course || c.id === ev.course);
+    const courseExtId = course ? `canvas-course-${course.id}` : undefined;
+    ops.push({
+      op: 'upsert',
+      entity: 'eventSeries',
+      key: { ...baseKey, externalId: `canvas-event-${i}` },
+      observedAt: now,
+      record: {
+        title: ev.title,
+        startAt: ev.date || undefined,
+        courseExternalId: courseExtId,
+        type: 'other' as const,
+      },
+    });
+  }
+
+  // To-do items -> assignment with status not_started
+  for (let i = 0; i < extract.toDoItems.length; i++) {
+    const todo = extract.toDoItems[i]!;
+    const course = extract.courses.find((c) => c.name === todo.course || c.id === todo.course);
+    const courseExtId = course ? `canvas-course-${course.id}` : undefined;
+    ops.push({
+      op: 'upsert',
+      entity: 'assignment',
+      key: { ...baseKey, externalId: `canvas-todo-${i}`, courseExternalId: courseExtId },
+      observedAt: now,
+      record: {
+        title: todo.title,
+        dueAt: todo.dueDate || undefined,
+        status: 'not_started' as const,
+        courseExternalId: courseExtId,
       },
     });
   }

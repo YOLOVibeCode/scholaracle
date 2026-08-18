@@ -13,6 +13,7 @@
     { "path": "../interfaces" },
     { "path": "../contracts" },
     { "path": "../agents" },
-    { "path": "../logger" }
+    { "path": "../logger" },
+    { "path": "../scraper-core" }
   ]
 }

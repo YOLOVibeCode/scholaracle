@@ -99,6 +99,13 @@ export class SyncScheduler {
     userId: string;
     triggeredByUserId?: string;
   }): Promise<string> {
+    if (
+      ['canvas', 'skyward', 'aeries', 'google-classroom', 'oneroster'].includes(params.provider)
+    ) {
+      throw new Error(
+        `${params.provider} sync is client-side only. Do not enqueue server-side jobs for this provider.`
+      );
+    }
     const jobData: ISyncJobData = {
       studentId: params.studentId,
       dataSourceIndex: params.dataSourceIndex,
@@ -178,6 +185,11 @@ export class SyncScheduler {
     for (const src of sources) {
       const schedule = (src['schedule'] as string) ?? 'daily';
       if (schedule === 'manual') continue;
+
+      // HTML-portal providers are synced client-side only; skip server-side scheduling.
+      const srcProvider = (src['provider'] as string | undefined) ?? '';
+      if (['canvas', 'skyward', 'aeries', 'google-classroom', 'oneroster'].includes(srcProvider))
+        continue;
 
       // Skip day-of-week restricted schedules when not applicable
       if (schedule === 'weekdays' && !isWeekday(now)) continue;
