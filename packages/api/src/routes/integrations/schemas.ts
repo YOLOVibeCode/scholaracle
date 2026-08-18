@@ -22,20 +22,13 @@ export type IUpdateIntegrationBody = z.infer<typeof updateIntegrationSchema>;
 export const assignStudentSchema = z.object({
   credentials: z
     .object({
-      authType: z.enum(['api', 'login']),
+      authType: z.enum(['api']),
       accessToken: z.string().optional(),
-      username: z.string().optional(),
-      password: z.string().optional(),
       baseUrl: z.string().optional(),
     })
-    .refine(
-      (data) => {
-        if (data.authType === 'api') return Boolean(data.accessToken?.trim());
-        if (data.authType === 'login') return Boolean(data.username?.trim() && data.password);
-        return false;
-      },
-      { message: 'api requires accessToken; login requires username and password' }
-    )
+    .refine((data) => Boolean(data.accessToken?.trim()), {
+      message: 'api authType requires accessToken',
+    })
     .optional(),
 });
 
@@ -46,10 +39,8 @@ export const testConnectionSchema = z.object({
   adapterId: z.string().min(1, 'adapterId is required'),
   baseUrl: z.string().optional(),
   credentials: z.object({
-    authType: z.enum(['api', 'login', 'oauth2', 'api-key']),
+    authType: z.enum(['api', 'oauth2', 'api-key']),
     accessToken: z.string().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
     clientId: z.string().optional(),
     clientSecret: z.string().optional(),
     apiKey: z.string().optional(),

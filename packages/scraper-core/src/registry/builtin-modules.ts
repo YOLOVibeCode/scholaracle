@@ -134,9 +134,11 @@ export const BUILTIN_ALIAS_TO_ADAPTER: Readonly<Record<string, string>> = {
   skyward: 'com.skyward.qmlativ',
   'com.skyward': 'com.skyward.qmlativ',
   'com.skyward.qmlativ': 'com.skyward.qmlativ',
+  'com.skyward.iscorp': 'com.skyward.qmlativ',
   aeries: 'com.aeries.sis',
   'com.aeries': 'com.aeries.sis',
   'com.aeries.sis': 'com.aeries.sis',
+  'com.aeries.portal': 'com.aeries.sis',
 };
 
 export const BUILTIN_MODULES_BY_ADAPTER: Readonly<Record<string, IScraperModule>> = {

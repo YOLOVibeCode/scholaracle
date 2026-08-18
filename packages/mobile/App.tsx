@@ -26,7 +26,16 @@ import { isDiagDeepLink } from './src/demo/diagDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import { DeployStamp } from './src/components/DeployStamp';
-import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
+import type {
+  ICourseGrade,
+  ICourseGradeAssignment,
+  ISourceInvitePayload,
+} from '@scholaracle/contracts';
+import { handleInstallLink, redeemPendingInstall } from './src/install/handleInstallLink';
+import { installSourceLinkParser } from './src/install/installSourceDeepLink';
+import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore';
+import { sourceInviteApplier } from './src/install/applySourceInvite';
+import { apiClient } from './src/api/client';
 
 // Install capture taps once at module load — before any other code runs.
 installDiagCapture();
@@ -47,6 +56,7 @@ interface INavState {
   readonly syncSource?: IConnectedSource;
   readonly course?: ICourseGrade;
   readonly assignment?: ICourseGradeAssignment;
+  readonly sourceInvite?: ISourceInvitePayload;
 }
 
 function AppContent(): React.ReactElement {
@@ -55,6 +65,7 @@ function AppContent(): React.ReactElement {
   const linkingUrl = useLinkingURL();
   const handledDemoUrl = useRef<string | null>(null);
   const handledDiagUrl = useRef<string | null>(null);
+  const handledInstallUrl = useRef<string | null>(null);
 
   // Trace navigation changes into the diag ring buffer.
   useEffect(() => {
@@ -84,6 +95,43 @@ function AppContent(): React.ReactElement {
       }
     })();
   }, [isLoading, linkingUrl, login]);
+
+  const applyInviteNav = useCallback((payload: ISourceInvitePayload): void => {
+    const student: IStudentListItem = {
+      id: payload.studentId,
+      userId: '',
+      name: payload.displayName,
+      studentId: payload.studentExternalId,
+    };
+    setNav({ view: 'connect-source', student, sourceInvite: payload });
+  }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!installSourceLinkParser.isInstallSourceDeepLink(linkingUrl)) return;
+    if (handledInstallUrl.current === linkingUrl) return;
+    handledInstallUrl.current = linkingUrl ?? null;
+    void handleInstallLink(linkingUrl, {
+      parser: installSourceLinkParser,
+      pending: pendingSourceInviteStore,
+      redeem: (token) => apiClient.redeemSourceInvite(token),
+      apply: sourceInviteApplier,
+      isLoggedIn,
+      onApplied: (payload) => applyInviteNav(payload),
+      onError: (message) => Alert.alert('Install link', message),
+    });
+  }, [isLoading, isLoggedIn, linkingUrl, applyInviteNav]);
+
+  useEffect(() => {
+    if (isLoading || !isLoggedIn) return;
+    void redeemPendingInstall({
+      pending: pendingSourceInviteStore,
+      redeem: (token) => apiClient.redeemSourceInvite(token),
+      apply: sourceInviteApplier,
+      onApplied: (payload) => applyInviteNav(payload),
+      onError: (message) => Alert.alert('Install link', message),
+    });
+  }, [isLoading, isLoggedIn, applyInviteNav]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -128,8 +176,9 @@ function AppContent(): React.ReactElement {
   if (nav.view === 'connect-source') {
     return (
       <ConnectSourceScreen
-        studentExternalId={nav.student?.studentId}
-        studentId={nav.student?.id}
+        studentExternalId={nav.sourceInvite?.studentExternalId ?? nav.student?.studentId}
+        studentId={nav.sourceInvite?.studentId ?? nav.student?.id}
+        invite={nav.sourceInvite}
         onConnected={() =>
           setNav({ view: nav.student ? 'dashboard' : 'students', student: nav.student })
         }

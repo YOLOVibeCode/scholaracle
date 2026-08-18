@@ -69,16 +69,9 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   const [bundle, setBundle] = useState<IBundleConnection[]>([]);
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
-  // Credentials for the current connection
-  const [, setAuthType] = useState<'api' | 'login'>('api');
-  const [, setAccessToken] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-
   // New provider: open ConnectProviderWizard; after download or add-to-bundle we update state
   const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
   const [bundleDownloading, setBundleDownloading] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
 
   // Created student tracking
@@ -96,37 +89,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   // ---------------------------------------------------------------------------
 
   const resetCredentials = () => {
-    setAuthType('api');
-    setAccessToken('');
-    setUsername('');
-    setPassword('');
     setTestResult(null);
-    setTestingConnection(false);
-  };
-
-  const handleTestConnection = async () => {
-    if (!currentIntegration) return;
-    const providerInfo = findProviderById(currentIntegration.provider);
-    if (!providerInfo) return;
-
-    setTestingConnection(true);
-    setTestResult(null);
-
-    const credPayload: { authType: 'login'; username?: string; password?: string } = {
-      authType: 'login',
-    };
-    if (username.trim()) credPayload.username = username.trim();
-    if (password) credPayload.password = password;
-
-    const result = await integrationsApi.testConnection({
-      provider: currentIntegration.provider,
-      adapterId: currentIntegration.adapterId,
-      baseUrl: currentIntegration.portalBaseUrl,
-      credentials: credPayload,
-    });
-
-    setTestResult(result);
-    setTestingConnection(false);
   };
 
   const resetAll = () => {
@@ -143,7 +106,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setCreatedStudentId(null);
     setCreatedStudentName('');
   };
-
   const handleClose = () => {
     resetAll();
     onClose();
@@ -205,9 +167,10 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setError(null);
     setSubmitting(true);
 
-    let credentials: IAssignStudentCredentials | undefined;
-    if (!skipCredentials && username.trim() && password) {
-      credentials = { authType: 'login', username: username.trim(), password };
+    const credentials: IAssignStudentCredentials | undefined = undefined;
+
+    if (skipCredentials) {
+      // Link without credentials; user can add them later from the app or extension.
     }
 
     try {
@@ -239,12 +202,9 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     }
   };
 
-  const handleSkipCredentials = () => handleConnect(true);
-
   // ---------------------------------------------------------------------------
   // Step 4 – Done
   // ---------------------------------------------------------------------------
-
   const handleFinish = () => {
     onStudentAdded?.();
     handleClose();
@@ -269,7 +229,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setCreatedStudentId(null);
     setCreatedStudentName('');
   };
-
   const handleRemoveFromBundle = (id: string) => {
     setBundle((b) => b.filter((c) => c.id !== id));
   };
@@ -288,8 +247,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
       loginUrl: c.loginUrl,
       scraperId: c.scraperId,
       credentials: {
-        username: c.username,
-        password: c.password,
         studentNameHint: c.studentNameHint,
       },
     }));
@@ -627,7 +584,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               </Button>
 
               <p className="text-sm text-muted-foreground">
-                Connect a new school platform by downloading a script. You&apos;ll pick your platform, enter your school login, and run the script on your computer to sync grades — same flow as the standalone setup wizard.
+                Connect a new school platform. Use the iOS app, browser extension, or the local CLI to run the scraper on your computer — your school login stays on your device.
               </p>
 
               <Button
@@ -640,6 +597,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
               <ConnectProviderWizard
                 open={connectProviderWizardOpen}
+                studentId={createdStudentId ?? undefined}
                 onClose={() => setConnectProviderWizardOpen(false)}
                 onConnectionReady={(connection) => {
                   setBundle((b) => [...b, connection]);
@@ -675,7 +633,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
                 <div className="text-sm">
                   <p>
-                    Enter <strong>{createdStudentName}</strong>&apos;s credentials for{' '}
+                    Connecting <strong>{createdStudentName}</strong> to{' '}
                     <strong>{currentIntegration.displayName}</strong>.
                   </p>
                 </div>
@@ -702,44 +660,29 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="wizard-username">Username</Label>
-                    <Input
-                      id="wizard-username"
-                      type="text"
-                      placeholder="Student's portal username"
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value);
-                        setAuthType('login');
-                      }}
-                      disabled={submitting}
-                      data-testid="wizard-credentials-username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="wizard-password">Password</Label>
-                    <Input
-                      id="wizard-password"
-                      type="password"
-                      placeholder="Student's portal password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        setAuthType('login');
-                      }}
-                      disabled={submitting}
-                      data-testid="wizard-credentials-password"
-                    />
-                  </div>
-                </div>
-
-                {providerInfo?.credentialHelp.note && (
-                  <p className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
-                    {providerInfo.credentialHelp.note}
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 p-4 space-y-2">
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                    School portal credentials stay on your device
                   </p>
-                )}
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    {currentIntegration.displayName} uses browser-based extraction. Your student&apos;s
+                    school login is never uploaded to Scholarmancy.
+                  </p>
+                  <ul className="text-sm text-amber-800 dark:text-amber-200 list-disc list-inside space-y-1">
+                    <li>
+                      <strong>iOS app</strong> — tap Add Source inside the Scholarmancy app
+                    </li>
+                    <li>
+                      <strong>Browser extension</strong> — connect from the school&apos;s portal page
+                    </li>
+                    <li>
+                      <strong>Local CLI</strong> — run{' '}
+                      <code className="bg-amber-100 dark:bg-amber-900 rounded px-1">
+                        npx scholaracle-scraper run
+                      </code>
+                    </li>
+                  </ul>
+                </div>
 
                 {/* Test Connection result */}
                 {testResult && (
@@ -767,35 +710,15 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 )}
 
                 <div className="flex gap-2 pt-2 flex-wrap">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTestConnection}
-                    disabled={testingConnection || submitting}
-                    data-testid="wizard-test-connection"
-                  >
-                    {testingConnection ? 'Testing...' : 'Test Connection'}
-                  </Button>
                   <div className="flex gap-2 ml-auto">
                     <Button
                       type="button"
-                      variant="ghost"
                       size="sm"
-                      className="text-muted-foreground"
-                      onClick={handleSkipCredentials}
-                      disabled={submitting}
-                    >
-                      Skip credentials
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleConnect(false)}
+                      onClick={() => handleConnect(true)}
                       disabled={submitting}
                       data-testid="wizard-connect-submit"
                     >
-                      {submitting ? 'Connecting...' : 'Connect'}
+                      {submitting ? 'Connecting...' : 'Continue without credentials'}
                     </Button>
                   </div>
                 </div>

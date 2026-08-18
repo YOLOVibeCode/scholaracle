@@ -39,10 +39,7 @@ export function AssignStudentSheet({
   onAssigned,
 }: AssignStudentSheetProps) {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [authType, setAuthType] = useState<'api' | 'login'>('api');
   const [accessToken, setAccessToken] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,10 +48,7 @@ export function AssignStudentSheet({
 
   const handleClose = () => {
     setSelectedStudentId('');
-    setAuthType('api');
     setAccessToken('');
-    setUsername('');
-    setPassword('');
     setError(null);
     onClose();
   };
@@ -68,10 +62,8 @@ export function AssignStudentSheet({
     setSubmitting(true);
 
     let credentials: IAssignStudentCredentials | undefined;
-    if (authType === 'api' && accessToken.trim()) {
+    if (accessToken.trim()) {
       credentials = { authType: 'api', accessToken: accessToken.trim() };
-    } else if (authType === 'login' && username.trim() && password) {
-      credentials = { authType: 'login', username: username.trim(), password };
     }
 
     try {
@@ -99,7 +91,7 @@ export function AssignStudentSheet({
         </SheetHeader>
         <div className="py-4 space-y-4">
           <p className="text-sm text-muted-foreground">
-            Choose a student and optionally add their credentials for this provider.
+            Choose a student and optionally add their API access token for this provider.
           </p>
 
           <div className="space-y-2">
@@ -122,52 +114,18 @@ export function AssignStudentSheet({
           </div>
 
           <div className="space-y-2">
-            <Label>Credentials (optional — can add later)</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={authType === 'api' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAuthType('api')}
-              >
-                API token
-              </Button>
-              <Button
-                type="button"
-                variant={authType === 'login' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAuthType('login')}
-              >
-                Portal login
-              </Button>
-            </div>
-            {authType === 'api' && (
-              <Input
-                type="password"
-                placeholder="Access token"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                data-testid="assign-credentials-token"
-              />
-            )}
-            {authType === 'login' && (
-              <div className="space-y-2">
-                <Input
-                  type="text"
-                  placeholder="Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  data-testid="assign-credentials-username"
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  data-testid="assign-credentials-password"
-                />
-              </div>
-            )}
+            <Label>API access token (optional — can add later)</Label>
+            <Input
+              type="password"
+              placeholder="Access token"
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              data-testid="assign-credentials-token"
+            />
+            <p className="text-xs text-muted-foreground">
+              For Canvas/Skyward/Aeries portal login, use the iOS app, browser extension, or{' '}
+              <code>npx scholaracle-scraper run</code> on your computer.
+            </p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

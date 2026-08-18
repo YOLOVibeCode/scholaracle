@@ -24,15 +24,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const studentIdFromPath = useMemo(() => getStudentIdFromPath(pathname ?? ''), [pathname]);
 
   useEffect(() => {
-    // Initialize auth token
     authApi.initialize();
-
-    // Check if user is authenticated
     const token = authApi.getToken();
     if (!token) {
-      router.push('/login');
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const path = `${pathname ?? '/dashboard'}${search}`;
+      const dest = path.startsWith('/') ? path : '/dashboard';
+      router.push(`/login?redirect=${encodeURIComponent(dest)}`);
     }
-  }, [router]);
+  }, [router, pathname]);
 
   const handleLogout = async () => {
     await authApi.logout();

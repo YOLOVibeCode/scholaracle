@@ -28,6 +28,8 @@ import {
 } from '../sources/ConnectedSourceStore';
 import { apiClient } from '../api/client';
 import { extractHostname } from '../utils/urlNormalize';
+import type { ISourceInvitePayload } from '@scholaracle/contracts';
+import { connectSourceInitialState } from '../install/connectSourceInitialState';
 
 type Provider = 'canvas' | 'skyward' | 'aeries';
 
@@ -70,6 +72,7 @@ interface ISavedCredential {
 interface IConnectSourceScreenProps {
   readonly studentExternalId?: string;
   readonly studentId?: string;
+  readonly invite?: ISourceInvitePayload;
   onConnected(): void;
   onCancel(): void;
 }
@@ -77,12 +80,16 @@ interface IConnectSourceScreenProps {
 export function ConnectSourceScreen({
   studentExternalId,
   studentId,
+  invite,
   onConnected,
   onCancel,
 }: IConnectSourceScreenProps): React.ReactElement {
-  const [step, setStep] = useState<'provider' | 'url' | 'credentials'>('provider');
-  const [selectedProvider, setSelectedProvider] = useState<IProviderInfo | null>(null);
-  const [portalUrl, setPortalUrl] = useState('');
+  const initial = connectSourceInitialState(invite);
+  const [step, setStep] = useState<'provider' | 'url' | 'credentials'>(initial.step);
+  const [selectedProvider, setSelectedProvider] = useState<IProviderInfo | null>(
+    () => PROVIDERS.find((p) => p.id === initial.provider) ?? null
+  );
+  const [portalUrl, setPortalUrl] = useState(initial.portalUrl);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -140,9 +147,9 @@ export function ConnectSourceScreen({
         baseUrl: portalUrl,
         sourceId,
         credentialKey: key,
-        studentExternalId: studentExternalId ?? 'default',
+        studentExternalId: invite?.studentExternalId ?? studentExternalId ?? 'default',
         institutionExternalId,
-        studentId,
+        studentId: invite?.studentId ?? studentId,
         adapterVersion: '0.1.0',
       });
 
@@ -232,6 +239,7 @@ export function ConnectSourceScreen({
       {step === 'credentials' && selectedProvider && (
         <View>
           <Text style={styles.stepTitle}>Sign in to {selectedProvider.name}</Text>
+          {initial.urlLocked ? <Text style={styles.stepHint}>{portalUrl}</Text> : null}
           <View style={styles.securityBadge}>
             <Text style={styles.securityText}>
               🔒 Your credentials are stored only on this device — never sent to our servers.
@@ -273,9 +281,11 @@ export function ConnectSourceScreen({
               <Text style={styles.buttonText}>Save &amp; Connect</Text>
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.back} onPress={() => setStep('url')}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
+          {initial.urlLocked ? null : (
+            <TouchableOpacity style={styles.back} onPress={() => setStep('url')}>
+              <Text style={styles.backText}>← Back</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </ScrollView>

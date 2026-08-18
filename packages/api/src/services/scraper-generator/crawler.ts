@@ -1,6 +1,13 @@
 /**
- * Server-side crawler for scraper generation.
- * Pipeline: connect (HTTP HEAD) → crawl (Playwright login page) → authenticate check (CAPTCHA/MFA detection).
+ * Scraper generation pipeline utilities.
+ *
+ * NOTE: The `crawlStep` and `authenticateCheckStep` functions that previously
+ * launched a Playwright browser on the API server have been removed. Server-side
+ * Chromium against school portals is no longer permitted. Scraper generation
+ * based on live crawl is a local CLI concern only.
+ *
+ * The `connectStep` (HTTP HEAD reachability check) is retained as it makes no
+ * authenticated request and opens no browser.
  */
 
 export interface IConnectResult {
@@ -51,10 +58,10 @@ export interface IPageAnalysis {
 }
 
 const CONNECT_TIMEOUT_MS = 15_000;
-const CRAWL_TIMEOUT_MS = 30_000;
 
 /**
  * Step 1: Verify site is reachable (DNS + HTTP HEAD).
+ * This is a plain HTTP request — no browser launched.
  */
 export async function connectStep(loginUrl: string): Promise<IConnectResult> {
   const start = Date.now();
@@ -110,251 +117,33 @@ export async function connectStep(loginUrl: string): Promise<IConnectResult> {
 }
 
 /**
- * Step 2: Visit login page with Playwright, capture DOM and form structure.
+ * Browser crawl is not available on the server.
+ * Scraper generation via live page capture runs locally via the CLI.
  */
-export async function crawlStep(loginUrl: string): Promise<ICrawlResult> {
-  let browser: import('playwright').Browser | undefined;
-  try {
-    const { chromium } = await import('playwright');
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-      userAgent: 'ScholaracleScraperGenerator/1.0',
-      ignoreHTTPSErrors: false,
-    });
-    const page = await context.newPage();
-    page.setDefaultTimeout(CRAWL_TIMEOUT_MS);
-
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: CRAWL_TIMEOUT_MS });
-
-    const analysis = await page.evaluate(() => {
-      const result: {
-        title: string;
-        loginForm?: {
-          emailField?: string;
-          passwordField?: string;
-          submitButton?: string;
-          ssoOptions?: string[];
-          formAction?: string;
-          method?: string;
-        };
-        navigation: Array<{ text: string; href: string }>;
-        detectedFramework?: string;
-        pageHtml: string;
-      } = {
-        title: document.title || '',
-        navigation: [],
-        pageHtml: document.documentElement.outerHTML.slice(0, 50_000),
-      };
-
-      const forms = Array.from(document.querySelectorAll('form'));
-      for (const form of forms) {
-        const inputs = Array.from(form.querySelectorAll('input'));
-        let hasPassword = false;
-        let emailSelector = '';
-        let passwordSelector = '';
-        let submitSelector = '';
-        const ssoOptions: string[] = [];
-
-        for (const input of inputs) {
-          const type = (input.getAttribute('type') || 'text').toLowerCase();
-          const name = input.getAttribute('name') || input.id || '';
-          const sel = input.id ? `#${input.id}` : name ? `input[name="${name}"]` : '';
-          if (type === 'password') {
-            hasPassword = true;
-            passwordSelector = sel || 'input[type="password"]';
-          } else if (
-            type === 'email' ||
-            name.toLowerCase().includes('email') ||
-            name.toLowerCase().includes('user')
-          ) {
-            emailSelector = sel || 'input[type="email"]';
-          }
-        }
-        const submit = form.querySelector(
-          'button[type="submit"], input[type="submit"], button:not([type])'
-        );
-        if (submit) {
-          submitSelector = submit.id
-            ? `#${submit.id}`
-            : submit.tagName.toLowerCase() +
-              (submit.className ? `.${String(submit.className).trim().split(/\s+/)[0]}` : '');
-        }
-        const links = Array.from(form.querySelectorAll('a[href]'));
-        for (const a of links) {
-          const text = (a.textContent || '').trim();
-          if (/google|clever|microsoft|sso|sign in with|oauth/i.test(text)) {
-            ssoOptions.push(text.slice(0, 50));
-          }
-        }
-        if (hasPassword && (emailSelector || passwordSelector)) {
-          result.loginForm = {
-            emailField:
-              emailSelector || 'input[type="email"], input[name="username"], input[name="email"]',
-            passwordField: passwordSelector || 'input[type="password"]',
-            submitButton: submitSelector || 'button[type="submit"], input[type="submit"]',
-            ssoOptions: ssoOptions.length ? ssoOptions : undefined,
-            formAction: (form.getAttribute('action') || '').slice(0, 500),
-            method: (form.getAttribute('method') || 'get').toLowerCase(),
-          };
-          break;
-        }
-      }
-
-      const navSelectors = ['nav a', 'header a', '[role="navigation"] a', '.nav a', '.menu a'];
-      const seen = new Set<string>();
-      for (const sel of navSelectors) {
-        const links = Array.from(document.querySelectorAll(sel));
-        for (const a of links) {
-          const href = (a.getAttribute('href') || '').trim();
-          const text = (a.textContent || '').trim().slice(0, 80);
-          if (href && text && !seen.has(href)) {
-            seen.add(href);
-            result.navigation.push({ text, href });
-          }
-        }
-      }
-
-      if (document.querySelector('[data-reactroot], [data-reactid], #__next]'))
-        result.detectedFramework = 'react';
-      else if (document.querySelector('[ng-version], [ng-app]'))
-        result.detectedFramework = 'angular';
-      else if (document.querySelector('[data-v-]')) result.detectedFramework = 'vue';
-
-      return result;
-    });
-
-    await browser.close();
-    browser = undefined;
-
-    if (!analysis.loginForm) {
-      return {
-        ok: false,
-        title: analysis.title,
-        navigation: analysis.navigation,
-        detectedFramework: analysis.detectedFramework,
-        error: 'Could not find a login form at this URL',
-      };
-    }
-
-    return {
-      ok: true,
-      title: analysis.title,
-      loginForm: analysis.loginForm,
-      navigation: analysis.navigation,
-      detectedFramework: analysis.detectedFramework,
-      pageHtml: analysis.pageHtml,
-    };
-  } catch (err) {
-    if (browser) await browser.close().catch(() => {});
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      error: msg.includes('timeout') ? 'Page load timed out' : msg.slice(0, 300),
-    };
-  }
+export async function crawlStep(_loginUrl: string): Promise<ICrawlResult> {
+  return {
+    ok: false,
+    error:
+      'Browser crawl is not available on the server. Use the local CLI to generate scrapers: `npx scholaracle-scraper generate --url <loginUrl>`.',
+  };
 }
 
-const CAPTCHA_SELECTORS = [
-  'iframe[src*="recaptcha"]',
-  'iframe[src*="hcaptcha"]',
-  '[data-sitekey]',
-  '.g-recaptcha',
-  '#recaptcha',
-  '[class*="captcha"]',
-];
-const MFA_SELECTORS = [
-  'input[name*="code"]',
-  'input[name*="otp"]',
-  'input[name*="verification"]',
-  '[class*="mfa"]',
-  '[class*="two-factor"]',
-  '[class*="2fa"]',
-  'input[type="tel"][maxlength="6"]',
-];
-
 /**
- * Step 3: Verify login form is automatable (no CAPTCHA, no MFA blocking).
+ * Browser auth check is not available on the server.
  */
 export async function authenticateCheckStep(
-  loginUrl: string,
-  crawlResult: ICrawlResult
+  _loginUrl: string,
+  _crawlResult: ICrawlResult
 ): Promise<IAuthenticateCheckResult> {
-  if (!crawlResult.ok || !crawlResult.loginForm) {
-    return { ok: false, error: crawlResult.error ?? 'Crawl did not find a login form' };
-  }
-  let browser: import('playwright').Browser | undefined;
-  try {
-    const { chromium } = await import('playwright');
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ userAgent: 'ScholaracleScraperGenerator/1.0' });
-    const page = await context.newPage();
-    page.setDefaultTimeout(15_000);
-    await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 15_000 });
-
-    const check = await page.evaluate(
-      ({ captchaSel, mfaSel }: { captchaSel: string[]; mfaSel: string[] }) => {
-        let captchaDetected = false;
-        for (const sel of captchaSel) {
-          if (document.querySelector(sel)) {
-            captchaDetected = true;
-            break;
-          }
-        }
-        let mfaRequired = false;
-        for (const sel of mfaSel) {
-          const el = document.querySelector(sel);
-          if (el && (el as HTMLElement).offsetParent !== null) {
-            mfaRequired = true;
-            break;
-          }
-        }
-        return { captchaDetected, mfaRequired };
-      },
-      { captchaSel: CAPTCHA_SELECTORS, mfaSel: MFA_SELECTORS }
-    );
-
-    await browser.close();
-    browser = undefined;
-
-    if (check.captchaDetected) {
-      return {
-        ok: false,
-        loginFormUsable: true,
-        captchaDetected: true,
-        mfaRequired: false,
-        error: 'Login requires CAPTCHA — cannot be automated',
-      };
-    }
-    if (check.mfaRequired) {
-      return {
-        ok: false,
-        loginFormUsable: true,
-        captchaDetected: false,
-        mfaRequired: true,
-        error: 'Login requires multi-factor authentication',
-      };
-    }
-
-    return {
-      ok: true,
-      loginFormUsable: true,
-      captchaDetected: false,
-      mfaRequired: false,
-      loginMethod: 'email_password',
-      ssoAvailable: crawlResult.loginForm.ssoOptions,
-    };
-  } catch (err) {
-    if (browser) await browser.close().catch(() => {});
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
+  return {
+    ok: false,
+    error: 'Browser crawl is not available on the server. Use the local CLI to generate scrapers.',
+  };
 }
 
 /**
  * Full pipeline: connect → crawl → authenticate check.
- * Returns page analysis for AI or throws with user-facing error.
+ * Crawl and auth check are not available on the server.
  */
 export async function runCrawlPipeline(loginUrl: string): Promise<IPageAnalysis> {
   const connect = await connectStep(loginUrl);
@@ -362,22 +151,7 @@ export async function runCrawlPipeline(loginUrl: string): Promise<IPageAnalysis>
     throw new Error(connect.error ?? 'Could not connect to the site');
   }
 
-  const crawl = await crawlStep(loginUrl);
-  if (!crawl.ok) {
-    throw new Error(crawl.error ?? 'Could not find a login form at this URL');
-  }
-
-  const auth = await authenticateCheckStep(loginUrl, crawl);
-  if (!auth.ok) {
-    throw new Error(auth.error ?? 'Login cannot be automated');
-  }
-
-  return {
-    url: loginUrl,
-    title: crawl.title ?? '',
-    loginForm: crawl.loginForm!,
-    navigation: crawl.navigation ?? [],
-    detectedFramework: crawl.detectedFramework,
-    pageHtml: crawl.pageHtml,
-  };
+  throw new Error(
+    'Browser crawl is not available on the server. Use the local CLI to generate scrapers: `npx scholaracle-scraper generate --url <loginUrl>`.'
+  );
 }

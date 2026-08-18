@@ -1,7 +1,7 @@
 {
   "name": "@scholaracle/scraper-core",
   "version": "0.1.0",
-  "description": "Runtime-agnostic scraper core: extractors, recipes, transformers, and validator shared across CLI, server workers, mobile app, and browser extension",
+  "description": "Runtime-agnostic scraper core: extractors, recipes, transformers, and validator shared across local CLI, mobile app, and browser extension",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

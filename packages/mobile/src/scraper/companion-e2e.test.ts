@@ -6,7 +6,13 @@
  */
 
 import type { ICanvasBrowserExtract } from '@scholaracle/scraper-core';
-import { FakePageDriver, validateEnvelope } from '@scholaracle/scraper-core';
+import {
+  FakePageDriver,
+  validateEnvelope,
+  transformCanvasExtract,
+  type IScraperResolver,
+  type IScraperModule,
+} from '@scholaracle/scraper-core';
 import { runSyncPipeline, type ISyncOrchestratorConfig } from './SyncOrchestrator';
 import type { IEnvelopeUploader, IRunRecorder } from '../api/interfaces';
 
@@ -53,15 +59,32 @@ const REALISTIC_EXTRACT: ICanvasBrowserExtract = {
   ],
 };
 
-jest.mock('@scholaracle/scraper-core', () => {
-  const actual = jest.requireActual(
-    '@scholaracle/scraper-core'
-  ) as typeof import('@scholaracle/scraper-core');
-  return {
-    ...actual,
-    runCanvasRecipe: jest.fn(async () => REALISTIC_EXTRACT),
+function canvasResolver(
+  scrape: () => Promise<ICanvasBrowserExtract>,
+  transform?: IScraperModule['transform']
+): IScraperResolver {
+  const module: IScraperModule = {
+    metadata: {
+      id: 'canvas',
+      name: 'Canvas',
+      adapterId: 'com.instructure.canvas',
+      version: '0.1.0',
+      hosts: ['*.instructure.com'],
+      entities: ['course', 'assignment'],
+      entry: 'builtin:canvas',
+      publisher: 'scholaracle',
+    },
+    scrape: async () => (await scrape()) as unknown as Record<string, unknown>,
+    transform:
+      transform ??
+      ((raw, ctx) => transformCanvasExtract(raw as unknown as ICanvasBrowserExtract, ctx)),
   };
-});
+  return {
+    async resolve() {
+      return { module, canRun: true, checkErrors: [] };
+    },
+  };
+}
 
 describe('Companion E2E: FakePageDriver → validate → mock ingest', () => {
   const config: ISyncOrchestratorConfig = {
@@ -128,7 +151,8 @@ describe('Companion E2E: FakePageDriver → validate → mock ingest', () => {
       recorder,
       (p) => {
         phases.push(p.phase);
-      }
+      },
+      { resolver: canvasResolver(async () => REALISTIC_EXTRACT) }
     );
 
     // Real validator (not mocked)
@@ -159,56 +183,33 @@ describe('Companion E2E: FakePageDriver → validate → mock ingest', () => {
   });
 
   it('should fail validation (real validator) when transform yields bad ops', async () => {
-    const scraperCore =
-      require('@scholaracle/scraper-core') as typeof import('@scholaracle/scraper-core');
-    (scraperCore.runCanvasRecipe as jest.Mock).mockResolvedValueOnce({
-      user: 'Broken',
-      courses: [
-        {
-          id: '',
-          name: '', // empty title → transform may still emit; force empty course id path
-          courseCode: '',
-          url: 'https://school.instructure.com/courses/x',
-          teachers: [],
-          assignments: [
-            { id: 'bad', name: '', dueDate: undefined, points: undefined, status: undefined },
-          ],
-          modules: [],
-          files: [],
-        },
-      ],
-      toDoItems: [],
-      upcomingEvents: [],
-      announcements: [],
-      timestamp: '2026-08-04T12:00:00.000Z',
-    } satisfies ICanvasBrowserExtract);
-
-    // Spy transform to return explicitly invalid ops for this case
-    const transformSpy = jest.spyOn(scraperCore, 'transformCanvasExtract').mockReturnValueOnce([
-      {
-        op: 'upsert',
-        entity: 'course',
-        key: {
-          provider: 'canvas',
-          adapterId: 'com.instructure.canvas',
-          externalId: 'c-1',
-        },
-        observedAt: '2026-08-04T12:00:00.000Z',
-        record: {}, // missing required title
-      },
-    ]);
-
     const recorder = makeRecorder();
     const uploader = makeUploader();
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
 
-    await expect(runSyncPipeline(driver, config, uploader, 'token', recorder)).rejects.toThrow(
-      /validation failed/
-    );
+    await expect(
+      runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+        resolver: canvasResolver(
+          async () => REALISTIC_EXTRACT,
+          () => [
+            {
+              op: 'upsert',
+              entity: 'course',
+              key: {
+                provider: 'canvas',
+                adapterId: 'com.instructure.canvas',
+                externalId: 'c-1',
+              },
+              observedAt: '2026-08-04T12:00:00.000Z',
+              record: {},
+            },
+          ]
+        ),
+      })
+    ).rejects.toThrow(/validation failed/);
 
     expect(recorder.fails).toBe(1);
     expect(uploader.uploadEnvelope).not.toHaveBeenCalled();
     expect(uploader.reportRunFailure).toHaveBeenCalled();
-    transformSpy.mockRestore();
   });
 });

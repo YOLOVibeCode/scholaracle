@@ -20,6 +20,8 @@ import {
   type IProviderDescriptor,
 } from '@/lib/providers';
 import type { IBundleConnection } from './bundle-types';
+import { sourceInvitesApi } from '@/lib/api/sourceInvites';
+import { isSourceInviteProvider } from '@scholaracle/contracts';
 
 interface JobStep {
   name: string;
@@ -47,6 +49,8 @@ export interface ConnectProviderWizardProps {
   onConnectionReady?: (connection: IBundleConnection) => void;
   /** When provided without onConnectionReady, wizard ends at download step and calls this after download. */
   onAdded?: () => void;
+  /** When set, show Email me an install link for builtin portals. */
+  studentId?: string;
 }
 
 type Step = 'platform' | 'credentials' | 'generating' | 'download' | 'added';
@@ -61,15 +65,13 @@ const OTHER_PLATFORM: Pick<IProviderDescriptor, 'id' | 'name' | 'description' | 
   urlPlaceholder: 'https://...',
 };
 
-export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdded }: ConnectProviderWizardProps) {
+export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdded, studentId }: ConnectProviderWizardProps) {
   const [step, setStep] = useState<Step>('platform');
   const [portalUrl, setPortalUrl] = useState('');
   const [detectedProvider, setDetectedProvider] = useState<IProviderDescriptor | undefined>();
   const [selectedProvider, setSelectedProvider] = useState<IProviderDescriptor | typeof OTHER_PLATFORM | null>(null);
   const [customPlatformName, setCustomPlatformName] = useState('');
   const [studentNameHint, setStudentNameHint] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [scraperId, setScraperId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<GenerateStatusResponse | null>(null);
@@ -77,6 +79,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<{ scraperId: string | null; platformName: string; loginUrl: string } | null>(null);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const allProviders = getAllProviders();
@@ -92,8 +95,6 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
     setSelectedProvider(null);
     setCustomPlatformName('');
     setStudentNameHint('');
-    setUsername('');
-    setPassword('');
     setScraperId(null);
     setJobId(null);
     setJobStatus(null);
@@ -101,6 +102,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
     setGeneratedCode(null);
     setShowCode(false);
     setPendingConnection(null);
+    setEmailStatus(null);
   }, [open]);
 
   useEffect(() => {
@@ -163,8 +165,6 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
       platformId,
       platformName: pendingConnection.platformName,
       loginUrl: pendingConnection.loginUrl,
-      username,
-      password,
       studentNameHint: studentNameHint.trim() || undefined,
       scraperId: pendingConnection.scraperId,
       generationStatus: 'ready',
@@ -172,7 +172,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
     };
     onConnectionReady(connection);
     setPendingConnection(null);
-  }, [step, pendingConnection, onConnectionReady, selectedProvider, username, password, studentNameHint]);
+  }, [step, pendingConnection, onConnectionReady, selectedProvider, studentNameHint]);
 
   const handleClose = () => {
     if (pollRef.current) {
@@ -185,8 +185,6 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
     setSelectedProvider(null);
     setCustomPlatformName('');
     setStudentNameHint('');
-    setUsername('');
-    setPassword('');
     setScraperId(null);
     setJobId(null);
     setJobStatus(null);
@@ -218,11 +216,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
     }
     const requireStudentName = !onConnectionReady;
     if (requireStudentName && !studentNameHint.trim()) {
-      setError('Please fill in student name, username, and password.');
-      return;
-    }
-    if (!username.trim() || !password) {
-      setError('Please fill in username and password.');
+      setError('Please fill in student name.');
       return;
     }
 
@@ -238,8 +232,6 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
           platformId,
           platformName,
           loginUrl,
-          username,
-          password,
           studentNameHint: studentNameHint.trim() || undefined,
           scraperId: null,
           generationStatus: 'ready',
@@ -306,7 +298,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
         body: JSON.stringify({
           os: detectedOS,
           ...(scraperId ? { scraperId } : { platform: platformName, url: loginUrl }),
-          credentials: { studentName: studentNameHint.trim() || 'default', username: username.trim(), password, studentNameHint: studentNameHint.trim() || undefined },
+          credentials: { studentNameHint: studentNameHint.trim() || undefined },
         }),
       });
       if (!response.ok) throw new Error('Download failed');
@@ -331,6 +323,28 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
 
   const displayName = selectedProvider?.id === 'other' ? customPlatformName : selectedProvider?.name;
   const isReference = selectedProvider && selectedProvider.id !== 'other' && (selectedProvider as IProviderDescriptor).available;
+
+  const handleEmailInstallLink = async (): Promise<void> => {
+    if (!studentId || !selectedProvider || !isSourceInviteProvider(selectedProvider.id)) return;
+    if (!portalUrl.trim()) {
+      setError('Please enter the school portal URL.');
+      return;
+    }
+    setError(null);
+    setEmailStatus(null);
+    try {
+      const result = await sourceInvitesApi.issue({
+        studentId,
+        provider: selectedProvider.id,
+        portalBaseUrl: portalUrl.trim(),
+      });
+      setEmailStatus(
+        `We emailed ${result.emailedTo}. Open it on your phone or in Chrome — same link.`
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not send install link');
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
@@ -442,9 +456,9 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
             </div>
 
             <div className="border-t pt-4 space-y-3">
-              <p className="text-sm font-medium">Your school login</p>
+              <p className="text-sm font-medium">Student name hint (optional)</p>
               <p className="text-xs text-muted-foreground">
-                Credentials are baked into the downloaded script and never stored on our servers.
+                School portal credentials stay on your device and are entered at runtime — never uploaded to Scholarmancy.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="student-name-hint">
@@ -458,33 +472,23 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
                   data-testid="connect-provider-student-name-hint"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="cred-username">Username</Label>
-                <Input
-                  id="cred-username"
-                  placeholder="e.g., parent@email.com"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  data-testid="connect-provider-username"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cred-password">Password</Label>
-                <Input
-                  id="cred-password"
-                  type="password"
-                  placeholder="Your school portal password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  data-testid="connect-provider-password"
-                />
-              </div>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {emailStatus && <p className="text-sm text-muted-foreground">{emailStatus}</p>}
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setStep('platform')}>Back</Button>
+              {studentId && selectedProvider && isSourceInviteProvider(selectedProvider.id) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleEmailInstallLink()}
+                  data-testid="button-email-install-link"
+                >
+                  Email me an install link
+                </Button>
+              )}
               <Button onClick={handleCredentialsNext} data-testid="connect-provider-continue">
                 {isReference ? 'Continue' : 'Generate Scraper'}
               </Button>
@@ -567,7 +571,7 @@ export function ConnectProviderWizard({ open, onClose, onConnectionReady, onAdde
                 <li>Offers to run automatically 3x daily</li>
               </ol>
               <p className="mt-2">
-                Your login credentials are stored in the downloaded file and never leave your computer.
+                When the script runs, it will prompt you for your school login. Your credentials are never uploaded to Scholarmancy.
               </p>
             </div>
 

@@ -309,8 +309,9 @@ describe('Students route — owner-scoped gradebook IDOR', () => {
       .get(`/api/students/${studentId}/grades`)
       .set('Authorization', `Bearer ${owner.token}`);
     expect(res.status).toBe(200);
-    // At least one course should be present
-    expect(Array.isArray(res.body.courses) || Array.isArray(res.body)).toBe(true);
+    // GET /grades returns IStudentGradesResponse.courseGrades, not a top-level `courses` array.
+    expect(Array.isArray(res.body.courseGrades)).toBe(true);
+    expect(res.body.courseGrades.length).toBeGreaterThan(0);
   });
 
   it('accepted co-parent sees owner grades (not empty)', async () => {
@@ -318,7 +319,7 @@ describe('Students route — owner-scoped gradebook IDOR', () => {
       .get(`/api/students/${studentId}/grades`)
       .set('Authorization', `Bearer ${coParent.token}`);
     expect(res.status).toBe(200);
-    const courses: unknown[] = res.body.courses ?? res.body ?? [];
+    const courses: unknown[] = res.body.courseGrades ?? [];
     expect(courses.length).toBeGreaterThan(0);
   });
 

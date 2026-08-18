@@ -44,12 +44,19 @@ import {
   type IAssignmentMatch,
   type ISourceCourse,
 } from '@scholaracle/connector';
+import { logger } from '../../../logger';
+import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
   /** When set, enqueue notify jobs after creating alerts so notifications are delivered. */
   readonly queue?: MongoQueue;
+  /**
+   * Join-gap enrichment mode for envelope ingest. Defaults to ENRICH_OPS_MODE
+   * or `off`. Tests inject this so they do not mutate process.env.
+   */
+  readonly enrichOpsMode?: EnrichOpsMode;
 }
 
 function randomUserCode(): string {
@@ -1302,11 +1309,12 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           res.status(200).json({ baseUrl, accessToken: credentials.accessToken ?? '' });
           return;
         }
-        res.status(200).json({
-          baseUrl,
-          username: credentials.username,
-          password: credentials.password,
-          accessToken: undefined,
+        // authType was 'login' — portal passwords are no longer vaulted on the server.
+        // Return 410 so callers know this endpoint will never return a portal password.
+        res.status(410).json({
+          success: false,
+          error:
+            'Portal login credentials are no longer stored on the server. Use the mobile app, browser extension, or local CLI to manage school portal credentials.',
         });
         return;
       }
@@ -1405,17 +1413,34 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         firstStudentExtId
       );
 
+      const prepared = await prepareIngestOps({
+        ops: envelope.ops,
+        mode: resolveEnrichOpsMode(config.enrichOpsMode),
+        revalidate: (ops) => validateEnvelope({ ...envelope, ops }),
+      });
+      logger.info(
+        {
+          runId,
+          enrichOpsMode: prepared.mode,
+          enrichPatchCount: prepared.patchCount,
+          enrichApplied: prepared.applied,
+          enrichFailed: prepared.failed,
+          clientEnrichmentSource: envelope.run.meta?.['enrichmentSource'] ?? 'none',
+        },
+        'ingest envelope enrichment'
+      );
+
       await applyOps({
         database: config.database,
         userId: dataUserId,
         sourceId: envelope.source?.sourceId,
-        ops: envelope.ops,
+        ops: prepared.ops,
       });
 
       await logDataQuality({
         database: config.database,
         userId: dataUserId,
-        ops: envelope.ops,
+        ops: prepared.ops,
       });
 
       const sourceId = envelope.source?.sourceId ?? '';
@@ -1424,7 +1449,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           database: config.database,
           userId: dataUserId,
           sourceId,
-          ops: envelope.ops,
+          ops: prepared.ops,
           provider: envelope.run?.provider ?? 'unknown',
           adapterId: envelope.run?.adapterId ?? 'unknown',
           portalBaseUrl: envelope.source?.portalBaseUrl,

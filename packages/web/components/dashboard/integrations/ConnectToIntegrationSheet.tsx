@@ -24,10 +24,7 @@ export function ConnectToIntegrationSheet({
   onConnected,
 }: ConnectToIntegrationSheetProps) {
   const [selected, setSelected] = useState<IIntegration | null>(null);
-  const [authType, setAuthType] = useState<'api' | 'login'>('api');
   const [accessToken, setAccessToken] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,10 +33,7 @@ export function ConnectToIntegrationSheet({
 
   const handleClose = () => {
     setSelected(null);
-    setAuthType('api');
     setAccessToken('');
-    setUsername('');
-    setPassword('');
     setError(null);
     onClose();
   };
@@ -50,10 +44,8 @@ export function ConnectToIntegrationSheet({
     setSubmitting(true);
 
     let credentials: IAssignStudentCredentials | undefined;
-    if (authType === 'api' && accessToken.trim()) {
+    if (accessToken.trim()) {
       credentials = { authType: 'api', accessToken: accessToken.trim() };
-    } else if (authType === 'login' && username.trim() && password) {
-      credentials = { authType: 'login', username: username.trim(), password };
     }
 
     try {
@@ -107,49 +99,17 @@ export function ConnectToIntegrationSheet({
             <>
               <p className="text-sm font-medium">{selected.displayName}</p>
               <div className="space-y-2">
-                <Label>Credentials (optional — can add later)</Label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={authType === 'api' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAuthType('api')}
-                  >
-                    API token
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={authType === 'login' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAuthType('login')}
-                  >
-                    Portal login
-                  </Button>
-                </div>
-                {authType === 'api' && (
-                  <Input
-                    type="password"
-                    placeholder="Access token"
-                    value={accessToken}
-                    onChange={(e) => setAccessToken(e.target.value)}
-                  />
-                )}
-                {authType === 'login' && (
-                  <div className="space-y-2">
-                    <Input
-                      type="text"
-                      placeholder="Username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                    />
-                    <Input
-                      type="password"
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                  </div>
-                )}
+                <Label>API access token (optional — can add later)</Label>
+                <Input
+                  type="password"
+                  placeholder="Access token"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  For Canvas/Skyward/Aeries portal login, use the iOS app, browser extension, or{' '}
+                  <code>npx scholaracle-scraper run</code> on your computer.
+                </p>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">

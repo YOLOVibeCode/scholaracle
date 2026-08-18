@@ -17,22 +17,18 @@ export const updateSourceSchema = addSourceSchema.partial().extend({
 
 export type IUpdateSourceBody = z.infer<typeof updateSourceSchema>;
 
-/** Credentials for API (token) or login (username/password) to scrape. */
+/**
+ * Credentials for API (OAuth token) only. Portal username/password (authType:'login') is
+ * rejected — school portal credentials are held by client devices, never by the server.
+ */
 export const credentialsSchema = z
   .object({
-    authType: z.enum(['api', 'login']),
+    authType: z.enum(['api']),
     accessToken: z.string().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
     baseUrl: z.string().optional(),
   })
-  .refine(
-    (data) => {
-      if (data.authType === 'api') return Boolean(data.accessToken?.trim());
-      if (data.authType === 'login') return Boolean(data.username?.trim() && data.password);
-      return false;
-    },
-    { message: 'api requires accessToken; login requires username and password' }
-  );
+  .refine((data) => Boolean(data.accessToken?.trim()), {
+    message: 'api authType requires accessToken',
+  });
 
 export type ICredentialsBody = z.infer<typeof credentialsSchema>;

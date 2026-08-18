@@ -18,7 +18,7 @@ import {
 } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
-import { encryptCredentials, decryptCredentials } from '../../utils/credentialsCipher';
+import { encryptCredentials } from '../../utils/credentialsCipher';
 import {
   packageSingleFile,
   packageMultiStudent,
@@ -74,8 +74,6 @@ async function testConnectionForProvider(
   baseUrl: string,
   credentials: {
     accessToken?: string;
-    username?: string;
-    password?: string;
     clientId?: string;
     clientSecret?: string;
     apiKey?: string;
@@ -206,7 +204,7 @@ async function testConnectionForProvider(
         return {
           success: false,
           message:
-            'Skyward test connection requires browser-based scraping and is not available via the API. Credentials will be verified during the first sync.',
+            'Skyward uses browser-based extraction on the client device. Use the mobile app, browser extension, or local CLI to connect Skyward.',
           durationMs: Date.now() - start,
         };
       }
@@ -228,16 +226,6 @@ async function testConnectionForProvider(
  * Create integrations router.
  * Account-level integration CRUD and student assignment.
  */
-function parseStoredCredentials(plain: string | null): { username: string; password: string } {
-  if (!plain) return { username: '', password: '' };
-  try {
-    const creds = JSON.parse(plain) as { username?: string; password?: string };
-    return { username: creds.username ?? '', password: creds.password ?? '' };
-  } catch {
-    return { username: '', password: '' };
-  }
-}
-
 /* eslint-disable-next-line max-lines-per-function -- legacy router; refactor in follow-up */
 export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   const router = Router();
@@ -258,23 +246,14 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   ): Promise<PlatformEntry | null> {
     const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(uid, ds.id);
     if (!ingestSource?.portalBaseUrl) return null;
-    let username = '';
-    let password = '';
-    if (ds.credentials?.encrypted && ds.credentials?.iv) {
-      const plain = decryptCredentials({
-        encrypted: ds.credentials.encrypted,
-        iv: ds.credentials.iv,
-      });
-      const parsed = parseStoredCredentials(plain ?? null);
-      username = parsed.username;
-      password = parsed.password;
-    }
+    // Portal passwords are no longer stored or returned by the server.
+    // Credentials are held by client devices only.
     return {
       studentId: (student._id as { toString?: () => string })?.toString?.() ?? '',
       studentName: student.name,
       platform: ingestSource.provider,
       loginUrl: ingestSource.portalBaseUrl,
-      credentials: { studentName: student.name, username, password },
+      credentials: { studentName: student.name, username: '', password: '' },
     };
   }
   async function getPlatformsForStudent(
@@ -1357,6 +1336,15 @@ echo ""
       }
 
       const bodyParsed = assignStudentSchema.safeParse(req.body || {});
+
+      const rawAuthType = (req.body as { credentials?: { authType?: string } })?.credentials
+        ?.authType;
+      if (rawAuthType === 'login') {
+        throw new ValidationError(
+          'Portal login credentials are stored on the client device (app, extension, or local CLI) and must not be sent to the server.'
+        );
+      }
+
       const credentials =
         bodyParsed.success && bodyParsed.data.credentials ? bodyParsed.data.credentials : undefined;
 

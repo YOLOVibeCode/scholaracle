@@ -450,6 +450,36 @@ describe('Integrations API Routes', () => {
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
     });
+
+    it('rejects authType:login credentials with 400 — server does not store portal passwords', async () => {
+      const createIntRes = await request(app)
+        .post('/api/integrations')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          displayName: 'Canvas Login Reject',
+        });
+      expect(createIntRes.status).toBe(201);
+      const integrationId = createIntRes.body.id as string;
+
+      const createStudentRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Login Cred Student', grade: 9 });
+      expect(createStudentRes.status).toBe(201);
+      const studentId = createStudentRes.body.id as string;
+
+      const response = await request(app)
+        .post(`/api/integrations/${integrationId}/students/${studentId}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          credentials: { authType: 'login', username: 'parent', password: 'secret' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toMatch(/client|device|app|extension/i);
+    });
   });
 
   describe('DELETE /api/integrations/:id/students/:studentId', () => {

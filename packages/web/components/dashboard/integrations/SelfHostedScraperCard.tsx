@@ -38,8 +38,6 @@ export function SelfHostedScraperCard() {
         loginUrl: c.loginUrl,
         scraperId: c.scraperId,
         credentials: {
-          username: c.username,
-          password: c.password,
           studentNameHint: c.studentNameHint,
         },
       }));
