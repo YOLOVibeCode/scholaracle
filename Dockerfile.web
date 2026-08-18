@@ -36,6 +36,8 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Web imports compiled contracts (`main: dist/index.js`); Next cannot resolve the TS source.
+RUN pnpm --filter @scholaracle/contracts build
 RUN pnpm --filter @scholaracle/web build
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/BUILT_AT
 
