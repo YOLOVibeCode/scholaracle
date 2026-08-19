@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ConnectedSourceStore,
   buildCredentialKey,
+  sourceIdForStudent,
   type IConnectedSource,
 } from './ConnectedSourceStore';
 
@@ -54,6 +55,25 @@ describe('ConnectedSourceStore', () => {
     await store.upsert(makeSource({ studentExternalId: 'stu-b', sourceId: 'b' }));
     const found = await store.getForStudent('stu-b');
     expect(found?.sourceId).toBe('b');
+  });
+
+  it('should match a household student by mongo id when SIS id is not set yet', async () => {
+    await store.upsert(
+      makeSource({
+        sourceId: 'local-skyward-host-mongo-g',
+        studentId: 'mongo-g',
+        studentExternalId: 'mongo-g',
+      })
+    );
+    const found = await store.getForStudentRecord({ id: 'mongo-g' });
+    expect(found?.sourceId).toBe('local-skyward-host-mongo-g');
+  });
+
+  it('should build a per-student source id so two kids sharing a portal do not clobber', () => {
+    const a = sourceIdForStudent('skyward', 'skyward.iscorp.com', 'mongo-g');
+    const b = sourceIdForStudent('skyward', 'skyward.iscorp.com', 'mongo-c');
+    expect(a).not.toBe(b);
+    expect(a).toContain('mongo-g');
   });
 
   it('should return null for an unknown student instead of falling back to another source', async () => {
