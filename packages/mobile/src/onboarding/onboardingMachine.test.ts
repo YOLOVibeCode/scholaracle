@@ -26,7 +26,7 @@ describe('onboardingMachine', () => {
     state = reduceOnboarding(state, { type: 'set-email', value: 'r@example.com' });
     state = reduceOnboarding(state, { type: 'set-password', value: 'short' });
     expect(canAdvance(state)).toBe(false);
-    state = reduceOnboarding(state, { type: 'set-password', value: 'password12' });
+    state = reduceOnboarding(state, { type: 'set-password', value: 'mock-password12' });
     expect(canAdvance(state)).toBe(true);
   });
 
@@ -54,7 +54,7 @@ describe('onboardingMachine', () => {
     let state = createInitialOnboardingState('logged-out');
     state = reduceOnboarding(state, { type: 'set-parent-name', value: 'Ricardo' });
     state = reduceOnboarding(state, { type: 'set-email', value: 'r@example.com' });
-    state = reduceOnboarding(state, { type: 'set-password', value: 'password12' });
+    state = reduceOnboarding(state, { type: 'set-password', value: 'mock-password12' });
     state = reduceOnboarding(state, { type: 'next' });
     expect(state.step).toBe('children');
     state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
