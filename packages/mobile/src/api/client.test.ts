@@ -111,7 +111,7 @@ describe('ScholarmancyApiClient auth', () => {
     it('should POST /api/auth/register and store tokens from the `token` field', async () => {
       const fetchMock = mockFetchSequence({ status: 201, body: makeLoginBody() });
 
-      await client.register('parent@example.com', 'password12', 'Ricardo');
+      await client.register('parent@example.com', 'mock-password12', 'Ricardo');
 
       expect(fetchMock).toHaveBeenCalledWith(
         `${BASE_URL}/api/auth/register`,
@@ -131,7 +131,7 @@ describe('ScholarmancyApiClient auth', () => {
 
     it('should throw when register returns no token', async () => {
       mockFetchSequence({ status: 201, body: { success: false } });
-      await expect(client.register('a@b.c', 'password12', 'A')).rejects.toThrow(/token/i);
+      await expect(client.register('a@b.c', 'mock-password12', 'A')).rejects.toThrow(/token/i);
     });
   });
 
