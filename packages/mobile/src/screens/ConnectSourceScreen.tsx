@@ -22,9 +22,10 @@ import {
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import {
-  connectedSourceStore,
-  buildCredentialKey,
   ADAPTER_IDS,
+  buildCredentialKey,
+  connectedSourceStore,
+  sourceIdForStudent,
 } from '../sources/ConnectedSourceStore';
 import { apiClient } from '../api/client';
 import { extractHostname } from '../utils/urlNormalize';
@@ -122,6 +123,17 @@ export function ConnectSourceScreen({
       return;
     }
 
+    const institutionExternalId = extractHostname(portalUrl);
+    const mongoId = invite?.studentId ?? studentId;
+    const externalId = invite?.studentExternalId ?? studentExternalId ?? mongoId;
+    if (!externalId) {
+      Alert.alert(
+        'Add a student first',
+        'Create a child profile before connecting a school portal.'
+      );
+      return;
+    }
+
     setIsSaving(true);
     try {
       const credential: ISavedCredential = {
@@ -138,8 +150,9 @@ export function ConnectSourceScreen({
         keychainAccessible: SecureStore.WHEN_UNLOCKED,
       });
 
-      const institutionExternalId = extractHostname(portalUrl);
-      const sourceId = `local-${selectedProvider.id}-${institutionExternalId}`;
+      const sourceId = mongoId
+        ? sourceIdForStudent(selectedProvider.id, institutionExternalId, mongoId)
+        : `local-${selectedProvider.id}-${institutionExternalId}`;
       const adapterId = ADAPTER_IDS[selectedProvider.id] ?? `com.${selectedProvider.id}`;
       await connectedSourceStore.upsert({
         provider: selectedProvider.id,
@@ -147,9 +160,9 @@ export function ConnectSourceScreen({
         baseUrl: portalUrl,
         sourceId,
         credentialKey: key,
-        studentExternalId: invite?.studentExternalId ?? studentExternalId ?? 'default',
+        studentExternalId: externalId,
         institutionExternalId,
-        studentId: invite?.studentId ?? studentId,
+        studentId: mongoId,
         adapterVersion: '0.1.0',
       });
 
