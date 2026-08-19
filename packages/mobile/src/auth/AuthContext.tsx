@@ -24,6 +24,7 @@ interface IAuthState {
 
 interface IAuthActions {
   login(email: string, password: string): Promise<void>;
+  register(email: string, password: string, name: string): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -72,6 +73,24 @@ export function AuthProvider({
     };
   }, []);
 
+  const register = useCallback(async (email: string, password: string, name: string) => {
+    setState((s) => ({ ...s, isAuthenticating: true, error: null }));
+    try {
+      await apiClient.register(email, password, name);
+      setState((s) => ({
+        ...s,
+        isLoggedIn: true,
+        isAuthenticating: false,
+        error: null,
+        accountEpoch: s.accountEpoch + 1,
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      setState((s) => ({ ...s, isAuthenticating: false, error: msg }));
+      throw err;
+    }
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     setState((s) => ({ ...s, isAuthenticating: true, error: null }));
     try {
@@ -100,7 +119,9 @@ export function AuthProvider({
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

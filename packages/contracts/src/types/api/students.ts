@@ -26,3 +26,10 @@ export interface IStudentListItem {
   readonly studentId?: string;
   readonly stats?: IStudentStatsWire;
 }
+
+/** Request body of POST /api/students. */
+export interface IStudentCreateRequest {
+  readonly name: string;
+  readonly grade?: number;
+  readonly studentId?: string;
+}
