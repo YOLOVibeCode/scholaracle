@@ -22,6 +22,10 @@ export interface IConnectedSource {
 export interface IConnectedSourceStore {
   list(): Promise<readonly IConnectedSource[]>;
   getForStudent(studentExternalId: string): Promise<IConnectedSource | null>;
+  getForStudentRecord(student: {
+    readonly id: string;
+    readonly studentId?: string;
+  }): Promise<IConnectedSource | null>;
   upsert(source: IConnectedSource): Promise<void>;
   remove(sourceId: string): Promise<void>;
 }
@@ -42,6 +46,19 @@ export class ConnectedSourceStore implements IConnectedSourceStore {
     // No fallback to another student's source: syncing the wrong portal is
     // worse than prompting the user to connect one.
     return all.find((s) => s.studentExternalId === studentExternalId) ?? null;
+  }
+
+  async getForStudentRecord(student: {
+    readonly id: string;
+    readonly studentId?: string;
+  }): Promise<IConnectedSource | null> {
+    const all = await this.list();
+    return (
+      all.find((s) => s.studentId === student.id) ??
+      (student.studentId
+        ? (all.find((s) => s.studentExternalId === student.studentId) ?? null)
+        : null)
+    );
   }
 
   async upsert(source: IConnectedSource): Promise<void> {
@@ -65,6 +82,14 @@ export const ADAPTER_IDS: Record<string, string> = {
   skyward: 'com.skyward.iscorp',
   aeries: 'com.aeries.portal',
 };
+
+export function sourceIdForStudent(
+  provider: string,
+  institutionExternalId: string,
+  studentMongoId: string
+): string {
+  return `local-${provider}-${institutionExternalId}-${studentMongoId}`;
+}
 
 export function buildCredentialKey(provider: string, baseUrl: string): string {
   const domain = baseUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
