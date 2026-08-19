@@ -14,6 +14,7 @@ import { Platform } from 'react-native';
 import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
+  IStudentCreateRequest,
   IStudentGradesResponse,
   IStudentMaterialsResponse,
   IActionBoardResponse,
@@ -96,15 +97,22 @@ export class ScholarmancyApiClient {
 
   async login(email: string, password: string): Promise<IAuthLoginResponse> {
     const res = await this._post<IAuthLoginResponse>('/api/auth/login', { email, password }, false);
-    if (!res.token) {
-      throw new Error('Login response did not include an access token');
-    }
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, res.token);
-    if (res.refreshToken) {
-      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
-    }
-    this._sessionEpoch += 1;
+    await this._persistSession(res, 'Login');
     return res;
+  }
+
+  async register(email: string, password: string, name: string): Promise<IAuthLoginResponse> {
+    const res = await this._post<IAuthLoginResponse>(
+      '/api/auth/register',
+      { email, password, name, rememberMe: true },
+      false
+    );
+    await this._persistSession(res, 'Register');
+    return res;
+  }
+
+  async createStudent(request: IStudentCreateRequest): Promise<IStudentListItem> {
+    return this._post<IStudentListItem>('/api/students', request, true);
   }
 
   async logout(): Promise<void> {
@@ -401,6 +409,17 @@ export class ScholarmancyApiClient {
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  private async _persistSession(res: IAuthLoginResponse, action: string): Promise<void> {
+    if (!res.token) {
+      throw new Error(`${action} response did not include an access token`);
+    }
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, res.token);
+    if (res.refreshToken) {
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
+    }
+    this._sessionEpoch += 1;
+  }
 
   private async _getAccessToken(): Promise<string> {
     const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);

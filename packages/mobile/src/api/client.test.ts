@@ -107,6 +107,57 @@ describe('ScholarmancyApiClient auth', () => {
     });
   });
 
+  describe('register', () => {
+    it('should POST /api/auth/register and store tokens from the `token` field', async () => {
+      const fetchMock = mockFetchSequence({ status: 201, body: makeLoginBody() });
+
+      await client.register('parent@example.com', 'password12', 'Ricardo');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/auth/register`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            email: 'parent@example.com',
+            password: 'mock-password12',
+            name: 'Ricardo',
+            rememberMe: true,
+          }),
+        })
+      );
+      expect(secureStoreData.get('slc_access_token')).toBe('jwt-access-token-1');
+      expect(secureStoreData.get('slc_refresh_token')).toBe('refresh-token-1');
+    });
+
+    it('should throw when register returns no token', async () => {
+      mockFetchSequence({ status: 201, body: { success: false } });
+      await expect(client.register('a@b.c', 'password12', 'A')).rejects.toThrow(/token/i);
+    });
+  });
+
+  describe('createStudent', () => {
+    it('should POST /api/students and return the created row', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const created = {
+        id: 'stu-mongo-1',
+        userId: 'user-1',
+        name: 'Gideon',
+        grade: 8,
+      };
+      const fetchMock = mockFetchSequence({ status: 201, body: created });
+
+      await expect(client.createStudent({ name: 'Gideon', grade: 8 })).resolves.toEqual(created);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/students`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'Gideon', grade: 8 }),
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+    });
+  });
+
   describe('token refresh', () => {
     it('should refresh using the `token` field and store the rotated refresh token', async () => {
       // No access token stored; only a refresh token.

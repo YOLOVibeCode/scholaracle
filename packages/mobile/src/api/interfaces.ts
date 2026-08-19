@@ -6,6 +6,7 @@
 import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
+  IStudentCreateRequest,
   IStudentGradesResponse,
   IAuthLoginResponse,
   ISourceInviteIssueRequest,
@@ -15,6 +16,7 @@ import type {
 
 export interface IAuthSession {
   login(email: string, password: string): Promise<IAuthLoginResponse>;
+  register(email: string, password: string, name: string): Promise<IAuthLoginResponse>;
   logout(): Promise<void>;
   isLoggedIn(): Promise<boolean>;
 }
@@ -25,6 +27,7 @@ export interface IConnectorTokenProvider {
 
 export interface IStudentReadApi {
   getStudents(): Promise<IStudentListItem[]>;
+  createStudent(request: IStudentCreateRequest): Promise<IStudentListItem>;
   getStudentAssignments(studentId: string): Promise<readonly unknown[]>;
   getStudentGrades(studentId: string): Promise<IStudentGradesResponse>;
   getStudentRuns(studentId: string): Promise<readonly unknown[]>;

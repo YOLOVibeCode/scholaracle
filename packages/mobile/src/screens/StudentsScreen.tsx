@@ -17,12 +17,14 @@ import { apiClient, type IStudentListItem } from '../api/client';
 interface IStudentsScreenProps {
   onSelectStudent(student: IStudentListItem): void;
   onAddSource(): void;
+  onStartSetup?(): void;
   onOpenSettings?(): void;
 }
 
 export function StudentsScreen({
   onSelectStudent,
   onAddSource,
+  onStartSetup,
   onOpenSettings,
 }: IStudentsScreenProps): React.ReactElement {
   const [students, setStudents] = useState<IStudentListItem[]>([]);
@@ -120,9 +122,11 @@ export function StudentsScreen({
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No students yet</Text>
-              <Text style={styles.emptyText}>Connect a school portal to start syncing data.</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={onAddSource}>
-                <Text style={styles.emptyButtonText}>Connect Portal</Text>
+              <Text style={styles.emptyText}>
+                Add your kids and connect the school portal. It takes a few minutes.
+              </Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={onStartSetup ?? onAddSource}>
+                <Text style={styles.emptyButtonText}>Get started</Text>
               </TouchableOpacity>
             </View>
           )
