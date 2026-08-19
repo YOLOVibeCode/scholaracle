@@ -8,8 +8,9 @@ import { View, StyleSheet, Alert } from 'react-native';
 import { useLinkingURL } from 'expo-linking';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
-import { LoginScreen } from './src/screens/LoginScreen';
 import { StudentsScreen } from './src/screens/StudentsScreen';
+import { OnboardingScreen } from './src/onboarding/OnboardingScreen';
+import type { IApplyOnboardingResult } from './src/onboarding/applyOnboarding';
 import { ConnectSourceScreen } from './src/screens/ConnectSourceScreen';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { CourseDetailScreen } from './src/screens/CourseDetailScreen';
@@ -62,6 +63,7 @@ interface INavState {
 function AppContent(): React.ReactElement {
   const { isLoggedIn, isLoading, login, accountEpoch } = useAuth();
   const [nav, setNav] = useState<INavState>({ view: 'students' });
+  const [studentCount, setStudentCount] = useState<number | null>(null);
   const linkingUrl = useLinkingURL();
   const handledDemoUrl = useRef<string | null>(null);
   const handledDiagUrl = useRef<string | null>(null);
@@ -134,11 +136,22 @@ function AppContent(): React.ReactElement {
   }, [isLoading, isLoggedIn, applyInviteNav]);
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (!isLoggedIn) {
+      setStudentCount(null);
+      return;
+    }
+    void apiClient
+      .getStudents()
+      .then((rows) => setStudentCount(rows.length))
+      .catch(() => setStudentCount(0));
+  }, [isLoggedIn, accountEpoch]);
+
+  useEffect(() => {
+    if (isLoggedIn && studentCount != null && studentCount > 0) {
       void registerForPushNotifications();
       void seedSecureStoreFromDevEnv();
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, studentCount]);
 
   // Notification taps open the app at the students list (data refetches on
   // mount, so the fresh alert context is visible immediately).
@@ -155,10 +168,7 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn]);
 
   const startSync = useCallback(async (student: IStudentListItem) => {
-    // Sources are keyed by the external (SIS/portal) student id.
-    const source = student.studentId
-      ? await connectedSourceStore.getForStudent(student.studentId)
-      : null;
+    const source = await connectedSourceStore.getForStudentRecord(student);
     if (!source) {
       Alert.alert(
         'No portal connected',
@@ -170,8 +180,22 @@ function AppContent(): React.ReactElement {
     setNav({ view: 'sync', student, syncSource: source });
   }, []);
 
+  const finishOnboarding = useCallback(async (result: IApplyOnboardingResult) => {
+    setStudentCount(result.students.length);
+    const first = result.students[0];
+    if (!first) {
+      setNav({ view: 'students' });
+      return;
+    }
+    const source = await connectedSourceStore.getForStudentRecord(first);
+    if (source) {
+      setNav({ view: 'sync', student: first, syncSource: source });
+      return;
+    }
+    setNav({ view: 'dashboard', student: first });
+  }, []);
+
   if (isLoading) return <View style={styles.loading} />;
-  if (!isLoggedIn) return <LoginScreen />;
 
   if (nav.view === 'connect-source') {
     return (
@@ -185,6 +209,32 @@ function AppContent(): React.ReactElement {
         onCancel={() =>
           setNav({ view: nav.student ? 'dashboard' : 'students', student: nav.student })
         }
+      />
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <OnboardingScreen
+        entry="logged-out"
+        onComplete={(result) => {
+          void finishOnboarding(result);
+        }}
+      />
+    );
+  }
+
+  if (studentCount === null) {
+    return <View style={styles.loading} />;
+  }
+
+  if (studentCount === 0 && nav.view === 'students') {
+    return (
+      <OnboardingScreen
+        entry="logged-in"
+        onComplete={(result) => {
+          void finishOnboarding(result);
+        }}
       />
     );
   }
@@ -269,6 +319,7 @@ function AppContent(): React.ReactElement {
       key={accountEpoch}
       onSelectStudent={(student) => setNav({ view: 'dashboard', student })}
       onAddSource={() => setNav({ view: 'connect-source' })}
+      onStartSetup={() => setNav({ view: 'students' })}
       onOpenSettings={() => setNav({ view: 'settings' })}
     />
   );
