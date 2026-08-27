@@ -15,8 +15,11 @@ import type {
   IRefreshTokenStore,
   IOAuthAccountRepository,
 } from '@scholaracle/database';
+import { StudentRepository, UserRepository } from '@scholaracle/database';
 import type { ISessionRepository } from '@scholaracle/database';
 import { parseUserAgent } from '../../utils/parseUserAgent';
+import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
+import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -276,6 +279,129 @@ async function handleResetPassword(
 }
 
 /**
+ * Consume a one-time student magic-link token (iPad Camera → /login?magic=).
+ * Public: no Bearer. Same success shape as password login.
+ */
+async function handleStudentMagic(
+  req: Request,
+  res: Response,
+  magicLinks: StudentMagicLink,
+  authService: AuthService,
+  sessionRepository?: ISessionRepository
+): Promise<void> {
+  const { token } = req.body as { token?: unknown };
+  if (typeof token !== 'string' || token.trim() === '') {
+    throw new ValidationError('Missing required field: token');
+  }
+
+  const consumed = await magicLinks.consume(token.trim());
+  if (consumed === null) {
+    res.status(401).json({ success: false, error: 'Invalid or expired sign-in link' });
+    return;
+  }
+
+  const result = await authService.createSessionForUser(consumed.userId, { rememberMe: true });
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
+    }
+    res.status(200).json(result satisfies IAuthLoginResponse);
+  } else {
+    res.status(401).json(result);
+  }
+}
+
+/**
+ * Generic magic-link consume endpoint (POST /api/auth/magic).
+ * Handles students, accepted shared parents, and pending-invite auto-onboarding.
+ * The /student-magic route is kept as an alias for backwards compatibility.
+ */
+async function handleMagicConsume(
+  req: Request,
+  res: Response,
+  magicLoginLink: MagicLoginLink,
+  authService: AuthService,
+  database: Db,
+  sessionRepository?: ISessionRepository
+): Promise<void> {
+  const { token } = req.body as { token?: unknown };
+  if (typeof token !== 'string' || token.trim() === '') {
+    throw new ValidationError('Missing required field: token');
+  }
+
+  const consumed = await magicLoginLink.consume(token.trim());
+  if (consumed === null) {
+    res.status(401).json({ success: false, error: 'Invalid or expired sign-in link' });
+    return;
+  }
+
+  let userId: string;
+
+  if ('pendingInvite' in consumed) {
+    // One-click onboarding: create (or find) a parent user and accept the invite
+    const { studentId, email } = consumed.pendingInvite;
+    const userRepo = new UserRepository(database);
+    const studentRepo = new StudentRepository(database);
+
+    let user = await userRepo.findByEmail(email);
+    if (!user) {
+      const passwordHash = await UserRepository.hashPassword(
+        `magic-${crypto.randomBytes(32).toString('base64url')}`
+      );
+      user = await userRepo.create({
+        email,
+        passwordHash,
+        name: email.split('@')[0] ?? email,
+        role: 'parent',
+      });
+    }
+    userId = user._id!.toString();
+
+    // Bind userId in the sharedWith entry and mark accepted
+    const student = await studentRepo.findById(studentId);
+    if (student) {
+      const inviteIdx = student.sharedWith.findIndex(
+        (sp) => sp.email === email && sp.status === 'pending'
+      );
+      if (inviteIdx !== -1) {
+        const updatedShared = [...student.sharedWith];
+        const current = updatedShared[inviteIdx]!;
+        updatedShared[inviteIdx] = {
+          ...current,
+          userId,
+          status: 'accepted',
+          acceptedAt: new Date(),
+          receiveAlerts: current.receiveAlerts !== false,
+          alertChannels: current.alertChannels ?? ['email'],
+        };
+        await studentRepo.update(student._id!, { sharedWith: updatedShared });
+      }
+    }
+  } else {
+    userId = consumed.userId;
+  }
+
+  const result = await authService.createSessionForUser(userId, {
+    rememberMe: true,
+    allowParent: true,
+  });
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
+    }
+    res.status(200).json(result satisfies IAuthLoginResponse);
+  } else {
+    res.status(401).json(result);
+  }
+}
+
+/**
  * Handle refresh token request.
  * Accepts refresh token from httpOnly cookie (preferred) or body.
  * Accepts rememberMe in body so cookie max-age can be set correctly (default true).
@@ -470,6 +596,49 @@ export function authRouter(config: IAuthRouterConfig): Router {
     '/login',
     asyncHandler((req: Request, res: Response) =>
       handleLogin(req, res, authService, config.sessionRepository)
+    )
+  );
+
+  /**
+   * POST /api/auth/magic
+   * Generic magic-link consume for students, accepted shared parents, and pending invitees.
+   */
+  const magicLoginLink = new MagicLoginLink({
+    database: config.database,
+    baseUrl: config.baseUrl ?? 'http://localhost:2800',
+  });
+
+  router.post(
+    '/magic',
+    asyncHandler((req: Request, res: Response) =>
+      handleMagicConsume(
+        req,
+        res,
+        magicLoginLink,
+        authService,
+        config.database,
+        config.sessionRepository
+      )
+    )
+  );
+
+  /**
+   * POST /api/auth/student-magic
+   * Legacy alias – kept for back-compat with existing iPad clients.
+   */
+  router.post(
+    '/student-magic',
+    asyncHandler((req: Request, res: Response) =>
+      handleStudentMagic(
+        req,
+        res,
+        new StudentMagicLink({
+          database: config.database,
+          baseUrl: config.baseUrl ?? 'http://localhost:2800',
+        }),
+        authService,
+        config.sessionRepository
+      )
     )
   );
 

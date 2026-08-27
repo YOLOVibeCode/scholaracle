@@ -78,6 +78,8 @@ export type {
   IRunResult,
   IRunRecorder,
   IClientScrapeHost,
+  ResourceAction,
+  IClassifyResourceParams,
 } from './pipeline';
 export {
   SyncError,
@@ -87,6 +89,7 @@ export {
   applyEnrichersFailOpen,
   sanitizeEnrichedOps,
   DEFAULT_ENRICHER_TIMEOUT_MS,
+  classifyResource,
 } from './pipeline';
 
 // Community Scraper Platform (CSP-1): manifest + module contract + resolvers

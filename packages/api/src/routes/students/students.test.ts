@@ -2,8 +2,10 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
+import { requireParent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Students API Routes', () => {
@@ -34,7 +36,12 @@ describe('Students API Routes', () => {
     app = express();
     app.use(express.json());
     const baseUrl = 'http://test.example';
-    app.use('/api/students', authMiddleware(authService), studentsRouter({ database, baseUrl }));
+    app.use(
+      '/api/students',
+      authMiddleware(authService),
+      requireParent,
+      studentsRouter({ database, baseUrl })
+    );
     app.use(createErrorHandler());
   });
 
@@ -50,6 +57,7 @@ describe('Students API Routes', () => {
       await database.collection('students').deleteMany({});
       await database.collection('subscriptions').deleteMany({});
       await database.collection('users').deleteMany({ email: 'students@example.com' });
+      await database.collection('users').deleteMany({ email: 'student-gate@example.com' });
 
       // Re-register test user for each test
       const registerResult = await authService.register(
@@ -111,6 +119,26 @@ describe('Students API Routes', () => {
       expect(response.body).toHaveLength(2);
       expect(response.body[0]).toHaveProperty('name');
       expect(response.body[1]).toHaveProperty('name');
+    });
+
+    it('rejects a student-role token with 403', async () => {
+      const passwordHash = await UserRepository.hashPassword('password123');
+      await new UserRepository(database).create({
+        email: 'student-gate@example.com',
+        passwordHash,
+        name: 'Student Gate',
+        role: 'student',
+        studentId: new ObjectId().toString(),
+      });
+      const login = await authService.login('student-gate@example.com', 'password123');
+      expect(login.success).toBe(true);
+
+      const response = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${login.token}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe('FORBIDDEN');
     });
   });
 
@@ -411,7 +439,7 @@ describe('Students API Routes', () => {
       expect(res.status).toBe(200);
       interface IAssetBucketItem {
         assignmentExternalId: string;
-        assets: Array<{ assetId: string; downloadUrl: string }>;
+        assets: Array<{ assetId: string; downloadUrl: string; contentHash?: string }>;
       }
       const buckets = res.body.buckets as Array<{ items: IAssetBucketItem[] }>;
       const allItems = buckets.flatMap((b) => b.items);
@@ -421,7 +449,10 @@ describe('Students API Routes', () => {
       expect(item!.assets.length).toBeGreaterThanOrEqual(1);
       expect(
         item!.assets.some(
-          (a) => a.assetId === assetId && a.downloadUrl.includes(`/api/assets/${assetId}`)
+          (a) =>
+            a.assetId === assetId &&
+            a.downloadUrl.includes(`/api/assets/${assetId}`) &&
+            a.contentHash === 'hash'
         )
       ).toBe(true);
     });
@@ -1325,6 +1356,7 @@ describe('Students API Routes', () => {
       if (database) {
         await database.collection('slc_course_materials').deleteMany({});
         await database.collection('slc_courses').deleteMany({});
+        await database.collection('slc_assets').deleteMany({});
       }
     });
 
@@ -1401,6 +1433,64 @@ describe('Students API Routes', () => {
       expect(res.body.courses.length).toBe(1);
       expect(res.body.courses[0].courseName).toBe('AP Biology');
       expect(res.body.courses[0].materials.length).toBe(2);
+    });
+
+    it('includes contentHash from slc_assets on the material (not from the signed URL)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Hash Materials Student' });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        externalId: 'course-hash',
+        record: { title: 'AP Biology', name: 'AP Biology' },
+        deletedAt: null,
+      });
+      await database.collection('slc_course_materials').insertOne({
+        userId,
+        studentId,
+        externalId: 'demo-emma-ap-bio-lab-safety',
+        courseExternalId: 'course-hash',
+        record: {
+          title: 'Lab Safety Handout',
+          type: 'handout',
+          courseExternalId: 'course-hash',
+        },
+        deletedAt: null,
+      });
+      await database.collection('slc_assets').insertOne({
+        assetId: 'demo-asset-demo-emma-ap-bio-lab-safety',
+        sourceId: 'demo',
+        userId,
+        originalUrl: 'https://demo.scholaracle.com/files/lab-safety.pdf',
+        storageKey: 'demo/demo-asset-demo-emma-ap-bio-lab-safety',
+        fileName: 'lab-safety.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 200,
+        contentHash: 'demo-demo-emma-ap-bio-lab-safety-hash',
+        entityType: 'courseMaterial',
+        entityExternalId: 'demo-emma-ap-bio-lab-safety',
+        deletedAt: null,
+        uploadedAt: new Date(),
+        lastAccessedAt: new Date(),
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/materials`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      const material = (res.body.courses as Array<{ materials: Array<Record<string, unknown>> }>)[0]
+        ?.materials[0];
+      expect(material?.['contentHash']).toBe('demo-demo-emma-ap-bio-lab-safety-hash');
+      expect(material?.['assetId']).toBe('demo-asset-demo-emma-ap-bio-lab-safety');
+      const downloadUrl = material?.['downloadUrl'] as string | undefined;
+      expect(downloadUrl).not.toContain('demo-demo-emma-ap-bio-lab-safety-hash');
     });
   });
 

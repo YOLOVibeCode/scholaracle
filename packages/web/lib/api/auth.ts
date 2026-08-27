@@ -22,10 +22,29 @@ export interface IAuthResponse {
     readonly id: string;
     readonly email: string;
     readonly name: string;
+    readonly role: 'parent' | 'student';
+    readonly studentId?: string;
   };
   /** When true, client should redirect to password reset flow. */
   readonly forcePasswordReset?: boolean;
   readonly error?: string;
+}
+
+function persistAuthResponse(response: IAuthResponse): void {
+  if (!(response.success && response.token)) {
+    return;
+  }
+  apiClient.setToken(response.token);
+  const useSessionStorage = response.rememberMe === false;
+  if (response.refreshToken) {
+    apiClient.setRefreshToken(response.refreshToken, useSessionStorage);
+  }
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('auth_token', response.token);
+    localStorage.setItem('remember_me', useSessionStorage ? 'false' : 'true');
+    const maxAge = 15 * 60;
+    document.cookie = `auth_token=${response.token}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }
 }
 
 /**
@@ -48,25 +67,28 @@ export const authApi = {
         rememberMe,
       });
 
-      if (response.success && response.token) {
-        apiClient.setToken(response.token);
-        const useSessionStorage = response.rememberMe === false;
-        if (response.refreshToken) {
-          apiClient.setRefreshToken(response.refreshToken, useSessionStorage);
-        }
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', response.token);
-          localStorage.setItem('remember_me', useSessionStorage ? 'false' : 'true');
-          const maxAge = 15 * 60; // 15 min
-          document.cookie = `auth_token=${response.token}; path=/; max-age=${maxAge}; SameSite=Lax`;
-        }
-      }
-
+      persistAuthResponse(response);
       return response;
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Login failed',
+      };
+    }
+  },
+
+  /**
+   * Consume a one-time student magic-link token (iPad Camera → /login?magic=).
+   */
+  async loginWithMagicToken(token: string): Promise<IAuthResponse> {
+    try {
+      const response = await apiClient.post<IAuthResponse>('/auth/magic', { token });
+      persistAuthResponse(response);
+      return response;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'That sign-in link expired. Ask a parent for a new QR code.',
       };
     }
   },
@@ -97,20 +119,7 @@ export const authApi = {
         ...(options?.smsConsent != null ? { smsConsent: options.smsConsent } : {}),
       });
 
-      if (response.success && response.token) {
-        apiClient.setToken(response.token);
-        const useSessionStorage = response.rememberMe === false;
-        if (response.refreshToken) {
-          apiClient.setRefreshToken(response.refreshToken, useSessionStorage);
-        }
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', response.token);
-          localStorage.setItem('remember_me', useSessionStorage ? 'false' : 'true');
-          const maxAge = 15 * 60; // 15 min
-          document.cookie = `auth_token=${response.token}; path=/; max-age=${maxAge}; SameSite=Lax`;
-        }
-      }
-
+      persistAuthResponse(response);
       return response;
     } catch (error) {
       return {

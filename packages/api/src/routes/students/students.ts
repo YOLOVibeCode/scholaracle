@@ -7,6 +7,7 @@ import {
   IngestRunRepository,
   AlertRepository,
   SubscriptionRepository,
+  UserRepository,
   PLAN_FEATURES,
   type IDataSource,
   type IDataSourceCredentials,
@@ -40,6 +41,14 @@ import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
 import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
+import { loadStudentMaterials } from '../../services/materials/loadStudentMaterials';
+import { StudentProvisioner } from '../../services/provision/StudentProvisioner';
+import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLoginAudit';
+import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
+import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
+import { registerStudentLoginRoutes } from './studentLogin';
+import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
+import { noopSink, registerNudgeRoutes } from './nudge';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -50,6 +59,10 @@ export interface IStudentsRouterConfig {
   readonly sendInviteEmail?: IInviteEmailSender;
   /** Optional sync scheduler for enqueuing sync jobs when triggers are called. */
   readonly syncScheduler?: import('@scholaracle/agents').SyncScheduler;
+  /** Optional sink for parent nudges (student-only). Defaults to no-op. */
+  readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
+  /** Optional sender for magic login links (email + SMS). */
+  readonly magicLinkSender?: IMagicLinkSender;
 }
 
 // Action-board wire types live in @scholaracle/contracts (types/api/actionBoard.ts).
@@ -214,12 +227,15 @@ type ActionBoardAssetDoc = {
   mimeType?: string;
   fileSize?: number;
   entityType?: string;
+  contentHash?: string;
   record?: Record<string, unknown>;
 };
 
 type ActionBoardAssignmentDoc = {
   externalId?: string;
   record?: Record<string, unknown>;
+  studentStatus?: string;
+  lastNudgedAt?: Date | string;
 };
 
 type BucketId = 'needs_attention' | 'due_soon' | 'in_progress' | 'recently_graded' | 'caught_up';
@@ -248,6 +264,7 @@ function buildActionAsset(
           ? signAssetUrl(baseUrl, aid, jwtSecret)
           : `${baseUrl.replace(/\/$/, '')}/api/assets/${aid}`
         : '',
+    ...(doc.contentHash != null && doc.contentHash !== '' ? { contentHash: doc.contentHash } : {}),
   };
 }
 
@@ -306,6 +323,31 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
   const subscriptionRepository = new SubscriptionRepository(config.database);
+  const userRepository = new UserRepository(config.database);
+  const magicLoginLink = new MagicLoginLink({
+    database: config.database,
+    baseUrl: config.baseUrl ?? 'http://localhost:2800',
+  });
+  registerStudentLoginRoutes(router, {
+    studentRepository,
+    provisioner: new StudentProvisioner({
+      studentRepository,
+      userRepository,
+      audit: new MongoStudentLoginAudit(config.database),
+    }),
+    magicLinks: new StudentMagicLink({
+      database: config.database,
+      baseUrl: config.baseUrl ?? 'http://localhost:2800',
+    }),
+    magicLoginLink,
+    magicLinkSender: config.magicLinkSender,
+  });
+  registerNudgeRoutes(router, {
+    database: config.database,
+    studentRepository,
+    userRepository,
+    sink: config.nudgeSink ?? noopSink,
+  });
 
   /**
    * GET /api/students
@@ -628,6 +670,76 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       res.status(200).json({ success: true });
+    })
+  );
+
+  /**
+   * POST /api/students/:id/contacts/:email/magic-link/send
+   * canAdmin only: issue a 24h magic link for an accepted or pending-invite contact and send it.
+   */
+  router.post(
+    '/:id/contacts/:email/magic-link/send',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+      const student = await studentRepository.findById(req.params['id'] ?? '');
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Student not found');
+      }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only an admin can send magic links to contacts');
+      }
+      if (!magicLoginLink || !config.magicLinkSender) {
+        throw new NotFoundError('Magic link delivery is not configured');
+      }
+
+      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+        .toLowerCase()
+        .trim();
+      const contact = student.sharedWith.find((sp) => sp.email === targetEmail);
+      if (!contact) {
+        throw new NotFoundError('Contact not found');
+      }
+
+      const body = req.body as { channel?: unknown; to?: unknown };
+      const channel = body.channel;
+      const toOverride = typeof body.to === 'string' ? body.to.trim() : undefined;
+
+      if (channel !== 'email' && channel !== 'sms') {
+        throw new ValidationError('channel must be "email" or "sms"');
+      }
+
+      let to: string;
+      if (channel === 'email') {
+        to = toOverride ?? contact.email;
+      } else {
+        to = toOverride ?? contact.phone ?? '';
+        if (!to) {
+          throw new ValidationError(
+            'No phone number available for SMS; provide "to" in the request body'
+          );
+        }
+      }
+
+      const issued = await magicLoginLink.issueForContact(
+        student._id!.toString(),
+        contact.userId ?? null,
+        contact.userId ? null : contact.email
+      );
+
+      if (channel === 'email') {
+        await config.magicLinkSender.sendEmail({
+          to,
+          loginUrl: issued.loginUrl,
+          recipientName: contact.name,
+        });
+      } else {
+        await config.magicLinkSender.sendSms({ to, loginUrl: issued.loginUrl });
+      }
+
+      res.status(200).json({ success: true, expiresAt: issued.expiresAt.toISOString() });
     })
   );
 
@@ -1182,6 +1294,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               type?: string;
               downloadUrl?: string;
             }>;
+            description?: string;
+            lmsUrl?: string;
           }>;
           recentPointsPossible: number;
           recentPointsEarned: number;
@@ -1244,6 +1358,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
         const data = courseData.get(courseExternalId)!;
         const isOverdue = dueAt ? new Date(dueAt).getTime() < now.getTime() : false;
+        const description = (record?.['description'] as string) ?? undefined;
+        const lmsUrl = (record?.['url'] as string) ?? undefined;
 
         data.assignments.push({
           externalId,
@@ -1257,6 +1373,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           categoryWeight,
           rubricScores,
           attachments,
+          description: description || undefined,
+          lmsUrl: lmsUrl || undefined,
         });
 
         // Track latest assignment date (as epoch ms) and term associations per course
@@ -1573,149 +1691,21 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
-      const dataUserId = student.dataUserId();
-      const studentExternalId = student.studentId ?? '';
-      const studentDbIdStr = student._id?.toString() ?? '';
-      const baseUrl = resolveApiBaseUrl(config.baseUrl);
-
-      const materialsColl = config.database.collection('slc_course_materials');
-      const coursesColl = config.database.collection('slc_courses');
-      const assetsColl = config.database.collection('slc_assets');
-
-      const materialFilter = studentDbIdStr
-        ? {
-            userId: dataUserId,
-            deletedAt: null,
-            $or: [
-              { studentId: studentDbIdStr },
-              ...(studentExternalId ? [{ studentExternalId }] : []),
-            ],
-          }
-        : { userId: dataUserId, studentExternalId, deletedAt: null };
-
       const courseQueryParam = req.query['course'] as string | undefined;
       const assignmentParam = req.query['assignment'] as string | undefined;
-
-      let assignmentCourseId: string | null = null;
-      if (assignmentParam) {
-        const assignmentDoc = await config.database.collection('slc_assignments').findOne({
-          userId: dataUserId,
-          deletedAt: null,
-          externalId: assignmentParam,
-          $or: [
-            { studentId: studentDbIdStr },
-            ...(studentExternalId ? [{ studentExternalId }] : []),
-          ],
-        });
-        assignmentCourseId = (assignmentDoc?.['courseExternalId'] as string) ?? null;
-      }
-
-      const [materialDocs, courseDocs, assetDocs] = await Promise.all([
-        materialsColl.find(materialFilter).toArray(),
-        coursesColl.find({ userId: dataUserId, deletedAt: null }).toArray(),
-        assetsColl
-          .find({ userId: dataUserId, deletedAt: null, entityType: 'courseMaterial' })
-          .toArray(),
-      ]);
-
-      const courseMap = new Map<string, string>();
-      for (const c of courseDocs) {
-        const extId = c['externalId'] as string;
-        const name = (c['record']?.name as string) ?? extId;
-        if (extId) courseMap.set(extId, name);
-      }
-
-      const assetMap = new Map<string, { assetId: string; fileSize?: number; mimeType?: string }>();
-      for (const a of assetDocs) {
-        const entityExtId = (a['entityExternalId'] ?? a['entityId']) as string | undefined;
-        if (entityExtId) {
-          assetMap.set(entityExtId, {
-            assetId: ((a['assetId'] ?? a['_id']?.toString()) as string) ?? '',
-            fileSize: a['fileSize'] as number | undefined,
-            mimeType: a['mimeType'] as string | undefined,
-          });
-        }
-      }
-
-      const grouped = new Map<
-        string,
-        Array<{
-          externalId: string;
-          title: string;
-          type: string;
-          url?: string;
-          fileName?: string;
-          mimeType?: string;
-          postedAt?: string;
-          description?: string;
-          fileSize?: number;
-          assetId?: string;
-          downloadUrl?: string;
-          linkAccessibility?: 'public' | 'authenticated' | 'unknown';
-          assignmentExternalId: string | null;
-        }>
-      >();
-
-      for (const m of materialDocs) {
-        const courseExtId = (m['courseExternalId'] as string) ?? '';
-        if (courseQueryParam && courseExtId !== courseQueryParam) continue;
-
-        if (assignmentParam) {
-          const rec = m['record'] as Record<string, unknown> | undefined;
-          const matAssignmentId = rec?.['assignmentExternalId'] as string | undefined;
-          const matchAssignment = matAssignmentId === assignmentParam;
-          const matchCourse = assignmentCourseId != null && courseExtId === assignmentCourseId;
-          if (!matchAssignment && !matchCourse) continue;
-        }
-
-        const extId = (m['externalId'] as string) ?? '';
-        const rec = m['record'] as Record<string, unknown> | undefined;
-        const asset = assetMap.get(extId);
-
-        const material = {
-          externalId: extId,
-          title: (rec?.['title'] ?? rec?.['name'] ?? m['title'] ?? '') as string,
-          type: (rec?.['type'] ?? m['type'] ?? 'document') as string,
-          url: (rec?.['url'] ?? m['url']) as string | undefined,
-          fileName: (rec?.['fileName'] ?? m['fileName']) as string | undefined,
-          mimeType: asset?.mimeType ?? ((rec?.['mimeType'] ?? m['mimeType']) as string | undefined),
-          postedAt: (rec?.['postedAt'] ?? m['postedAt']) as string | undefined,
-          description: (rec?.['description'] ?? m['description']) as string | undefined,
-          fileSize: asset?.fileSize ?? ((rec?.['fileSize'] ?? m['fileSize']) as number | undefined),
-          assetId: asset?.assetId,
-          downloadUrl:
-            asset && config.jwtSecret
-              ? signAssetUrl(baseUrl, asset.assetId, config.jwtSecret)
-              : asset
-                ? `${baseUrl}/api/assets/${asset.assetId}`
-                : undefined,
-          linkAccessibility: rec?.['linkAccessibility'] as
-            'public' | 'authenticated' | 'unknown' | undefined,
-          assignmentExternalId: (rec?.['assignmentExternalId'] as string | undefined) ?? null,
-        };
-
-        const list = grouped.get(courseExtId);
-        if (list) {
-          list.push(material);
-        } else {
-          grouped.set(courseExtId, [material]);
-        }
-      }
-
-      const courses = [...grouped.entries()].map(([courseExternalId, materials]) => ({
-        courseExternalId,
-        courseName: courseMap.get(courseExternalId) ?? courseExternalId,
-        materials,
-      }));
-
-      const totalMaterials = courses.reduce((sum, c) => sum + c.materials.length, 0);
-
-      res.status(200).json({
-        studentId: studentDbId,
+      const payload = await loadStudentMaterials({
+        database: config.database,
+        ownerUserId: student.dataUserId(),
+        studentDbId: student._id?.toString() ?? '',
+        studentExternalId: student.studentId ?? '',
         studentName: student.name,
-        totalMaterials,
-        courses,
-      } satisfies IStudentMaterialsResponse);
+        baseUrl: config.baseUrl ?? '',
+        jwtSecret: config.jwtSecret,
+        ...(courseQueryParam !== undefined ? { courseFilter: courseQueryParam } : {}),
+        ...(assignmentParam !== undefined ? { assignmentExternalId: assignmentParam } : {}),
+      });
+
+      res.status(200).json(payload satisfies IStudentMaterialsResponse);
     })
   );
 
@@ -2039,6 +2029,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           );
         }
 
+        const studentStatus = (doc['studentStatus'] as string) ?? undefined;
+        const lastNudgedRaw = doc['lastNudgedAt'];
+        const lastNudgedAt =
+          lastNudgedRaw instanceof Date
+            ? lastNudgedRaw.toISOString()
+            : typeof lastNudgedRaw === 'string'
+              ? lastNudgedRaw
+              : undefined;
+
         items.push({
           assignmentExternalId: externalId,
           title,
@@ -2057,6 +2056,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           },
           assets: assignmentAssets,
           materials: courseMaterials,
+          ...(studentStatus !== undefined ? { studentStatus } : {}),
+          ...(lastNudgedAt !== undefined ? { lastNudgedAt } : {}),
         });
       }
 

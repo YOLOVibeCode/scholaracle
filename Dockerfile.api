@@ -22,6 +22,7 @@ COPY packages/agents/package.json ./packages/agents/
 COPY packages/connector/package.json ./packages/connector/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/scraper-core/package.json ./packages/scraper-core/
+COPY packages/studio-core/package.json ./packages/studio-core/
 
 # Create stub package.json for packages not needed by API but referenced in workspace
 RUN mkdir -p packages/workers packages/web packages/e2e && \

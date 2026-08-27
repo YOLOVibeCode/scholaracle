@@ -138,19 +138,26 @@ export const test = base.extend<AuthFixtures>({
 
 export { expect } from '@playwright/test';
 
+const OVERLAY_DISABLE_CSS = `
+  nextjs-portal, nextjs-portal * { pointer-events: none !important; }
+  [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
+`;
+
+async function disableNextDevOverlay(page: Page): Promise<void> {
+  await page.addStyleTag({ content: OVERLAY_DISABLE_CSS }).catch(() => {});
+}
+
 /**
- * Login helper function for parent users.
+ * Login helper that waits for a role-specific destination.
  */
-export async function login(page: Page, email: string, password: string): Promise<void> {
+export async function loginExpecting(
+  page: Page,
+  email: string,
+  password: string,
+  url: string | RegExp
+): Promise<void> {
   await page.goto('/login');
-  await page
-    .addStyleTag({
-      content: `
-        nextjs-portal, nextjs-portal * { pointer-events: none !important; }
-        [data-nextjs-dev-overlay="true"], [data-nextjs-dev-overlay="true"] * { pointer-events: none !important; }
-      `,
-    })
-    .catch(() => {});
+  await disableNextDevOverlay(page);
   await page.fill('[data-testid="input-email"]', email);
   await page.fill('[data-testid="input-password"]', password);
 
@@ -163,7 +170,21 @@ export async function login(page: Page, email: string, password: string): Promis
   const response = await responsePromise;
   expect(response.status()).toBeLessThan(400);
 
-  await page.waitForURL('/dashboard');
+  await page.waitForURL(url);
+}
+
+/**
+ * Login helper function for parent users.
+ */
+export async function login(page: Page, email: string, password: string): Promise<void> {
+  await loginExpecting(page, email, password, '/dashboard');
+}
+
+/**
+ * Login helper for student users (lands on /studio, not /dashboard).
+ */
+export async function loginStudent(page: Page, email: string, password: string): Promise<void> {
+  await loginExpecting(page, email, password, '/studio');
 }
 
 /**

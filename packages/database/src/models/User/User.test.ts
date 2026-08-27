@@ -68,5 +68,41 @@ describe('User', () => {
       expect(user.subscription.plan).toBe('premium');
       expect(user.subscription.status).toBe('active');
     });
+
+    it('defaults role to parent when omitted (existing users)', () => {
+      const user = new User({
+        email: 'legacy@example.com',
+        passwordHash: 'hashed-password',
+        name: 'Legacy User',
+      });
+
+      expect(user.role).toBe('parent');
+      expect(user.studentId).toBeUndefined();
+    });
+
+    it('stores student role and studentId for a student login', () => {
+      const user = new User({
+        email: 'emma.demo@scholarmancy.com',
+        passwordHash: 'hashed-password',
+        name: 'Emma Mitchell',
+        role: 'student',
+        studentId: '507f1f77bcf86cd799439011',
+      });
+
+      expect(user.role).toBe('student');
+      expect(user.studentId).toBe('507f1f77bcf86cd799439011');
+    });
+
+    it('treats empty studentId as absent', () => {
+      const user = new User({
+        email: 'parent@example.com',
+        passwordHash: 'hashed-password',
+        name: 'Parent',
+        role: 'parent',
+        studentId: '',
+      });
+
+      expect(user.studentId).toBeUndefined();
+    });
   });
 });

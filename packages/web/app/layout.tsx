@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Providers } from './providers';
 import { TrakletDevWidget } from '@/components/TrakletDevWidget';
@@ -47,6 +47,12 @@ export const metadata: Metadata = {
     description: 'AI-powered parenting assistant for academic success.',
   },
   applicationName: 'Scholarmancy',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

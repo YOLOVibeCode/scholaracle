@@ -12,17 +12,26 @@ import { connectedSourceStore, type IConnectedSource } from '../sources/Connecte
 
 interface ISettingsScreenProps {
   onBack(): void;
+  /** Student sessions: sign out + notifications only. No portal disconnect. */
+  readonly hideHousehold?: boolean;
 }
 
-export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactElement {
+export function SettingsScreen({
+  onBack,
+  hideHousehold = false,
+}: ISettingsScreenProps): React.ReactElement {
   const { logout } = useAuth();
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
   const [pushStatus, setPushStatus] = useState<string>('unknown');
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const loadSources = useCallback(async () => {
+    if (hideHousehold) {
+      setSources([]);
+      return;
+    }
     setSources(await connectedSourceStore.list());
-  }, []);
+  }, [hideHousehold]);
 
   useEffect(() => {
     void loadSources();
@@ -56,7 +65,9 @@ export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactEle
     if (isSigningOut) return;
     Alert.alert(
       'Sign out?',
-      'Removes your account, saved portal credentials, and local sync history from this device.',
+      hideHousehold
+        ? 'Removes your account from this device.'
+        : 'Removes your account, saved portal credentials, and local sync history from this device.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -84,30 +95,34 @@ export function SettingsScreen({ onBack }: ISettingsScreenProps): React.ReactEle
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.sectionHeader}>Connected Portals</Text>
-        {sources.length === 0 ? (
-          <View style={styles.card}>
-            <Text style={styles.emptyText}>No portals connected on this device.</Text>
-          </View>
-        ) : (
-          sources.map((source) => (
-            <View key={source.sourceId} style={styles.card}>
-              <View style={styles.sourceRow}>
-                <View style={styles.sourceInfo}>
-                  <Text style={styles.sourceName}>{source.provider}</Text>
-                  <Text style={styles.sourceSub}>{source.institutionExternalId}</Text>
-                  <Text style={styles.sourceSub}>Student: {source.studentExternalId}</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.disconnectBtn}
-                  onPress={() => handleDisconnect(source)}
-                  testID={`button-disconnect-${source.sourceId}`}
-                >
-                  <Text style={styles.disconnectText}>Disconnect</Text>
-                </TouchableOpacity>
+        {hideHousehold ? null : (
+          <>
+            <Text style={styles.sectionHeader}>Connected Portals</Text>
+            {sources.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.emptyText}>No portals connected on this device.</Text>
               </View>
-            </View>
-          ))
+            ) : (
+              sources.map((source) => (
+                <View key={source.sourceId} style={styles.card}>
+                  <View style={styles.sourceRow}>
+                    <View style={styles.sourceInfo}>
+                      <Text style={styles.sourceName}>{source.provider}</Text>
+                      <Text style={styles.sourceSub}>{source.institutionExternalId}</Text>
+                      <Text style={styles.sourceSub}>Student: {source.studentExternalId}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.disconnectBtn}
+                      onPress={() => handleDisconnect(source)}
+                      testID={`button-disconnect-${source.sourceId}`}
+                    >
+                      <Text style={styles.disconnectText}>Disconnect</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+          </>
         )}
 
         <Text style={styles.sectionHeader}>Notifications</Text>

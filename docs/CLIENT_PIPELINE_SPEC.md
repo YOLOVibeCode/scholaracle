@@ -472,9 +472,13 @@ The following data points are defined in `CLIENT_SCRAPER_SPEC.md` but not yet ex
 
 ## 9. Asset pipeline (`IAssetHost`)
 
-Asset processing (download → S3 upload → URL rewrite) is CLI-only.
-The interface MUST be defined in `scraper-core` so all clients can reference the type,
-but implementations live outside of `scraper-core`.
+> Full offline contract: [`docs/CLASS_OFFLINE_PACK.md`](./CLASS_OFFLINE_PACK.md).
+
+`IAssetHost` is **MUST** for any LMS client (`canvas`, `google-classroom`, …) that emits
+`courseMaterial` ops. It is optional for SIS-only runs (Skyward, Aeries).
+
+The interface MUST be defined in `scraper-core` so all clients can reference the type;
+implementations live outside `scraper-core`.
 
 ```typescript
 // scraper-core/src/pipeline/types.ts
@@ -484,14 +488,45 @@ export interface IAssetHost {
    * Given a list of ops that may contain local file paths or temporary URLs,
    * downloads assets, uploads to permanent storage, and rewrites the URLs in-place.
    * Returns the mutated ops array.
-   * No-ops silently when the host is absent (mobile/extension).
+   * Fail-open: one miss must not throw — log and skip the file.
    */
   processOps(ops: ISlcDeltaOp[]): Promise<ISlcDeltaOp[]>;
 }
 ```
 
-The CLI's `BaseScraper` asset pipeline becomes an `IAssetHost` implementation.
-Mobile and extension omit `assets` from the host; `runClientScrape` skips the step.
+### Resource classifier (shared — `scraper-core/src/pipeline/resourceClassifier.ts`)
+
+All clients use the same pure classifier before deciding what to pass to `processOps`.
+This prevents each scraper from reimplementing the capture-order logic:
+
+```typescript
+export type ResourceAction = 'rehost' | 'extractText' | 'leaveLink';
+
+export function classifyResource(params: {
+  url: string;
+  contentType?: string; // from HEAD response, if probed
+  type?: string;        // op record.type e.g. 'document' | 'link'
+}): ResourceAction;
+```
+
+Rules (same as CLIENT_SCRAPER_SPEC §12.2):
+1. Portal-native file URL + `type: document | video | presentation` → `rehost`
+2. HEAD gives binary `Content-Type` (`application/pdf`, `image/*`, `video/*`) → `rehost`
+3. Public/session HTML page → `extractText`
+4. Authenticated HTML with no export → `leaveLink`
+
+### Mobile (`WebViewAssetHost`)
+
+`WebViewAssetHost.processOps()` MUST handle **both** `courseMaterial` ops and
+`assignment.attachments[]` URL fields. Omitting attachments is a gap (tracked:
+`later-assets-mobile-attachments`). The classifier determines action; attachments matching
+`rehost` are fetched; `extractText` items populate `extractedText`; `leaveLink` items
+set `linkAccessibility: 'authenticated'` and are never proxied.
+
+### CLI (`CliAssetHost`)
+
+No change to the existing implementation. Must also use `classifyResource` to determine
+action before calling the fetch/upload pipeline. `--skip-assets` is debug-only.
 
 ---
 

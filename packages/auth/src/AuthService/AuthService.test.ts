@@ -26,6 +26,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     await database.collection('users').deleteMany({});
+    await database.collection('refresh_tokens').deleteMany({});
   });
 
   describe('register', () => {
@@ -65,6 +66,20 @@ describe('AuthService', () => {
       expect(decoded).not.toBeNull();
       expect(decoded?.email).toBe('jwt@example.com');
       expect(decoded?.userId).toBeDefined();
+      expect(decoded?.role).toBe('parent');
+      expect(decoded?.studentId).toBeUndefined();
+    });
+
+    it('always creates parent-role users (public register cannot mint students)', async () => {
+      const result = await authService.register(
+        'parent-only@example.com',
+        'Password123!',
+        'Parent Only'
+      );
+
+      expect(result.user?.role).toBe('parent');
+      const persisted = await userRepository.findByEmail('parent-only@example.com');
+      expect(persisted?.role).toBe('parent');
     });
 
     it('should hash password (not store plaintext)', async () => {
@@ -113,6 +128,46 @@ describe('AuthService', () => {
       const decoded = await authService.verifyToken(result.token!);
       expect(decoded).not.toBeNull();
       expect(decoded?.email).toBe('login@example.com');
+      expect(decoded?.role).toBe('parent');
+    });
+
+    it('rejects login when the user is suspended', async () => {
+      const passwordHash = await UserRepository.hashPassword('StudentPass123!');
+      const created = await userRepository.create({
+        email: 'revoked.auth@example.com',
+        passwordHash,
+        name: 'Revoked Student',
+        role: 'student',
+        studentId: '507f1f77bcf86cd799439011',
+      });
+      await userRepository.suspendUser(created._id!.toString(), 'student_login_revoked');
+
+      const result = await authService.login('revoked.auth@example.com', 'StudentPass123!');
+
+      expect(result.success).toBe(false);
+      expect(result.token).toBeUndefined();
+      expect(result.error).toContain('Invalid');
+    });
+
+    it('issues a student-scoped JWT when the user was provisioned as a student', async () => {
+      const studentProfileId = '507f1f77bcf86cd799439011';
+      const passwordHash = await UserRepository.hashPassword('StudentPass123!');
+      await userRepository.create({
+        email: 'emma.auth@example.com',
+        passwordHash,
+        name: 'Emma Auth',
+        role: 'student',
+        studentId: studentProfileId,
+      });
+
+      const result = await authService.login('emma.auth@example.com', 'StudentPass123!');
+
+      expect(result.success).toBe(true);
+      expect(result.user?.role).toBe('student');
+      expect(result.user?.studentId).toBe(studentProfileId);
+      const decoded = await authService.verifyToken(result.token!);
+      expect(decoded?.role).toBe('student');
+      expect(decoded?.studentId).toBe(studentProfileId);
     });
   });
 
@@ -157,6 +212,18 @@ describe('AuthService', () => {
       const decoded = await authService.verifyToken(result.token!);
       expect(decoded).toBeNull();
     });
+
+    it('treats tokens without a role claim as parent (legacy JWTs)', async () => {
+      const jwt = await import('jsonwebtoken');
+      const legacy = jwt.sign({ userId: 'legacy-id', email: 'legacy@example.com' }, TEST_SECRET, {
+        expiresIn: '1h',
+      });
+
+      const decoded = await authService.verifyToken(legacy);
+      expect(decoded).not.toBeNull();
+      expect(decoded?.role).toBe('parent');
+      expect(decoded?.studentId).toBeUndefined();
+    });
   });
 
   describe('issueTokenForUser', () => {
@@ -175,6 +242,97 @@ describe('AuthService', () => {
       expect(decoded).not.toBeNull();
       expect(decoded?.userId).toBe('test-id-123');
       expect(decoded?.email).toBe('issued@example.com');
+      expect(decoded?.role).toBe('parent');
+    });
+  });
+
+  describe('createSessionForUser', () => {
+    it('issues a student JWT with studentId (not a parent impersonation token)', async () => {
+      const studentProfileId = '507f191e810c19729de860eb';
+      const passwordHash = await UserRepository.hashPassword('StudentPass123!');
+      const user = await userRepository.create({
+        email: 'emma.magic@example.com',
+        passwordHash,
+        name: 'Emma Magic',
+        role: 'student',
+        studentId: studentProfileId,
+      });
+      const userId = user._id?.toString() ?? '';
+
+      const result = await authService.createSessionForUser(userId);
+
+      expect(result.success).toBe(true);
+      expect(result.user?.role).toBe('student');
+      expect(result.user?.studentId).toBe(studentProfileId);
+      expect(result.token).toBeDefined();
+      const decoded = await authService.verifyToken(result.token!);
+      expect(decoded?.role).toBe('student');
+      expect(decoded?.studentId).toBe(studentProfileId);
+      expect(decoded?.userId).toBe(userId);
+    });
+
+    it('rejects parent users and suspended students with the same error', async () => {
+      const parent = await authService.register(
+        'parent.magic@example.com',
+        'Password123!',
+        'Parent Magic'
+      );
+      const parentSession = await authService.createSessionForUser(parent.user!.id);
+      expect(parentSession.success).toBe(false);
+      expect(parentSession.error).toBe('Invalid or expired sign-in link');
+
+      const passwordHash = await UserRepository.hashPassword('StudentPass123!');
+      const suspended = await userRepository.create({
+        email: 'suspended.magic@example.com',
+        passwordHash,
+        name: 'Suspended',
+        role: 'student',
+        studentId: '507f191e810c19729de860ec',
+        isSuspended: true,
+      });
+      const suspendedSession = await authService.createSessionForUser(
+        suspended._id?.toString() ?? ''
+      );
+      expect(suspendedSession.success).toBe(false);
+      expect(suspendedSession.error).toBe('Invalid or expired sign-in link');
+    });
+  });
+
+  describe('refreshAccessToken', () => {
+    it('copies student role and studentId onto the rotated access token', async () => {
+      const { RefreshTokenRepository } = await import('@scholaracle/database');
+      const refreshStore = new RefreshTokenRepository(database);
+      const service = new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        undefined,
+        undefined,
+        undefined,
+        refreshStore
+      );
+
+      const studentProfileId = '507f191e810c19729de860ea';
+      const passwordHash = await UserRepository.hashPassword('StudentPass123!');
+      await userRepository.create({
+        email: 'emma.refresh@example.com',
+        passwordHash,
+        name: 'Emma Refresh',
+        role: 'student',
+        studentId: studentProfileId,
+      });
+
+      const login = await service.login('emma.refresh@example.com', 'StudentPass123!');
+      expect(login.success).toBe(true);
+      expect(login.refreshToken).toBeDefined();
+
+      const refreshed = await service.refreshAccessToken(login.refreshToken!);
+      expect('error' in refreshed).toBe(false);
+      if ('error' in refreshed) return;
+
+      const decoded = await service.verifyToken(refreshed.token);
+      expect(decoded?.role).toBe('student');
+      expect(decoded?.studentId).toBe(studentProfileId);
     });
   });
 

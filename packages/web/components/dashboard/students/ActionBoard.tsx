@@ -22,6 +22,11 @@ export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
     { retryCount: 1 }
   );
 
+  const handleNudge = async (item: IActionItem): Promise<void> => {
+    await studentsApi.nudge(studentId, item.assignmentExternalId);
+    await refresh();
+  };
+
   useEffect(() => {
     void refresh();
   }, [studentId, refresh]);
@@ -75,6 +80,9 @@ export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
           <ActionBucket
             key={bucket.id}
             bucket={bucket}
+            onNudge={(item) => {
+              void handleNudge(item);
+            }}
             onItemClick={(item) => {
               setDrawerItem(item);
               setDrawerOpen(true);

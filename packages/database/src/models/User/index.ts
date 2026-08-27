@@ -1,2 +1,2 @@
 export { User } from './User';
-export type { IUserData, IUserPreferences, IUserDevice, IUserSubscription } from './User';
+export type { IUserData, IUserPreferences, IUserDevice, IUserSubscription, UserRole } from './User';

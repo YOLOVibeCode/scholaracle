@@ -2,6 +2,8 @@ export { AuthService } from './AuthService/AuthService';
 export type {
   IAuthService,
   IAuthResult,
+  IAuthUserPayload,
+  IAuthTokenPayload,
   IRegisterOptions,
   IRequestPasswordResetResult,
   IRefreshResult,
@@ -20,3 +22,5 @@ export type { IMFAService, IMFASetupResult } from './MFAService/MFAService';
 
 export { ConnectorTokenService } from './ConnectorTokenService/ConnectorTokenService';
 export type { IConnectorTokenPayload } from './ConnectorTokenService/ConnectorTokenService';
+
+export { qrPngDataUrl } from './qrPngDataUrl';

@@ -30,6 +30,7 @@
     "@scholaracle/interfaces": "workspace:*",
     "@scholaracle/logger": "workspace:*",
     "@scholaracle/scraper-core": "workspace:*",
+    "@scholaracle/studio-core": "workspace:*",
     "@sendgrid/mail": "^8.1.0",
     "@sentry/node": "^10.0.0",
     "@types/archiver": "^7.0.0",

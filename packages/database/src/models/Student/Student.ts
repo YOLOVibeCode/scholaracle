@@ -100,6 +100,16 @@ export interface IOwnerAlertPrefs {
   readonly alertTypes?: readonly string[];
 }
 
+/** Parent-provisioned student login bound to this profile. */
+export interface IStudentLogin {
+  readonly userId: string;
+  /** Parent flag. Omitted / undefined is treated as false by the Student constructor. */
+  readonly showGrades?: boolean;
+  readonly createdAt: Date;
+  /** Profile owner who created or last rebound this login. */
+  readonly provisionedByUserId?: string;
+}
+
 export interface IStudentData {
   readonly userId: ObjectId | string;
   readonly name: string;
@@ -114,6 +124,8 @@ export interface IStudentData {
   readonly ownerAlertPrefs?: IOwnerAlertPrefs;
   /** Optional email where the student receives alert notifications (same content as parents). */
   readonly alertEmail?: string;
+  /** Student-facing login for this profile. Absent until a parent provisions one. */
+  readonly studentLogin?: IStudentLogin;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
@@ -134,6 +146,7 @@ export class Student {
   public readonly ownerAlertPrefs?: IOwnerAlertPrefs;
   /** Email where the student receives alert notifications (same content as parents). */
   public readonly alertEmail?: string;
+  public readonly studentLogin?: IStudentLogin;
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
 
@@ -149,6 +162,17 @@ export class Student {
     this.sharedWith = data.sharedWith ?? [];
     this.ownerAlertPrefs = data.ownerAlertPrefs;
     this.alertEmail = data.alertEmail;
+    this.studentLogin = data.studentLogin
+      ? {
+          userId: data.studentLogin.userId,
+          showGrades: data.studentLogin.showGrades === true,
+          createdAt: data.studentLogin.createdAt,
+          ...(data.studentLogin.provisionedByUserId !== undefined &&
+          data.studentLogin.provisionedByUserId !== ''
+            ? { provisionedByUserId: data.studentLogin.provisionedByUserId }
+            : {}),
+        }
+      : undefined;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();
   }

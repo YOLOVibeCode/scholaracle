@@ -19,6 +19,7 @@ import {
   type IIngestEnvelopeAcceptResponse,
 } from '@scholaracle/contracts';
 import { authMiddleware } from '../../../middleware/auth';
+import { requireParent } from '../../../middleware/requireRole';
 import {
   connectorAuthMiddleware,
   type IConnectorAuthenticatedRequest,
@@ -46,6 +47,7 @@ import {
 } from '@scholaracle/connector';
 import { logger } from '../../../logger';
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
+import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -1195,6 +1197,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   router.post(
     '/device/approve',
     authMiddleware(authService),
+    requireParent,
     asyncHandler(async (req: Request, res: Response) => {
       const userCode = (req.body?.userCode as string | undefined) ?? '';
       const userId = (req as unknown as { userId?: string }).userId ?? '';
@@ -1434,6 +1437,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         database: config.database,
         userId: dataUserId,
         sourceId: envelope.source?.sourceId,
+        ops: prepared.ops,
+      });
+
+      await scheduleGuidanceJobsFromOps({
+        queue: config.queue,
+        database: config.database,
+        userId: dataUserId,
+        timezone: envelope.run.timezone,
         ops: prepared.ops,
       });
 

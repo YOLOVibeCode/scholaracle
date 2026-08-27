@@ -83,6 +83,17 @@ describe('MongoQueue', () => {
       expect(scheduledTime).toBeLessThanOrEqual(expectedTime + 100);
     });
 
+    it('should use absolute scheduledFor when provided', async () => {
+      const jobId = '507f1f77bcf86cd799439011';
+      mockCollection.insertOne.mockResolvedValue({
+        insertedId: { toString: () => jobId },
+      } as unknown as Awaited<ReturnType<typeof mockCollection.insertOne>>);
+      const scheduledFor = new Date('2026-08-25T20:00:00.000Z');
+      await mongoQueue.add('guidance', 't48h', {}, { scheduledFor, delay: 999999 });
+      const callArgs = mockCollection.insertOne.mock.calls[0]?.[0] as { scheduledFor?: Date };
+      expect(callArgs?.scheduledFor).toEqual(scheduledFor);
+    });
+
     it('should use custom priority when provided', async () => {
       // Arrange
       const jobId = '507f1f77bcf86cd799439011';

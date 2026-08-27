@@ -4,7 +4,11 @@ import { StudentNotificationGenerator } from '../../generators/StudentNotificati
 import { ParentNotificationGenerator } from '../../generators/ParentNotificationGenerator';
 import { DeliveryRouter } from '../../delivery/DeliveryRouter';
 import { MongoQueue } from '../../queue/MongoQueue';
-import { shouldNotifyStudent, shouldNotifyParent } from '../../config/alert-audience';
+import {
+  shouldNotifyStudent,
+  shouldNotifyParent,
+  shouldDeliverToAgent,
+} from '../../config/alert-audience';
 import {
   Alert,
   Notification,
@@ -259,6 +263,7 @@ export class NotificationService {
     for (const agent of this._agents!) {
       if (!agent.handles(alert)) continue;
       const notification = agent.generate(alert);
+      if (!shouldDeliverToAgent(alert.type, notification.agentType)) continue;
       for (const channel of notification.channels) {
         const result = await this._deliveryRouter.route(notification, channel);
         deliveryResults.push(result);
@@ -322,6 +327,7 @@ export class NotificationService {
     for (const agent of this._agents) {
       if (!agent.handles(alert)) continue;
       const notification = agent.generate(alert);
+      if (!shouldDeliverToAgent(alert.type, notification.agentType)) continue;
       notifications.push(notification);
     }
 
@@ -332,6 +338,8 @@ export class NotificationService {
 
     for (const recipient of recipients) {
       const useStudent = recipient.recipientType === 'student';
+      if (useStudent && !shouldNotifyStudent(alert.type)) continue;
+      if (!useStudent && !shouldNotifyParent(alert.type)) continue;
       const notification = useStudent
         ? (studentNotification ?? parentNotification)
         : (parentNotification ?? studentNotification);

@@ -108,6 +108,58 @@ describe('native IDs — Canvas', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Assignment description and LMS url
+// ---------------------------------------------------------------------------
+
+describe('assignment description and url', () => {
+  it('includes description on the assignment op record when present', () => {
+    const extract = makeExtract({
+      courses: [
+        makeCourse({
+          assignments: [
+            {
+              id: '500',
+              name: 'Essay Draft',
+              description:
+                '<p>Write 500 words on <a href="https://docs.google.com/doc">this doc</a></p>',
+            },
+          ],
+        }),
+      ],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const assignOp = ops.find((o) => o.entity === 'assignment');
+    expect(assignOp?.record?.['description']).toBe(
+      '<p>Write 500 words on <a href="https://docs.google.com/doc">this doc</a></p>'
+    );
+  });
+
+  it('omits description when absent', () => {
+    const extract = makeExtract({
+      courses: [makeCourse({ assignments: [{ id: '501', name: 'Quiz' }] })],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const assignOp = ops.find((o) => o.entity === 'assignment');
+    expect(assignOp?.record?.['description']).toBeUndefined();
+  });
+
+  it('file-matching via description link still works when description is stored on op', () => {
+    const extract = makeExtract({
+      courses: [
+        makeCourse({
+          assignments: [{ id: '987', name: 'HW 1', description: 'Download /files/555' }],
+          files: [{ id: '555', name: 'worksheet.pdf', url: '/files/555/download' }],
+          modules: [],
+        }),
+      ],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const matOp = ops.find((o) => o.entity === 'courseMaterial');
+    expect(matOp?.record?.['assignmentExternalId']).toBe('canvas-assignment-987');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // matchMaterialsToAssignments — returns native IDs, not array indices
 // ---------------------------------------------------------------------------
 

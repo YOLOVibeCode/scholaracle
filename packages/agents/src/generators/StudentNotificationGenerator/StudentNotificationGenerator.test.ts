@@ -72,6 +72,7 @@ describe('StudentNotificationGenerator', () => {
           previousGrade: 92,
           currentGrade: 85,
           reason: 'Recent quiz: 70%',
+          showGrades: true,
         },
       });
 

@@ -731,6 +731,159 @@ describe('ScholarmancyApiClient auth', () => {
       expect(body['type']).toBe('ios');
       expect(secureStoreData.get('slc_push_token')).toBe('ExponentPushToken[xyz]');
     });
+
+    it('student session registers the token with audience student and studentId', async () => {
+      mockFetchSequence({
+        status: 200,
+        body: makeLoginBody({
+          user: {
+            id: 'user-emma',
+            email: 'emma.demo@scholarmancy.com',
+            name: 'Emma',
+            role: 'student',
+            studentId: '507f1f77bcf86cd799439011',
+          },
+        }),
+      });
+      await client.login('emma.demo@scholarmancy.com', 'pw');
+      const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+
+      await client.registerPushToken('ExponentPushToken[emma]');
+
+      const call = fetchMock.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body) as Record<string, unknown>;
+      expect(body['audience']).toBe('student');
+      expect(body['studentId']).toBe('507f1f77bcf86cd799439011');
+    });
+  });
+
+  describe('session user (student vs parent)', () => {
+    it('persists role and studentId from the login user so cold start can gate nav', async () => {
+      mockFetchSequence({
+        status: 200,
+        body: makeLoginBody({
+          user: {
+            id: 'user-emma',
+            email: 'emma.demo@scholarmancy.com',
+            name: 'Emma',
+            role: 'student',
+            studentId: '507f1f77bcf86cd799439011',
+          },
+        }),
+      });
+
+      await client.login('emma.demo@scholarmancy.com', 'pw');
+
+      await expect(client.getSessionUser()).resolves.toEqual({
+        id: 'user-emma',
+        email: 'emma.demo@scholarmancy.com',
+        name: 'Emma',
+        role: 'student',
+        studentId: '507f1f77bcf86cd799439011',
+      });
+    });
+
+    it('defaults a login without role to parent (legacy parent sessions)', async () => {
+      mockFetchSequence({ status: 200, body: makeLoginBody() });
+      await client.login('demo@scholarmancy.com', 'pw');
+      await expect(client.getSessionUser()).resolves.toEqual(
+        expect.objectContaining({ role: 'parent', email: 'demo@scholarmancy.com' })
+      );
+    });
+
+    it('clears the session user on logout', async () => {
+      mockFetchSequence({
+        status: 200,
+        body: makeLoginBody({
+          user: {
+            id: 'user-emma',
+            email: 'emma.demo@scholarmancy.com',
+            name: 'Emma',
+            role: 'student',
+            studentId: '507f1f77bcf86cd799439011',
+          },
+        }),
+      });
+      await client.login('emma.demo@scholarmancy.com', 'pw');
+      await client.logout();
+      await expect(client.getSessionUser()).resolves.toBeNull();
+    });
+
+    it('reads role from the access-token JWT when the stored user is missing', async () => {
+      const payload = Buffer.from(
+        JSON.stringify({
+          userId: 'user-emma',
+          email: 'emma.demo@scholarmancy.com',
+          role: 'student',
+          studentId: '507f1f77bcf86cd799439011',
+        })
+      ).toString('base64url');
+      secureStoreData.set('slc_access_token', `hdr.${payload}.sig`);
+
+      await expect(client.getSessionUser()).resolves.toEqual({
+        id: 'user-emma',
+        email: 'emma.demo@scholarmancy.com',
+        name: '',
+        role: 'student',
+        studentId: '507f1f77bcf86cd799439011',
+      });
+    });
+  });
+
+  describe('studio student API', () => {
+    const today = {
+      encouragement: 'Nice work on Reading response 8.',
+      next: {
+        assignmentExternalId: 'demo-emma-ap-bio-a5',
+        title: 'Unit 9 Homework',
+        courseName: 'AP Biology',
+        primaryCtaLabel: 'Open worksheet',
+      },
+      alsoToday: [],
+    };
+    const pack = {
+      title: 'Unit 9 Homework',
+      courseName: 'AP Biology',
+      humanStatus: 'Not turned in',
+      instructionsText: 'Complete the worksheet.',
+      primaryAsset: null,
+      needsSchoolLogin: [],
+      moreFromCourse: [],
+    };
+
+    it('getStudioToday GETs /api/studio/today', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: today });
+      await expect(client.getStudioToday()).resolves.toEqual(today);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/studio/today`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+    });
+
+    it('getStudioWorkPack GETs /api/studio/assignments/:externalId', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: pack });
+      await expect(client.getStudioWorkPack('demo-emma-ap-bio-a5')).resolves.toEqual(pack);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        `${BASE_URL}/api/studio/assignments/demo-emma-ap-bio-a5`
+      );
+    });
+
+    it('patchStudioAssignmentStatus PATCHes working_on_it', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({
+        status: 200,
+        body: { success: true, studentStatus: 'working_on_it' },
+      });
+      await client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'working_on_it');
+      const call = fetchMock.mock.calls[0] as [string, { method: string; body: string }];
+      expect(call[0]).toBe(`${BASE_URL}/api/studio/assignments/demo-emma-ap-bio-a5/status`);
+      expect(call[1].method).toBe('PATCH');
+      expect(JSON.parse(call[1].body)).toEqual({ status: 'working_on_it' });
+    });
   });
 });
 

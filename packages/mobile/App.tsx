@@ -18,6 +18,9 @@ import { AssignmentDetailScreen } from './src/screens/AssignmentDetailScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { TodayScreen } from './src/screens/TodayScreen';
+import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
 import { registerForPushNotifications, addResponseListener } from './src/notifications/pushSetup';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
@@ -37,19 +40,19 @@ import { installSourceLinkParser } from './src/install/installSourceDeepLink';
 import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore';
 import { sourceInviteApplier } from './src/install/applySourceInvite';
 import { apiClient } from './src/api/client';
+import {
+  clampNavView,
+  homeViewForRole,
+  isStudentSession,
+  mayStorePortalCredentials,
+  viewAfterNotificationTap,
+  type AppNavView,
+} from './src/studio/studentMode';
 
 // Install capture taps once at module load — before any other code runs.
 installDiagCapture();
 
-type AppView =
-  | 'students'
-  | 'connect-source'
-  | 'dashboard'
-  | 'course-detail'
-  | 'assignment-detail'
-  | 'sync'
-  | 'run-history'
-  | 'settings';
+type AppView = AppNavView;
 
 interface INavState {
   readonly view: AppView;
@@ -58,10 +61,13 @@ interface INavState {
   readonly course?: ICourseGrade;
   readonly assignment?: ICourseGradeAssignment;
   readonly sourceInvite?: ISourceInvitePayload;
+  readonly assignmentExternalId?: string;
 }
 
 function AppContent(): React.ReactElement {
-  const { isLoggedIn, isLoading, login, accountEpoch } = useAuth();
+  const { isLoggedIn, isLoading, login, accountEpoch, role } = useAuth();
+  const studentMode = isStudentSession(role);
+  const [loggedOutSurface, setLoggedOutSurface] = useState<'login' | 'onboarding'>('login');
   const [nav, setNav] = useState<INavState>({ view: 'students' });
   const [studentCount, setStudentCount] = useState<number | null>(null);
   const linkingUrl = useLinkingURL();
@@ -112,6 +118,7 @@ function AppContent(): React.ReactElement {
     if (isLoading) return;
     if (!installSourceLinkParser.isInstallSourceDeepLink(linkingUrl)) return;
     if (handledInstallUrl.current === linkingUrl) return;
+    if (isLoggedIn && studentMode) return;
     handledInstallUrl.current = linkingUrl ?? null;
     void handleInstallLink(linkingUrl, {
       parser: installSourceLinkParser,
@@ -122,10 +129,10 @@ function AppContent(): React.ReactElement {
       onApplied: (payload) => applyInviteNav(payload),
       onError: (message) => Alert.alert('Install link', message),
     });
-  }, [isLoading, isLoggedIn, linkingUrl, applyInviteNav]);
+  }, [isLoading, isLoggedIn, studentMode, linkingUrl, applyInviteNav]);
 
   useEffect(() => {
-    if (isLoading || !isLoggedIn) return;
+    if (isLoading || !isLoggedIn || studentMode) return;
     void redeemPendingInstall({
       pending: pendingSourceInviteStore,
       redeem: (token) => apiClient.redeemSourceInvite(token),
@@ -133,39 +140,50 @@ function AppContent(): React.ReactElement {
       onApplied: (payload) => applyInviteNav(payload),
       onError: (message) => Alert.alert('Install link', message),
     });
-  }, [isLoading, isLoggedIn, applyInviteNav]);
+  }, [isLoading, isLoggedIn, studentMode, applyInviteNav]);
 
   useEffect(() => {
     if (!isLoggedIn) {
       setStudentCount(null);
       return;
     }
+    if (studentMode) {
+      setStudentCount(0);
+      return;
+    }
     void apiClient
       .getStudents()
       .then((rows) => setStudentCount(rows.length))
       .catch(() => setStudentCount(0));
-  }, [isLoggedIn, accountEpoch]);
+  }, [isLoggedIn, studentMode, accountEpoch]);
 
   useEffect(() => {
-    if (isLoggedIn && studentCount != null && studentCount > 0) {
+    if (!isLoggedIn) return;
+    if (studentMode || (studentCount != null && studentCount > 0)) {
       void registerForPushNotifications();
+    }
+    if (mayStorePortalCredentials(role) && studentCount != null && studentCount > 0) {
       void seedSecureStoreFromDevEnv();
     }
-  }, [isLoggedIn, studentCount]);
+  }, [isLoggedIn, studentMode, studentCount, role]);
 
-  // Notification taps open the app at the students list (data refetches on
-  // mount, so the fresh alert context is visible immediately).
+  // Notification taps: parent → students list; student → Today.
   useEffect(() => {
     const subscription = addResponseListener(() => {
-      setNav({ view: 'students' });
+      setNav({ view: viewAfterNotificationTap(role) });
     });
     return () => subscription.remove();
-  }, []);
+  }, [role]);
 
-  // Reset navigation when the session ends so the next login starts clean.
+  // Reset navigation on login/logout so the next session starts on the right home.
   useEffect(() => {
-    if (!isLoggedIn) setNav({ view: 'students' });
-  }, [isLoggedIn]);
+    if (!isLoggedIn) {
+      setNav({ view: 'students' });
+      return;
+    }
+    setLoggedOutSurface('login');
+    setNav({ view: homeViewForRole(role) });
+  }, [isLoggedIn, accountEpoch, role]);
 
   const startSync = useCallback(async (student: IStudentListItem) => {
     const source = await connectedSourceStore.getForStudentRecord(student);
@@ -197,7 +215,7 @@ function AppContent(): React.ReactElement {
 
   if (isLoading) return <View style={styles.loading} />;
 
-  if (nav.view === 'connect-source') {
+  if (nav.view === 'connect-source' && !studentMode) {
     return (
       <ConnectSourceScreen
         studentExternalId={nav.sourceInvite?.studentExternalId ?? nav.student?.studentId}
@@ -214,12 +232,45 @@ function AppContent(): React.ReactElement {
   }
 
   if (!isLoggedIn) {
+    if (loggedOutSurface === 'onboarding') {
+      return (
+        <OnboardingScreen
+          entry="logged-out"
+          onComplete={(result) => {
+            void finishOnboarding(result);
+          }}
+        />
+      );
+    }
     return (
-      <OnboardingScreen
-        entry="logged-out"
-        onComplete={(result) => {
-          void finishOnboarding(result);
+      <LoginScreen
+        onCreateAccount={() => {
+          setLoggedOutSurface('onboarding');
         }}
+      />
+    );
+  }
+
+  if (studentMode) {
+    const view = clampNavView(role, nav.view);
+    if (view === 'work-pack' && nav.assignmentExternalId) {
+      return (
+        <StudentWorkPackScreen
+          assignmentExternalId={nav.assignmentExternalId}
+          onBack={() => setNav({ view: 'today' })}
+        />
+      );
+    }
+    if (view === 'settings') {
+      return <SettingsScreen hideHousehold onBack={() => setNav({ view: 'today' })} />;
+    }
+    return (
+      <TodayScreen
+        key={accountEpoch}
+        onOpenAssignment={(assignmentExternalId) =>
+          setNav({ view: 'work-pack', assignmentExternalId })
+        }
+        onOpenSettings={() => setNav({ view: 'settings' })}
       />
     );
   }
@@ -249,6 +300,14 @@ function AppContent(): React.ReactElement {
         }}
         onBack={() => setNav({ view: 'students' })}
         onOpenCourse={(course) => setNav({ view: 'course-detail', student: nav.student, course })}
+        onOpenAssignmentFromTab={(assignment, course) =>
+          setNav({
+            view: 'assignment-detail',
+            student: nav.student,
+            course,
+            assignment,
+          })
+        }
         onRunHistory={() => setNav({ view: 'run-history', student: nav.student })}
       />
     );
