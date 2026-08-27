@@ -5,6 +5,8 @@
     "resolveJsonModule": true,
     "paths": {
       "@scholaracle/contracts": ["../contracts/src"],
+      "@scholaracle/studio-core": ["../studio-core/src"],
+      "@scholaracle/interfaces": ["../interfaces/src"],
       "@scholaracle/scraper-core": ["../scraper-core/src"]
     }
   },

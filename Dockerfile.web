@@ -19,6 +19,7 @@ COPY packages/connector/package.json ./packages/connector/
 COPY packages/web/package.json ./packages/web/
 COPY packages/e2e/package.json ./packages/e2e/
 COPY packages/scraper-core/package.json ./packages/scraper-core/
+COPY packages/studio-core/package.json ./packages/studio-core/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ──────────────────────────────────────────────────────────
@@ -36,8 +37,10 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Web imports compiled contracts (`main: dist/index.js`); Next cannot resolve the TS source.
+# Web imports compiled contracts / studio-core (`main: dist/index.js`); Next cannot resolve the TS source.
 RUN pnpm --filter @scholaracle/contracts build
+RUN pnpm --filter @scholaracle/interfaces build
+RUN pnpm --filter @scholaracle/studio-core build
 RUN pnpm --filter @scholaracle/web build
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > /app/BUILT_AT
 

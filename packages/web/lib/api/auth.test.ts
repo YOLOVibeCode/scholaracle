@@ -127,6 +127,41 @@ describe('authApi', () => {
     });
   });
 
+  describe('loginWithMagicToken', () => {
+    it('POSTs the token to /auth/student-magic and saves the session like login', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          token: 'magic-tok',
+          user: { id: 'emma', email: 'emma.demo@scholarmancy.com', name: 'Emma', role: 'student' },
+        })
+      );
+
+      const result = await authApi.loginWithMagicToken('once-only');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/auth/student-magic'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'once-only' }),
+        })
+      );
+      expect(result.success).toBe(true);
+      expect(apiClient.getToken()).toBe('magic-tok');
+      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('auth_token', 'magic-tok');
+    });
+
+    it('returns a non-throwing error when the link is expired', async () => {
+      fetchSpy.mockRejectedValue(new ApiClientError('Invalid or expired sign-in link', 401));
+
+      const result = await authApi.loginWithMagicToken('stale');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid or expired sign-in link');
+      expect(apiClient.getToken()).toBeNull();
+    });
+  });
+
   // -------------------------------------------------------------------------
   // register
   // -------------------------------------------------------------------------

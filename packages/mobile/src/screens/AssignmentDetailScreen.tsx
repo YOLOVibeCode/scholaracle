@@ -17,19 +17,17 @@ import {
   Alert,
 } from 'react-native';
 import { openURL } from 'expo-linking';
-import type {
-  ICourseGradeAssignment,
-  ICourseMaterial,
-  IStudentMaterialsResponse,
-} from '@scholaracle/contracts';
+import type { ICourseGradeAssignment, IWorkPackView } from '@scholaracle/contracts';
+import {
+  WorkPack,
+  classifyResource,
+  createStaticWorkPackSource,
+  humanAssignmentStatus,
+  type IResourceLink,
+} from '@scholaracle/studio-core';
 import { apiClient } from '../api/client';
 import { ApiError } from '../api/ApiError';
 import { formatDate, formatPercent, formatPoints, statusColor } from '../grades/format';
-import {
-  classifyResource,
-  partitionMaterials,
-  type IResourceLink,
-} from '../resources/resourcePartition';
 
 interface IAssignmentDetailScreenProps {
   /** Mongo `id` from GET /api/students — used for the materials call. */
@@ -45,16 +43,34 @@ export function AssignmentDetailScreen({
   assignment,
   onBack,
 }: IAssignmentDetailScreenProps): React.ReactElement {
-  const [materials, setMaterials] = useState<IStudentMaterialsResponse | null>(null);
+  const [pack, setPack] = useState<IWorkPackView | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [courseOpen, setCourseOpen] = useState(false);
 
   const assignmentExternalId = assignment.externalId;
   const loadMaterials = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setMaterials(await apiClient.getAssignmentMaterials(studentId, assignmentExternalId));
+      const materials = await apiClient.getAssignmentMaterials(studentId, assignmentExternalId);
+      const view = await new WorkPack(
+        createStaticWorkPackSource({
+          assignment: {
+            assignmentExternalId,
+            title: assignment.title,
+            courseName,
+            status: assignment.status,
+            ...(assignment.dueAt !== undefined ? { dueAt: assignment.dueAt } : {}),
+            ...(assignment.description !== undefined
+              ? { descriptionHtml: assignment.description }
+              : {}),
+            ...(assignment.lmsUrl !== undefined ? { lmsUrl: assignment.lmsUrl } : {}),
+          },
+          materials,
+        })
+      ).load({ studentId, displayName: 'Student', showGrades: true }, assignmentExternalId);
+      setPack(view);
     } catch (err: unknown) {
       const message =
         err instanceof ApiError && err.requestId
@@ -63,10 +79,20 @@ export function AssignmentDetailScreen({
             ? err.message
             : 'Failed to load resources';
       setError(message);
+      setPack(null);
     } finally {
       setIsLoading(false);
     }
-  }, [studentId, assignmentExternalId]);
+  }, [
+    studentId,
+    assignmentExternalId,
+    assignment.title,
+    assignment.status,
+    assignment.dueAt,
+    assignment.description,
+    assignment.lmsUrl,
+    courseName,
+  ]);
 
   useEffect(() => {
     void loadMaterials();
@@ -86,7 +112,7 @@ export function AssignmentDetailScreen({
   const points = formatPoints(assignment.pointsEarned, assignment.pointsPossible);
   const percent = formatPercent(assignment.pointsEarned, assignment.pointsPossible);
   const hasFacts = assignment.dueAt != null || points != null || assignment.category != null;
-  const partition = materials != null ? partitionMaterials(materials, assignmentExternalId) : null;
+  const primaryHref = pack?.primaryAsset?.downloadUrl;
 
   return (
     <View style={styles.container}>
@@ -103,7 +129,7 @@ export function AssignmentDetailScreen({
           <View style={styles.cardRow}>
             <Text style={styles.assignmentTitle}>{assignment.title}</Text>
             <Text style={[styles.statusBadge, statusColor(assignment.status)]}>
-              {assignment.status}
+              {humanAssignmentStatus(assignment.status)}
             </Text>
           </View>
           <Text style={styles.courseName}>{courseName}</Text>
@@ -138,6 +164,38 @@ export function AssignmentDetailScreen({
                 </Text>
               </View>
             )}
+          </View>
+        )}
+
+        {primaryHref != null && (
+          <TouchableOpacity
+            style={styles.primaryCta}
+            onPress={() => openLink(primaryHref)}
+            testID="pack-primary-cta"
+          >
+            <Text style={styles.primaryCtaText}>Open {pack?.primaryAsset?.fileName ?? 'file'}</Text>
+          </TouchableOpacity>
+        )}
+
+        {pack != null && pack.instructionsText !== '' && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.cardHeader}>Instructions</Text>
+            <Text style={styles.instructionsText}>{pack.instructionsText}</Text>
+          </View>
+        )}
+
+        {pack != null && pack.needsSchoolLogin.length > 0 && (
+          <View style={styles.sectionCard}>
+            <Text style={styles.cardHeader}>Needs school login / other links</Text>
+            {pack.needsSchoolLogin.map((link) => (
+              <ResourceRow
+                key={link.href}
+                title={link.label}
+                link={{ href: link.href, kind: 'portal' }}
+                isAuthRequired={link.kind === 'school-login'}
+                onOpen={openLink}
+              />
+            ))}
           </View>
         )}
 
@@ -196,54 +254,34 @@ export function AssignmentDetailScreen({
           </View>
         )}
 
-        {partition != null && !isLoading && error == null && (
-          <>
-            {partition.forAssignment.length > 0 && (
-              <View style={styles.sectionCard}>
-                <Text style={styles.cardHeader}>For this assignment</Text>
-                {partition.forAssignment.map((material) => (
-                  <MaterialRow key={material.externalId} material={material} onOpen={openLink} />
-                ))}
-              </View>
-            )}
-            {partition.courseMaterials.length > 0 && (
-              <View style={styles.sectionCard}>
-                <Text style={styles.cardHeader}>Course materials</Text>
-                {partition.courseMaterials.map((material) => (
-                  <MaterialRow key={material.externalId} material={material} onOpen={openLink} />
-                ))}
-              </View>
-            )}
-            {partition.forAssignment.length === 0 && partition.courseMaterials.length === 0 && (
-              <View style={styles.sectionCard}>
-                <Text style={styles.emptyText}>
-                  No resources synced for this course yet. Run a sync to pull the latest materials.
-                </Text>
-              </View>
-            )}
-          </>
+        {pack != null && !isLoading && error == null && pack.moreFromCourse.length > 0 && (
+          <View style={styles.sectionCard}>
+            <TouchableOpacity onPress={() => setCourseOpen((open) => !open)}>
+              <Text style={styles.cardHeader}>More from this course {courseOpen ? '▾' : '▸'}</Text>
+            </TouchableOpacity>
+            {courseOpen
+              ? pack.moreFromCourse.map((item) => (
+                  <ResourceRow
+                    key={item.title}
+                    title={item.title}
+                    subtitle={item.asset?.fileName}
+                    link={{
+                      href: item.asset?.downloadUrl ?? item.href ?? null,
+                      kind:
+                        item.asset?.downloadUrl != null
+                          ? 'download'
+                          : item.href != null
+                            ? 'portal'
+                            : 'none',
+                    }}
+                    onOpen={openLink}
+                  />
+                ))
+              : null}
+          </View>
         )}
       </ScrollView>
     </View>
-  );
-}
-
-interface IMaterialRowProps {
-  readonly material: ICourseMaterial;
-  onOpen(href: string): void;
-}
-
-function MaterialRow({ material, onOpen }: IMaterialRowProps): React.ReactElement {
-  const subParts = [material.fileName ?? material.type];
-  if (material.postedAt != null) subParts.push(formatDate(material.postedAt));
-  return (
-    <ResourceRow
-      title={material.title}
-      subtitle={subParts.join('  ·  ')}
-      link={classifyResource(material, apiClient.baseUrlValue)}
-      isAuthRequired={material.linkAccessibility === 'authenticated'}
-      onOpen={onOpen}
-    />
   );
 }
 
@@ -323,6 +361,16 @@ const styles = StyleSheet.create({
   assignmentTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#1a1a2e', marginRight: 8 },
   statusBadge: { fontSize: 12, fontWeight: '600' },
   courseName: { fontSize: 13, color: '#6c757d', marginTop: 4 },
+  primaryCta: {
+    backgroundColor: '#4361ee',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  primaryCtaText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cardHeader: {
     fontSize: 12,
     fontWeight: '700',
@@ -368,5 +416,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  emptyText: { fontSize: 14, color: '#6c757d', lineHeight: 20 },
+  instructionsText: {
+    fontSize: 14,
+    color: '#1a1a2e',
+    lineHeight: 21,
+    marginBottom: 8,
+  },
 });

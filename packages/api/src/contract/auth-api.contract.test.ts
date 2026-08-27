@@ -72,10 +72,11 @@ describe('auth API contract', () => {
     expect(typeof res.body.token).toBe('string');
     assertKeys(
       res.body.user as Record<string, unknown>,
-      ['id', 'email', 'name'],
-      [],
+      ['id', 'email', 'name', 'role'],
+      ['studentId'],
       'IAuthLoginResponse.user'
     );
+    expect(res.body.user.role).toBe('parent');
   });
 
   it('POST /api/auth/refresh — success body has the exact wire keys', async () => {

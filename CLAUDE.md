@@ -37,21 +37,36 @@ Rollback: `npx eas-cli update:republish --branch production` to restore the last
 
 ### Native change → full binary
 
-From `packages/mobile`, always in this order:
+From `packages/mobile`, one command so iOS and Android share the same git SHA and marketing version:
 
-**iOS:**
+```bash
+export ASC_API_KEY_PATH=/Users/admin/Dev/YOLOProjects/scholarmancy/AuthKey_RA29BTM8KJ.p8
+export GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/Users/admin/Dev/YOLOProjects/scholarmancy/play-service-account.json
+pnpm ship:production           # both stores, same git SHA
+pnpm ship:production:ios       # TestFlight only
+pnpm ship:production:android   # Play only
+```
+
+Do not force iOS `buildNumber` to equal Android `versionCode` — stores require each to only increase. JS-only changes still use `pnpm update:production` (no new binaries).
+
+Single-platform fallbacks (same commit only if you run them back-to-back from a clean tree):
 ```bash
 export ASC_API_KEY_PATH=/Users/admin/Dev/YOLOProjects/scholarmancy/AuthKey_RA29BTM8KJ.p8
 pnpm build:ios     # preflight (doctor + tsc + version check + bundle export) THEN eas build (~5 min)
 pnpm submit:ios    # push latest build to TestFlight
 ```
 
-**Android:**
+**Android** (same package `com.scholarmancy.app`; two Play tracks so UAT and prod AABs do not overwrite each other):
+
 ```bash
-export GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/path/to/play-service-account.json
-pnpm build:android  # preflight THEN eas build (~8 min); EAS manages the upload keystore
-pnpm submit:android # push latest AAB to Play internal testing track
+export GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/Users/admin/Dev/YOLOProjects/scholarmancy/play-service-account.json
+# UAT → Play internal track (api-uat.scholarmancy.com, EAS channel preview)
+pnpm build:android:preview
+# Prod API → Play closed/alpha track (api.scholarmancy.com, EAS channel production)
+pnpm build:android
 ```
+
+Those scripts `--auto-submit` after a green preflight. Later ships: `npx eas-cli workflow:run .eas/workflows/submit-android.yml` from `packages/mobile` (do not run on every main push — each Android cloud build costs credits).
 
 - **Never call `eas build` directly** — the `build:*` scripts run preflight first; each skipped preflight historically cost a full remote build to discover the same error.
 - Build numbers auto-increment: iOS `buildNumber` and Android `versionCode` both increment via `appVersionSource: remote`.

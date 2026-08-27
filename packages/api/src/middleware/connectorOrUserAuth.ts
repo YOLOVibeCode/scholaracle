@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { Db } from 'mongodb';
 import type { AuthService, ConnectorTokenService } from '@scholaracle/auth';
+import { StudentRepository } from '@scholaracle/database';
 import { verifyAssetSignature } from '../services/assets/signedUrl';
 
 export interface IAssetAuthenticatedRequest extends Request {
@@ -74,6 +75,27 @@ export function connectorOrUserAuthMiddleware(
 
     const userDecoded = await authService.verifyToken(token);
     if (userDecoded) {
+      if (userDecoded.role === 'student') {
+        if (!userDecoded.studentId || !options?.database) {
+          res.status(403).json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' });
+          return;
+        }
+        try {
+          const student = await new StudentRepository(options.database).findById(
+            userDecoded.studentId
+          );
+          if (!student || student.studentLogin?.userId !== userDecoded.userId) {
+            res.status(403).json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' });
+            return;
+          }
+          req.assetUserId = student.dataUserId();
+        } catch {
+          res.status(403).json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' });
+          return;
+        }
+        next();
+        return;
+      }
       req.assetUserId = userDecoded.userId;
       next();
       return;

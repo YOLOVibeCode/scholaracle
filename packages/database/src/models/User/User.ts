@@ -72,6 +72,9 @@ export interface IUserDevice {
   readonly type: 'ios' | 'android' | 'web';
   readonly pushToken?: string;
   readonly lastActive: Date;
+  readonly audience?: 'parent' | 'student';
+  /** Scoped students `_id` when this device is a student login. */
+  readonly studentId?: string;
 }
 
 export interface IUserSubscription {
@@ -80,11 +83,21 @@ export interface IUserSubscription {
   readonly expiresAt?: Date;
 }
 
+/** Account kind. Existing documents without `role` are treated as parent. */
+export type UserRole = 'parent' | 'student';
+
 export interface IUserData {
   readonly email: string;
   /** Required for password login; OAuth-only users get a random placeholder hash. */
   readonly passwordHash: string;
   readonly name: string;
+  /** Defaults to parent. Student logins are parent-provisioned, never public register. */
+  readonly role?: UserRole;
+  /**
+   * Mongo `_id` of the `students` document this login may see.
+   * Distinct from `Student.studentId` (external id, e.g. `demo-emma`).
+   */
+  readonly studentId?: string;
   readonly phone?: string;
   readonly phoneVerified?: boolean;
   /** Whether the user gave explicit consent to receive SMS alerts at registration. */
@@ -115,13 +128,16 @@ export interface IUserData {
 }
 
 /**
- * User model representing a parent/guardian account.
+ * User model representing a parent/guardian or student login.
  */
 export class User {
   public readonly _id?: ObjectId;
   public readonly email: string;
   public readonly passwordHash: string;
   public readonly name: string;
+  public readonly role: UserRole;
+  /** Mongo `_id` of the scoped `students` document when `role` is student. */
+  public readonly studentId?: string;
   public readonly phone?: string;
   public readonly phoneVerified: boolean;
   /** Whether the user gave explicit consent to receive SMS alerts at registration. */
@@ -155,6 +171,9 @@ export class User {
     this.email = data.email;
     this.passwordHash = data.passwordHash;
     this.name = data.name;
+    this.role = data.role === 'student' ? 'student' : 'parent';
+    this.studentId =
+      typeof data.studentId === 'string' && data.studentId.length > 0 ? data.studentId : undefined;
     this.oauthProviders = data.oauthProviders ?? [];
     this.timezone = data.timezone ?? 'America/New_York';
     this.phone = data.phone;

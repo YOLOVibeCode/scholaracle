@@ -1,5 +1,5 @@
 import { createServer } from 'http';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import {
   MongoQueue,
   NotificationWorker,
@@ -13,6 +13,8 @@ import {
   DigestInsightService,
   GlanceInsightService,
   LlmClient,
+  createMongoGuidanceProcessor,
+  ReminderNotificationSink,
 } from '@scholaracle/agents';
 import {
   UserRepository,
@@ -267,7 +269,14 @@ function initializeNotificationService(
       ? new ExpoPushDelivery({
           tokenStore: {
             getTokens: async (userId: string): Promise<readonly string[]> => {
-              const user = await new UserRepository(database).findById(userId);
+              const repo = new UserRepository(database);
+              let user = ObjectId.isValid(userId) ? await repo.findById(userId) : null;
+              if (!user) {
+                user = await repo.findByStudentId(userId);
+              }
+              if (!user) {
+                user = await repo.findByEmail(userId);
+              }
               return (user?.devices ?? [])
                 .map((d) => d.pushToken)
                 .filter((t): t is string => typeof t === 'string' && t.length > 0);
@@ -487,6 +496,25 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     pollIntervalMs,
     concurrency,
     resolveAllAlertRecipients: resolveAll,
+    processGuidanceJob: createMongoGuidanceProcessor(
+      database,
+      new ReminderNotificationSink({
+        notificationService,
+        resolveEmail: async (audience, studentId) => {
+          const userRepository = new UserRepository(database);
+          if (audience === 'student') {
+            const studentUser = await userRepository.findByStudentId(studentId);
+            return studentUser?.email ?? null;
+          }
+          const student = await database
+            .collection('students')
+            .findOne({ _id: new ObjectId(studentId) });
+          if (student === null) return null;
+          const parent = await userRepository.findById(student['userId'] as string);
+          return parent?.email ?? null;
+        },
+      })
+    ),
   });
 
   // Start notification worker

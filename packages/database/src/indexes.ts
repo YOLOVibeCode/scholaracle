@@ -10,6 +10,8 @@ export async function createIndexes(database: Db): Promise<void> {
   const usersCollection = database.collection('users');
   await usersCollection.createIndex({ email: 1 }, { unique: true });
   await usersCollection.createIndex({ 'devices.pushToken': 1 });
+  // One student login per profile. Devices share that user (sparse: parents have no studentId).
+  await usersCollection.createIndex({ studentId: 1 }, { unique: true, sparse: true });
 
   // Students collection indexes
   const studentsCollection = database.collection('students');
@@ -198,6 +200,11 @@ export async function createIndexes(database: Db): Promise<void> {
     'payload.institutionExternalId': 1,
     consumedAt: 1,
   });
+
+  const studentMagicTokens = database.collection('student_magic_tokens');
+  await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });
+  await studentMagicTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await studentMagicTokens.createIndex({ userId: 1, usedAt: 1 });
 
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');

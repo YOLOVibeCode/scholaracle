@@ -43,6 +43,13 @@ export interface ICourseGradeAssignment {
   readonly categoryWeight?: number;
   readonly rubricScores?: readonly ICourseGradeRubricScore[];
   readonly attachments?: readonly ICourseGradeAttachment[];
+  /**
+   * Assignment instructions / description HTML as scraped from the LMS.
+   * Strip tags client-side for display; keep raw for link extraction.
+   */
+  readonly description?: string;
+  /** Direct link to the assignment on the school portal (LMS URL). */
+  readonly lmsUrl?: string;
 }
 
 export interface ICourseGrade {

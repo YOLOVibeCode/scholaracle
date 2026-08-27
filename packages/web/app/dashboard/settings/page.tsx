@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
+import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 
 const ALERT_TYPE_KEYS = [
   'missing_assignment',
@@ -215,6 +216,8 @@ export default function SettingsPage() {
           </Button>
         </CardFooter>
       </Card>
+
+      <StudentLoginsSection />
 
       {oauthProviders.length > 0 && (
         <Card>

@@ -71,6 +71,18 @@ describe('NotificationWorker', () => {
       expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'notify' });
       expect(mockNotificationService.processAlertEnqueueDeliver).not.toHaveBeenCalled();
     });
+
+    it('claims guidance jobs when a processor is configured', async () => {
+      const processGuidanceJob = jest.fn().mockResolvedValue(undefined);
+      const worker = new NotificationWorker(mockMongoQueue, mockNotificationService, {
+        processGuidanceJob,
+      });
+      mockMongoQueue.getNextJob.mockResolvedValue(null);
+      worker.start();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await worker.stop();
+      expect(mockMongoQueue.getNextJob).toHaveBeenCalledWith({ type: 'guidance' });
+    });
   });
 
   describe('stop', () => {
@@ -135,6 +147,30 @@ describe('NotificationWorker', () => {
       );
       expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
       expect(mockMongoQueue.fail).not.toHaveBeenCalled();
+    });
+
+    it('runs processGuidanceJob and completes the job', async () => {
+      const processGuidanceJob = jest.fn().mockResolvedValue(undefined);
+      const worker = new NotificationWorker(mockMongoQueue, mockNotificationService, {
+        processGuidanceJob,
+      });
+      const jobId = 'guide-1';
+      const job: IJob = {
+        _id: { toString: (): string => jobId } as unknown as ObjectId,
+        type: 'guidance',
+        name: 't18h',
+        data: { studentId: 'emma-id' },
+        scheduledFor: new Date(),
+        priority: 10,
+        status: 'processing',
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await worker.processJob(job);
+      expect(processGuidanceJob).toHaveBeenCalledWith(job);
+      expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
     });
 
     it('should mark job as failed when processing fails', async () => {

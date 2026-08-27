@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { StudentRepository } from '@scholaracle/database';
+import { StudentRepository, UserRepository } from '@scholaracle/database';
 import { ingestV1Router } from './ingest';
 import { createErrorHandler } from '../../../middleware/errorHandler';
 
@@ -238,6 +238,24 @@ describe('Ingest v1 API', () => {
       .post('/api/ingest/v1/device/approve')
       .send({ userCode: 'AAAA-BBBB' });
     expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when a student JWT tries to approve a connector', async () => {
+    const passwordHash = await UserRepository.hashPassword('password123');
+    await new UserRepository(database).create({
+      email: 'student-ingest@test.com',
+      passwordHash,
+      name: 'Student Ingest',
+      role: 'student',
+      studentId: new ObjectId().toString(),
+    });
+    const login = await authService.login('student-ingest@test.com', 'password123');
+    const res = await request(app)
+      .post('/api/ingest/v1/device/approve')
+      .set('Authorization', `Bearer ${login.token}`)
+      .send({ userCode: 'AAAA-BBBB' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
   });
 
   // ---------------------------------------------------------------------------

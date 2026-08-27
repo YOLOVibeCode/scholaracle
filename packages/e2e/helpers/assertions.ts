@@ -87,6 +87,16 @@ export async function assertRedirectedToLogin(page: Page): Promise<void> {
 }
 
 /**
+ * Assert student is on /studio (Today or a work pack).
+ */
+export async function assertOnStudio(page: Page): Promise<void> {
+  await expect(page).toHaveURL(/\/studio/);
+  await expect(
+    page.locator('[data-testid="studio-today"], [data-testid="studio-pack-page"]').first()
+  ).toBeVisible();
+}
+
+/**
  * Assert user has access to admin page (not 403).
  */
 export async function assertAdminAccess(page: Page, url: string): Promise<void> {

@@ -1,0 +1,49 @@
+# On-demand Android store ship. Do NOT add a push-to-main trigger —
+# each Android cloud build costs EAS credits.
+#
+# Preview AAB → Play internal (UAT API).
+# Production AAB → Play alpha/closed (prod API).
+# Sequential so remote versionCode autoIncrement cannot collide.
+#
+# Run from packages/mobile:
+#   npx eas-cli workflow:run .eas/workflows/submit-android.yml
+#
+# Requires a Google Play service-account key in EAS Android credentials
+# (or GOOGLE_SERVICE_ACCOUNT_KEY_PATH for local eas submit).
+
+name: Submit Android (UAT internal + prod alpha)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_android_preview:
+    name: Build Android preview (UAT)
+    type: build
+    params:
+      platform: android
+      profile: preview
+
+  submit_android_preview:
+    name: Submit preview to Play internal
+    type: submit
+    needs: [build_android_preview]
+    params:
+      build_id: ${{ needs.build_android_preview.outputs.build_id }}
+      profile: preview
+
+  build_android_production:
+    name: Build Android production
+    type: build
+    needs: [submit_android_preview]
+    params:
+      platform: android
+      profile: production
+
+  submit_android_production:
+    name: Submit production to Play alpha
+    type: submit
+    needs: [build_android_production]
+    params:
+      build_id: ${{ needs.build_android_production.outputs.build_id }}
+      profile: production

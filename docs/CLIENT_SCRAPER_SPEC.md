@@ -380,3 +380,49 @@ Skyward snapshot as the official grade.
 - Uploading portal username / password
 - Launching Chromium on Scholaracle servers
 - Implementing Google Classroom on iOS in this spec (document the gap only)
+
+---
+
+## 12. Resource capture and offline readiness
+
+> Full contract in [`docs/CLASS_OFFLINE_PACK.md`](./CLASS_OFFLINE_PACK.md).
+
+### 12.1 `IAssetHost` is REQUIRED for LMS clients
+
+`IClientScrapeHost.assets` MUST be provided when `provider` is `canvas`,
+`google-classroom`, or any LMS adapter that emits `courseMaterial` ops with
+`type: document | video | presentation`. `--skip-assets` (CLI) is a debug
+flag only and MUST NOT be used in production runs.
+
+Mobile: `WebViewAssetHost` MUST process both `courseMaterial` ops **and**
+`assignment.attachments[]` URLs. Processing only materials is a known gap
+(see [`CLASS_OFFLINE_PACK.md §8`](./CLASS_OFFLINE_PACK.md)).
+
+### 12.2 Capture order (lock this in every LMS scraper)
+
+For each portal resource, decide in this exact order. Do not skip to
+"leave a school-login link" if an earlier step can succeed:
+
+1. **Native file** — portal `/files/{id}/download`, attachment, Drive export.
+   `IAssetHost.processOps()` rewrites `record.url` to the Scholaracle asset.
+   MUST set `fileName` and `mimeType`.
+2. **Link that is actually a file** — HEAD/GET `Content-Type` is `application/pdf`,
+   `image/*`, `video/*`. Treat as (1). Probe with portal cookies if portal-origin.
+3. **Grab-enough HTML** — public or session-visible page that is not a binary.
+   Keep `type: link`; set `linkAccessibility`; populate `extractedText` (50 KB cap,
+   readable text only, no navigation or scripts). Do NOT archive interactive SPAs.
+4. **Cannot capture** — authenticated viewer / SPA with no file export.
+   Set `linkAccessibility: 'authenticated'`. Studio shows "Needs school login".
+
+One miss MUST NOT fail the sync (fail-open per file).
+
+### 12.3 Validator additions for offline readiness
+
+| Check | Severity |
+|-------|----------|
+| LMS course with courses but no rehosted `courseMaterial` | **warning** |
+| `type: document` with empty `fileName` or empty `mimeType` | **warning** |
+| Portal-origin URL still in `record.url` after `IAssetHost` ran | **warning** |
+
+These warnings do not fail the run but indicate the scraper is incomplete for
+offline use.

@@ -1,9 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import { AuthService } from '@scholaracle/auth';
+import type { UserRole } from '@scholaracle/database';
 
 export interface IAuthenticatedRequest extends Request {
   userId?: string;
   userEmail?: string;
+  userRole?: UserRole;
+  studentId?: string;
 }
 
 /**
@@ -40,6 +43,8 @@ export function authMiddleware(authService: AuthService) {
       // Add user info to request
       req.userId = decoded.userId;
       req.userEmail = decoded.email;
+      req.userRole = decoded.role;
+      req.studentId = decoded.studentId;
 
       next();
     } catch (error) {

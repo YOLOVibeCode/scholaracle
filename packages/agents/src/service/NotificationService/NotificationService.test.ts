@@ -104,6 +104,49 @@ describe('NotificationService', () => {
       expect(mockDeliveryRouter.route).toHaveBeenCalledTimes(2);
     });
 
+    it('does not deliver parent channels for deadline alerts', async () => {
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.DEADLINE,
+        severity: 'medium',
+        relatedData: {},
+      });
+      const studentNotification = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Due soon',
+        body: 'Open the worksheet',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: 'deadline',
+        channels: [NotificationChannel.EMAIL],
+      });
+      const parentNotification = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'student-123',
+        userId: 'parent-456',
+        subject: 'Chore',
+        body: 'Due tomorrow',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: 'deadline',
+        channels: [NotificationChannel.EMAIL],
+      });
+      mockStudentGenerator.generate.mockReturnValue(studentNotification);
+      mockParentGenerator.generate.mockReturnValue(parentNotification);
+      mockDeliveryRouter.route.mockResolvedValue({
+        success: true,
+        channel: NotificationChannel.EMAIL,
+        messageId: 'email-123',
+        deliveredAt: new Date(),
+      });
+      await notificationService.processAlert(alert);
+      expect(mockDeliveryRouter.route).toHaveBeenCalledTimes(1);
+      expect(mockDeliveryRouter.route).toHaveBeenCalledWith(
+        studentNotification,
+        NotificationChannel.EMAIL
+      );
+    });
+
     it('should deliver to all channels specified in notification', async () => {
       // Arrange
       const alert = new Alert({
@@ -508,6 +551,56 @@ describe('NotificationService', () => {
       expect(result.studentNotification).toEqual(notifA);
       expect(result.parentNotification).toEqual(notifB);
     });
+
+    it('deadline alerts skip the parent agent (student-only)', async () => {
+      const alert = new Alert({
+        type: AlertType.DEADLINE,
+        studentId: 'stu-1',
+        severity: 'high',
+        relatedData: {},
+      });
+      const studentNotif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'stu-1',
+        userId: 'stu-1',
+        subject: 'Due soon',
+        body: 'Open the worksheet',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const parentNotif = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'stu-1',
+        userId: 'parent-1',
+        subject: 'Chore',
+        body: 'Due tomorrow',
+        priority: NotificationPriority.HIGH,
+        triggerType: alert.type,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const studentAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(studentNotif),
+      };
+      const parentAgent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(parentNotif),
+      };
+      const mockRouter = {
+        route: jest.fn().mockResolvedValue({
+          success: true,
+          channel: NotificationChannel.EMAIL,
+          messageId: 'id',
+          deliveredAt: new Date(),
+        }),
+      } as unknown as DeliveryRouter;
+      const svc = new NotificationService([studentAgent, parentAgent], mockRouter);
+      const result = await svc.processAlert(alert);
+      expect(mockRouter.route).toHaveBeenCalledTimes(1);
+      expect(mockRouter.route).toHaveBeenCalledWith(studentNotif, NotificationChannel.EMAIL);
+      expect(result.deliveryResults).toHaveLength(1);
+    });
   });
 
   describe('processAlertEnqueueDeliver', () => {
@@ -715,6 +808,61 @@ describe('NotificationService', () => {
       expect(studentCall).toBeDefined();
       expect(studentCall![2].notificationPayload.agentType).toBe(AgentType.STUDENT);
       expect(studentCall![2].notificationPayload.subject).toBe('MISSING ASSIGNMENT');
+    });
+
+    it('does not enqueue parent deliver jobs for deadline alerts', async () => {
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
+      const studentNotif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Due soon',
+        body: 'Open the worksheet',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.DEADLINE,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const parentNotif = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'student-123',
+        userId: 'parent-456',
+        subject: 'Chore',
+        body: 'Due tomorrow',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.DEADLINE,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const svc = new NotificationService(
+        [
+          {
+            handles: jest.fn().mockReturnValue(true),
+            generate: jest.fn().mockReturnValue(studentNotif),
+          },
+          {
+            handles: jest.fn().mockReturnValue(true),
+            generate: jest.fn().mockReturnValue(parentNotif),
+          },
+        ],
+        mockDeliveryRouter
+      );
+      const alert = new Alert({
+        studentId: 'student-123',
+        type: AlertType.DEADLINE,
+        severity: 'medium',
+        relatedData: {},
+      });
+      await svc.processAlertEnqueueDeliver(alert, mockQueue, [
+        { parentEmail: 'parent@example.com', recipientType: 'parent' },
+        { parentEmail: 'emma.demo@scholarmancy.com', recipientType: 'student' },
+      ]);
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+      const payload = (mockQueue.add as jest.Mock).mock.calls[0]?.[2] as {
+        notificationPayload: { userId: string; agentType: AgentType };
+      };
+      expect(payload.notificationPayload.userId).toBe('emma.demo@scholarmancy.com');
+      expect(payload.notificationPayload.agentType).toBe(AgentType.STUDENT);
     });
 
     it('should treat recipients without recipientType as parent (backward compat)', async () => {

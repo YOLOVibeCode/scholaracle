@@ -10,6 +10,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { IAuthUser, UserRole } from '@scholaracle/contracts';
 import { apiClient } from '../api/client';
 import { fullSignOut } from './signOut';
 
@@ -18,6 +19,8 @@ interface IAuthState {
   readonly isLoading: boolean;
   readonly isAuthenticating: boolean;
   readonly error: string | null;
+  readonly role: UserRole;
+  readonly studentId?: string;
   /** Increments on each successful login — key screens on it to refetch after account switches. */
   readonly accountEpoch: number;
 }
@@ -32,6 +35,15 @@ type AuthContextValue = IAuthState & IAuthActions;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function roleFields(user: IAuthUser | null): { role: UserRole; studentId?: string } {
+  if (user?.role === 'student') {
+    return user.studentId !== undefined && user.studentId !== ''
+      ? { role: 'student', studentId: user.studentId }
+      : { role: 'student' };
+  }
+  return { role: 'parent' };
+}
+
 export function AuthProvider({
   children,
 }: {
@@ -42,18 +54,25 @@ export function AuthProvider({
     isLoading: true,
     isAuthenticating: false,
     error: null,
+    role: 'parent',
     accountEpoch: 0,
   });
 
   useEffect(() => {
-    apiClient
-      .isLoggedIn()
-      .then((loggedIn) => {
-        setState((s) => ({ ...s, isLoggedIn: loggedIn, isLoading: false }));
-      })
-      .catch(() => {
+    void (async (): Promise<void> => {
+      try {
+        const loggedIn = await apiClient.isLoggedIn();
+        const user = loggedIn ? await apiClient.getSessionUser() : null;
+        setState((s) => ({
+          ...s,
+          isLoggedIn: loggedIn,
+          isLoading: false,
+          ...roleFields(user),
+        }));
+      } catch {
         setState((s) => ({ ...s, isLoading: false }));
-      });
+      }
+    })();
 
     // When the SERVER rejects a refresh, the session is dead — drop to the
     // login screen. Epoch guard: a straggler request from a previous session
@@ -65,7 +84,7 @@ export function AuthProvider({
         .logout()
         .catch(() => undefined)
         .then(() => {
-          setState((s) => ({ ...s, isLoggedIn: false }));
+          setState((s) => ({ ...s, isLoggedIn: false, role: 'parent', studentId: undefined }));
         });
     };
     return () => {
@@ -76,13 +95,14 @@ export function AuthProvider({
   const register = useCallback(async (email: string, password: string, name: string) => {
     setState((s) => ({ ...s, isAuthenticating: true, error: null }));
     try {
-      await apiClient.register(email, password, name);
+      const res = await apiClient.register(email, password, name);
       setState((s) => ({
         ...s,
         isLoggedIn: true,
         isAuthenticating: false,
         error: null,
         accountEpoch: s.accountEpoch + 1,
+        ...roleFields(res.user ?? null),
       }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
@@ -94,13 +114,14 @@ export function AuthProvider({
   const login = useCallback(async (email: string, password: string) => {
     setState((s) => ({ ...s, isAuthenticating: true, error: null }));
     try {
-      await apiClient.login(email, password);
+      const res = await apiClient.login(email, password);
       setState((s) => ({
         ...s,
         isLoggedIn: true,
         isAuthenticating: false,
         error: null,
         accountEpoch: s.accountEpoch + 1,
+        ...roleFields(res.user ?? null),
       }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed';
@@ -114,7 +135,7 @@ export function AuthProvider({
       // Full device purge: portal credentials, sources, ledger, push + auth tokens.
       await fullSignOut();
     } finally {
-      setState((s) => ({ ...s, isLoggedIn: false }));
+      setState((s) => ({ ...s, isLoggedIn: false, role: 'parent', studentId: undefined }));
     }
   }, []);
 

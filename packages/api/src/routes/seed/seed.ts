@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import {
@@ -20,6 +21,8 @@ import type { AdminRole } from '@scholaracle/database';
 import {
   DEMO_USER,
   DEMO_STUDENTS,
+  DEMO_STUDENT_USER_EMMA,
+  DEMO_STUDENT_USER_LIAM,
   DEMO_CONTACT_JESSICA,
   DEMO_CONTACT_RICKY,
   DEMO_CONTACT_JENNIFER,
@@ -33,12 +36,15 @@ import {
   buildDemoGradeHistory,
   buildDemoGradeSnapshots,
   buildDemoAttendanceDocs,
+  demoAssetByteFiles,
 } from './demo-data';
-import type { ISharedParent } from '@scholaracle/database';
+import type { ISharedParent, IStudentLogin } from '@scholaracle/database';
+import type { IAssetStore } from '../../services/assets/IAssetStore';
 
 export interface ISeedRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  readonly assetStore?: IAssetStore;
 }
 
 /**
@@ -554,6 +560,89 @@ function isDemoAllowed(): boolean {
   return demoEnabled || nodeEnv === 'development' || nodeEnv === 'test';
 }
 
+async function putDemoAssetBytes(store: IAssetStore): Promise<void> {
+  for (const file of demoAssetByteFiles()) {
+    await store.put(file.storageKey, Readable.from(file.bytes), {
+      contentType: file.contentType,
+      contentLength: file.bytes.length,
+    });
+  }
+}
+
+/**
+ * Keep demo material → assignment joins current on idempotent re-seed.
+ * Does not insert missing docs; only $sets known joins on existing materials.
+ */
+async function syncDemoMaterialAssignmentJoins(
+  materialsColl: ReturnType<Db['collection']>,
+  userId: string
+): Promise<void> {
+  for (const doc of buildDemoMaterialDocs(userId)) {
+    const record = doc['record'] as Record<string, unknown>;
+    const assignmentExternalId = record['assignmentExternalId'];
+    if (typeof assignmentExternalId !== 'string') {
+      continue;
+    }
+    await materialsColl.updateOne(
+      { userId, externalId: doc['externalId'] },
+      { $set: { 'record.assignmentExternalId': assignmentExternalId } }
+    );
+  }
+}
+
+type DemoStudentUserCreds = {
+  readonly email: string;
+  readonly password: string;
+  readonly name: string;
+};
+
+/**
+ * Parent-provisioned demo student login. Idempotent: find-by-email, never public register.
+ * Restores DemoPass123! and unsuspends leftovers so documented creds always work.
+ */
+async function ensureDemoStudentLogin(
+  userRepository: UserRepository,
+  creds: DemoStudentUserCreds,
+  studentMongoId: string,
+  ownerUserId: string,
+  existingCreatedAt?: Date
+): Promise<IStudentLogin> {
+  const passwordHash = await UserRepository.hashPassword(creds.password);
+  const existing = await userRepository.findByEmail(creds.email);
+  if (existing?._id) {
+    const userId = existing._id.toString();
+    if (existing.isSuspended) {
+      await userRepository.unsuspendUser(userId);
+    }
+    await userRepository.update(existing._id, {
+      passwordHash,
+      role: 'student',
+      studentId: studentMongoId,
+      name: creds.name,
+    });
+    return {
+      userId,
+      showGrades: false,
+      createdAt: existingCreatedAt ?? existing.createdAt,
+      provisionedByUserId: ownerUserId,
+    };
+  }
+
+  const created = await userRepository.create({
+    email: creds.email,
+    passwordHash,
+    name: creds.name,
+    role: 'student',
+    studentId: studentMongoId,
+  });
+  return {
+    userId: created._id?.toString() ?? '',
+    showGrades: false,
+    createdAt: existingCreatedAt ?? new Date(),
+    provisionedByUserId: ownerUserId,
+  };
+}
+
 /**
  * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
  */
@@ -575,9 +664,15 @@ async function handleDemoSeed(
   if (!user) {
     const result = await authService.register(DEMO_USER.email, DEMO_USER.password, DEMO_USER.name);
     if (!result.success) {
-      throw new InternalError(result.error ?? 'Failed to create demo user');
+      if (result.error === 'User already exists') {
+        // Concurrent seed call — user was created by another worker; re-fetch
+        user = await userRepository.findByEmail(DEMO_USER.email);
+      } else {
+        throw new InternalError(result.error ?? 'Failed to create demo user');
+      }
+    } else {
+      user = await userRepository.findByEmail(DEMO_USER.email);
     }
-    user = await userRepository.findByEmail(DEMO_USER.email);
   }
   if (!user?._id) {
     throw new InternalError('Demo user not found after create');
@@ -663,8 +758,32 @@ async function handleDemoSeed(
       alertChannels: ['email'],
     },
   ];
-  if (emmaId) await studentRepository.update(emmaId, { sharedWith: emmaSharedWith });
-  if (liamId) await studentRepository.update(liamId, { sharedWith: liamSharedWith });
+  if (emmaId) {
+    const emmaLogin = await ensureDemoStudentLogin(
+      userRepository,
+      DEMO_STUDENT_USER_EMMA,
+      emmaId,
+      userId,
+      emma?.studentLogin?.createdAt
+    );
+    await studentRepository.update(emmaId, {
+      sharedWith: emmaSharedWith,
+      studentLogin: emmaLogin,
+    });
+  }
+  if (liamId) {
+    const liamLogin = await ensureDemoStudentLogin(
+      userRepository,
+      DEMO_STUDENT_USER_LIAM,
+      liamId,
+      userId,
+      liam?.studentLogin?.createdAt
+    );
+    await studentRepository.update(liamId, {
+      sharedWith: liamSharedWith,
+      studentLogin: liamLogin,
+    });
+  }
 
   const assignmentsColl = config.database.collection('slc_assignments');
   const coursesColl = config.database.collection('slc_courses');
@@ -697,6 +816,12 @@ async function handleDemoSeed(
     await gradeSnapshotsColl.insertMany(gradeSnapshotDocs);
     const attendanceDocs = buildDemoAttendanceDocs(userId, baseDate);
     await attendanceColl.insertMany(attendanceDocs);
+  } else {
+    await syncDemoMaterialAssignmentJoins(materialsColl, userId);
+  }
+
+  if (config.assetStore) {
+    await putDemoAssetBytes(config.assetStore);
   }
 
   if (emmaId && liamId) {

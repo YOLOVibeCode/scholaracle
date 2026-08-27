@@ -58,5 +58,7 @@ export * from './repositories/AdminMFATokenRepository';
 export * from './repositories/AdminStepUpChallengeRepository';
 export * from './repositories/SessionRepository';
 export * from './repositories/OAuthAccountRepository';
+export * from './repositories/StudentMagicTokenRepository';
+export * from './repositories/MagicLoginTokenRepository';
 
 export { createIndexes } from './indexes';
