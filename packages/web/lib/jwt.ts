@@ -26,3 +26,14 @@ export function getTokenEmail(token: string | null): string | null {
   const payload = decodePayload(token);
   return typeof payload?.['email'] === 'string' ? (payload['email'] as string) : null;
 }
+
+/** Returns the `role` claim. Missing role on a readable token is treated as parent. */
+export function getTokenRole(token: string | null): 'parent' | 'student' | null {
+  if (!token || typeof token !== 'string') return null;
+  const payload = decodePayload(token);
+  if (!payload) return null;
+  if (payload['role'] === 'student') return 'student';
+  if (payload['role'] === 'parent') return 'parent';
+  if (typeof payload['userId'] === 'string') return 'parent';
+  return null;
+}

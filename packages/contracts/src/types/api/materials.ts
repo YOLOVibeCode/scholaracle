@@ -9,6 +9,9 @@
  * NOTE on ?assignment= semantics: the filter is an OR — exact assignment
  * matches PLUS every material in that assignment's course. Clients separate
  * the two via `assignmentExternalId` (null = course-scoped).
+ *
+ * `contentHash` is the client cache validator (key with assetId). `downloadUrl`
+ * is a signed 24h fetch ticket — never cache that URL, only the bytes.
  */
 
 export type MaterialLinkAccessibility = 'public' | 'authenticated' | 'unknown';
@@ -24,7 +27,12 @@ export interface ICourseMaterial {
   readonly description?: string;
   readonly fileSize?: number;
   readonly assetId?: string;
-  /** Signed asset URL (24h TTL, no auth header needed). Never cache. */
+  /**
+   * Hash of the stored bytes. Cache key is assetId + contentHash.
+   * Absent when the material is a link with no hosted file.
+   */
+  readonly contentHash?: string;
+  /** Signed asset URL (24h TTL, no auth header needed). Never cache this URL. */
   readonly downloadUrl?: string;
   readonly linkAccessibility?: MaterialLinkAccessibility;
   /** The assignment this material is linked to; null = course-scoped. */

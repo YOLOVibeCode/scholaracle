@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -10,6 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { authApi } from '@/lib/api/auth';
+import { postLoginDestination } from '@/lib/auth/destinationForRole';
+import {
+  claimMagicTokenOnce,
+  magicTokenFromSearchParam,
+  releaseMagicTokenClaim,
+} from '@/lib/auth/magicLogin';
 
 function LoginForm() {
   const router = useRouter();
@@ -22,6 +28,28 @@ function LoginForm() {
   const redirectTo = searchParams.get('redirect');
   const sessionExpired = searchParams.get('reason') === 'session_expired';
   const resetSuccess = searchParams.get('reset') === 'success';
+  const magicToken = magicTokenFromSearchParam(searchParams.get('magic'));
+
+  useEffect(() => {
+    if (magicToken === null || typeof sessionStorage === 'undefined') {
+      return;
+    }
+    if (!claimMagicTokenOnce(magicToken, sessionStorage)) {
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    void (async () => {
+      const result = await authApi.loginWithMagicToken(magicToken);
+      if (result.success) {
+        router.push(postLoginDestination(result.user?.role, redirectTo));
+        return;
+      }
+      releaseMagicTokenClaim(magicToken, sessionStorage);
+      setError(result.error ?? 'That sign-in link expired. Ask a parent for a new QR code.');
+      setIsLoading(false);
+    })();
+  }, [magicToken, redirectTo, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +65,7 @@ function LoginForm() {
             `/forgot-password?required=1&email=${encodeURIComponent(result.user.email)}`
           );
         } else {
-          const dest = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard';
+          const dest = postLoginDestination(result.user?.role, redirectTo);
           router.push(dest);
         }
       } else {
@@ -62,8 +90,30 @@ function LoginForm() {
             className="rounded-2xl mb-1"
           />
           <CardTitle className="text-2xl font-bold">Scholarmancy</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <CardDescription>
+            {magicToken !== null ? 'Signing you in' : 'Sign in to your account'}
+          </CardDescription>
         </CardHeader>
+        {magicToken !== null ? (
+          <CardContent className="space-y-4">
+            {error && (
+              <div data-testid="message-error" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
+                {error}
+              </div>
+            )}
+            {error ? (
+              <p className="text-center text-sm text-muted-foreground">
+                <Link href="/login" className="font-medium text-blue-600 hover:underline">
+                  Sign in with email
+                </Link>
+              </p>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground" data-testid="magic-login-pending">
+                Opening studio…
+              </p>
+            )}
+          </CardContent>
+        ) : (
         <form data-testid="form-login" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {sessionExpired && (
@@ -158,6 +208,7 @@ function LoginForm() {
             </div>
           </CardFooter>
         </form>
+        )}
       </Card>
     </div>
   );

@@ -18,6 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 import { SyncWebView } from '../scraper/SyncWebView';
 import { WebViewPageDriver } from '../scraper/WebViewPageDriver';
 import { runSyncPipeline, SyncError, type ISyncProgress } from '../scraper/SyncOrchestrator';
+import { WebViewAssetHost } from '../scraper/WebViewAssetHost';
 import { apiClient } from '../api/client';
 import { runLedger } from '../ledger/RunLedger';
 
@@ -136,7 +137,17 @@ export function SyncScreen({
           runLedger,
           (p: ISyncProgress) => {
             if (!cancelledRef.current) setProgress(p);
-          }
+          },
+          undefined,
+          new WebViewAssetHost({
+            driver: driverRef.current,
+            connectorToken,
+            sourceId: config.sourceId,
+            provider: config.provider,
+            // Derive portal origin via string parsing — no URL API in React Native.
+            portalOrigin: config.baseUrl.replace(/^(https?:\/\/[^/]+).*$/, '$1'),
+            apiBaseUrl: apiClient.baseUrlValue,
+          })
         );
         if (cancelledRef.current) return;
         setSyncState('done');

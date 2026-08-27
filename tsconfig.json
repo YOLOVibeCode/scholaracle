@@ -12,6 +12,7 @@
     { "path": "packages/agents" },
     { "path": "packages/connector" },
     { "path": "packages/api" },
-    { "path": "packages/workers" }
+    { "path": "packages/workers" },
+    { "path": "packages/studio-core" }
   ]
 }

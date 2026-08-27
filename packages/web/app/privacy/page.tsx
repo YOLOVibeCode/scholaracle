@@ -13,13 +13,13 @@ export default function PrivacyPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Privacy Policy</CardTitle>
-            <CardDescription>Last updated: August 6, 2026</CardDescription>
+            <CardDescription>Last updated: August 24, 2026</CardDescription>
           </CardHeader>
           <CardContent className="prose prose-gray dark:prose-invert max-w-none space-y-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Scholarmancy (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) is operated by NoctuSoft, Inc.
               This policy explains what information we collect, how we use it, and your rights regarding it.
-              It applies to the Scholarmancy iOS app and the Scholarmancy web platform.
+              It applies to the Scholarmancy iOS and Android apps, the Chrome extension, and the Scholarmancy web platform.
             </p>
 
             <section>
@@ -31,20 +31,21 @@ export default function PrivacyPage() {
                 to authenticate you. If you opt in to SMS notifications, we also collect your phone number.
               </p>
 
-              <h3 className="text-base font-semibold mt-4">b) School Portal Credentials (iOS App)</h3>
+              <h3 className="text-base font-semibold mt-4">b) School Portal Credentials</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Your school portal username and password are stored <strong>exclusively on your device</strong> using
-                iOS Secure Enclave / Keychain. They are <strong>never transmitted to Scholarmancy servers</strong> and
-                are never shared with any third party. Removing the app or deleting your account erases them permanently
-                from your device.
+                Your school portal username and password are stored <strong>exclusively on your device</strong>
+                (iOS Keychain / Secure Enclave, Android Keystore, or the browser extension&apos;s local storage).
+                They are <strong>never transmitted to Scholarmancy servers</strong> and are never shared with any
+                third party. Removing the app or extension, or deleting your account, erases them from that device.
               </p>
 
               <h3 className="text-base font-semibold mt-4">c) Academic Data</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                When you trigger a sync, the Scholarmancy app reads your academic data (assignments, grades,
-                attendance records, and course information) directly from your school&apos;s portal. This data is
-                transmitted to Scholarmancy servers solely to display it back to you and to send you notifications.
-                We do not sell, license, or share this data with advertisers or third parties.
+                When you trigger a sync from the iOS app, Android app, Chrome extension, or local CLI, that client
+                reads your academic data (assignments, grades, attendance records, and course information) directly
+                from your school&apos;s portal. This data is transmitted to Scholarmancy servers solely to display it
+                back to you and to send you notifications. We do not sell, license, or share this data with advertisers
+                or third parties.
               </p>
 
               <h3 className="text-base font-semibold mt-4">d) Device Identifiers and Push Tokens</h3>
@@ -128,9 +129,9 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-lg font-semibold">9. Third-Party Services</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholarmancy uses Expo Application Services (EAS) for building and delivering the iOS app,
-                and Apple Push Notification Service (APNs) for push notifications. These services have their
-                own privacy policies.
+                Scholarmancy uses Expo Application Services (EAS) to build and deliver the iOS and Android apps,
+                Apple Push Notification Service (APNs) for iOS push, and Firebase Cloud Messaging (FCM) for Android
+                push. These services have their own privacy policies.
               </p>
             </section>
 

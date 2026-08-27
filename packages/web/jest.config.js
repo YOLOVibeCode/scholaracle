@@ -7,7 +7,11 @@ module.exports = {
   testMatch: ['**/?(*.)+(spec|test).ts', '**/?(*.)+(spec|test).tsx'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^@scholaracle/studio-core$': '<rootDir>/../studio-core/src/index.ts',
+    '^@scholaracle/contracts$': '<rootDir>/../contracts/src/index.ts',
+    '^@scholaracle/interfaces$': '<rootDir>/../interfaces/src/index.ts',
   },
+  setupFiles: ['<rootDir>/jest.setup.js'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

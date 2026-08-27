@@ -27,6 +27,16 @@ export function resolveApiBaseUrl(configBaseUrl: string | undefined): string {
   if (explicit) return explicit;
   const railwayDomain = process.env['RAILWAY_PUBLIC_DOMAIN'];
   if (railwayDomain) return `https://${railwayDomain}`;
+  const assetBase = process.env['ASSET_BASE_URL'];
+  if (assetBase) return assetBase;
+  const port = process.env['PORT'];
+  const webLocal =
+    configBaseUrl === undefined ||
+    configBaseUrl.includes('localhost:2800') ||
+    configBaseUrl.includes('127.0.0.1:2800');
+  if (webLocal && port !== undefined && port !== '' && port !== '2800') {
+    return `http://localhost:${port}`;
+  }
   return configBaseUrl ?? '';
 }
 

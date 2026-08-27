@@ -173,8 +173,8 @@ function Hero({
           </h1>
 
           <p className="max-w-xl text-lg text-muted-foreground sm:text-xl">
-            Scholarmancy pulls your kids&apos; grades, assignments, and alerts from every school portal
-            into one dashboard — and warns you before things slip.
+            Connect Canvas, Skyward, or Aeries from your phone or browser. Grades, assignments,
+            and alerts land in one dashboard — and we warn you before things slip.
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -218,7 +218,7 @@ function HeroDashboardMockup() {
           <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
           <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
           <div className="h-2.5 w-2.5 rounded-full bg-green-400/80" />
-          <div className="ml-3 text-xs text-muted-foreground">app.scholarmancy.com/dashboard</div>
+          <div className="ml-3 text-xs text-muted-foreground">scholarmancy.com/dashboard</div>
         </div>
 
         <div className="space-y-4 p-5">
@@ -432,8 +432,7 @@ function FeaturesSection() {
             Everything parents need, in one place.
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Stop juggling tabs. Scholarmancy does the watching for you and only tells you
-            what matters.
+            Stop juggling tabs. Sync from your device, then see what matters in one place.
           </p>
         </div>
 
@@ -442,7 +441,7 @@ function FeaturesSection() {
             icon={<LayoutDashboard className="h-5 w-5" />}
             tint="blue"
             title="Unified dashboard"
-            body="Grades, assignments, attendance, and announcements from every portal in one place. One login, one source of truth."
+            body="Grades, assignments, attendance, and announcements from every portal in one place — without logging into each school site every day."
           />
           <FeatureCard
             icon={<BellRing className="h-5 w-5" />}
@@ -698,7 +697,7 @@ function HowItWorks() {
             num="2"
             icon={<PlugZap className="h-5 w-5" />}
             title="Connect your school"
-            body="Pick your portal (Canvas, Aeries, Skyward, or custom) and log in once. We&apos;ll handle the rest."
+            body="In the iOS or Android app (or the Chrome extension), pick Canvas, Aeries, or Skyward and sign in on your device. Those passwords never leave it."
           />
           <Step
             num="3"
@@ -769,8 +768,8 @@ function UseCases() {
           <UseCaseCard
             tag="DIY parent"
             title="The Tech-Savvy Parent"
-            body="Wants full control. Runs the scraper on their own machine. Builds custom scrapers for niche district portals."
-            features={['Open-source CLI', 'Self-hosted option', 'Custom scrapers via AI']}
+            body="Prefers the local CLI or Chrome extension. Generates a custom scraper when the district portal isn&apos;t Canvas, Skyward, or Aeries."
+            features={['Local CLI on your machine', 'Chrome extension', 'Custom scraper generator']}
           />
         </div>
       </div>
@@ -916,15 +915,15 @@ function FaqSection() {
           />
           <FaqItem
             question="How often does my data refresh?"
-            answer="By default, scrapers run on a schedule you set — typically once a day. You can also run them on demand from the dashboard or via cron for fully automated updates."
+            answer="Whenever you sync from the iOS or Android app, the Chrome extension, or the local CLI. Scholarmancy servers never log into your school. On a computer you can schedule the CLI yourself (for example with cron)."
           />
           <FaqItem
             question="Can both parents have access?"
             answer="Yes. Each student can have multiple parent/guardian accounts. Co-parents and step-parents get their own logins and notification preferences."
           />
           <FaqItem
-            question="What if I don&apos;t want to give you my data at all?"
-            answer="Use the open-source CLI scraper standalone. You can run everything on your own machine without an account — perfect for privacy-conscious or technical parents."
+            question="Do you store my school passwords?"
+            answer="No. Portal usernames and passwords stay in your device keychain or browser extension storage. Only academic records (grades, assignments, attendance) are uploaded so we can show the dashboard and send alerts. Delete your account anytime and that data is removed."
           />
           <FaqItem
             question="Can I cancel anytime?"

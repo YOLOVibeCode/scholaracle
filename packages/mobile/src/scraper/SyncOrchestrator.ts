@@ -14,6 +14,7 @@ import {
   type SyncProgressCallback,
   type IScraperResolver,
   type IAIEnricher,
+  type IAssetHost,
 } from '@scholaracle/scraper-core';
 import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 // Re-export pipeline types for existing callers
@@ -105,7 +106,8 @@ export async function runSyncPipeline(
   connectorToken: string,
   recorder: IMobileRunRecorder,
   onProgress?: SyncProgressCallback,
-  overrides?: ISyncPipelineOverrides
+  overrides?: ISyncPipelineOverrides,
+  assets?: IAssetHost
 ): Promise<ISlcIngestEnvelopeV1> {
   return runClientScrape({
     driver,
@@ -126,5 +128,6 @@ export async function runSyncPipeline(
     resolver: overrides?.resolver,
     enricher: overrides?.enricher,
     enricherTimeoutMs: overrides?.enricherTimeoutMs,
+    assets,
   });
 }

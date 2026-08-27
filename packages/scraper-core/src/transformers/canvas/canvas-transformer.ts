@@ -338,6 +338,7 @@ export function transformCanvasExtract(
           dueAt: a.dueDate || undefined,
           pointsPossible: parsePoints(a.points),
           status: normalizeStatus(a.status),
+          description: a.description || undefined,
           attachments: a.attachments?.map((att) => ({
             name: att.name,
             url: att.url,

@@ -10,6 +10,20 @@ export const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
 
 export type UserRole = 'parent' | 'admin' | 'newUser';
 
+/** Demo household from POST /api/seed/demo. Password for all: DemoPass123! */
+export const DEMO_USERS = {
+  parent: {
+    email: 'demo@scholarmancy.com',
+    password: 'DemoPass123!',
+    name: 'Sarah Mitchell',
+  },
+  emma: {
+    email: 'emma.demo@scholarmancy.com',
+    password: 'DemoPass123!',
+    name: 'Emma Mitchell',
+  },
+} as const;
+
 export const TEST_USERS = {
   parent: {
     email: 'test.parent@example.com',

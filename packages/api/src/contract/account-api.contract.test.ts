@@ -11,18 +11,22 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { UserRepository } from '@scholaracle/database';
 import { createAccountRouter } from '../routes/account/account';
 import { authMiddleware } from '../middleware/auth';
 import { createErrorHandler } from '../middleware/errorHandler';
 import { assertKeys } from './assertExactKeys';
 
 const EMAIL = 'contract-account@example.com';
+const STUDENT_EMAIL = 'contract-student-push@example.com';
+const STUDENT_PROFILE_ID = '507f1f77bcf86cd799439011';
 
 describe('account API contract', () => {
   let app: Express;
   let database: Db;
   let mongoClient: MongoClient;
   let userToken: string;
+  let studentToken: string;
 
   beforeAll(async () => {
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -30,7 +34,7 @@ describe('account API contract', () => {
     mongoClient = new MongoClient(mongodbUri);
     await mongoClient.connect();
     database = mongoClient.db(dbName);
-    await database.collection('users').deleteMany({ email: EMAIL });
+    await database.collection('users').deleteMany({ email: { $in: [EMAIL, STUDENT_EMAIL] } });
 
     const authService = new AuthService(database, 'test-secret');
     app = express();
@@ -45,6 +49,20 @@ describe('account API contract', () => {
     const reg = await authService.register(EMAIL, 'password123', 'Account Contract');
     if (!reg.success || !reg.token) throw new Error('Failed to register test user');
     userToken = reg.token;
+
+    const passwordHash = await UserRepository.hashPassword('password123');
+    await new UserRepository(database).create({
+      email: STUDENT_EMAIL,
+      passwordHash,
+      name: 'Emma Contract',
+      role: 'student',
+      studentId: STUDENT_PROFILE_ID,
+    });
+    const studentLogin = await authService.login(STUDENT_EMAIL, 'password123');
+    if (!studentLogin.success || !studentLogin.token) {
+      throw new Error('Failed to login contract student');
+    }
+    studentToken = studentLogin.token;
   });
 
   afterAll(async () => {
@@ -155,5 +173,40 @@ describe('account API contract', () => {
   it('DELETE /api/account/push-token — unauthenticated is 401 (not 404)', async () => {
     const res = await request(app).delete('/api/account/push-token').send({ deviceId: 'x' });
     expect(res.status).toBe(401);
+  });
+
+  it('student JWT can POST /api/account/push-token and stores audience student + studentId', async () => {
+    const res = await request(app)
+      .post('/api/account/push-token')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        expoPushToken: 'ExponentPushToken[student-1]',
+        deviceId: 'device-student',
+        type: 'ios',
+        audience: 'student',
+        studentId: STUDENT_PROFILE_ID,
+      });
+
+    expect(res.status).toBe(200);
+    const user = await database.collection('users').findOne({ email: STUDENT_EMAIL });
+    const devices = (user?.['devices'] ?? []) as Array<{
+      deviceId: string;
+      audience?: string;
+      studentId?: string;
+      pushToken: string;
+    }>;
+    const device = devices.find((d) => d.deviceId === 'device-student');
+    expect(device?.pushToken).toBe('ExponentPushToken[student-1]');
+    expect(device?.audience).toBe('student');
+    expect(device?.studentId).toBe(STUDENT_PROFILE_ID);
+  });
+
+  it('student JWT cannot initiate an email transfer (household mutation)', async () => {
+    const res = await request(app)
+      .post('/api/account/email-transfer/initiate')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ newEmail: 'other@example.com' });
+
+    expect(res.status).toBe(403);
   });
 });

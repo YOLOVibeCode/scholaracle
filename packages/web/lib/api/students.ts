@@ -66,6 +66,11 @@ export interface IAttachment {
   readonly name: string;
   readonly url?: string;
   readonly type?: string;
+  /**
+   * Signed URL for Scholaracle-hosted attachments (24h TTL). Absent for raw
+   * school-portal URLs. Never cache.
+   */
+  readonly downloadUrl?: string;
 }
 
 export interface IRubricScore {
@@ -89,6 +94,13 @@ export interface ICourseAssignment {
   readonly categoryWeight?: number;
   readonly rubricScores?: readonly IRubricScore[];
   readonly attachments?: readonly IAttachment[];
+  /**
+   * Assignment instructions / description HTML. Strip tags for display;
+   * extract <a href> links for the work pack. Never cache.
+   */
+  readonly description?: string;
+  /** Direct link to the assignment on the school portal. */
+  readonly lmsUrl?: string;
 }
 
 export type RiskLevel = 'none' | 'low' | 'medium' | 'high' | 'critical';
@@ -135,6 +147,8 @@ export interface IActionAsset {
   readonly mimeType: string;
   readonly fileSize: number;
   readonly downloadUrl: string;
+  /** Hash of stored bytes. Cache key is assetId + contentHash. */
+  readonly contentHash?: string;
 }
 
 export interface IActionItem {
@@ -154,6 +168,8 @@ export interface IActionItem {
   };
   readonly assets: readonly IActionAsset[];
   readonly materials: readonly IActionAsset[];
+  readonly studentStatus?: string;
+  readonly lastNudgedAt?: string;
 }
 
 export interface IActionBucket {
@@ -320,9 +336,16 @@ export interface ICourseMaterial {
   readonly description?: string;
   readonly fileSize?: number;
   readonly assetId?: string;
+  /**
+   * Hash of the stored bytes. Cache key is assetId + contentHash.
+   * downloadUrl is a 24h ticket — never cache that URL.
+   */
+  readonly contentHash?: string;
   readonly downloadUrl?: string;
   /** When 'authenticated', link requires school login; show lock indicator. */
   readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
+  /** Non-null when this material is linked to a specific assignment. */
+  readonly assignmentExternalId?: string | null;
 }
 
 export interface ICourseMaterials {
@@ -403,6 +426,18 @@ export const studentsApi = {
    */
   async getActionBoard(id: string): Promise<IActionBoardResponse | null> {
     return await apiClient.get<IActionBoardResponse>(`/students/${id}/action-board`);
+  },
+
+  /**
+   * Parent → student nudge. Max once per assignment per calendar day.
+   */
+  async nudge(
+    studentId: string,
+    assignmentExternalId: string
+  ): Promise<{ success: boolean; lastNudgedAt?: string }> {
+    return await apiClient.post<{ success: boolean; lastNudgedAt?: string }>(
+      `/students/${studentId}/assignments/${encodeURIComponent(assignmentExternalId)}/nudge`
+    );
   },
 
   /**
@@ -614,5 +649,42 @@ export const studentsApi = {
     return apiClient.get<readonly IPendingInvite[]>(
       `/students/invites/pending?email=${encodeURIComponent(email)}`
     );
+  },
+
+  /** Send a one-time magic login link to a student via email or SMS (owner only). */
+  async sendStudentMagicLink(
+    studentId: string,
+    channel: 'email' | 'sms',
+    to: string
+  ): Promise<{ success: boolean; expiresAt?: string; message?: string }> {
+    try {
+      const res = await apiClient.post<{ success: boolean; expiresAt?: string }>(
+        `/students/${studentId}/login/magic-link/send`,
+        { channel, to }
+      );
+      return res;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to send login link';
+      return { success: false, message: msg };
+    }
+  },
+
+  /** Send a one-time magic login link to a shared-parent contact (canAdmin). */
+  async sendContactMagicLink(
+    studentId: string,
+    contactEmail: string,
+    channel: 'email' | 'sms',
+    to?: string
+  ): Promise<{ success: boolean; expiresAt?: string; message?: string }> {
+    try {
+      const res = await apiClient.post<{ success: boolean; expiresAt?: string }>(
+        `/students/${studentId}/contacts/${encodeURIComponent(contactEmail)}/magic-link/send`,
+        { channel, ...(to ? { to } : {}) }
+      );
+      return res;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to send login link';
+      return { success: false, message: msg };
+    }
   },
 };

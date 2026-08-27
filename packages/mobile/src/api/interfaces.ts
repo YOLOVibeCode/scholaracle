@@ -9,6 +9,9 @@ import type {
   IStudentCreateRequest,
   IStudentGradesResponse,
   IAuthLoginResponse,
+  IAuthUser,
+  ITodayView,
+  IWorkPackView,
   ISourceInviteIssueRequest,
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
@@ -19,6 +22,17 @@ export interface IAuthSession {
   register(email: string, password: string, name: string): Promise<IAuthLoginResponse>;
   logout(): Promise<void>;
   isLoggedIn(): Promise<boolean>;
+  getSessionUser(): Promise<IAuthUser | null>;
+}
+
+/** Student studio slice. Parent screens must not depend on this. */
+export interface IStudioApi {
+  getStudioToday(): Promise<ITodayView>;
+  getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView>;
+  patchStudioAssignmentStatus(
+    assignmentExternalId: string,
+    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
+  ): Promise<void>;
 }
 
 export interface IConnectorTokenProvider {

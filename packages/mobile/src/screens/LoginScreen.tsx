@@ -32,7 +32,12 @@ import {
 } from '../credentials/savedLoginStore';
 import { ApiError } from '../api/ApiError';
 
-export function LoginScreen(): React.ReactElement {
+export interface ILoginScreenProps {
+  /** Parent first-run only. Students are parent-provisioned and stay on this form. */
+  onCreateAccount?(): void;
+}
+
+export function LoginScreen({ onCreateAccount }: ILoginScreenProps = {}): React.ReactElement {
   const { login, isAuthenticating, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -162,6 +167,12 @@ export function LoginScreen(): React.ReactElement {
             {error}
           </Text>
         )}
+
+        {onCreateAccount !== undefined ? (
+          <TouchableOpacity onPress={onCreateAccount} testID="link-create-parent-account">
+            <Text style={styles.createLink}>Create a parent account</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );
@@ -255,5 +266,12 @@ const styles = StyleSheet.create({
     color: '#dc3545',
     marginTop: 16,
     textAlign: 'center',
+  },
+  createLink: {
+    color: '#4361ee',
+    fontWeight: '600',
+    marginTop: 24,
+    textAlign: 'center',
+    fontSize: 16,
   },
 });

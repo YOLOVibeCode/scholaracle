@@ -9,29 +9,17 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import {
-  FileText,
-  Link2,
-  BookOpen,
-  FileSpreadsheet,
-  Presentation,
-  Video,
-  File,
   Download,
-  Lock,
-  ExternalLink,
 } from 'lucide-react';
-import type { ComponentType } from 'react';
 import { studentsApi, type ICourseMaterial, type IAttachment } from '@/lib/api/students';
 import { getAttachmentIcon, getFileExtension } from '@/lib/attachment-utils';
-
-const MATERIAL_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  document: FileText,
-  link: Link2,
-  syllabus: BookOpen,
-  handout: FileSpreadsheet,
-  presentation: Presentation,
-  video: Video,
-};
+import type { IStudentMaterialsResponse, IWorkPackView } from '@scholaracle/contracts';
+import {
+  WorkPack,
+  createStaticWorkPackSource,
+  humanAssignmentStatus,
+} from '@scholaracle/studio-core';
+import { WorkPackView } from '@/components/studio/WorkPackView';
 
 export interface AssignmentDetailDrawerAssignment {
   readonly externalId: string;
@@ -41,6 +29,10 @@ export interface AssignmentDetailDrawerAssignment {
   readonly pointsPossible?: number;
   readonly pointsEarned?: number;
   readonly attachments?: readonly IAttachment[];
+  /** Assignment instructions HTML from the LMS. */
+  readonly description?: string;
+  /** Direct link to the assignment on the school portal. */
+  readonly lmsUrl?: string;
 }
 
 export interface AssignmentDetailDrawerCourse {
@@ -103,15 +95,16 @@ export function AssignmentDetailDrawer({
   open,
   onOpenChange,
   studentId,
+  studentName,
   assignment,
   course,
 }: AssignmentDetailDrawerProps) {
-  const [materials, setMaterials] = useState<readonly ICourseMaterial[]>([]);
+  const [pack, setPack] = useState<IWorkPackView | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadMaterials = useCallback(async () => {
     if (!studentId || !assignment?.externalId) {
-      setMaterials([]);
+      setPack(null);
       return;
     }
     setLoading(true);
@@ -120,11 +113,50 @@ export function AssignmentDetailDrawer({
         assignmentExternalId: assignment.externalId,
       });
       const list = res?.courses?.flatMap((c) => c.materials) ?? [];
-      setMaterials(list);
+      const view = await new WorkPack(
+        createStaticWorkPackSource({
+          assignment: {
+            assignmentExternalId: assignment.externalId,
+            title: assignment.title,
+            courseName: course?.name ?? '',
+            status: assignment.status,
+            ...(assignment.dueAt !== undefined ? { dueAt: assignment.dueAt } : {}),
+            ...(assignment.description !== undefined
+              ? { descriptionHtml: assignment.description }
+              : {}),
+            ...(assignment.lmsUrl !== undefined ? { lmsUrl: assignment.lmsUrl } : {}),
+          },
+          materials: toMaterialsResponse(
+            studentId,
+            course?.externalId ?? '',
+            course?.name ?? '',
+            list
+          ),
+        })
+      ).load(
+        {
+          studentId,
+          displayName: studentName ?? 'Student',
+          showGrades: true,
+        },
+        assignment.externalId
+      );
+      setPack(view);
     } finally {
       setLoading(false);
     }
-  }, [studentId, assignment?.externalId]);
+  }, [
+    studentId,
+    studentName,
+    assignment?.externalId,
+    assignment?.title,
+    assignment?.status,
+    assignment?.dueAt,
+    assignment?.description,
+    assignment?.lmsUrl,
+    course?.externalId,
+    course?.name,
+  ]);
 
   useEffect(() => {
     if (open && assignment) void loadMaterials();
@@ -143,9 +175,9 @@ export function AssignmentDetailDrawer({
           <SheetDescription>
             Due {formatDueDate(assignment.dueAt)} ·{' '}
             <span
-              className={`inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize ${statusBadgeClass(assignment.status)}`}
+              className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadgeClass(assignment.status)}`}
             >
-              {assignment.status.replace('_', ' ')}
+              {humanAssignmentStatus(assignment.status)}
             </span>
             {assignment.pointsPossible != null && assignment.pointsPossible > 0 && (
               <> · {scoreText(assignment)}</>
@@ -183,24 +215,52 @@ export function AssignmentDetailDrawer({
             </div>
           )}
 
-          <h3 className="text-sm font-semibold">Related materials</h3>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : materials.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No materials linked to this assignment.</p>
-          ) : (
-            <ul className="space-y-1">
-              {materials.map((m) => (
-                <li key={m.externalId}>
-                  <MaterialRow material={m} />
-                </li>
-              ))}
-            </ul>
-          )}
+            <p className="text-sm text-muted-foreground">Loading materials…</p>
+          ) : pack ? (
+            <WorkPackView view={pack} chrome="stack" className="mx-0 max-w-none px-0 py-2" />
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>
   );
+}
+
+function toMaterialsResponse(
+  studentId: string,
+  courseExternalId: string,
+  courseName: string,
+  materials: readonly ICourseMaterial[]
+): IStudentMaterialsResponse {
+  return {
+    studentId,
+    studentName: '',
+    totalMaterials: materials.length,
+    courses: [
+      {
+        courseExternalId,
+        courseName,
+        materials: materials.map((m) => ({
+          externalId: m.externalId,
+          title: m.title,
+          type: m.type,
+          assignmentExternalId: m.assignmentExternalId ?? null,
+          ...(m.url !== undefined ? { url: m.url } : {}),
+          ...(m.fileName !== undefined ? { fileName: m.fileName } : {}),
+          ...(m.mimeType !== undefined ? { mimeType: m.mimeType } : {}),
+          ...(m.postedAt !== undefined ? { postedAt: m.postedAt } : {}),
+          ...(m.description !== undefined ? { description: m.description } : {}),
+          ...(m.fileSize !== undefined ? { fileSize: m.fileSize } : {}),
+          ...(m.assetId !== undefined ? { assetId: m.assetId } : {}),
+          ...(m.contentHash !== undefined ? { contentHash: m.contentHash } : {}),
+          ...(m.downloadUrl !== undefined ? { downloadUrl: m.downloadUrl } : {}),
+          ...(m.linkAccessibility !== undefined
+            ? { linkAccessibility: m.linkAccessibility }
+            : {}),
+        })),
+      },
+    ],
+  };
 }
 
 function AttachmentRow({ attachment }: { attachment: IAttachment }) {
@@ -228,46 +288,6 @@ function AttachmentRow({ attachment }: { attachment: IAttachment }) {
           <Download className="h-4 w-4" />
         </a>
       )}
-    </div>
-  );
-}
-
-function MaterialRow({ material }: { material: ICourseMaterial }) {
-  const Icon = MATERIAL_ICONS[material.type] ?? File;
-  const href = material.downloadUrl ?? material.url;
-
-  return (
-    <div
-      className="flex items-center gap-3 rounded-md border bg-background px-3 py-2"
-      data-testid="drawer-material-row"
-    >
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{material.title}</p>
-        {material.fileName && (
-          <p className="truncate text-xs text-muted-foreground">{material.fileName}</p>
-        )}
-      </div>
-      {material.linkAccessibility === 'authenticated' && (
-        <span title="Requires school login">
-          <Lock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        </span>
-      )}
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={material.downloadUrl ? 'Download' : 'Open link'}
-        >
-          {material.downloadUrl ? (
-            <Download className="h-4 w-4" />
-          ) : (
-            <ExternalLink className="h-4 w-4" />
-          )}
-        </a>
-      ) : null}
     </div>
   );
 }

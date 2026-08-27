@@ -13,9 +13,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, Trash2, Mail, Check, Clock, Crown, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Users, Trash2, Mail, Check, Clock, Crown, ShieldCheck, ShieldOff, Link2 } from 'lucide-react';
 import { studentsApi } from '@/lib/api/students';
 import { useAsyncData } from '@/lib/hooks';
+
+interface SendLinkState {
+  email: string;
+  channel: 'email' | 'sms';
+  to: string;
+  sending: boolean;
+  sent: boolean;
+  error: string | null;
+}
 
 export interface ManageParentsCardProps {
   studentId: string;
@@ -32,6 +41,7 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [sendLink, setSendLink] = useState<SendLinkState | null>(null);
 
   const fetchParents = useCallback(() => studentsApi.getParents(studentId), [studentId]);
   const { data: parents, retry: refreshParents } = useAsyncData(fetchParents, { retryCount: 1 });
@@ -85,6 +95,33 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
       setInviteError(err instanceof Error ? err.message : 'Failed to remove parent');
     } finally {
       setRemoving(null);
+    }
+  };
+
+  const openSendLink = (contactEmail: string, defaultTo: string) => {
+    setSendLink({
+      email: contactEmail,
+      channel: 'email',
+      to: defaultTo,
+      sending: false,
+      sent: false,
+      error: null,
+    });
+  };
+
+  const handleSendLink = async () => {
+    if (!sendLink) return;
+    setSendLink((s) => s && { ...s, sending: true, error: null, sent: false });
+    const result = await studentsApi.sendContactMagicLink(
+      studentId,
+      sendLink.email,
+      sendLink.channel,
+      sendLink.to || undefined
+    );
+    if (result.success) {
+      setSendLink((s) => s && { ...s, sending: false, sent: true });
+    } else {
+      setSendLink((s) => s && { ...s, sending: false, error: result.message ?? 'Failed to send link' });
     }
   };
 
@@ -161,6 +198,16 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => p.email && openSendLink(p.email, p.email)}
+                    title="Send login link"
+                    data-testid={`send-link-${p.email}`}
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
                     onClick={() => p.email && handleToggleAdmin(p.email, p.isAdmin)}
                     disabled={toggling === p.email}
                     title={p.isAdmin ? 'Remove admin rights' : 'Grant admin rights'}
@@ -185,16 +232,28 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
                 </div>
               )}
               {!p.isOwner && isOwner && p.status === 'pending' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => p.email && handleRemove(p.email)}
-                  disabled={removing === p.email}
-                  data-testid={`remove-parent-${p.email}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => p.email && openSendLink(p.email, p.email)}
+                    title="Send login link"
+                    data-testid={`send-link-${p.email}`}
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => p.email && handleRemove(p.email)}
+                    disabled={removing === p.email}
+                    data-testid={`remove-parent-${p.email}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
             </div>
           ))}
@@ -203,6 +262,64 @@ export function ManageParentsCard({ studentId, studentName, isOwner }: ManagePar
             <p className="text-sm text-muted-foreground py-2">Loading...</p>
           )}
         </div>
+
+        {/* Send login link panel */}
+        {sendLink && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-primary" />
+              Send login link to {sendLink.email}
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Select
+                value={sendLink.channel}
+                onValueChange={(v) =>
+                  setSendLink((s) => s && { ...s, channel: v as 'email' | 'sms', sent: false, error: null })
+                }
+              >
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="sms">SMS</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                className="flex-1 min-w-[160px]"
+                placeholder={sendLink.channel === 'email' ? 'email@example.com' : '+1 555 000 0000'}
+                value={sendLink.to}
+                onChange={(e) =>
+                  setSendLink((s) => s && { ...s, to: e.target.value, sent: false, error: null })
+                }
+                disabled={sendLink.sending || sendLink.sent}
+              />
+              <Button
+                size="sm"
+                onClick={handleSendLink}
+                disabled={sendLink.sending || sendLink.sent || !sendLink.to.trim()}
+                data-testid="send-link-submit"
+              >
+                {sendLink.sending ? 'Sending…' : sendLink.sent ? 'Sent ✓' : 'Send'}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSendLink(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+            {sendLink.error && (
+              <p className="text-xs text-destructive">{sendLink.error}</p>
+            )}
+            {sendLink.sent && (
+              <p className="text-xs text-green-600 dark:text-green-400">
+                Login link sent — it expires in 24 hours.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Invite form (owner only) */}
         {isOwner && (

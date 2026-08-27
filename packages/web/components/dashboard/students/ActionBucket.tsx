@@ -9,6 +9,7 @@ import { ActionItem } from './ActionItem';
 export interface ActionBucketProps {
   readonly bucket: IActionBucketType;
   readonly onItemClick?: (item: IActionItem) => void;
+  readonly onNudge?: (item: IActionItem) => void;
 }
 
 type BucketId = IActionBucketType['id'];
@@ -29,7 +30,7 @@ function leftBorderClass(id: BucketId): string {
   }
 }
 
-export function ActionBucket({ bucket, onItemClick }: ActionBucketProps) {
+export function ActionBucket({ bucket, onItemClick, onNudge }: ActionBucketProps) {
   const defaultOpen = bucket.id !== 'caught_up';
   const [open, setOpen] = useState(defaultOpen);
   const borderClass = leftBorderClass(bucket.id);
@@ -67,7 +68,12 @@ export function ActionBucket({ bucket, onItemClick }: ActionBucketProps) {
             <p className="text-sm text-muted-foreground">Nothing here.</p>
           ) : (
             bucket.items.map((item) => (
-              <ActionItem key={item.assignmentExternalId} item={item} onItemClick={onItemClick} />
+              <ActionItem
+                key={item.assignmentExternalId}
+                item={item}
+                onItemClick={onItemClick}
+                onNudge={onNudge}
+              />
             ))
           )}
         </CardContent>

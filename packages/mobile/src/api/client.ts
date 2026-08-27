@@ -22,6 +22,10 @@ import type {
   IRunListItem,
   IAuthLoginResponse,
   IAuthRefreshResponse,
+  IAuthUser,
+  ITodayView,
+  IWorkPackView,
+  IPushTokenRequest,
   IConnectorTokenResponse,
   IIngestSourceRegisterRequest,
   IIngestRunStartResponse,
@@ -30,6 +34,7 @@ import type {
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
 } from '@scholaracle/contracts';
+import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
@@ -40,6 +45,7 @@ const REFRESH_TOKEN_KEY = 'slc_refresh_token';
 const LEGACY_CONNECTOR_TOKEN_KEY = 'slc_connector_token';
 const CONNECTOR_TOKEN_KEY = 'slc_connector_token_v2';
 const PUSH_TOKEN_KEY = 'slc_push_token';
+const SESSION_USER_KEY = 'slc_session_user';
 
 /** Flattened assignment view-model consumed by DashboardScreen. */
 export interface IAssignmentItem {
@@ -49,6 +55,8 @@ export interface IAssignmentItem {
   readonly status?: string;
   readonly courseName?: string;
   readonly courseExternalId?: string;
+  /** Matches ICourseGradeAssignment.externalId — used to navigate to detail. */
+  readonly assignmentExternalId?: string;
 }
 
 /** Run view-model consumed by DashboardScreen (provider comes from the source). */
@@ -121,6 +129,22 @@ export class ScholarmancyApiClient {
     await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => undefined);
     await SecureStore.deleteItemAsync(CONNECTOR_TOKEN_KEY).catch(() => undefined);
     await SecureStore.deleteItemAsync(LEGACY_CONNECTOR_TOKEN_KEY).catch(() => undefined);
+    await SecureStore.deleteItemAsync(SESSION_USER_KEY).catch(() => undefined);
+  }
+
+  async getSessionUser(): Promise<IAuthUser | null> {
+    const raw = await SecureStore.getItemAsync(SESSION_USER_KEY);
+    if (raw != null && raw !== '') {
+      try {
+        const parsed = JSON.parse(raw) as Partial<IAuthUser>;
+        const user = sessionUserFromPartial(parsed);
+        if (user) return user;
+      } catch {
+        // fall through to JWT
+      }
+    }
+    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+    return token != null ? userFromAccessToken(token) : null;
   }
 
   async isLoggedIn(): Promise<boolean> {
@@ -210,6 +234,32 @@ export class ScholarmancyApiClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Student studio (IStudioApi — student JWT only)
+  // ---------------------------------------------------------------------------
+
+  async getStudioToday(): Promise<ITodayView> {
+    return parseTodayView(await this._get<unknown>('/api/studio/today'));
+  }
+
+  async getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView> {
+    return parseWorkPackView(
+      await this._get<unknown>(
+        `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}`
+      )
+    );
+  }
+
+  async patchStudioAssignmentStatus(
+    assignmentExternalId: string,
+    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
+  ): Promise<void> {
+    await this._patch(
+      `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+      { status }
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Student data (studentId = the Mongo `id` from GET /api/students —
   // NEVER the external/SIS id)
   // ---------------------------------------------------------------------------
@@ -225,6 +275,7 @@ export class ScholarmancyApiClient {
         status: item.status,
         courseName: item.course.name,
         courseExternalId: item.course.externalId,
+        assignmentExternalId: item.assignmentExternalId,
       }))
     );
   }
@@ -301,7 +352,16 @@ export class ScholarmancyApiClient {
   async registerPushToken(expoPushToken: string): Promise<void> {
     const deviceId = await getDeviceId();
     const type = Platform.OS === 'android' ? 'android' : 'ios';
-    await this._post('/api/account/push-token', { expoPushToken, deviceId, type }, true);
+    const user = await this.getSessionUser();
+    const audience = user?.role === 'student' ? 'student' : 'parent';
+    const body: IPushTokenRequest = {
+      expoPushToken,
+      deviceId,
+      type,
+      audience,
+      ...(audience === 'student' && user?.studentId ? { studentId: user.studentId } : {}),
+    };
+    await this._post('/api/account/push-token', body, true);
     await SecureStore.setItemAsync(PUSH_TOKEN_KEY, expoPushToken);
   }
 
@@ -418,6 +478,7 @@ export class ScholarmancyApiClient {
     if (res.refreshToken) {
       await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, res.refreshToken);
     }
+    await SecureStore.setItemAsync(SESSION_USER_KEY, JSON.stringify(sessionUserFromLogin(res)));
     this._sessionEpoch += 1;
   }
 
@@ -490,6 +551,22 @@ export class ScholarmancyApiClient {
     return res.json() as Promise<T>;
   }
 
+  private async _patch<T>(path: string, body: unknown): Promise<T> {
+    const doPatch = async (authToken: string): Promise<Response> =>
+      fetch(`${this.baseUrl}${path}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify(body),
+      });
+
+    let res = await doPatch(await this._getAccessToken());
+    if (res.status === 401) {
+      res = await doPatch(await this._refreshAccessToken());
+    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `PATCH ${path}`);
+    return res.json() as Promise<T>;
+  }
+
   private async _delete<T>(path: string, body: unknown): Promise<T> {
     const doDelete = async (authToken: string): Promise<Response> =>
       fetch(`${this.baseUrl}${path}`, {
@@ -530,3 +607,58 @@ export class ScholarmancyApiClient {
 export const apiClient = new ScholarmancyApiClient(
   process.env['EXPO_PUBLIC_API_URL'] ?? 'https://api.scholarmancy.com'
 );
+
+function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
+  const raw = res.user;
+  const role = raw?.role === 'student' ? 'student' : 'parent';
+  return {
+    id: raw?.id ?? '',
+    email: raw?.email ?? '',
+    name: raw?.name ?? '',
+    role,
+    ...(role === 'student' && raw?.studentId ? { studentId: raw.studentId } : {}),
+  };
+}
+
+function sessionUserFromPartial(parsed: Partial<IAuthUser>): IAuthUser | null {
+  if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') return null;
+  const role = parsed.role === 'student' ? 'student' : 'parent';
+  return {
+    id: parsed.id,
+    email: parsed.email,
+    name: typeof parsed.name === 'string' ? parsed.name : '',
+    role,
+    ...(role === 'student' && typeof parsed.studentId === 'string' && parsed.studentId !== ''
+      ? { studentId: parsed.studentId }
+      : {}),
+  };
+}
+
+function userFromAccessToken(token: string): IAuthUser | null {
+  const payloadPart = token.split('.')[1];
+  if (payloadPart === undefined || payloadPart === '') return null;
+  try {
+    const padded = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const withPad = padded + '='.repeat((4 - (padded.length % 4)) % 4);
+    const json =
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(withPad, 'base64').toString('utf8')
+        : atob(withPad);
+    const payload = JSON.parse(json) as {
+      userId?: string;
+      email?: string;
+      role?: string;
+      studentId?: string;
+    };
+    if (typeof payload.userId !== 'string' || typeof payload.email !== 'string') return null;
+    return sessionUserFromPartial({
+      id: payload.userId,
+      email: payload.email,
+      name: '',
+      role: payload.role === 'student' ? 'student' : 'parent',
+      ...(typeof payload.studentId === 'string' ? { studentId: payload.studentId } : {}),
+    });
+  } catch {
+    return null;
+  }
+}

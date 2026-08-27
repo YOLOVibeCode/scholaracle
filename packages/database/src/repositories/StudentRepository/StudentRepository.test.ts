@@ -213,6 +213,27 @@ describe('StudentRepository', () => {
     });
   });
 
+  describe('clearStudentLogin', () => {
+    it('unsets studentLogin so the profile has no bound login', async () => {
+      const created = await repository.create(
+        makeStudentData({
+          studentLogin: {
+            userId: new ObjectId().toString(),
+            showGrades: false,
+            createdAt: new Date(),
+          },
+        })
+      );
+      expect(created.studentLogin).toBeDefined();
+
+      const cleared = await repository.clearStudentLogin(created._id!.toString());
+      expect(cleared).toBe(true);
+
+      const found = await repository.findById(created._id!);
+      expect(found?.studentLogin).toBeUndefined();
+    });
+  });
+
   describe('delete', () => {
     it('should delete a student and return true', async () => {
       const created = await repository.create(makeStudentData());

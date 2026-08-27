@@ -340,6 +340,7 @@ describe('students API contract', () => {
           'description',
           'fileSize',
           'assetId',
+          'contentHash',
           'downloadUrl',
           'linkAccessibility',
         ],
@@ -377,7 +378,14 @@ describe('students API contract', () => {
     assertKeys(
       item,
       ['assignmentExternalId', 'title', 'status', 'isOverdue', 'course', 'assets', 'materials'],
-      ['dueAt', 'termExternalId', 'pointsPossible', 'pointsEarned'],
+      [
+        'dueAt',
+        'termExternalId',
+        'pointsPossible',
+        'pointsEarned',
+        'lastNudgedAt',
+        'studentStatus',
+      ],
       'IActionItem'
     );
     assertKeys(

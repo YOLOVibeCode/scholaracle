@@ -9,4 +9,5 @@ export type {
   IStudentContact,
   IAlertRecipientResolved,
   IOwnerAlertPrefs,
+  IStudentLogin,
 } from './Student';

@@ -8,9 +8,25 @@ import {
   type IRefreshTokenStore,
   type IOAuthAccountRepository,
 } from '@scholaracle/database';
-import type { IUserData } from '@scholaracle/database';
+import type { IUserData, User, UserRole } from '@scholaracle/database';
 import type { OAuthProvider } from '@scholaracle/database';
 import type { IPasswordResetEmailSender } from '../PasswordResetEmailSender';
+
+export interface IAuthUserPayload {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+  readonly role: UserRole;
+  readonly studentId?: string;
+}
+
+export interface IAuthTokenPayload {
+  readonly userId: string;
+  readonly email: string;
+  readonly role: UserRole;
+  readonly fid?: string;
+  readonly studentId?: string;
+}
 
 export interface IAuthResult {
   readonly success: boolean;
@@ -20,11 +36,7 @@ export interface IAuthResult {
   readonly familyId?: string;
   /** When false, client should use sessionStorage and token has shorter expiry. */
   readonly rememberMe?: boolean;
-  readonly user?: {
-    readonly id: string;
-    readonly email: string;
-    readonly name: string;
-  };
+  readonly user?: IAuthUserPayload;
   /** When true, client should redirect to reset-password on next login. */
   readonly forcePasswordReset?: boolean;
   readonly error?: string;
@@ -74,13 +86,47 @@ export interface IAuthService {
     userId: string,
     provider: OAuthProvider
   ): Promise<{ success: boolean; error?: string }>;
-  verifyToken(
-    token: string
-  ): Promise<{ readonly userId: string; readonly email: string; readonly fid?: string } | null>;
+  verifyToken(token: string): Promise<IAuthTokenPayload | null>;
   requestPasswordReset(email: string): Promise<IRequestPasswordResetResult>;
   resetPasswordWithToken(token: string, newPassword: string): Promise<IRequestPasswordResetResult>;
   refreshAccessToken(refreshToken: string): Promise<IRefreshResult | { error: string }>;
   revokeRefreshToken(refreshToken: string): Promise<{ success: boolean; error?: string }>;
+  /**
+   * Issue a JWT + refresh for an already-authenticated user (magic-link consume).
+   * By default only student-role, non-suspended users succeed.
+   * Pass `{ allowParent: true }` (magic-link consume path only) to also accept parent-role users.
+   */
+  createSessionForUser(
+    userId: string,
+    options?: { rememberMe?: boolean; allowParent?: boolean }
+  ): Promise<IAuthResult>;
+}
+
+function roleFromUser(user: { role?: string }): UserRole {
+  return user.role === 'student' ? 'student' : 'parent';
+}
+
+function tokenClaimsFromUser(
+  user: User,
+  familyId?: string
+): { familyId?: string; role: UserRole; studentId?: string } {
+  const role = roleFromUser(user);
+  return {
+    role,
+    ...(familyId ? { familyId } : {}),
+    ...(role === 'student' && user.studentId ? { studentId: user.studentId } : {}),
+  };
+}
+
+function publicUserFromUser(user: User): IAuthUserPayload {
+  const role = roleFromUser(user);
+  return {
+    id: user._id?.toString() ?? '',
+    email: user.email,
+    name: user.name,
+    role,
+    ...(role === 'student' && user.studentId ? { studentId: user.studentId } : {}),
+  };
 }
 
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
@@ -186,6 +232,7 @@ export class AuthService implements IAuthService {
         email,
         passwordHash,
         name,
+        role: 'parent',
         phone: options?.phone || undefined,
         smsConsent: options?.smsConsent ?? false,
       };
@@ -200,7 +247,11 @@ export class AuthService implements IAuthService {
         undefined,
         rememberMe ? undefined : this._sessionRefreshTokenExpiresInMs
       );
-      const token = this._generateToken(userId, emailVal, refreshPair?.familyId);
+      const token = this._generateToken(
+        userId,
+        emailVal,
+        tokenClaimsFromUser(user, refreshPair?.familyId)
+      );
 
       return {
         success: true,
@@ -208,11 +259,7 @@ export class AuthService implements IAuthService {
         refreshToken: refreshPair?.refreshToken,
         familyId: refreshPair?.familyId,
         rememberMe,
-        user: {
-          id: userId,
-          email: user.email,
-          name: user.name,
-        },
+        user: publicUserFromUser(user),
       };
     } catch (error) {
       return {
@@ -246,6 +293,13 @@ export class AuthService implements IAuthService {
         };
       }
 
+      if (user.isSuspended) {
+        return {
+          success: false,
+          error: 'Invalid email or password',
+        };
+      }
+
       // Verify password
       const isValidPassword = await UserRepo.verifyPassword(password, user.passwordHash);
       if (!isValidPassword) {
@@ -255,28 +309,32 @@ export class AuthService implements IAuthService {
         };
       }
 
-      const userId = user._id?.toString() ?? '';
-      const refreshPair = await this._createRefreshToken(
-        userId,
-        email,
-        undefined,
-        rememberMe ? undefined : this._sessionRefreshTokenExpiresInMs
-      );
-      const token = this._generateToken(userId, email, refreshPair?.familyId);
-
+      return await this._issueSession(user, rememberMe);
+    } catch (error) {
       return {
-        success: true,
-        token,
-        refreshToken: refreshPair?.refreshToken,
-        familyId: refreshPair?.familyId,
-        rememberMe,
-        user: {
-          id: userId,
-          email: user.email,
-          name: user.name,
-        },
-        forcePasswordReset: user.forcePasswordReset === true,
+        success: false,
+        error: error instanceof Error ? error.message : 'Login failed',
       };
+    }
+  }
+
+  /**
+   * Issue a session for a known user without a password (magic-link consume).
+   * Parents and suspended students fail with the same message as a bad token.
+   */
+  public async createSessionForUser(
+    userId: string,
+    options?: { rememberMe?: boolean; allowParent?: boolean }
+  ): Promise<IAuthResult> {
+    const rememberMe = options?.rememberMe !== false;
+    const allowParent = options?.allowParent === true;
+    try {
+      const user = await this._userRepository.findById(userId);
+      const role = user ? roleFromUser(user) : null;
+      if (!user || user.isSuspended || (!allowParent && role !== 'student')) {
+        return { success: false, error: 'Invalid or expired sign-in link' };
+      }
+      return await this._issueSession(user, rememberMe);
     } catch (error) {
       return {
         success: false,
@@ -311,14 +369,18 @@ export class AuthService implements IAuthService {
         }
         const userId = user._id?.toString() ?? '';
         const refreshPair = await this._createRefreshToken(userId, user.email, undefined);
-        const token = this._generateToken(userId, user.email, refreshPair?.familyId);
+        const token = this._generateToken(
+          userId,
+          user.email,
+          tokenClaimsFromUser(user, refreshPair?.familyId)
+        );
         return {
           success: true,
           token,
           refreshToken: refreshPair?.refreshToken,
           familyId: refreshPair?.familyId,
           rememberMe: true,
-          user: { id: userId, email: user.email, name: user.name },
+          user: publicUserFromUser(user),
         };
       }
 
@@ -335,14 +397,18 @@ export class AuthService implements IAuthService {
         await this._userRepository.update(userByEmail._id!, { oauthProviders: providers });
         const userId = userByEmail._id?.toString() ?? '';
         const refreshPair = await this._createRefreshToken(userId, userByEmail.email, undefined);
-        const token = this._generateToken(userId, userByEmail.email, refreshPair?.familyId);
+        const token = this._generateToken(
+          userId,
+          userByEmail.email,
+          tokenClaimsFromUser(userByEmail, refreshPair?.familyId)
+        );
         return {
           success: true,
           token,
           refreshToken: refreshPair?.refreshToken,
           familyId: refreshPair?.familyId,
           rememberMe: true,
-          user: { id: userId, email: userByEmail.email, name: userByEmail.name },
+          user: publicUserFromUser(userByEmail),
         };
       }
 
@@ -352,20 +418,25 @@ export class AuthService implements IAuthService {
         email,
         passwordHash,
         name,
+        role: 'parent',
         oauthProviders: [provider],
       };
       const user = await this._userRepository.create(userData);
       const userId = user._id?.toString() ?? '';
       await this._oauthAccountRepository.create(userId, provider, providerAccountId, email);
       const refreshPair = await this._createRefreshToken(userId, user.email, undefined);
-      const token = this._generateToken(userId, user.email, refreshPair?.familyId);
+      const token = this._generateToken(
+        userId,
+        user.email,
+        tokenClaimsFromUser(user, refreshPair?.familyId)
+      );
       return {
         success: true,
         token,
         refreshToken: refreshPair?.refreshToken,
         familyId: refreshPair?.familyId,
         rememberMe: true,
-        user: { id: userId, email: user.email, name: user.name },
+        user: publicUserFromUser(user),
       };
     } catch (error) {
       return {
@@ -454,20 +525,27 @@ export class AuthService implements IAuthService {
    * @param token - JWT token
    * @returns Decoded token data or null if invalid
    */
-  public async verifyToken(
-    token: string
-  ): Promise<{ readonly userId: string; readonly email: string; readonly fid?: string } | null> {
+  public async verifyToken(token: string): Promise<IAuthTokenPayload | null> {
     try {
       const decoded = jwt.verify(token, this._jwtSecret) as {
         userId: string;
         email: string;
         fid?: string;
+        role?: string;
+        studentId?: string;
       };
 
+      const role: UserRole = decoded.role === 'student' ? 'student' : 'parent';
       return {
         userId: decoded.userId,
         email: decoded.email,
+        role,
         fid: decoded.fid,
+        ...(role === 'student' &&
+        typeof decoded.studentId === 'string' &&
+        decoded.studentId.length > 0
+          ? { studentId: decoded.studentId }
+          : {}),
       };
     } catch {
       return null;
@@ -481,7 +559,7 @@ export class AuthService implements IAuthService {
    * enforce RBAC and audit logging at the API layer.
    */
   public issueTokenForUser(userId: string, email: string): string {
-    return this._generateToken(userId, email);
+    return this._generateToken(userId, email, { role: 'parent' });
   }
 
   /**
@@ -593,7 +671,11 @@ export class AuthService implements IAuthService {
     if (!newPair) {
       return { error: 'Failed to issue new tokens' };
     }
-    const token = this._generateToken(valid.userId, user.email, newPair.familyId);
+    const token = this._generateToken(
+      valid.userId,
+      user.email,
+      tokenClaimsFromUser(user, newPair.familyId)
+    );
     return { token, refreshToken: newPair.refreshToken, familyId: newPair.familyId };
   }
 
@@ -619,6 +701,34 @@ export class AuthService implements IAuthService {
   }
 
   /**
+   * Mint access + refresh tokens for a verified user.
+   */
+  private async _issueSession(user: User, rememberMe: boolean): Promise<IAuthResult> {
+    const userId = user._id?.toString() ?? '';
+    const refreshPair = await this._createRefreshToken(
+      userId,
+      user.email,
+      undefined,
+      rememberMe ? undefined : this._sessionRefreshTokenExpiresInMs
+    );
+    const token = this._generateToken(
+      userId,
+      user.email,
+      tokenClaimsFromUser(user, refreshPair?.familyId)
+    );
+
+    return {
+      success: true,
+      token,
+      refreshToken: refreshPair?.refreshToken,
+      familyId: refreshPair?.familyId,
+      rememberMe,
+      user: publicUserFromUser(user),
+      forcePasswordReset: user.forcePasswordReset === true,
+    };
+  }
+
+  /**
    * Create and store a refresh token for the user. Returns access token and raw refresh token.
    * When familyId is provided (rotation), reuse it; otherwise create a new family.
    * When expiresInMsOverride is set (e.g. for session-only), use that instead of default expiry.
@@ -641,21 +751,28 @@ export class AuthService implements IAuthService {
       new Date(Date.now() + (expiresInMsOverride ?? this._refreshTokenExpiresInMs));
 
     await this._refreshTokenStore.create(userId, tokenHash, fid, expiresAt);
-    const token = this._generateToken(userId, email);
+    const token = this._generateToken(userId, email, { role: 'parent' });
     return { token, refreshToken: refreshTokenRaw, familyId: fid };
   }
 
   /**
-   * Generate JWT token. Optionally include familyId for session management (current session marker).
-   *
-   * @param userId - User ID
-   * @param email - User email
-   * @param familyId - Optional refresh token family ID (for session list "current" marker)
-   * @returns JWT token
+   * Generate JWT token. Includes role (default parent) and optional studentId / familyId.
    */
-  private _generateToken(userId: string, email: string, familyId?: string): string {
-    const payload: { userId: string; email: string; fid?: string } = { userId, email };
-    if (familyId) payload.fid = familyId;
+  private _generateToken(
+    userId: string,
+    email: string,
+    claims?: { familyId?: string; role?: UserRole; studentId?: string }
+  ): string {
+    const role: UserRole = claims?.role === 'student' ? 'student' : 'parent';
+    const payload: {
+      userId: string;
+      email: string;
+      role: UserRole;
+      fid?: string;
+      studentId?: string;
+    } = { userId, email, role };
+    if (claims?.familyId) payload.fid = claims.familyId;
+    if (role === 'student' && claims?.studentId) payload.studentId = claims.studentId;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
     return jwt.sign(
       payload,

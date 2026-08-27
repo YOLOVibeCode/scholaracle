@@ -49,6 +49,42 @@ describe('Student', () => {
       expect(student.grade).toBeUndefined();
       expect(student.studentId).toBeUndefined();
       expect(student.stats).toBeUndefined();
+      expect(student.studentLogin).toBeUndefined();
+    });
+
+    it('stores studentLogin with showGrades defaulting to false', () => {
+      const createdAt = new Date('2026-08-25T12:00:00Z');
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        studentLogin: {
+          userId: 'emma-user-id',
+          showGrades: false,
+          createdAt,
+        },
+      });
+
+      expect(student.studentLogin).toEqual({
+        userId: 'emma-user-id',
+        showGrades: false,
+        createdAt,
+      });
+    });
+
+    it('treats omitted showGrades as false and keeps provisionedByUserId', () => {
+      const createdAt = new Date('2026-08-25T12:00:00Z');
+      const student = new Student({
+        userId: 'user-123',
+        name: 'Jane Doe',
+        studentLogin: {
+          userId: 'emma-user-id',
+          createdAt,
+          provisionedByUserId: 'parent-owner-id',
+        },
+      });
+
+      expect(student.studentLogin?.showGrades).toBe(false);
+      expect(student.studentLogin?.provisionedByUserId).toBe('parent-owner-id');
     });
 
     it('should set dataSources to empty array by default', () => {

@@ -119,9 +119,13 @@ config.resolver.useWatchman = false;
 // compiles TypeScript on the fly without needing pre-built dist/.
 const contractsSrc = path.resolve(projectRoot, '../contracts/src');
 const scraperCoreSrc = path.resolve(projectRoot, '../scraper-core/src');
+const studioCoreSrc = path.resolve(projectRoot, '../studio-core/src');
+const interfacesSrc = path.resolve(projectRoot, '../interfaces/src');
 config.resolver.extraNodeModules = {
   '@scholaracle/contracts': contractsSrc,
   '@scholaracle/scraper-core': scraperCoreSrc,
+  '@scholaracle/studio-core': studioCoreSrc,
+  '@scholaracle/interfaces': interfacesSrc,
 };
 
 // Never pull companion secret files into the JS graph

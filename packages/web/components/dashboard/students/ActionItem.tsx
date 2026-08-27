@@ -14,6 +14,8 @@ import type { IActionItem, IActionAsset } from '@/lib/api/students';
 export interface ActionItemProps {
   readonly item: IActionItem;
   readonly onItemClick?: (item: IActionItem) => void;
+  readonly onNudge?: (item: IActionItem) => void;
+  readonly nudging?: boolean;
 }
 
 function statusBadgeClass(status: string): string {
@@ -47,6 +49,19 @@ function formatDueDate(dueAt: string | undefined): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+export function formatNudgedAgo(iso: string, now: Date = new Date()): string {
+  const diffM = Math.max(1, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
+  if (diffM < 60) return `Nudged ${diffM}m ago`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH < 24) return `Nudged ${diffH}h ago`;
+  return `Nudged ${Math.floor(diffH / 24)}d ago`;
+}
+
+export function nudgedToday(iso: string | undefined, now: Date = new Date()): boolean {
+  if (iso === undefined || iso === '') return false;
+  return new Date(iso).toDateString() === now.toDateString();
+}
+
 function AssetChipIcon({ materialType }: { materialType: string }) {
   const t = materialType.toLowerCase();
   if (t === 'rubric') return <ClipboardList className="h-3.5 w-3.5 shrink-0" />;
@@ -74,26 +89,23 @@ function AssetChip({ asset }: { asset: IActionAsset }) {
   );
 }
 
-export function ActionItem({ item, onItemClick }: ActionItemProps) {
+export function ActionItem({ item, onItemClick, onNudge, nudging = false }: ActionItemProps) {
   const gradeLabel =
     item.course.currentGrade != null
       ? `${item.course.currentGrade}%`
       : item.course.letterGrade ?? '—';
   const allAssets = [...item.assets, ...item.materials];
-  const Wrapper = onItemClick ? 'button' : 'div';
-  const wrapperProps = onItemClick
-    ? {
-        type: 'button' as const,
-        onClick: () => onItemClick(item),
-        className:
-          'flex w-full flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring',
-      }
-    : { className: 'flex flex-col gap-2 rounded-lg border bg-card p-3' };
+  const alreadyNudged = nudgedToday(item.lastNudgedAt);
 
   return (
-    <Wrapper
-      {...wrapperProps}
+    <div
       data-testid={`action-item-${item.assignmentExternalId}`}
+      onClick={onItemClick ? () => onItemClick(item) : undefined}
+      className={
+        onItemClick
+          ? 'flex w-full cursor-pointer flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-muted/50'
+          : 'flex flex-col gap-2 rounded-lg border bg-card p-3'
+      }
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -106,6 +118,11 @@ export function ActionItem({ item, onItemClick }: ActionItemProps) {
           {item.status.replace('_', ' ')}
         </span>
       </div>
+      {item.studentStatus === 'working_on_it' ? (
+        <p className="text-xs text-sky-700 dark:text-sky-300" data-testid="action-item-working">
+          Working on it
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">{item.course.name}</span>
         <span
@@ -121,6 +138,27 @@ export function ActionItem({ item, onItemClick }: ActionItemProps) {
           ))}
         </div>
       )}
-    </Wrapper>
+      {onNudge ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {item.lastNudgedAt ? (
+            <span className="text-xs text-muted-foreground" data-testid="action-item-nudged">
+              {formatNudgedAgo(item.lastNudgedAt)}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            data-testid="action-item-nudge"
+            disabled={alreadyNudged || nudging}
+            className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNudge(item);
+            }}
+          >
+            Nudge
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

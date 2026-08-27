@@ -10,6 +10,7 @@ import {
   type IPushTokenResponse,
 } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { requireParent } from '../../middleware/requireRole';
 import {
   EmailTransferService,
   type IEmailTransferEmailService,
@@ -42,6 +43,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
    */
   router.post(
     '/email-transfer/initiate',
+    requireParent,
     asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
@@ -136,6 +138,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
    */
   router.post(
     '/email-transfer/cancel',
+    requireParent,
     asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
@@ -157,6 +160,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
    */
   router.get(
     '/email-transfer/status',
+    requireParent,
     asyncHandler(async (req: Request, res: Response) => {
       const userId = getUserId(req);
       if (!userId) {
@@ -214,14 +218,18 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
       }
 
       const id = deviceId?.trim() || 'mobile-default';
-      const deviceType = type ?? 'ios';
+      const deviceType: 'ios' | 'android' | 'web' =
+        type === 'android' || type === 'web' ? type : 'ios';
       const existing = [...(user.devices ?? [])];
       const idx = existing.findIndex((d) => d.deviceId === id);
+      const audience = user.role === 'student' ? 'student' : 'parent';
       const nextDevice = {
         deviceId: id,
         type: deviceType,
         pushToken: expoPushToken.trim(),
         lastActive: new Date(),
+        audience,
+        ...(audience === 'student' && user.studentId ? { studentId: user.studentId } : {}),
       };
       const devices =
         idx >= 0

@@ -24,6 +24,35 @@ export const DEMO_STUDENT_LIAM = {
 
 export const DEMO_STUDENTS = [DEMO_STUDENT_EMMA, DEMO_STUDENT_LIAM] as const;
 
+/** Student-facing login for Emma. Parent-provisioned; not created via public register. */
+export const DEMO_STUDENT_USER_EMMA = {
+  email: 'emma.demo@scholarmancy.com',
+  password: 'DemoPass123!',
+  name: 'Emma Mitchell',
+} as const;
+
+/** Student-facing login for Liam. Parent-provisioned; not created via public register. */
+export const DEMO_STUDENT_USER_LIAM = {
+  email: 'liam.demo@scholarmancy.com',
+  password: 'DemoPass123!',
+  name: 'Liam Mitchell',
+} as const;
+
+/** Tiny valid-enough PDF so GET /api/assets returns real bytes (not metadata-only). */
+export const DEMO_MINIMAL_PDF = Buffer.from(
+  '%PDF-1.1\n' +
+    '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
+    '2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n' +
+    '3 0 obj<</Type/Page/MediaBox[0 0 200 200]/Parent 2 0 R>>endobj\n' +
+    'trailer<</Root 1 0 R>>\n' +
+    '%%EOF\n',
+  'utf8'
+);
+
+export const DEMO_LAB_SAFETY_ASSET_ID = 'demo-asset-demo-emma-ap-bio-lab-safety';
+export const DEMO_LAB_SAFETY_HASH = 'demo-demo-emma-ap-bio-lab-safety-hash';
+export const DEMO_LAB_SAFETY_STORAGE_KEY = 'demo/demo-asset-demo-emma-ap-bio-lab-safety';
+
 /** Blended-family demo contacts (emails); create users for accepted ones when seeding. */
 export const DEMO_CONTACT_JESSICA = 'jessica.demo@scholaracle.com';
 export const DEMO_CONTACT_RICKY = 'ricky.demo@scholaracle.com';
@@ -102,6 +131,10 @@ export interface DemoAssignmentInput {
   status: AssignmentStatus;
   pointsPossible?: number;
   pointsEarned?: number;
+  /** Assignment instructions HTML — shown on the work pack. */
+  description?: string;
+  /** Direct LMS link to the assignment page. */
+  lmsUrl?: string;
 }
 
 /**
@@ -121,15 +154,26 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
   for (let i = -35; i <= 10; i += 5) {
     const pts = 10;
     const earned = i <= 0 ? Math.floor(pts * (0.88 + Math.random() * 0.12)) : undefined;
+    const isMissing = i > 3;
     out.push({
       courseExternalId: 'demo-emma-ap-bio',
       studentExternalId: DEMO_STUDENT_EMMA.studentId,
       externalId: `demo-emma-ap-bio-a${i}`,
       title: `Unit ${Math.floor((i + 40) / 5)} Homework`,
       dueAt: day(i),
-      status: i <= 0 ? 'graded' : i > 3 ? 'missing' : 'submitted',
+      status: i <= 0 ? 'graded' : isMissing ? 'missing' : 'submitted',
       pointsPossible: pts,
       pointsEarned: earned,
+      // Attach instructions + public resources to the first missing assignment
+      ...(i === 5
+        ? {
+            description:
+              '<p>Complete the <strong>Cell Division</strong> worksheet below and submit via Canvas.</p>' +
+              '<p>Reference materials: <a href="https://www.khanacademy.org/science/ap-biology/cell-communication-and-cell-cycle">Khan Academy – Cell Cycle</a>.</p>' +
+              '<p>Lab safety rules apply — review the handout before lab time.</p>',
+            lmsUrl: 'https://school.instructure.com/courses/bio101/assignments/cell-division',
+          }
+        : {}),
     });
   }
 
@@ -181,6 +225,19 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
       status: i < 9 ? 'graded' : i === 9 ? 'submitted' : 'missing',
       pointsPossible: pts,
       pointsEarned: earned,
+      // Attach instructions + external resources to the essay assignment
+      ...(i === 9
+        ? {
+            description:
+              '<p>Write a 5-paragraph <strong>analytical essay</strong> on a theme from <em>To Kill a Mockingbird</em>.</p>' +
+              '<ul>' +
+              '<li>Follow the <a href="https://scholarmancy.com/demo/essay-rubric.pdf">Essay Rubric</a> (PDF, hosted).</li>' +
+              '<li>Reference guide: <a href="https://www.sparknotes.com/lit/mocking/">SparkNotes – To Kill a Mockingbird</a>.</li>' +
+              '</ul>' +
+              '<p>Submit via Google Classroom before 11:59 PM.</p>',
+            lmsUrl: 'https://school.instructure.com/courses/eng10/assignments/essay-draft',
+          }
+        : {}),
     });
   }
 
@@ -195,6 +252,19 @@ export function buildDemoAssignments(baseDate: Date): DemoAssignmentInput[] {
       status: 'graded',
       pointsPossible: 20,
       pointsEarned: 14 + Math.floor(Math.random() * 4),
+      // Attach instructions + public primary-source links to chapter 2
+      ...(i === 1
+        ? {
+            description:
+              '<p>Quiz covers Chapter 2: <strong>Age of Exploration</strong>.</p>' +
+              '<p>Study materials:</p>' +
+              '<ul>' +
+              '<li><a href="https://scholarmancy.com/demo/timeline.pdf">Timeline PDF</a> (hosted copy)</li>' +
+              '<li><a href="https://example.com/primary-1">Primary Source — Declaration</a> (public)</li>' +
+              '</ul>',
+            lmsUrl: 'https://school.instructure.com/courses/whist/assignments/ch2-quiz',
+          }
+        : {}),
     });
   }
 
@@ -317,6 +387,8 @@ export function buildDemoAssignmentDocs(userId: string, baseDate: Date) {
       status: a.status,
       pointsPossible: a.pointsPossible,
       pointsEarned: a.pointsEarned,
+      description: a.description,
+      url: a.lmsUrl,
     },
   }));
 }
@@ -517,6 +589,8 @@ export interface DemoMaterialInput {
   readonly fileName?: string;
   readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
   readonly hasAsset?: boolean;
+  /** Linked assignment externalId (layer-1 join for the work pack). */
+  readonly assignmentExternalId?: string;
 }
 
 const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
@@ -538,6 +612,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'handout',
     fileName: 'lab-safety.pdf',
     hasAsset: true,
+    assignmentExternalId: 'demo-emma-ap-bio-a5',
   },
   {
     courseExternalId: 'demo-emma-ap-bio',
@@ -547,6 +622,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'video',
     url: 'https://www.khanacademy.org/science/ap-biology/cell-communication-and-cell-cycle',
     linkAccessibility: 'public',
+    assignmentExternalId: 'demo-emma-ap-bio-a5',
   },
   {
     courseExternalId: 'demo-emma-ap-bio',
@@ -584,6 +660,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'handout',
     fileName: 'formulas.pdf',
     hasAsset: true,
+    assignmentExternalId: 'demo-emma-alg2-missing-1',
   },
   {
     courseExternalId: 'demo-emma-alg2',
@@ -612,6 +689,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'rubric',
     fileName: 'essay-rubric.pdf',
     hasAsset: true,
+    assignmentExternalId: 'demo-emma-eng10-a9',
   },
   {
     courseExternalId: 'demo-emma-eng10',
@@ -630,6 +708,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'link',
     url: 'https://www.sparknotes.com/lit/mocking/',
     linkAccessibility: 'public',
+    assignmentExternalId: 'demo-emma-eng10-a9',
   },
   // Emma - World History
   {
@@ -649,6 +728,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'document',
     fileName: 'timeline.pdf',
     hasAsset: true,
+    assignmentExternalId: 'demo-emma-wh-a1',
   },
   {
     courseExternalId: 'demo-emma-world-hist',
@@ -658,6 +738,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'link',
     url: 'https://example.com/primary-1',
     linkAccessibility: 'public',
+    assignmentExternalId: 'demo-emma-wh-a1',
   },
   {
     courseExternalId: 'demo-emma-world-hist',
@@ -771,6 +852,7 @@ export function buildDemoMaterialDocs(userId: string): Array<Record<string, unkn
       url: m.url,
       fileName: m.fileName,
       linkAccessibility: m.linkAccessibility,
+      assignmentExternalId: m.assignmentExternalId,
     },
   }));
 }
@@ -789,7 +871,7 @@ export function buildDemoAssetDocs(userId: string): Array<Record<string, unknown
     storageKey: `demo/demo-asset-${m.externalId}`,
     fileName: m.fileName ?? 'document.pdf',
     mimeType: 'application/pdf',
-    fileSize: 1024 + Math.floor(Math.random() * 2048),
+    fileSize: DEMO_MINIMAL_PDF.length,
     contentHash: `demo-${m.externalId}-hash`,
     entityType: 'courseMaterial',
     entityExternalId: m.externalId,
@@ -797,6 +879,19 @@ export function buildDemoAssetDocs(userId: string): Array<Record<string, unknown
     deletedAt: null,
     uploadedAt: now,
     lastAccessedAt: now,
+  }));
+}
+
+/** Files to put into IAssetStore when seeding demo (same tiny PDF per hosted material). */
+export function demoAssetByteFiles(): ReadonlyArray<{
+  readonly storageKey: string;
+  readonly bytes: Buffer;
+  readonly contentType: string;
+}> {
+  return DEMO_MATERIAL_INPUTS.filter((m) => m.hasAsset === true).map((m) => ({
+    storageKey: `demo/demo-asset-${m.externalId}`,
+    bytes: DEMO_MINIMAL_PDF,
+    contentType: 'application/pdf',
   }));
 }
 

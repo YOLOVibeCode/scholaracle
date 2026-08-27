@@ -20,6 +20,7 @@
     "preview": {
       "distribution": "store",
       "channel": "preview",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-uat.scholarmancy.com",
         "EAS_USE_CACHE": "1",
@@ -61,8 +62,9 @@
         "ascApiKeyId": "RA29BTM8KJ"
       },
       "android": {
-        "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH",
-        "track": "internal"
+        "track": "internal",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": true
       }
     },
     "production": {
@@ -77,8 +79,9 @@
         "metadataPath": "./store-metadata"
       },
       "android": {
-        "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH",
-        "track": "internal"
+        "track": "alpha",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": true
       }
     }
   }

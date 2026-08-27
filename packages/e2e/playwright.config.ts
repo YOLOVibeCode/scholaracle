@@ -177,6 +177,18 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 300 * 1000,
     },
+    // Student studio: phone-width Chromium (iPhone 13 viewport). Demo household.
+    {
+      name: 'studio',
+      testMatch: /18-studio\.spec\.ts/,
+      dependencies: ['critical'],
+      use: {
+        ...devices['iPhone 13'],
+        // CI installs Chromium only; keep the phone viewport, not WebKit.
+        browserName: 'chromium',
+      },
+      timeout: 90 * 1000,
+    },
   ],
 
   // Web server configuration

@@ -230,15 +230,22 @@ attachment). Unmatched files still upload — server LLM matching fills the gap.
 | **title** [required] | string | Document/resource title |
 | **courseExternalId** [required] | string | Which course this belongs to |
 | **type** [required] | string | One of: "document", "link", "syllabus", "handout", "rubric", "study_guide", "presentation", "video", "other" |
-| url | string | Download or view URL |
-| fileName | string | File name: "ch5-study-guide.pdf" |
-| mimeType | string | MIME type: "application/pdf", "image/png" |
+| url | string | **Download** URL (e.g. Canvas `/files/{id}/download`). Never a viewer page URL. |
+| fileName | string | File name including extension: "ch5-study-guide.pdf". MUST be set for `type: document`. |
+| mimeType | string | MIME type: "application/pdf", "image/png". MUST be set for `type: document`. |
+| linkAccessibility | string | `'public'` (no auth needed) \| `'authenticated'` (requires school login) \| `'unknown'`. Set for `type: link`. |
+| extractedText | string | Readable text extracted from the page (cap 50 KB; strip nav/scripts/styles). Set when `type: link` and the page is accessible. Used for offline reading. |
 | postedAt | string (ISO) | When it was posted |
 | description | string | Description or notes |
-| extractedText | string | Text content extracted from document (for AI analysis) |
 | fileSize | number | File size in bytes |
 
 **Where to find:** Course files page, modules/units page, resources page, assignment attachments. Syllabi are often on the course home page or a dedicated syllabus tab.
+
+**Capture order for offline readiness** (see [`CLASS_OFFLINE_PACK.md §3`](./CLASS_OFFLINE_PACK.md)):
+1. Native file → rehost via `IAssetHost`; set `fileName` + `mimeType`.
+2. Link whose `Content-Type` is a binary file type → treat as (1).
+3. Accessible HTML page → `extractedText` (50 KB cap); keep `type: link`.
+4. Authenticated viewer with no export → `linkAccessibility: 'authenticated'`; no `extractedText`.
 
 ---
 

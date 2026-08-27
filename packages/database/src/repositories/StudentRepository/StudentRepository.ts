@@ -10,6 +10,7 @@ export interface IStudentReader {
 export interface IStudentWriter {
   create(studentData: IStudentData): Promise<Student>;
   update(id: string | ObjectId, updates: Partial<IStudentData>): Promise<Student | null>;
+  clearStudentLogin(id: string | ObjectId): Promise<boolean>;
   delete(id: string | ObjectId): Promise<boolean>;
 }
 
@@ -167,6 +168,18 @@ export class StudentRepository implements IStudentRepository {
     }
 
     return new Student(result, result._id);
+  }
+
+  /**
+   * Unbind a provisioned student login from this profile.
+   */
+  public async clearStudentLogin(id: string | ObjectId): Promise<boolean> {
+    const objectId = typeof id === 'string' ? new ObjectId(id) : id;
+    const result = await this._collection.updateOne(
+      { _id: objectId },
+      { $unset: { studentLogin: '' }, $set: { updatedAt: new Date() } }
+    );
+    return result.matchedCount > 0;
   }
 
   /**

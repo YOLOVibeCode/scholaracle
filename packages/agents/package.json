@@ -20,6 +20,7 @@
     "@scholaracle/database": "workspace:*",
     "@scholaracle/interfaces": "workspace:*",
     "@scholaracle/contracts": "workspace:*",
+    "@scholaracle/studio-core": "workspace:*",
     "@scholaracle/logger": "workspace:*",
     "@sendgrid/mail": "^8.1.0",
     "twilio": "^5.0.0",

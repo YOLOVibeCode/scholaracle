@@ -1,3 +1,7 @@
+export { GuidanceJobHandler } from './guidance/GuidanceJobHandler';
+export { enqueueGuidanceJobs } from './guidance/enqueueGuidanceJobs';
+export { createMongoGuidanceProcessor } from './guidance/createMongoGuidanceProcessor';
+export { ReminderNotificationSink } from './guidance/ReminderNotificationSink';
 export * from './agents';
 export * from './generators';
 export * from './delivery';

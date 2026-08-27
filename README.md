@@ -1,159 +1,106 @@
-# Scholaracle
+# Scholaracle (Scholarmancy)
 
-AI-powered parenting assistant for academic success.
+AI-powered parenting assistant for academic success. The consumer product is **Scholarmancy** ([scholarmancy.com](https://scholarmancy.com)).
+
+Parents connect Canvas, Skyward, or Aeries from **their** device and provision a real login for each child. Students use the **studio** (`/studio` on iPad Safari or web — Today + one next step, not a shrunken parent dashboard). Scholarmancy servers do not log into school portals; students never see portal credentials.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 
-## Overview
-
-Scholaracle is an AI-powered parenting assistant that helps parents track their children's academic progress, get proactive alerts about assignments, deadlines, and grade changes, and receive actionable recommendations.
-
-### Key Features
-
-- **Unified Dashboard**: View all student data in one place
-- **Proactive Alerts**: Get notified about missing assignments, upcoming deadlines, and grade changes
-- **AI-Powered Insights**: Receive recommendations and pattern recognition
-- **Multi-Channel Notifications**: Email, push, SMS, and in-app notifications
-- **Student & Parent Agents**: Separate notification systems for students and parents
-- **Super Admin Dashboard**: Full customer and subscription management
-
-## Project Structure
-
-This is a monorepo using PNPM workspaces with strict package isolation:
+## How data gets in
 
 ```
-scholaracle/
-├── packages/
-│   ├── interfaces/    # @scholaracle/interfaces - ISP interfaces
-│   ├── contracts/     # @scholaracle/contracts - Data models & enums
-│   ├── agents/        # @scholaracle/agents - Notification generators
-│   ├── database/      # @scholaracle/database - MongoDB repositories
-│   ├── auth/          # @scholaracle/auth - JWT authentication
-│   ├── connector/     # @scholaracle/connector - LMS data connector (CLI)
-│   ├── api/           # @scholaracle/api - Express API server
-│   ├── workers/       # @scholaracle/workers - Background notification jobs
-│   ├── web/           # @scholaracle/web - Next.js frontend
-│   └── e2e/           # E2E tests (Playwright)
+School portal  →  parent’s device (app / extension / CLI)  →  ingest API  →  dashboard + alerts
+   (login)              (extract + transform)                 (envelope)         (no portal login)
 ```
 
-## Getting Started
+| Client | Driver | Who signs into the school |
+|--------|--------|---------------------------|
+| iOS / Android (`packages/mobile`) | WebView | The parent’s phone |
+| Chrome extension (`packages/browser-extension`) | Content script | The parent’s browser |
+| [`scholaracle-scraper` CLI](https://github.com/YOLOVibeCode/scholaracle_scrapers) | Playwright | The parent’s machine |
 
-**PORT POLICY: All local services use FIXED ports in the 28XX series (2800-2804). These ports MUST NOT be changed.**
-- **2800**: Web App (FIXED)
-- **2801**: API Server (FIXED)
-- **2802**: MongoDB (FIXED)
-- **2803**: MailHog SMTP (FIXED)
-- **2804**: MailHog UI (FIXED)
+Shared extract/transform/validate logic: `@scholaracle/scraper-core`.
 
-See [PORT_POLICY.md](./PORT_POLICY.md) for complete port policy documentation.
+## Who signs in
 
-### Prerequisites
+| Role | Surface | Who creates the account |
+|------|---------|-------------------------|
+| Parent | `/dashboard` | Self-serve register, or demo seed |
+| Student | `/studio` | Parent only (Settings → Student logins). No student self-signup. |
 
-- **Node.js**: 20+ LTS ([Download](https://nodejs.org/))
-- **PNPM**: 8+ ([Installation Guide](https://pnpm.io/installation))
-- **Docker** (optional, for full infrastructure setup)
+Default student visibility is **tasks only** (`showGrades` off). The same JWT works on web, iPad Safari, and the mobile app.
 
-### Installation
+**iPad without typing a password:** on a laptop/phone, parent Settings → Student logins → **iPad sign-in**. Scan the QR with the iPad camera. Safari opens `/login?magic=…`, consumes a 15-minute one-time ticket (`POST /api/auth/student-magic`), and lands in `/studio`. Re-issuing a QR invalidates the previous unused code.
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/YOLOVibeCode/scholaracle.git
-   cd scholaracle
-   ```
+## Project structure
 
-2. **Install dependencies**:
-   ```bash
-   pnpm install
-   ```
+PNPM workspace. Ports are **fixed**: 2800 web, 2801 API, 2802 MongoDB. See [PORT_POLICY.md](./PORT_POLICY.md).
 
-3. **Verify installation**:
-   ```bash
-   pnpm build
-   pnpm test
-   ```
+```
+packages/
+  interfaces/          Shared TypeScript interfaces
+  contracts/           Data models
+  auth/                JWT auth
+  database/            MongoDB repositories
+  agents/              Alert copy + notification generators
+  logger/              Structured logging
+  scraper-core/        Recipes, transformers, envelope validation
+  scraper-playwright/  Playwright page driver (CLI)
+  studio-core/         Student Today + work pack + guidance ladder (no Express/React)
+  connector/           Legacy local-connector helpers (not the live scrape path)
+  api/                 Express ingest + product API
+  workers/             Notifications, digests, sync-staleness mail
+  web/                 Next.js parent dashboard + student studio (scholarmancy.com)
+  mobile/              Expo app (iOS + Android, com.scholarmancy.app)
+  browser-extension/   Chrome/Edge extension
+  e2e/                 Playwright E2E
+```
 
-### Development
+## Getting started
 
 ```bash
-# Build all packages
+git clone https://github.com/YOLOVibeCode/scholaracle.git
+cd scholaracle
+pnpm install
 pnpm build
-
-# Run all tests
 pnpm test
-
-# Lint all packages
-pnpm lint
-
-# Type check all packages
-pnpm type-check
-
-# Clean build artifacts
-pnpm clean
 ```
-
-### Working with Individual Packages
 
 ```bash
-# Build a specific package
-pnpm --filter @scholaracle/contracts build
-
-# Test a specific package
-pnpm --filter @scholaracle/agents test
-
-# Run linting for a specific package
-pnpm --filter @scholaracle/interfaces lint
+pnpm --filter @scholaracle/web dev     # http://localhost:2800
+pnpm --filter @scholaracle/api dev     # http://localhost:2801
+curl -s -X POST http://localhost:2801/api/seed/demo
 ```
 
-## Architecture
+### Demo logins
 
-### Package Dependencies
+Password for all three: `DemoPass123!`
 
-```
-interfaces (no dependencies)
-    ↓
-contracts (depends on interfaces)
-    ↓
-database, auth, agents (depend on interfaces + contracts)
-    ↓
-connector (depends on contracts + interfaces)
-    ↓
-api, workers, web (depend on all above)
-```
+| Actor | Email | After login |
+|-------|--------|-------------|
+| Parent | `demo@scholarmancy.com` | `/dashboard` |
+| Emma | `emma.demo@scholarmancy.com` | `/studio` |
+| Liam | `liam.demo@scholarmancy.com` | `/studio` |
+
+Parent Settings → Student logins also has **iPad sign-in** (QR) for Emma and Liam.
 
 ## Deployment
 
-- **API + Workers**: Railway (Docker) — see [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
-- **Web**: Railway (Docker)
-- **MongoDB**: Railway MongoDB plugin
-- **Production URL**: https://scholarmancy.com
-- **API URL**: https://api.scholarmancy.com
+- **API, workers, web:** Railway. Push to `main` deploys **dev** immediately; **production** waits on CI. Details: [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) and [CLAUDE.md](./CLAUDE.md).
+- **Mobile:** EAS. JS-only → `pnpm update:production`. Native → `pnpm ship:production` (or `:ios` / `:android`). See [CLAUDE.md](./CLAUDE.md).
+- **Production:** https://scholarmancy.com · https://api.scholarmancy.com
+- **UAT:** https://api-uat.scholarmancy.com (preview / Play internal)
 
 ## Documentation
 
-- [App Specification](./APP_SPECIFICATION.md) — Authoritative v1 feature spec
-- [Super Admin Dashboard Spec](./SUPER_ADMIN_DASHBOARD_SPECIFICATION.md) — Admin roles & permissions
-- [Port Policy](./PORT_POLICY.md) — Fixed ports (2800-2804)
-- [Docker Setup](./DOCKER_SETUP.md) — Local Docker infrastructure guide
-- [Railway Deployment](./RAILWAY_DEPLOYMENT.md) — Production deployment reference
-- [Seed Endpoint](./SEED_ENDPOINT_USAGE.md) — Test data seeding
-- [E2E Test Guide](./RUN_ALL_TESTS.md) — Running the E2E test suite
-- [Specification Coverage](./SPECIFICATION_COVERAGE.md) — Test coverage matrix
-- [Automation Testability](./AUTOMATION_TESTABILITY.md) — data-testid conventions
-- [E2E Fail-Fast Pyramid](./E2E_FAIL_FAST_PYRAMID.md) — Layered test architecture
-
-## Technology Stack
-
-- **Runtime**: Node.js 20 LTS
-- **Language**: TypeScript 5.3+ (strict mode)
-- **Package Manager**: PNPM 8+
-- **Testing**: Jest 29+ / Playwright
-- **Linting**: ESLint + Prettier
-- **Database**: MongoDB (Railway plugin)
-- **Frontend**: Next.js 16
-- **Hosting**: Railway (API, Workers, Web) + custom domain
+- [CLAUDE.md](./CLAUDE.md) — operating rules and how to ship
+- [PORT_POLICY.md](./PORT_POLICY.md) — fixed local ports
+- [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) — backend/web deploy
+- [docs/CLIENT_PIPELINE_SPEC.md](./docs/CLIENT_PIPELINE_SPEC.md) — client scrape pipeline
+- [docs/CLIENT_SCRAPER_SPEC.md](./docs/CLIENT_SCRAPER_SPEC.md) — extraction quality rules
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+MIT — see [LICENSE](./LICENSE).

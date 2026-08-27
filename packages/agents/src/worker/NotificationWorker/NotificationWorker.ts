@@ -18,6 +18,8 @@ export interface INotificationWorkerConfig {
   ) => Promise<readonly IResolvedRecipient[]>;
   /** @deprecated Use resolveAllAlertRecipients. Resolve parent userId to email/phone for delivery. */
   readonly resolveParentRecipients?: (userId: string) => Promise<IResolvedRecipients>;
+  /** When set, the worker also claims `guidance` jobs and re-checks LMS status at send time. */
+  readonly processGuidanceJob?: (job: IJob) => Promise<void>;
 }
 
 /**
@@ -33,10 +35,12 @@ export class NotificationWorker {
     studentId: string
   ) => Promise<readonly IResolvedRecipient[]>;
   private readonly _resolveParentRecipients?: (userId: string) => Promise<IResolvedRecipients>;
+  private readonly _processGuidanceJob?: (job: IJob) => Promise<void>;
   private _running = false;
   private _activeJobs = 0;
   private _notifyLoopPromise?: Promise<void>;
   private _deliverLoopPromise?: Promise<void>;
+  private _guidanceLoopPromise?: Promise<void>;
 
   constructor(
     queue: MongoQueue,
@@ -49,6 +53,7 @@ export class NotificationWorker {
     this._concurrency = config.concurrency ?? 10;
     this._resolveAllAlertRecipients = config.resolveAllAlertRecipients;
     this._resolveParentRecipients = config.resolveParentRecipients;
+    this._processGuidanceJob = config.processGuidanceJob;
   }
 
   /**
@@ -62,6 +67,9 @@ export class NotificationWorker {
     this._running = true;
     this._notifyLoopPromise = this._processLoop('notify');
     this._deliverLoopPromise = this._processLoop('deliver');
+    if (this._processGuidanceJob) {
+      this._guidanceLoopPromise = this._processLoop('guidance');
+    }
   }
 
   /**
@@ -82,6 +90,7 @@ export class NotificationWorker {
 
     if (this._notifyLoopPromise) await this._notifyLoopPromise;
     if (this._deliverLoopPromise) await this._deliverLoopPromise;
+    if (this._guidanceLoopPromise) await this._guidanceLoopPromise;
   }
 
   /**
@@ -92,6 +101,10 @@ export class NotificationWorker {
   public async processJob(job: IJob): Promise<void> {
     if (job.type === 'deliver') {
       await this._processDeliverJob(job);
+      return;
+    }
+    if (job.type === 'guidance') {
+      await this._processGuidanceJobInternal(job);
       return;
     }
     await this._processNotifyJob(job);
@@ -173,10 +186,22 @@ export class NotificationWorker {
     }
   }
 
+  private async _processGuidanceJobInternal(job: IJob): Promise<void> {
+    try {
+      if (!this._processGuidanceJob) {
+        throw new Error('Guidance job received but no processGuidanceJob handler is configured');
+      }
+      await this._processGuidanceJob(job);
+      await this._queue.complete(job._id.toString());
+    } catch (error) {
+      await this._queue.fail(job._id.toString(), error as Error);
+    }
+  }
+
   /**
    * Main processing loop for a single job type.
    */
-  private async _processLoop(jobType: 'notify' | 'deliver'): Promise<void> {
+  private async _processLoop(jobType: 'notify' | 'deliver' | 'guidance'): Promise<void> {
     while (this._running) {
       try {
         if (this._activeJobs >= this._concurrency) {

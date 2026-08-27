@@ -124,3 +124,7 @@ local/
 *.p8
 *.p12
 *.mobileprovision
+
+# Google Play API service-account JSON (local / EAS credentials only)
+**/play-service-account.json
+**/*-play-service-account.json

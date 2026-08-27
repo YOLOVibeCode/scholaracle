@@ -6,3 +6,5 @@ export {
   sanitizeEnrichedOps,
   DEFAULT_ENRICHER_TIMEOUT_MS,
 } from './enrichment';
+export { classifyResource } from './resourceClassifier';
+export type { ResourceAction, IClassifyResourceParams } from './resourceClassifier';

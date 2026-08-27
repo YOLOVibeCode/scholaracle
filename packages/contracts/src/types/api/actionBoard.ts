@@ -14,6 +14,8 @@ export interface IActionAsset {
   readonly mimeType: string;
   readonly fileSize: number;
   readonly downloadUrl: string;
+  /** Hash of stored bytes. Cache key is assetId + contentHash. */
+  readonly contentHash?: string;
 }
 
 export interface IActionItem {
@@ -34,6 +36,8 @@ export interface IActionItem {
   };
   readonly assets: readonly IActionAsset[];
   readonly materials: readonly IActionAsset[];
+  readonly studentStatus?: string;
+  readonly lastNudgedAt?: string;
 }
 
 export interface IActionBucket {

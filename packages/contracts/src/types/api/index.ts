@@ -8,3 +8,5 @@ export * from './account';
 export * from './ingest';
 export * from './sourceInvite';
 export * from './materials';
+export * from './studio';
+export * from './studentLogin';

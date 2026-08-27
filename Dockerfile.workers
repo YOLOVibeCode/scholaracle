@@ -27,6 +27,7 @@ COPY packages/scraper-playwright/package.json ./packages/scraper-playwright/
 COPY packages/mobile/package.json ./packages/mobile/
 COPY packages/browser-extension/package.json ./packages/browser-extension/
 COPY packages/logger/package.json ./packages/logger/
+COPY packages/studio-core/package.json ./packages/studio-core/
 
 RUN pnpm install --no-frozen-lockfile
 

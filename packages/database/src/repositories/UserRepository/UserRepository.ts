@@ -29,6 +29,7 @@ export interface IUserStatistics {
 export interface IUserReader {
   findById(id: string | ObjectId): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  findByStudentId(studentId: string): Promise<User | null>;
   findWithPagination(options: IPaginationOptions): Promise<IPaginatedResult<User>>;
   searchUsers(query: string): Promise<readonly User[]>;
   getUserStatistics(): Promise<IUserStatistics>;
@@ -103,6 +104,17 @@ export class UserRepository implements IUserRepository {
       return null;
     }
 
+    return new User(document, document._id);
+  }
+
+  /**
+   * Find the student-role user bound to a `students` document `_id`.
+   */
+  public async findByStudentId(studentId: string): Promise<User | null> {
+    const document = await this._collection.findOne({ studentId });
+    if (!document || !document._id) {
+      return null;
+    }
     return new User(document, document._id);
   }
 

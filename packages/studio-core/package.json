@@ -1,0 +1,30 @@
+{
+  "name": "@scholaracle/studio-core",
+  "version": "1.0.0",
+  "description": "Student studio composers (Today, work pack) — no Express, no React",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:strict": "eslint src --ext .ts --max-warnings=0",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@scholaracle/contracts": "workspace:*",
+    "@scholaracle/interfaces": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.11.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  }
+}

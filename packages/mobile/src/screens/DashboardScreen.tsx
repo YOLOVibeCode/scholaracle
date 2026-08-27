@@ -15,7 +15,7 @@ import {
 import { apiClient, type IAssignmentItem, type ISyncRunItem } from '../api/client';
 import { ApiError } from '../api/ApiError';
 import { formatDate, statusColor } from '../grades/format';
-import type { ICourseGrade } from '@scholaracle/contracts';
+import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
 
 interface IDashboardData {
   readonly assignments: IAssignmentItem[];
@@ -31,6 +31,7 @@ interface IDashboardScreenProps {
   onSync(): void;
   onBack(): void;
   onOpenCourse(course: ICourseGrade): void;
+  onOpenAssignmentFromTab(assignment: ICourseGradeAssignment, course: ICourseGrade): void;
   onRunHistory?(): void;
 }
 
@@ -40,6 +41,7 @@ export function DashboardScreen({
   onSync,
   onBack,
   onOpenCourse,
+  onOpenAssignmentFromTab,
   onRunHistory,
 }: IDashboardScreenProps): React.ReactElement {
   const [data, setData] = useState<IDashboardData | null>(null);
@@ -121,7 +123,7 @@ export function DashboardScreen({
               <Text style={styles.historyText}>Runs</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.syncBtn} onPress={handleSyncPress}>
+          <TouchableOpacity style={styles.syncBtn} onPress={handleSyncPress} testID="button-sync">
             <Text style={styles.syncText}>Sync</Text>
           </TouchableOpacity>
         </View>
@@ -171,18 +173,34 @@ export function DashboardScreen({
           renderSectionHeader={({ section }) => (
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardRow}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={[styles.statusBadge, statusColor(item.status)]}>
-                  {item.status ?? 'unknown'}
-                </Text>
-              </View>
-              {item.courseName && <Text style={styles.cardSub}>{item.courseName}</Text>}
-              {item.dueAt && <Text style={styles.cardSub}>Due: {formatDate(item.dueAt)}</Text>}
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const course = item.courseExternalId
+              ? (data?.grades ?? []).find((g) => g.courseExternalId === item.courseExternalId)
+              : undefined;
+            const fullAssignment = course?.assignments.find(
+              (a) => a.externalId === item.assignmentExternalId
+            );
+            const isTappable = course != null && fullAssignment != null;
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={isTappable ? 0.7 : 1}
+                onPress={() => {
+                  if (isTappable) onOpenAssignmentFromTab(fullAssignment, course);
+                }}
+              >
+                <View style={styles.cardRow}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={[styles.statusBadge, statusColor(item.status ?? '')]}>
+                    {item.status ?? 'unknown'}
+                  </Text>
+                  {isTappable && <Text style={styles.chevron}>›</Text>}
+                </View>
+                {item.courseName && <Text style={styles.cardSub}>{item.courseName}</Text>}
+                {item.dueAt && <Text style={styles.cardSub}>Due: {formatDate(item.dueAt)}</Text>}
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
 

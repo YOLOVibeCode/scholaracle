@@ -6,10 +6,15 @@
  * response inline).
  */
 
+export type UserRole = 'parent' | 'student';
+
 export interface IAuthUser {
   readonly id: string;
   readonly email: string;
   readonly name: string;
+  readonly role: UserRole;
+  /** Mongo `_id` of the scoped students document. Present for student logins. */
+  readonly studentId?: string;
 }
 
 /** Success body of POST /api/auth/login (failure is the standard error envelope). */

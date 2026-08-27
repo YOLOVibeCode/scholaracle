@@ -14,6 +14,7 @@
     { "path": "../contracts" },
     { "path": "../agents" },
     { "path": "../logger" },
-    { "path": "../scraper-core" }
+    { "path": "../scraper-core" },
+    { "path": "../studio-core" }
   ]
 }

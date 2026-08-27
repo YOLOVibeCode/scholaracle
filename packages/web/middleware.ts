@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getTokenExp } from '@/lib/jwt';
+import { getTokenExp, getTokenRole } from '@/lib/jwt';
+import { destinationForRole } from '@/lib/auth/destinationForRole';
 
 const publicRoutes = [
   '/',
@@ -15,7 +16,10 @@ const publicRoutes = [
   '/pricing',
   '/cli-auth',
 ];
-const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
+
+function isPublicPath(pathname: string): boolean {
+  return publicRoutes.includes(pathname);
+}
 
 /** If token expires within this many seconds, client may proactively refresh. */
 const PROACTIVE_REFRESH_THRESHOLD_SEC = 2 * 60; // 2 minutes
@@ -37,14 +41,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if route is public
-  const isPublicRoute = publicRoutes.includes(pathname);
-  const isAuthRoute = authRoutes.includes(pathname);
-
-  // If user is authenticated and tries to access auth routes, redirect to dashboard
-  if (token && isAuthRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  const role = token ? (getTokenRole(token) ?? 'parent') : undefined;
+  const dest = destinationForRole(role, pathname);
+  if (dest) {
+    return NextResponse.redirect(new URL(dest, request.url));
   }
+
+  const isPublicRoute = isPublicPath(pathname);
 
   // If user is not authenticated and tries to access protected routes, redirect to login
   if (!token && !isPublicRoute) {

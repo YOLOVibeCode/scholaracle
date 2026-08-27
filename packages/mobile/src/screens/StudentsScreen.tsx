@@ -64,11 +64,15 @@ export function StudentsScreen({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="students-list">
       <View style={styles.header}>
         <Text style={styles.title}>Students</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.addButton} onPress={onAddSource}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={onAddSource}
+            testID="button-connect-source"
+          >
             <Text style={styles.addButtonText}>+ Connect Source</Text>
           </TouchableOpacity>
           {onOpenSettings && (

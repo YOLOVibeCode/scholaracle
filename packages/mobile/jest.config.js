@@ -14,6 +14,10 @@ module.exports = {
     '!src/components/debug/**',
     '!src/components/DeployStamp.tsx',
     '!src/onboarding/OnboardingScreen.tsx',
+    '!src/screens/TodayScreen.tsx',
+    '!src/screens/StudentWorkPackScreen.tsx',
+    '!src/studio/TodayView.tsx',
+    '!src/studio/WorkPackView.tsx',
   ],
   // Starting thresholds — raise as screen/component coverage grows.
   coverageThreshold: {
@@ -21,6 +25,8 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@scholaracle/contracts$': '<rootDir>/../contracts/src/index.ts',
+    '^@scholaracle/studio-core$': '<rootDir>/../studio-core/src/index.ts',
+    '^@scholaracle/interfaces$': '<rootDir>/../interfaces/src/index.ts',
     // Use built dist so DOM-extractor source isn't typechecked under mobile tsconfig
     '^@scholaracle/scraper-core$': '<rootDir>/../scraper-core/dist/index.js',
   },

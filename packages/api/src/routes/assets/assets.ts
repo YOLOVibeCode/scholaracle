@@ -138,6 +138,84 @@ export function createAssetUploadRouter(config: IAssetsRouterConfig): Router {
     })
   );
 
+  /**
+   * POST /upload-base64
+   * Mobile-friendly: accepts JSON with base64-encoded file content.
+   * Used by the mobile WebViewAssetHost which fetches school-portal files
+   * from within the WebView's cookie context and posts them back here.
+   */
+  // eslint-disable-next-line complexity
+  router.post(
+    '/upload-base64',
+    connectorAuth,
+    express.json({ limit: '30mb' }),
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const userId = req.connectorUserId ?? '';
+      if (!userId) throw new AuthenticationError('Unauthorized');
+
+      const body = req.body as Record<string, unknown>;
+      const base64 = (body['data'] as string)?.trim();
+      const sourceId = (body['sourceId'] as string)?.trim();
+      const provider = (body['provider'] as string)?.trim();
+      const originalUrl = (body['originalUrl'] as string)?.trim();
+      const contentHash = (body['contentHash'] as string)?.trim();
+      const fileName = (body['fileName'] as string)?.trim() || 'file';
+      const mimeType = (body['mimeType'] as string)?.trim() || 'application/octet-stream';
+      const entityType = (body['entityType'] as string)?.trim();
+      const entityExternalId = (body['entityExternalId'] as string)?.trim();
+      const courseExternalId = (body['courseExternalId'] as string)?.trim() || undefined;
+
+      if (
+        !base64 ||
+        !sourceId ||
+        !provider ||
+        !originalUrl ||
+        !contentHash ||
+        !entityType ||
+        !entityExternalId
+      ) {
+        throw new ValidationError(
+          'Missing required fields: data, sourceId, provider, originalUrl, contentHash, entityType, entityExternalId'
+        );
+      }
+
+      const existing = await assetRepo.findBySourceIdAndHash(sourceId, contentHash);
+      if (existing) {
+        const serverUrl = `${baseUrl}/api/assets/${existing.assetId}`;
+        res.status(200).json({ assetId: existing.assetId, serverUrl });
+        return;
+      }
+
+      const fileBuffer = Buffer.from(base64, 'base64');
+      const assetId = randomUUID();
+      const storageKey = `${sourceId}/${assetId}`;
+      const { Readable } = await import('node:stream');
+      const stream = Readable.from(fileBuffer);
+      await store.put(storageKey, stream, {
+        contentType: mimeType,
+        contentLength: fileBuffer.length,
+      });
+
+      await assetRepo.insert({
+        assetId,
+        sourceId,
+        userId,
+        originalUrl,
+        storageKey,
+        fileName,
+        mimeType,
+        fileSize: fileBuffer.length,
+        contentHash,
+        entityType,
+        entityExternalId,
+        courseExternalId,
+      });
+
+      const serverUrl = `${baseUrl}/api/assets/${assetId}`;
+      res.status(200).json({ assetId, serverUrl });
+    })
+  );
+
   return router;
 }
 
@@ -183,6 +261,8 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
       res.setHeader('ETag', etag);
       res.setHeader('Last-Modified', lastModified);
       res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
+      // Web (2800) fetches signed tickets from the API (2801); helmet CORP same-origin would block.
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       const ifNoneMatch = req.get('If-None-Match');
       if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === asset.contentHash)) {
         res.status(304).end();
@@ -219,6 +299,7 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
       res.setHeader('ETag', etag);
       res.setHeader('Last-Modified', lastModified);
       res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Content-Type', asset.mimeType);
       res.setHeader('Content-Length', String(asset.fileSize));
       res.status(200).end();

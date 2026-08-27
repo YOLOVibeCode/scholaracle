@@ -130,6 +130,30 @@ describe('UserRepository Admin Methods', () => {
     });
   });
 
+  describe('findByStudentId', () => {
+    it('finds the student-role user bound to a profile id', async () => {
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const studentId = new ObjectId().toString();
+      await repository.create({
+        email: 'kid@test.com',
+        passwordHash,
+        name: 'Kid',
+        role: 'student',
+        studentId,
+      });
+
+      const found = await repository.findByStudentId(studentId);
+      expect(found).not.toBeNull();
+      expect(found?.email).toBe('kid@test.com');
+      expect(found?.role).toBe('student');
+    });
+
+    it('returns null when no student login exists for that profile', async () => {
+      const found = await repository.findByStudentId(new ObjectId().toString());
+      expect(found).toBeNull();
+    });
+  });
+
   describe('unsuspendUser', () => {
     it('should unsuspend user', async () => {
       const passwordHash = await UserRepository.hashPassword('TestPass123!');

@@ -16,6 +16,8 @@ export interface IJobOptions {
   readonly priority?: number;
   readonly delay?: number;
   readonly maxAttempts?: number;
+  /** Absolute send time. Wins over `delay` when both are set. */
+  readonly scheduledFor?: Date;
 }
 
 export interface IJob {
@@ -88,7 +90,8 @@ export class MongoQueue {
     data: Record<string, unknown>,
     options: IJobOptions = {}
   ): Promise<string> {
-    const scheduledFor = options.delay ? new Date(Date.now() + options.delay) : new Date();
+    const scheduledFor =
+      options.scheduledFor ?? (options.delay ? new Date(Date.now() + options.delay) : new Date());
 
     const result = await this._jobs.insertOne({
       type,

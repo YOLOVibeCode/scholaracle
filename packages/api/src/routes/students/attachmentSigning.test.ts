@@ -6,12 +6,18 @@ const SECRET = 'mock-signing-secret';
 describe('resolveApiBaseUrl', () => {
   const savedApiBaseUrl = process.env['API_BASE_URL'];
   const savedRailwayDomain = process.env['RAILWAY_PUBLIC_DOMAIN'];
+  const savedAssetBase = process.env['ASSET_BASE_URL'];
+  const savedPort = process.env['PORT'];
 
   afterEach(() => {
     if (savedApiBaseUrl === undefined) delete process.env['API_BASE_URL'];
     else process.env['API_BASE_URL'] = savedApiBaseUrl;
     if (savedRailwayDomain === undefined) delete process.env['RAILWAY_PUBLIC_DOMAIN'];
     else process.env['RAILWAY_PUBLIC_DOMAIN'] = savedRailwayDomain;
+    if (savedAssetBase === undefined) delete process.env['ASSET_BASE_URL'];
+    else process.env['ASSET_BASE_URL'] = savedAssetBase;
+    if (savedPort === undefined) delete process.env['PORT'];
+    else process.env['PORT'] = savedPort;
   });
 
   it('should prefer an explicit API_BASE_URL over everything', () => {
@@ -31,9 +37,19 @@ describe('resolveApiBaseUrl', () => {
   it('should fall back to the config baseUrl outside Railway (local dev, tests)', () => {
     delete process.env['API_BASE_URL'];
     delete process.env['RAILWAY_PUBLIC_DOMAIN'];
+    delete process.env['ASSET_BASE_URL'];
+    delete process.env['PORT'];
 
     expect(resolveApiBaseUrl('http://localhost:2801')).toBe('http://localhost:2801');
     expect(resolveApiBaseUrl(undefined)).toBe('');
+  });
+
+  it('signs against the local API port when BASE_URL is the web origin', () => {
+    delete process.env['API_BASE_URL'];
+    delete process.env['RAILWAY_PUBLIC_DOMAIN'];
+    delete process.env['ASSET_BASE_URL'];
+    process.env['PORT'] = '2801';
+    expect(resolveApiBaseUrl('http://localhost:2800')).toBe('http://localhost:2801');
   });
 });
 

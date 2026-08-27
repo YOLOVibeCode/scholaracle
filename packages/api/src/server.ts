@@ -14,6 +14,8 @@ import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
 import { authMiddleware } from './middleware/auth';
+import { requireParent, requireStudent } from './middleware/requireRole';
+import { studioRouter } from './routes/studio/studio';
 import { requestIdMiddleware } from './middleware/requestId';
 import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
@@ -34,6 +36,7 @@ import {
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
+import { MagicLinkSender } from './services/provision/MagicLinkSender';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
 import { SourceInviteService } from './services/source-invite/SourceInviteService';
@@ -173,6 +176,9 @@ function initializeNotificationService(config: IServerConfig): {
   emailTransport: IEmailTransport;
   fromEmail: string;
   fromName: string;
+  twilioClient: import('twilio').Twilio | null;
+  twilioFromNumber: string;
+  twilioMessagingServiceSid: string;
 } {
   const sendGridConfig = getSendGridConfig(config);
   const twilioConfig = getTwilioConfig(config);
@@ -249,6 +255,9 @@ function initializeNotificationService(config: IServerConfig): {
     emailTransport: transport,
     fromEmail: sendGridConfig.fromEmail,
     fromName: sendGridConfig.fromName,
+    twilioClient: twilioConfigured ? twilioClient : null,
+    twilioFromNumber: twilioConfig.fromNumber,
+    twilioMessagingServiceSid: twilioConfig.messagingServiceSid,
   };
 }
 
@@ -341,14 +350,14 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
 
-  const { notificationService, emailTransport, fromEmail, fromName } =
-    initializeNotificationService(config);
+  const notificationInit = initializeNotificationService(config);
+  const { notificationService, emailTransport, fromEmail, fromName } = notificationInit;
 
   app.use('/api/health', healthRouter);
 
   // Seed endpoint (development/test only)
   if (database) {
-    app.use('/api/seed', seedRouter({ database, jwtSecret }));
+    app.use('/api/seed', seedRouter({ database, jwtSecret, assetStore: createAssetStore() }));
   }
 
   // Legacy alerts route (for notification creation) - POST /api/alerts.
@@ -426,20 +435,53 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       // Agents package not available — sync routes will be skipped
     }
 
+    const {
+      emailTransport: magicEmailTransport,
+      fromEmail: magicFromEmail,
+      fromName: magicFromName,
+      twilioClient: magicTwilioClient,
+      twilioFromNumber,
+      twilioMessagingServiceSid,
+    } = notificationInit;
+    const magicLinkSender = new MagicLinkSender(
+      magicEmailTransport,
+      { fromEmail: magicFromEmail, fromName: magicFromName },
+      magicTwilioClient,
+      { fromNumber: twilioFromNumber, messagingServiceSid: twilioMessagingServiceSid }
+    );
+
     app.use(
       '/api/students',
       authMiddleware(authService),
+      requireParent,
       studentsRouter({
         database,
         baseUrl: baseUrl ?? '',
         jwtSecret,
         sendInviteEmail: inviteEmailSender,
         syncScheduler,
+        magicLinkSender,
       })
     );
-    app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
-    // Account routes (push tokens, email transfer). Mobile push registration
-    // depends on this mount.
+    app.use(
+      '/api/studio',
+      authMiddleware(authService),
+      requireStudent,
+      studioRouter({
+        database,
+        baseUrl: baseUrl ?? '',
+        jwtSecret,
+      })
+    );
+    app.use(
+      '/api/integrations',
+      authMiddleware(authService),
+      requireParent,
+      integrationsRouter({ database })
+    );
+    // Account routes (push tokens for parent and student logins, email transfer).
+    // Push registration is any authenticated user; household email transfer is
+    // requireParent inside the router.
     app.use(
       '/api/account',
       authMiddleware(authService),
@@ -470,6 +512,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         app.use(
           '/api/sync',
           authMiddleware(authService),
+          requireParent,
           createSyncRouter({ database, syncScheduler })
         );
       } catch {
@@ -482,6 +525,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use(
       '/api/alerts',
       authMiddleware(authService),
+      requireParent,
       alertsRouter(notificationService, {
         queue: notificationQueue,
         studentReader: new StudentRepository(database),
@@ -489,11 +533,17 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     );
 
     // New alerts API routes (for fetching/managing alerts) - GET/POST/DELETE /api/alerts-api
-    app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
+    app.use(
+      '/api/alerts-api',
+      authMiddleware(authService),
+      requireParent,
+      alertsApiRouter({ database })
+    );
     // Email history API routes
     app.use(
       '/api/email-history',
       authMiddleware(authService),
+      requireParent,
       emailHistoryRouter({
         database,
         transport: emailTransport,
@@ -505,6 +555,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use(
       '/api/settings',
       authMiddleware(authService),
+      requireParent,
       settingsRouter({ database, authService })
     );
     // Agenda API routes (unified assignments + recurring events)
@@ -533,6 +584,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use(
       '/api/source-invites',
       authMiddleware(authService),
+      requireParent,
       sourceInvitesRouter(sourceInviteConfig)
     );
     app.use('/install-source', installSourceRouter(sourceInviteConfig));
@@ -650,6 +702,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       app.use(
         '/api/billing',
         authMiddleware(authService),
+        requireParent,
         billingRouter({ database, squareService })
       );
       // Square webhook uses raw body for signature verification

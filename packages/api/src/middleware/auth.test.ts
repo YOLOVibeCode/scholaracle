@@ -1,6 +1,7 @@
 import { type Response } from 'express';
 import { authMiddleware, type IAuthenticatedRequest } from './auth';
 import { AuthService } from '@scholaracle/auth';
+import { UserRepository } from '@scholaracle/database';
 import { MongoClient, type Db } from 'mongodb';
 
 describe('authMiddleware', () => {
@@ -48,6 +49,40 @@ describe('authMiddleware', () => {
     expect(next).toHaveBeenCalled();
     expect(req.userId).toBe(registerResult.user?.id);
     expect(req.userEmail).toBe('user@test.com');
+    expect(req.userRole).toBe('parent');
+    expect(req.studentId).toBeUndefined();
+  });
+
+  it('attaches student role and studentId from the JWT', async () => {
+    const passwordHash = await UserRepository.hashPassword('TestPass123!');
+    await new UserRepository(database).create({
+      email: 'student-mw@test.com',
+      passwordHash,
+      name: 'Student MW',
+      role: 'student',
+      studentId: '507f1f77bcf86cd799439011',
+    });
+    const login = await authService.login('student-mw@test.com', 'TestPass123!');
+    expect(login.success).toBe(true);
+
+    const req = {
+      headers: {
+        authorization: `Bearer ${login.token}`,
+      },
+    } as IAuthenticatedRequest;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as unknown as Response;
+
+    const next = jest.fn();
+
+    await middleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.userRole).toBe('student');
+    expect(req.studentId).toBe('507f1f77bcf86cd799439011');
   });
 
   it('should reject request without authorization header', async () => {
