@@ -59,7 +59,8 @@ export function formatNudgedAgo(iso: string, now: Date = new Date()): string {
 
 export function nudgedToday(iso: string | undefined, now: Date = new Date()): boolean {
   if (iso === undefined || iso === '') return false;
-  return new Date(iso).toDateString() === now.toDateString();
+  const diffMs = now.getTime() - new Date(iso).getTime();
+  return diffMs >= 0 && diffMs < 24 * 60 * 60 * 1000;
 }
 
 function AssetChipIcon({ materialType }: { materialType: string }) {
