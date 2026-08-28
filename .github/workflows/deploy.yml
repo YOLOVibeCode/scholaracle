@@ -70,6 +70,19 @@ jobs:
           done
           echo "Dev Web never picked up this commit"; exit 1
 
+      - name: App Store legal pages reachable without a session
+        run: |
+          for path in /privacy /terms /support /delete-account /robots.txt /sitemap.xml; do
+            code=$(curl -sS -o /tmp/store-page -w "%{http_code}" -L "${DEV_WEB_URL}${path}")
+            echo "$path → $code"
+            if [ "$code" != "200" ]; then
+              echo "App Review cannot load ${DEV_WEB_URL}${path}"
+              exit 1
+            fi
+          done
+          curl -fsS "${DEV_WEB_URL}/privacy" | grep -qi "Sign in with Apple"
+          curl -fsS "${DEV_WEB_URL}/delete-account" | grep -qi "privacy@scholarmancy.com"
+
   # ─── E2E against the freshly-deployed dev environment ───────────────
   e2e-dev:
     name: E2E vs dev

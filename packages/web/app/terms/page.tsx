@@ -13,7 +13,7 @@ export default function TermsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Terms of Service</CardTitle>
-            <CardDescription>Last updated: February 2026</CardDescription>
+            <CardDescription>Last updated: August 27, 2026</CardDescription>
           </CardHeader>
           <CardContent className="prose prose-gray dark:prose-invert max-w-none space-y-6">
             <section>
@@ -27,18 +27,24 @@ export default function TermsPage() {
             <section>
               <h2 className="text-lg font-semibold">2. Description of Service</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholarmancy is an AI-powered parenting assistant for academic success. The Service helps parents
-                track student progress, receive alerts about assignments and deadlines, and get personalized
-                recommendations. Notifications may be delivered via email and, if you opt in, via SMS text message.
+                Scholarmancy is an AI-powered parenting assistant for academic success. The Service includes the
+                Scholarmancy website, iOS app, and Android app. It helps parents track student progress, receive
+                alerts about assignments and deadlines, and get personalized recommendations. Notifications may
+                be delivered via email, push notification, and, if you opt in, via SMS text message.
               </p>
             </section>
 
             <section>
               <h2 className="text-lg font-semibold">3. Account and Registration</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                You must provide accurate information when creating an account. You are responsible for
-                maintaining the security of your credentials. By registering, you represent that you are at least
-                18 years of age or have parental consent.
+                You must provide accurate information when creating an account. You may register with email and
+                password or with Sign in with Apple, Google, or Microsoft. You are responsible for maintaining
+                the security of your credentials. By registering, you represent that you are at least 18 years
+                of age or have parental consent. You may delete your account at any time at{' '}
+                <Link href="/delete-account" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                  scholarmancy.com/delete-account
+                </Link>
+                .
               </p>
             </section>
 

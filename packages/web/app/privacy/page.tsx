@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Privacy Policy</CardTitle>
-            <CardDescription>Last updated: August 24, 2026</CardDescription>
+            <CardDescription>Last updated: August 27, 2026</CardDescription>
           </CardHeader>
           <CardContent className="prose prose-gray dark:prose-invert max-w-none space-y-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -29,6 +29,8 @@ export default function PrivacyPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 When you create a Scholarmancy account we collect your email address and a hashed password
                 to authenticate you. If you opt in to SMS notifications, we also collect your phone number.
+                You may also sign in with Apple, Google, or Microsoft. Those providers send us the email
+                address and display name you authorize — we do not receive your provider password.
               </p>
 
               <h3 className="text-base font-semibold mt-4">b) School Portal Credentials</h3>
@@ -52,6 +54,15 @@ export default function PrivacyPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 We collect your device&apos;s push notification token to deliver sync-complete and assignment alerts.
                 This token is associated with your account and is never used for advertising.
+              </p>
+
+              <h3 className="text-base font-semibold mt-4">e) Sign in with Apple, Google, and Microsoft</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                If you choose Sign in with Apple, we receive the Apple-provided email (or a private relay address)
+                and your name only if you share it. We use that information solely to create or link your
+                Scholarmancy account. You can hide your email via Apple&apos;s Hide My Email. Disconnecting
+                Apple, Google, or Microsoft sign-in, or deleting your Scholarmancy account, stops further
+                use of that provider identity.
               </p>
             </section>
 
@@ -98,11 +109,12 @@ export default function PrivacyPage() {
               <h2 className="text-lg font-semibold">6. Data Retention</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Academic data is retained while your account is active. You may delete your account at any time
-                by contacting{' '}
-                <Link href="mailto:support@scholarmancy.com" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
-                  support@scholarmancy.com
+                from the app (Settings → Delete account) or via our{' '}
+                <Link href="/delete-account" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                  account deletion page
                 </Link>
-                , which will permanently delete all associated data within 30 days.
+                . Deletion permanently removes your account, academic data, and linked sign-in providers
+                within 30 days.
               </p>
             </section>
 
@@ -129,9 +141,11 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-lg font-semibold">9. Third-Party Services</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholarmancy uses Expo Application Services (EAS) to build and deliver the iOS and Android apps,
-                Apple Push Notification Service (APNs) for iOS push, and Firebase Cloud Messaging (FCM) for Android
-                push. These services have their own privacy policies.
+                Scholarmancy uses Expo Application Services (EAS) to build and deliver the iOS and Android apps;
+                Apple, Google, and Microsoft for optional social sign-in; Apple Push Notification Service (APNs)
+                for iOS push; Firebase Cloud Messaging (FCM) for Android push; SendGrid for email; and Twilio
+                for optional SMS. These services have their own privacy policies. We do not sell personal
+                information and we do not use this data for advertising.
               </p>
             </section>
 
