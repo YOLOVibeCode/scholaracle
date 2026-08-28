@@ -13,6 +13,7 @@
     "ios": {
       "bundleIdentifier": "com.scholarmancy.app",
       "supportsTablet": true,
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -34,6 +35,7 @@
       "expo-updates",
       "expo-secure-store",
       "expo-notifications",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

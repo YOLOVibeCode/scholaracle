@@ -500,7 +500,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
       database,
       new ReminderNotificationSink({
         notificationService,
-        resolveEmail: async (audience, studentId) => {
+        resolveEmail: async (audience, studentId): Promise<string | null> => {
           const userRepository = new UserRepository(database);
           if (audience === 'student') {
             const studentUser = await userRepository.findByStudentId(studentId);
