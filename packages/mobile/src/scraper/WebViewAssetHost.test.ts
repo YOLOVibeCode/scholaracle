@@ -106,11 +106,18 @@ describe('WebViewAssetHost.processOps', () => {
     expect(result).toEqual(ops);
   });
 
-  it('passes through materials whose URL does not start with portalOrigin', async () => {
+  it('annotates public external materials with linkAccessibility', async () => {
     const host = buildHost(jest.fn());
     const op = makeMaterialOp('https://other.example.com/file.pdf');
     const result = await host.processOps([op]);
-    expect(result).toEqual([op]);
+    // External (non-portal) URLs are classified as public and annotated,
+    // not left entirely unchanged.
+    expect(result).toEqual([
+      {
+        ...op,
+        record: { ...(op.record as object), linkAccessibility: 'public' },
+      },
+    ]);
   });
 
   it('rewrites portal URL to serverUrl on successful fetch + upload', async () => {
