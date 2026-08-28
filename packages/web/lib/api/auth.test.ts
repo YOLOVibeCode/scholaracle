@@ -128,7 +128,7 @@ describe('authApi', () => {
   });
 
   describe('loginWithMagicToken', () => {
-    it('POSTs the token to /auth/student-magic and saves the session like login', async () => {
+    it('POSTs the token to /auth/magic and saves the session like login', async () => {
       fetchSpy.mockResolvedValue(
         fakeResponse({
           success: true,
@@ -140,7 +140,7 @@ describe('authApi', () => {
       const result = await authApi.loginWithMagicToken('once-only');
 
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/auth/student-magic'),
+        expect.stringContaining('/auth/magic'),
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ token: 'once-only' }),
