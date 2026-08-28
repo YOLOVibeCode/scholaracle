@@ -4,11 +4,12 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
+import { STORE_LEGAL_URLS } from '../store/legalUrls';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -84,6 +85,23 @@ export function SettingsScreen({
     );
   };
 
+  const handleDeleteAccount = (): void => {
+    Alert.alert(
+      'Delete account?',
+      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data within 30 days. School portal passwords stay on this device until you uninstall.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: (): void => {
+            void Linking.openURL(STORE_LEGAL_URLS.deleteAccount);
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -136,6 +154,36 @@ export function SettingsScreen({
             </Text>
           )}
         </View>
+
+        <Text style={styles.sectionHeader}>Legal</Text>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => void Linking.openURL(STORE_LEGAL_URLS.privacy)}
+          testID="link-privacy"
+        >
+          <Text style={styles.rowText}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => void Linking.openURL(STORE_LEGAL_URLS.terms)}
+          testID="link-terms"
+        >
+          <Text style={styles.rowText}>Terms of Service</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => void Linking.openURL(STORE_LEGAL_URLS.support)}
+          testID="link-support"
+        >
+          <Text style={styles.rowText}>Support</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={handleDeleteAccount}
+          testID="link-delete-account"
+        >
+          <Text style={styles.deleteAccountText}>Delete account</Text>
+        </TouchableOpacity>
 
         <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity
@@ -209,4 +257,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   signOutText: { color: '#dc3545', fontWeight: '700', fontSize: 16 },
+  deleteAccountText: { color: '#dc3545', fontWeight: '600', fontSize: 15 },
 });

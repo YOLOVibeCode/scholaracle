@@ -1,0 +1,48 @@
+# On-demand iOS TestFlight ship. Do NOT add a push-to-main trigger —
+# each iOS cloud build costs EAS credits.
+#
+# Preview IPA → TestFlight (UAT API, channel preview).
+# Production IPA → TestFlight (prod API, channel production).
+#
+# Run from packages/mobile:
+#   npx eas-cli workflow:run .eas/workflows/submit-ios.yml
+#
+# After the build lands in TestFlight, sync the Test Information form:
+#   pnpm sync:testflight
+
+name: Submit iOS TestFlight (preview + production)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios_preview:
+    name: Build iOS preview (UAT)
+    type: build
+    params:
+      platform: ios
+      profile: preview
+
+  submit_ios_preview:
+    name: Submit preview to TestFlight
+    type: submit
+    needs: [build_ios_preview]
+    params:
+      build_id: ${{ needs.build_ios_preview.outputs.build_id }}
+      profile: preview
+
+  build_ios_production:
+    name: Build iOS production
+    type: build
+    needs: [submit_ios_preview]
+    params:
+      platform: ios
+      profile: production
+
+  submit_ios_production:
+    name: Submit production to TestFlight
+    type: submit
+    needs: [build_ios_production]
+    params:
+      build_id: ${{ needs.build_ios_production.outputs.build_id }}
+      profile: production

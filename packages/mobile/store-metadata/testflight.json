@@ -1,0 +1,11 @@
+{
+  "feedbackEmail": "support@scholarmancy.com",
+  "marketingUrl": "https://scholarmancy.com",
+  "privacyPolicyUrl": "https://scholarmancy.com/privacy",
+  "supportUrl": "https://scholarmancy.com/support",
+  "betaDescription": "Scholarmancy helps families track grades, assignments, and class materials from school portals (Canvas, Skyward, Aeries).\n\nWhat to try:\n• Sign in as the demo parent (credentials in Beta App Review Information).\n• Open the household dashboard, then Emma’s and Liam’s work.\n• Student studio is a separate role — magic-link / student login, not this parent account.\n• School portal passwords stay on the device. They are never sent to our servers.\n\nAirplane mode: a signed-in session still opens. Live sync, login, and OAuth need a network connection and show “You’re offline” instead of hanging.",
+  "demoAccountRequired": true,
+  "demoAccountName": "demo@scholarmancy.com",
+  "demoAccountPassword": "DemoPass123!",
+  "reviewNotes": "DEMO PARENT (required)\nEmail: demo@scholarmancy.com\nPassword: DemoPass123!\n\nThis is a seeded household: parent Sarah Mitchell with students Emma and Liam. After sign-in you land on the parent home (student list / dashboard). Do not expect a school-portal login on first launch — portal credentials are stored only on-device after the parent connects a source.\n\nStudent studio is a different account (emma.demo@scholarmancy.com) provisioned by the parent. Reviewers only need the parent demo.\n\nSign in with Apple / Google / Microsoft may appear if those provider apps are configured; email/password is sufficient for review.\n\nAirplane mode: the app must not hang. Cold start restores a local session. Network calls time out in 15s with “You’re offline.”\n\nPrivacy: https://scholarmancy.com/privacy\nSupport: https://scholarmancy.com/support\nDelete account: Settings → Delete account, or https://scholarmancy.com/delete-account"
+}

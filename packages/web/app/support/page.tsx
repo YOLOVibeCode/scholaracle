@@ -49,8 +49,25 @@ export default function SupportPage() {
             <section>
               <h2 className="text-lg font-semibold">Contact Us</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                For additional support, sign in and use the in-app help option, or email us at the address
-                listed in your account.
+                Email{' '}
+                <Link
+                  href="mailto:support@scholarmancy.com"
+                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  support@scholarmancy.com
+                </Link>
+                . We read every message. For account deletion, use{' '}
+                <Link href="/delete-account" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                  scholarmancy.com/delete-account
+                </Link>{' '}
+                or email{' '}
+                <Link
+                  href="mailto:privacy@scholarmancy.com"
+                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  privacy@scholarmancy.com
+                </Link>
+                .
               </p>
             </section>
 
@@ -68,6 +85,8 @@ export default function SupportPage() {
                 <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
                 {' · '}
                 <Link href="/terms" className="hover:underline">Terms of Service</Link>
+                {' · '}
+                <Link href="/delete-account" className="hover:underline">Delete account</Link>
               </p>
             </div>
           </CardContent>
