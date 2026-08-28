@@ -27,6 +27,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // CommonJS test setup file — cannot use ESM imports
+    "jest.setup.js",
   ]),
 ]);
 
