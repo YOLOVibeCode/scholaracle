@@ -223,10 +223,10 @@ function HeroDashboardMockup() {
 
         <div className="space-y-4 p-5">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-muted-foreground">Good morning</div>
-              <div className="text-lg font-semibold">Ava&apos;s Week</div>
-            </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Good morning</div>
+                <div className="text-lg font-semibold">Emma&apos;s Week</div>
+              </div>
             <Badge variant="outline" className="text-xs">3 alerts</Badge>
           </div>
 
@@ -453,7 +453,7 @@ function FeaturesSection() {
             icon={<Bot className="h-5 w-5" />}
             tint="purple"
             title="AI insights"
-            body="Spot patterns before they become problems. &ldquo;Ava&apos;s math grades dip every Thursday&rdquo; — now you know."
+            body="Spot patterns before they become problems. &ldquo;Emma&apos;s math grades dip every Thursday&rdquo; — now you know."
           />
           <FeatureCard
             icon={<Users className="h-5 w-5" />}
@@ -536,10 +536,10 @@ function DashboardPreview() {
               subtitle="Across all students"
               icon={<Calendar className="h-4 w-4 text-blue-500" />}
             >
-              <AgendaItem name="Algebra II quiz" who="Ava · 1st period" />
-              <AgendaItem name="Spelling test" who="Leo · 9:30 AM" />
-              <AgendaItem name="Soccer practice" who="Ava · 4:00 PM" />
-              <AgendaItem name="History essay due" who="Ava · 11:59 PM" alert />
+              <AgendaItem name="Algebra II quiz" who="Emma · 1st period" />
+              <AgendaItem name="Spelling test" who="Liam · 9:30 AM" />
+              <AgendaItem name="Soccer practice" who="Emma · 4:00 PM" />
+              <AgendaItem name="History essay due" who="Emma · 11:59 PM" alert />
             </PreviewPanel>
 
             <PreviewPanel
@@ -559,10 +559,10 @@ function DashboardPreview() {
               icon={<Bot className="h-4 w-4 text-purple-500" />}
             >
               <InsightRow
-                text="Ava&apos;s math quiz grades drop on weeks with weekend tournaments. Consider a Thursday review session."
+                text="Emma&apos;s math quiz grades drop on weeks with weekend tournaments. Consider a Thursday review session."
               />
               <InsightRow
-                text="Leo&apos;s spelling test scores correlate with sleep — &lt;7hrs = avg 12% lower."
+                text="Liam&apos;s spelling test scores correlate with sleep — &lt;7hrs = avg 12% lower."
               />
               <InsightRow
                 text="History essay has been &ldquo;not started&rdquo; for 4 days. Suggest a check-in tonight."
@@ -998,9 +998,26 @@ function FinalCta({
             <Link href="/register" data-testid="final-cta-register">Create free account</Link>
           </Button>
         </div>
-        <p className="mt-6 text-sm text-white/70">
-          Demo login: <span className="font-mono">{DEMO_EMAIL}</span> / <span className="font-mono">{DEMO_PASSWORD}</span>
-        </p>
+        <div className="mt-6 rounded-lg border border-white/20 bg-white/10 px-5 py-4 text-left text-sm">
+          <p className="mb-2 font-semibold text-white/90">Demo logins</p>
+          <div className="space-y-1 text-white/75">
+            <p>
+              <span className="font-medium text-white">Parent (Sarah):</span>{' '}
+              <span className="font-mono">{DEMO_EMAIL}</span> /{' '}
+              <span className="font-mono">{DEMO_PASSWORD}</span>
+            </p>
+            <p>
+              <span className="font-medium text-white">Student Emma:</span>{' '}
+              <span className="font-mono">emma.demo@scholarmancy.com</span> /{' '}
+              <span className="font-mono">{DEMO_PASSWORD}</span>
+            </p>
+            <p>
+              <span className="font-medium text-white">Student Liam:</span>{' '}
+              <span className="font-mono">liam.demo@scholarmancy.com</span> /{' '}
+              <span className="font-mono">{DEMO_PASSWORD}</span>
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

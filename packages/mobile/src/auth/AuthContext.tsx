@@ -28,6 +28,12 @@ interface IAuthState {
 interface IAuthActions {
   login(email: string, password: string): Promise<void>;
   register(email: string, password: string, name: string): Promise<void>;
+  loginWithOAuth(
+    provider: 'google' | 'apple' | 'microsoft',
+    providerAccountId: string,
+    email: string,
+    name: string
+  ): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -130,6 +136,40 @@ export function AuthProvider({
     }
   }, []);
 
+  const loginWithOAuth = useCallback(
+    async (
+      provider: 'google' | 'apple' | 'microsoft',
+      providerAccountId: string,
+      email: string,
+      name: string
+    ) => {
+      setState((s) => ({ ...s, isAuthenticating: true, error: null }));
+      try {
+        const internalSecret = process.env['EXPO_PUBLIC_INTERNAL_API_SECRET'] ?? '';
+        const res = await apiClient.loginWithOAuth(
+          provider,
+          providerAccountId,
+          email,
+          name,
+          internalSecret
+        );
+        setState((s) => ({
+          ...s,
+          isLoggedIn: true,
+          isAuthenticating: false,
+          error: null,
+          accountEpoch: s.accountEpoch + 1,
+          ...roleFields(res.user ?? null),
+        }));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Sign in failed';
+        setState((s) => ({ ...s, isAuthenticating: false, error: msg }));
+        throw err;
+      }
+    },
+    []
+  );
+
   const logout = useCallback(async () => {
     try {
       // Full device purge: portal credentials, sources, ledger, push + auth tokens.
@@ -140,7 +180,7 @@ export function AuthProvider({
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, loginWithOAuth, logout }}>
       {children}
     </AuthContext.Provider>
   );

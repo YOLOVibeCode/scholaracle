@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { OAuthButtons } from '@/components/auth/OAuthButtons';
+import { OAuthButtons, type OAuthProviderId } from '@/components/auth/OAuthButtons';
 import { authApi } from '@/lib/api/auth';
 import { postLoginDestination } from '@/lib/auth/destinationForRole';
 import {
@@ -25,6 +25,7 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasOAuth, setHasOAuth] = useState(false);
   const redirectTo = searchParams.get('redirect');
   const sessionExpired = searchParams.get('reason') === 'session_expired';
   const resetSuccess = searchParams.get('reset') === 'success';
@@ -186,10 +187,16 @@ function LoginForm() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <OAuthButtons disabled={isLoading} onError={setError} />
-            <div className="relative text-center text-sm text-gray-500">
-              <span className="bg-white px-2 dark:bg-gray-900">or</span>
-            </div>
+            <OAuthButtons
+              disabled={isLoading}
+              onError={setError}
+              onProvidersResolved={(ids: OAuthProviderId[]) => setHasOAuth(ids.length > 0)}
+            />
+            {hasOAuth && (
+              <div className="relative text-center text-sm text-gray-500">
+                <span className="bg-white px-2 dark:bg-gray-900">or</span>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-login">
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>

@@ -1,7 +1,11 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
-import { PasswordResetTokenRepository, RefreshTokenRepository } from '@scholaracle/database';
+import {
+  OAuthAccountRepository,
+  PasswordResetTokenRepository,
+  RefreshTokenRepository,
+} from '@scholaracle/database';
 import { authRouter } from './auth';
 import { createErrorHandler } from '../../middleware/errorHandler';
 
@@ -31,6 +35,7 @@ describe('Auth API Routes', () => {
 
     const passwordResetTokenStore = new PasswordResetTokenRepository(database);
     const refreshTokenStore = new RefreshTokenRepository(database);
+    const oauthAccountRepository = new OAuthAccountRepository(database);
 
     // Setup Express app with routes
     app = express();
@@ -46,6 +51,7 @@ describe('Auth API Routes', () => {
         baseUrl: 'http://localhost:2800',
         refreshTokenStore,
         refreshTokenExpiresIn: '30d',
+        oauthAccountRepository,
       })
     );
     app.use(createErrorHandler());
@@ -311,6 +317,51 @@ describe('Auth API Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toMatch(/missing|required/i);
+    });
+
+    it('should register a new parent and return tokens on first OAuth login', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', 'test-internal-secret')
+        .send({
+          provider: 'google',
+          providerAccountId: 'google-uid-001',
+          email: 'newparent.oauth@example.com',
+          name: 'New OAuth Parent',
+        });
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.token).toBeDefined();
+      expect(response.body.user?.role).toBe('parent');
+    });
+
+    it('should return tokens for a returning OAuth user', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+      const headers = { 'x-internal-api-secret': 'test-internal-secret' };
+      const payload = {
+        provider: 'google',
+        providerAccountId: 'google-uid-002',
+        email: 'returning.oauth@example.com',
+        name: 'Returning OAuth',
+      };
+
+      await request(app).post('/api/auth/oauth').set(headers).send(payload);
+      const response = await request(app).post('/api/auth/oauth').set(headers).send(payload);
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.token).toBeDefined();
     });
   });
 

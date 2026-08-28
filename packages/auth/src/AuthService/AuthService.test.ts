@@ -404,6 +404,111 @@ describe('AuthService', () => {
     });
   });
 
+  describe('loginOrRegisterOAuth', () => {
+    const mockOAuthRepo = {
+      findByProviderAndId: jest.fn(),
+      findByUserId: jest.fn(),
+      create: jest.fn(),
+      deleteByUserId: jest.fn(),
+    };
+
+    function makeOAuthService() {
+      return new AuthService(
+        database,
+        TEST_SECRET,
+        TEST_EXPIRES,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockOAuthRepo
+      );
+    }
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return error when oauth repository is not configured', async () => {
+      const result = await authService.loginOrRegisterOAuth(
+        'google',
+        'g-123',
+        'oauth@example.com',
+        'OAuth User'
+      );
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/not configured/i);
+    });
+
+    it('should login existing user via existing OAuth link', async () => {
+      await authService.register('linked@example.com', 'Pass123!', 'Linked User');
+      const user = await userRepository.findByEmail('linked@example.com');
+      mockOAuthRepo.findByProviderAndId.mockResolvedValue({
+        userId: user!._id!.toString(),
+        email: 'linked@example.com',
+        createdAt: new Date(),
+      });
+
+      const service = makeOAuthService();
+      const result = await service.loginOrRegisterOAuth(
+        'google',
+        'g-existing',
+        'linked@example.com',
+        'Linked User'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBeDefined();
+      expect(result.rememberMe).toBe(true);
+      expect(result.user?.email).toBe('linked@example.com');
+    });
+
+    it('should link OAuth to existing email-based user and return tokens', async () => {
+      await authService.register('email-user@example.com', 'Pass123!', 'Email User');
+      mockOAuthRepo.findByProviderAndId.mockResolvedValue(null);
+      mockOAuthRepo.create.mockResolvedValue(undefined);
+
+      const service = makeOAuthService();
+      const result = await service.loginOrRegisterOAuth(
+        'apple',
+        'a-new',
+        'email-user@example.com',
+        'Email User'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBeDefined();
+      expect(mockOAuthRepo.create).toHaveBeenCalledWith(
+        expect.any(String),
+        'apple',
+        'a-new',
+        'email-user@example.com'
+      );
+    });
+
+    it('should register a brand-new user via OAuth', async () => {
+      mockOAuthRepo.findByProviderAndId.mockResolvedValue(null);
+      mockOAuthRepo.create.mockResolvedValue(undefined);
+
+      const service = makeOAuthService();
+      const result = await service.loginOrRegisterOAuth(
+        'google',
+        'g-brand-new',
+        'brandnew@example.com',
+        'Brand New'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.token).toBeDefined();
+      expect(result.user?.email).toBe('brandnew@example.com');
+      expect(result.user?.role).toBe('parent');
+      const createdUser = await userRepository.findByEmail('brandnew@example.com');
+      expect(createdUser).not.toBeNull();
+    });
+  });
+
   describe('resetPasswordWithToken', () => {
     const mockTokenStore = {
       create: jest.fn(),
