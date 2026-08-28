@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { UserRepository } from '@scholaracle/database';
+import { UserRepository, type IUserDevice } from '@scholaracle/database';
 import {
   AuthenticationError,
   NotFoundError,
@@ -223,7 +223,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
       const existing = [...(user.devices ?? [])];
       const idx = existing.findIndex((d) => d.deviceId === id);
       const audience = user.role === 'student' ? 'student' : 'parent';
-      const nextDevice = {
+      const nextDevice: IUserDevice = {
         deviceId: id,
         type: deviceType,
         pushToken: expoPushToken.trim(),
