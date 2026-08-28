@@ -409,7 +409,7 @@ describe('AuthService', () => {
       findByProviderAndId: jest.fn(),
       findByUserId: jest.fn(),
       create: jest.fn(),
-      deleteByUserId: jest.fn(),
+      deleteByProviderAndUserId: jest.fn(),
     };
 
     function makeOAuthService() {
