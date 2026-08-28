@@ -119,6 +119,23 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  async loginWithOAuth(
+    provider: 'google' | 'apple' | 'microsoft',
+    providerAccountId: string,
+    email: string,
+    name: string,
+    internalSecret: string
+  ): Promise<IAuthLoginResponse> {
+    const res = await this._postWithHeaders<IAuthLoginResponse>(
+      '/api/auth/oauth',
+      { provider, providerAccountId, email, name },
+      { 'x-internal-api-secret': internalSecret },
+      false
+    );
+    await this._persistSession(res, 'OAuthLogin');
+    return res;
+  }
+
   async createStudent(request: IStudentCreateRequest): Promise<IStudentListItem> {
     return this._post<IStudentListItem>('/api/students', request, true);
   }
@@ -598,6 +615,26 @@ export class ScholarmancyApiClient {
     if (requireAuth && res.status === 401) {
       res = await doPost(await this._refreshAccessToken());
     }
+    if (!res.ok) throw await ApiError.fromResponse(res, `POST ${path}`);
+    return res.json() as Promise<T>;
+  }
+
+  private async _postWithHeaders<T>(
+    path: string,
+    body: unknown,
+    extraHeaders: Record<string, string>,
+    requireAuth: boolean
+  ): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders };
+    if (requireAuth) {
+      const token = await this._getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
     if (!res.ok) throw await ApiError.fromResponse(res, `POST ${path}`);
     return res.json() as Promise<T>;
   }

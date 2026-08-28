@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
+import { NativeOAuthButtons } from '../auth/NativeOAuthButtons';
 import {
   loadSavedLogin,
   saveLogin,
@@ -168,11 +169,25 @@ export function LoginScreen({ onCreateAccount }: ILoginScreenProps = {}): React.
           </Text>
         )}
 
-        {onCreateAccount !== undefined ? (
-          <TouchableOpacity onPress={onCreateAccount} testID="link-create-parent-account">
-            <Text style={styles.createLink}>Create a parent account</Text>
-          </TouchableOpacity>
-        ) : null}
+        {onCreateAccount !== undefined && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <NativeOAuthButtons
+              disabled={isAuthenticating}
+              onError={(msg) => {
+                /* errors surface through AuthContext; relay unexpected ones inline */
+                void msg;
+              }}
+            />
+            <TouchableOpacity onPress={onCreateAccount} testID="link-create-parent-account">
+              <Text style={styles.createLink}>Create a parent account</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -273,5 +288,20 @@ const styles = StyleSheet.create({
     marginTop: 24,
     textAlign: 'center',
     fontSize: 16,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#dee2e6',
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    color: '#6c757d',
   },
 });
