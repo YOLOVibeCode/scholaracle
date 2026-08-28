@@ -47,6 +47,15 @@ const CONNECTOR_TOKEN_KEY = 'slc_connector_token_v2';
 const PUSH_TOKEN_KEY = 'slc_push_token';
 const SESSION_USER_KEY = 'slc_session_user';
 
+/** Apple Review airplane-mode: fail fast instead of spinning on a hung fetch. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+export const OFFLINE_ERROR_CODE = 'OFFLINE';
+export const OFFLINE_ERROR_MESSAGE = "You're offline. Connect to the internet to continue.";
+
+export interface IApiClientOptions {
+  readonly requestTimeoutMs?: number;
+}
+
 /** Flattened assignment view-model consumed by DashboardScreen. */
 export interface IAssignmentItem {
   readonly _id: string;
@@ -74,6 +83,7 @@ interface IStoredConnectorToken {
 
 export class ScholarmancyApiClient {
   private readonly baseUrl: string;
+  private readonly _requestTimeoutMs: number;
   private _refreshPromise: Promise<string> | null = null;
   private _sessionEpoch = 0;
 
@@ -85,8 +95,9 @@ export class ScholarmancyApiClient {
    */
   public onSessionExpired?: (epoch: number) => void;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, options: IApiClientOptions = {}) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this._requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /** Increments on every login/logout; identifies the current session. */
@@ -97,6 +108,22 @@ export class ScholarmancyApiClient {
   /** The configured API base URL (used to classify resource-link hosts). */
   get baseUrlValue(): string {
     return this.baseUrl;
+  }
+
+  /**
+   * Every network call goes through here so airplane mode fails in seconds
+   * with a readable error instead of hanging on the splash/spinner.
+   */
+  private async _timedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this._requestTimeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (err: unknown) {
+      throw mapFetchFailure(err);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -228,7 +255,7 @@ export class ScholarmancyApiClient {
     initialToken?: string
   ): Promise<Response> {
     const doFetch = async (token: string): Promise<Response> =>
-      fetch(`${this.baseUrl}${path}`, {
+      this._timedFetch(`${this.baseUrl}${path}`, {
         method: init.method,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: init.body,
@@ -529,7 +556,7 @@ export class ScholarmancyApiClient {
       throw new Error('Not logged in');
     }
 
-    const res = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+    const res = await this._timedFetch(`${this.baseUrl}/api/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
@@ -555,7 +582,7 @@ export class ScholarmancyApiClient {
 
   private async _get<T>(path: string): Promise<T> {
     const doGet = async (token: string): Promise<Response> =>
-      fetch(`${this.baseUrl}${path}`, {
+      this._timedFetch(`${this.baseUrl}${path}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -570,7 +597,7 @@ export class ScholarmancyApiClient {
 
   private async _patch<T>(path: string, body: unknown): Promise<T> {
     const doPatch = async (authToken: string): Promise<Response> =>
-      fetch(`${this.baseUrl}${path}`, {
+      this._timedFetch(`${this.baseUrl}${path}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify(body),
@@ -586,7 +613,7 @@ export class ScholarmancyApiClient {
 
   private async _delete<T>(path: string, body: unknown): Promise<T> {
     const doDelete = async (authToken: string): Promise<Response> =>
-      fetch(`${this.baseUrl}${path}`, {
+      this._timedFetch(`${this.baseUrl}${path}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify(body),
@@ -604,7 +631,7 @@ export class ScholarmancyApiClient {
     const doPost = async (authToken?: string): Promise<Response> => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-      return fetch(`${this.baseUrl}${path}`, {
+      return this._timedFetch(`${this.baseUrl}${path}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -630,7 +657,7 @@ export class ScholarmancyApiClient {
       const token = await this._getAccessToken();
       if (token) headers['Authorization'] = `Bearer ${token}`;
     }
-    const res = await fetch(`${this.baseUrl}${path}`, {
+    const res = await this._timedFetch(`${this.baseUrl}${path}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -644,6 +671,28 @@ export class ScholarmancyApiClient {
 export const apiClient = new ScholarmancyApiClient(
   process.env['EXPO_PUBLIC_API_URL'] ?? 'https://api.scholarmancy.com'
 );
+
+function mapFetchFailure(err: unknown): ApiError {
+  if (err instanceof ApiError) return err;
+  if (isOfflineLike(err)) {
+    return new ApiError(OFFLINE_ERROR_MESSAGE, 0, OFFLINE_ERROR_CODE);
+  }
+  const message = err instanceof Error ? err.message : 'Request failed';
+  return new ApiError(message, 0, 'NETWORK_ERROR');
+}
+
+function isOfflineLike(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'AbortError') return true;
+  const message = err.message.toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('the internet connection appears to be offline') ||
+    message.includes('aborted') ||
+    message.includes('the network connection was lost')
+  );
+}
 
 function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
   const raw = res.user;

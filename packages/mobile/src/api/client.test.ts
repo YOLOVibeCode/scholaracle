@@ -1006,6 +1006,42 @@ describe('session hardening', () => {
   });
 });
 
+describe('ScholarmancyApiClient airplane mode', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+  });
+
+  it('maps a Network request failed login to a readable offline error', async () => {
+    client = new ScholarmancyApiClient(BASE_URL);
+    global.fetch = jest.fn().mockRejectedValue(new TypeError('Network request failed'));
+    await expect(client.login('demo@scholarmancy.com', 'x')).rejects.toMatchObject({
+      name: 'ApiError',
+      code: 'OFFLINE',
+      message: expect.stringMatching(/offline/i),
+    });
+  });
+
+  it('aborts hung fetches so airplane mode cannot spin forever', async () => {
+    client = new ScholarmancyApiClient(BASE_URL, { requestTimeoutMs: 20 });
+    global.fetch = jest.fn((_url: string, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      });
+    }) as unknown as typeof fetch;
+
+    await expect(client.login('demo@scholarmancy.com', 'x')).rejects.toMatchObject({
+      code: 'OFFLINE',
+    });
+  });
+});
+
 describe('ScholarmancyApiClient source invites', () => {
   let client: ScholarmancyApiClient;
 
