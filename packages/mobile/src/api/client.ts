@@ -163,6 +163,12 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  async loginWithMagicToken(token: string): Promise<IAuthLoginResponse> {
+    const res = await this._post<IAuthLoginResponse>('/api/auth/magic', { token }, false);
+    await this._persistSession(res, 'MagicLogin');
+    return res;
+  }
+
   async createStudent(request: IStudentCreateRequest): Promise<IStudentListItem> {
     return this._post<IStudentListItem>('/api/students', request, true);
   }

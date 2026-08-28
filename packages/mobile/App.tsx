@@ -27,6 +27,7 @@ import { connectedSourceStore, type IConnectedSource } from './src/sources/Conne
 import { type IStudentListItem } from './src/api/client';
 import { isDemoDeepLink, DEMO_EMAIL, DEMO_PASSWORD } from './src/demo/demoLogin';
 import { isDiagDeepLink } from './src/demo/diagDeepLink';
+import { extractMagicToken } from './src/auth/magicDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import { DeployStamp } from './src/components/DeployStamp';
@@ -74,6 +75,7 @@ function AppContent(): React.ReactElement {
   const handledDemoUrl = useRef<string | null>(null);
   const handledDiagUrl = useRef<string | null>(null);
   const handledInstallUrl = useRef<string | null>(null);
+  const handledMagicUrl = useRef<string | null>(null);
 
   // Trace navigation changes into the diag ring buffer.
   useEffect(() => {
@@ -103,6 +105,26 @@ function AppContent(): React.ReactElement {
       }
     })();
   }, [isLoading, linkingUrl, login]);
+
+  // scholarmancy://magic?token=<raw> — one-tap magic login sent via email/SMS.
+  useEffect(() => {
+    if (isLoading) return;
+    const magicToken = extractMagicToken(linkingUrl);
+    if (!magicToken || handledMagicUrl.current === linkingUrl) return;
+    handledMagicUrl.current = linkingUrl ?? null;
+    void (async (): Promise<void> => {
+      try {
+        await apiClient.loginWithMagicToken(magicToken);
+        setNav({ view: 'students' });
+      } catch {
+        Alert.alert(
+          'Link expired',
+          'This login link has already been used or has expired. Ask your parent to send a new one.',
+          [{ text: 'OK' }]
+        );
+      }
+    })();
+  }, [isLoading, linkingUrl]);
 
   const applyInviteNav = useCallback((payload: ISourceInvitePayload): void => {
     const student: IStudentListItem = {

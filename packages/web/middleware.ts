@@ -16,6 +16,8 @@ const publicRoutes = [
   '/pricing',
   '/cli-auth',
   '/delete-account',
+  '/magic',
+  '/get-app',
 ];
 
 function isPublicPath(pathname: string): boolean {

@@ -124,7 +124,9 @@ export class MagicLoginLink {
     const raw = randomBytes(32).toString('base64url');
     const expiresAt = new Date(this._now().getTime() + ttlMs);
     await store(hashToken(raw), expiresAt);
-    const loginUrl = `${this._baseUrl}/login?magic=${encodeURIComponent(raw)}`;
+    // /magic routes mobile devices to the native app (or the install page);
+    // web browsers are redirected to /login?magic= from that page.
+    const loginUrl = `${this._baseUrl}/magic?token=${encodeURIComponent(raw)}`;
     const qrDataUrl = await this._qr(loginUrl);
     return { loginUrl, expiresAt, qrDataUrl };
   }
