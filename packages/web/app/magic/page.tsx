@@ -8,7 +8,7 @@
  *            After 1.5 s, if still on page, shows the install CTA.
  */
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -22,7 +22,7 @@ function isIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
-export default function MagicPage(): React.ReactElement {
+function MagicRouter(): React.ReactElement {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token') ?? '';
@@ -113,5 +113,19 @@ export default function MagicPage(): React.ReactElement {
         Continue on web instead
       </Link>
     </div>
+  );
+}
+
+const Spinner = (): React.ReactElement => (
+  <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#4f46e5] border-t-transparent" />
+  </div>
+);
+
+export default function MagicPage(): React.ReactElement {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <MagicRouter />
+    </Suspense>
   );
 }
