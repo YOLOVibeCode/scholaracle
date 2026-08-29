@@ -48,8 +48,8 @@ function makeSenderStub(): IMagicLinkSender & {
 
 function tokenFromUrl(loginUrl: string): string {
   const parsed = new URL(loginUrl);
-  const token = parsed.searchParams.get('magic');
-  if (!token) throw new Error('loginUrl missing magic param');
+  const token = parsed.searchParams.get('token');
+  if (!token) throw new Error('loginUrl missing token param');
   return token;
 }
 
@@ -140,7 +140,7 @@ describe('Magic-link send + consume', () => {
     expect(res.body.expiresAt).toBeDefined();
     expect(sender.emails).toHaveLength(1);
     expect(sender.emails[0]!.to).toBe('emma@example.com');
-    expect(sender.emails[0]!.loginUrl).toMatch(/\/login\?magic=/);
+    expect(sender.emails[0]!.loginUrl).toMatch(/\/magic\?token=/);
   });
 
   it('POST .../login/magic-link/send returns 403 without auth', async () => {
