@@ -31,6 +31,10 @@ concurrency:
 env:
   DEV_API_URL: https://api-dev-c268.up.railway.app
   DEV_WEB_URL: https://web-dev-8552.up.railway.app
+  # Branded UAT domains — the exact hosts the TestFlight preview binary calls.
+  # DNS/TLS breakage here would ship silently without these checks.
+  UAT_API_URL: https://api-uat.scholarmancy.com
+  UAT_WEB_URL: https://web-uat.scholarmancy.com
 
 jobs:
   ci-check:
@@ -70,6 +74,54 @@ jobs:
           done
           echo "Dev Web never picked up this commit"; exit 1
 
+      - name: Wait for UAT API domain to run ${{ github.sha }}
+        run: |
+          for i in {1..80}; do
+            deployed=$(curl -fsS "${UAT_API_URL}/api/health/version" 2>/dev/null | jq -r '.commit // "unreachable"' || echo "unreachable")
+            if [ "$deployed" = "${{ github.sha }}" ]; then
+              echo "UAT API is running ${deployed}"; exit 0
+            fi
+            echo "UAT API on ${deployed}, waiting for ${{ github.sha }}... ($i/80)"
+            sleep 10
+          done
+          echo "UAT API (${UAT_API_URL}) never picked up this commit"; exit 1
+
+      - name: Wait for UAT Web domain to run ${{ github.sha }}
+        run: |
+          for i in {1..80}; do
+            deployed=$(curl -fsS "${UAT_WEB_URL}/api/health/version" 2>/dev/null | jq -r '.commit // "unreachable"' || echo "unreachable")
+            if [ "$deployed" = "${{ github.sha }}" ]; then
+              echo "UAT Web is running ${deployed}"; exit 0
+            fi
+            echo "UAT Web on ${deployed}, waiting for ${{ github.sha }}... ($i/80)"
+            sleep 10
+          done
+          echo "UAT Web (${UAT_WEB_URL}) never picked up this commit"; exit 1
+
+      - name: UAT mobile-contract smoke
+        run: |
+          # 1. Demo login — the first network call the TestFlight app makes.
+          code=$(curl -sS -o /tmp/login-res -w "%{http_code}" -X POST \
+            "${UAT_API_URL}/api/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"demo@scholarmancy.com","password":"DemoPass123!"}')
+          echo "UAT demo login → $code"
+          if [ "$code" != "200" ]; then
+            echo "UAT demo login failed (${code}): $(cat /tmp/login-res)"
+            exit 1
+          fi
+          # 2. Magic-link consume with a bogus token — must return 4xx, never 5xx.
+          code=$(curl -sS -o /tmp/magic-res -w "%{http_code}" -X POST \
+            "${UAT_API_URL}/api/auth/magic" \
+            -H "Content-Type: application/json" \
+            -d '{"token":"ci-smoke-bogus-token"}')
+          echo "UAT magic consume (bogus) → $code"
+          if [ "${code:0:1}" = "5" ]; then
+            echo "UAT magic endpoint returned 5xx (${code}): $(cat /tmp/magic-res)"
+            exit 1
+          fi
+          echo "UAT mobile-contract smoke passed"
+
       - name: App Store legal pages reachable without a session
         run: |
           for path in /privacy /terms /support /delete-account /robots.txt /sitemap.xml; do
@@ -92,3 +144,78 @@ jobs:
     with:
       base_url: https://web-dev-8552.up.railway.app
       api_base_url: https://api-dev-c268.up.railway.app/api
+
+  # ─── OTA update → TestFlight preview channel ─────────────────────────
+  # Runs after E2E (or wait-for-dev if E2E is skipped).
+  # Fingerprint guard: if the native binary fingerprint changed (new plugin,
+  # entitlement, native dependency) the OTA cannot load on the TestFlight
+  # build — skip it and surface a clear warning instead of a silent failure.
+  # Production channel is intentionally NOT automated here — keep it manual
+  # so the binary under App Review never shifts mid-review.
+  ota-preview:
+    name: OTA → TestFlight preview
+    # wait-for-dev is always required; e2e-dev may be skipped via skip_e2e.
+    # !failure() lets this job run even when e2e-dev was skipped (not failed).
+    needs: [wait-for-dev, e2e-dev]
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+      - name: Install mobile dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+      - name: Check EXPO_TOKEN is configured
+        id: token-check
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::EXPO_TOKEN secret is not configured — OTA skipped. Add it at expo.dev → Account settings → Access tokens, then: gh secret set EXPO_TOKEN"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check native fingerprint
+        id: fingerprint
+        if: steps.token-check.outputs.configured == 'true'
+        run: |
+          # Generate the current project fingerprint.
+          CURRENT_FP=$(npx @expo/fingerprint@latest . --platform ios 2>/dev/null | jq -r '.hash // empty')
+          # Fetch the fingerprint from the latest finished preview build on EAS.
+          LATEST_FP=$(npx eas-cli build:list \
+            --platform ios \
+            --channel preview \
+            --status finished \
+            --limit 1 \
+            --non-interactive \
+            --json 2>/dev/null | jq -r '.[0].fingerprintHash // empty')
+          echo "Current fingerprint : ${CURRENT_FP}"
+          echo "Latest build fingerprint: ${LATEST_FP}"
+          if [ -z "$CURRENT_FP" ] || [ -z "$LATEST_FP" ]; then
+            echo "match=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not determine fingerprints (no finished preview build or fingerprint package error). OTA skipped."
+          elif [ "$CURRENT_FP" = "$LATEST_FP" ]; then
+            echo "match=true" >> "$GITHUB_OUTPUT"
+            echo "Fingerprint matches latest preview build — OTA is safe."
+          else
+            echo "match=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Native fingerprint changed (${CURRENT_FP} ≠ ${LATEST_FP}). OTA skipped — a new TestFlight binary is required. Run: cd packages/mobile && pnpm build:ios:preview"
+          fi
+      - name: Publish OTA to preview channel
+        if: steps.token-check.outputs.configured == 'true' && steps.fingerprint.outputs.match == 'true'
+        run: |
+          npx eas-cli update \
+            --channel preview \
+            --environment preview \
+            --message "${{ github.event.head_commit.message || github.sha }}" \
+            --non-interactive
