@@ -11,8 +11,8 @@ function sha256(value: string): string {
 
 function tokenFromLoginUrl(loginUrl: string): string {
   const parsed = new URL(loginUrl);
-  const token = parsed.searchParams.get('magic');
-  if (token === null) throw new Error('loginUrl missing magic param');
+  const token = parsed.searchParams.get('token');
+  if (token === null) throw new Error('loginUrl missing token param');
   return token;
 }
 
@@ -77,11 +77,11 @@ describe('MagicLoginLink', () => {
   // ── student kind ─────────────────────────────────────────────────────────
 
   describe('student kind', () => {
-    it('issues a /login?magic= URL, QR, and stores only SHA-256 hash', async () => {
+    it('issues a /magic?token= URL, QR, and stores only SHA-256 hash', async () => {
       await provisioner.invite(studentId, 'nora@example.com');
       const issued = await issuer().issueForStudent(studentId);
 
-      expect(issued.loginUrl).toMatch(/^http:\/\/test\.example\/login\?magic=/);
+      expect(issued.loginUrl).toMatch(/^http:\/\/test\.example\/magic\?token=/);
       expect(issued.qrDataUrl).toMatch(/^data:image\/png;base64,/);
       expect(qrPayloads).toEqual([issued.loginUrl]);
 
