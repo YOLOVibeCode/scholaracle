@@ -41,6 +41,12 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000001'),
+  digestStringAsync: jest.fn(async (_algo: string, data: string) => {
+    let h = 0;
+    for (let i = 0; i < data.length; i += 1) h = (h * 31 + data.charCodeAt(i)) >>> 0;
+    return h.toString(16).padStart(64, '0');
+  }),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
 }));
 
 // react-native ships Flow-typed sources jest can't parse; mock the pieces used.
@@ -54,6 +60,7 @@ jest.mock('react-native', () => ({
 
 jest.mock('expo-linking', () => ({
   useLinkingURL: jest.fn(() => null),
+  openURL: jest.fn(async () => true),
 }));
 
 jest.mock('expo-notifications', () => ({

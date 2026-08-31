@@ -22,7 +22,7 @@ const VIEW: IWorkPackView = {
     {
       label: 'Khan Academy – Cell Cycle',
       href: 'https://www.khanacademy.org/science/ap-biology/cell-communication-and-cell-cycle',
-      kind: 'external',
+      kind: 'needs-internet',
     },
     {
       label: 'View in Canvas',
@@ -31,10 +31,14 @@ const VIEW: IWorkPackView = {
     },
   ],
   moreFromCourse: [
-    { title: 'AP Biology Syllabus', asset: { assetId: 's', contentHash: 'h', fileName: 'syllabus.pdf' } },
+    {
+      title: 'AP Biology Syllabus',
+      asset: { assetId: 's', contentHash: 'h', fileName: 'syllabus.pdf' },
+    },
     { title: 'Chapter 5 Study Guide' },
     { title: 'YouTube - AP Bio Review', href: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
   ],
+  capturedPages: [],
 };
 
 const OPENED = {
@@ -58,8 +62,32 @@ describe('WorkPackView', () => {
     expect(screen.getByRole('button', { name: 'Open lab-safety.pdf' })).toBeInTheDocument();
     expect(screen.getByTestId('studio-pack-primary-cta').tagName).toBe('BUTTON');
     expect(screen.getByText('View in Canvas')).toBeInTheDocument();
+    expect(screen.getByText(/needs internet/)).toBeInTheDocument();
     expect(screen.getByTestId('studio-pack-instructions')).toHaveTextContent(/Cell Division/);
     expect(screen.queryByText(/^missing$/i)).not.toBeInTheDocument();
+  });
+
+  it('shows captured article text for offline reading', () => {
+    render(
+      <WorkPackView
+        view={{
+          ...VIEW,
+          capturedPages: [
+            {
+              title: 'SparkNotes snapshot',
+              text: 'Scout narrates. Cite the novel.',
+              href: 'https://www.sparknotes.com/lit/mocking/',
+            },
+          ],
+        }}
+        openPrimaryAsset={jest.fn()}
+      />
+    );
+    expect(screen.getByTestId('studio-pack-captured')).toHaveTextContent(/Scout narrates/);
+    expect(screen.getByRole('link', { name: 'Open original' })).toHaveAttribute(
+      'href',
+      'https://www.sparknotes.com/lit/mocking/'
+    );
   });
 
   it('keeps course extras collapsed', () => {

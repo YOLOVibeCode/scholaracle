@@ -35,6 +35,11 @@ export interface ICourseMaterial {
   /** Signed asset URL (24h TTL, no auth header needed). Never cache this URL. */
   readonly downloadUrl?: string;
   readonly linkAccessibility?: MaterialLinkAccessibility;
+  /**
+   * Readable text grabbed from a public page (CLASS_OFFLINE_PACK step 3).
+   * Present when the scraper could extract article text; absent for files.
+   */
+  readonly extractedText?: string;
   /** The assignment this material is linked to; null = course-scoped. */
   readonly assignmentExternalId: string | null;
 }

@@ -32,9 +32,7 @@ export function WorkPackView({
   onPrimaryOpened,
 }: IWorkPackViewProps): React.ReactElement {
   const overdue = isOverdue(view.dueAt);
-  const primaryLabel = view.primaryAsset
-    ? `Open ${view.primaryAsset.fileName}`
-    : null;
+  const primaryLabel = view.primaryAsset ? `Open ${view.primaryAsset.fileName}` : null;
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerType, setViewerType] = useState<string>('application/pdf');
   const [fromCache, setFromCache] = useState(false);
@@ -88,7 +86,10 @@ export function WorkPackView({
           <header className="flex flex-col gap-1">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{view.title}</h1>
-              <p className="text-sm font-medium text-muted-foreground" data-testid="studio-pack-status">
+              <p
+                className="text-sm font-medium text-muted-foreground"
+                data-testid="studio-pack-status"
+              >
                 {view.humanStatus}
               </p>
             </div>
@@ -101,7 +102,12 @@ export function WorkPackView({
         ) : null}
 
         {primaryLabel ? (
-          <Button size="lg" className="w-fit" onClick={handleOpen} data-testid="studio-pack-primary-cta">
+          <Button
+            size="lg"
+            className="w-fit"
+            onClick={handleOpen}
+            data-testid="studio-pack-primary-cta"
+          >
             {primaryLabel}
           </Button>
         ) : null}
@@ -139,9 +145,37 @@ export function WorkPackView({
           </p>
         </section>
 
+        {view.capturedPages.length > 0 ? (
+          <section data-testid="studio-pack-captured" className="flex flex-col gap-4">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Read here — saved for offline
+            </h2>
+            {view.capturedPages.map((page) => (
+              <article key={page.title} className="rounded-md border px-4 py-3">
+                <h3 className="text-sm font-semibold">{page.title}</h3>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+                  {page.text}
+                </p>
+                {page.href != null && page.href !== '' ? (
+                  <a
+                    href={page.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    Open original
+                  </a>
+                ) : null}
+              </article>
+            ))}
+          </section>
+        ) : null}
+
         {view.needsSchoolLogin.length > 0 ? (
           <section data-testid="studio-pack-fallbacks" className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-muted-foreground">Needs school login / other links</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Needs school login / other links
+            </h2>
             <ul className="space-y-1">
               {view.needsSchoolLogin.map((link) => (
                 <li key={link.href}>
@@ -151,7 +185,7 @@ export function WorkPackView({
                     rel="noopener noreferrer"
                     className="text-sm text-primary underline-offset-4 hover:underline"
                   >
-                    {link.label}
+                    {link.kind === 'needs-internet' ? `${link.label} (needs internet)` : link.label}
                   </a>
                 </li>
               ))}

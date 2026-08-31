@@ -110,14 +110,96 @@ describe('WebViewAssetHost.processOps', () => {
     const host = buildHost(jest.fn());
     const op = makeMaterialOp('https://other.example.com/file.pdf');
     const result = await host.processOps([op]);
-    // External (non-portal) URLs are classified as public and annotated,
-    // not left entirely unchanged.
+    // Unprobed public URLs are extractText; a no-op evaluate still marks public.
     expect(result).toEqual([
       {
         ...op,
         record: { ...(op.record as object), linkAccessibility: 'public' },
       },
     ]);
+  });
+
+  it('extracts article text from public HTML and keeps the original href', async () => {
+    const evaluateMock = jest.fn().mockResolvedValue({
+      kind: 'html',
+      mimeType: 'text/html',
+      html: '<html><body><p>Scout narrates. Cite the novel.</p></body></html>',
+      fileName: 'mocking',
+      size: 64,
+    });
+    const host = buildHost(evaluateMock);
+    const op = makeMaterialOp('https://www.sparknotes.com/lit/mocking/');
+    const result = await host.processOps([op]);
+    expect(result[0]?.record?.['extractedText']).toMatch(/Scout narrates/);
+    expect(result[0]?.record?.['linkAccessibility']).toBe('public');
+    expect(result[0]?.record?.['url']).toBe('https://www.sparknotes.com/lit/mocking/');
+  });
+
+  it('uploads a snapshot PDF when extracted article text is long', async () => {
+    const html = `<html><body><p>${'Scout Finch. '.repeat(40)}</p></body></html>`;
+    const evaluateMock = jest.fn().mockResolvedValue({
+      kind: 'html',
+      mimeType: 'text/html',
+      html,
+      fileName: 'mocking',
+      size: html.length,
+    });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        assetId: 'asset-snap',
+        serverUrl: 'https://api.scholarmancy.com/api/assets/asset-snap',
+      }),
+    });
+    const host = buildHost(evaluateMock, fetchMock);
+    const op = makeMaterialOp('https://www.sparknotes.com/lit/mocking/');
+    const result = await host.processOps([op]);
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result[0]?.record?.['url']).toBe('https://www.sparknotes.com/lit/mocking/');
+    expect(String(result[0]?.record?.['extractedText'])).toMatch(/Scout Finch/);
+  });
+
+  it('rehosts when an extractText fetch is actually a PDF', async () => {
+    const evaluateMock = jest.fn().mockResolvedValue({
+      kind: 'binary',
+      base64: 'dGVzdA==',
+      mimeType: 'application/pdf',
+      size: 4,
+      sha256: 'abc123',
+      fileName: 'hw.pdf',
+    });
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        assetId: 'asset-pdf',
+        serverUrl: 'https://api.scholarmancy.com/api/assets/asset-pdf',
+      }),
+    });
+    const host = buildHost(evaluateMock, fetchMock);
+    const op = makeMaterialOp('https://school.edu/hw.pdf');
+    const result = await host.processOps([op]);
+    expect(result[0]?.record?.['url']).toBe('https://api.scholarmancy.com/api/assets/asset-pdf');
+  });
+
+  it('marks Khan Academy as a public leave-link without fetching', async () => {
+    const evaluateMock = jest.fn();
+    const host = buildHost(evaluateMock);
+    const op = makeMaterialOp(
+      'https://www.khanacademy.org/science/ap-biology/cell-communication-and-cell-cycle'
+    );
+    const result = await host.processOps([op]);
+    expect(evaluateMock).not.toHaveBeenCalled();
+    expect(result[0]?.record?.['linkAccessibility']).toBe('public');
+    expect(result[0]?.record?.['url']).toContain('khanacademy.org');
+  });
+
+  it('marks Canvas assignment pages as authenticated without fetching', async () => {
+    const evaluateMock = jest.fn();
+    const host = buildHost(evaluateMock);
+    const op = makeMaterialOp(`${PORTAL_ORIGIN}/courses/1/assignments/2`);
+    const result = await host.processOps([op]);
+    expect(evaluateMock).not.toHaveBeenCalled();
+    expect(result[0]?.record?.['linkAccessibility']).toBe('authenticated');
   });
 
   it('rewrites portal URL to serverUrl on successful fetch + upload', async () => {

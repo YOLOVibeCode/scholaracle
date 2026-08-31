@@ -8,6 +8,11 @@
  * token. The op's record.url is rewritten to the permanent server URL so the
  * work pack can open files without needing the school portal session.
  *
+ * Capture ladder (classifyResource):
+ *   rehost      — native files / binary Content-Type
+ *   extractText — public HTML; store extractedText; optional snapshot PDF
+ *   leaveLink   — interactive (Khan/YouTube) stays public; portal stays authenticated
+ *
  * Design notes:
  * - Fail-open: errors on individual files are swallowed; the sync always
  *   succeeds even if asset rehosting is partial.
@@ -19,7 +24,14 @@
  *   JSON rather than multipart, avoiding the need for expo-file-system.
  */
 
-import { classifyResource, type IAssetHost } from '@scholaracle/scraper-core';
+import * as Crypto from 'expo-crypto';
+import {
+  buildSimplePdf,
+  classifyResource,
+  extractPageText,
+  isInteractiveHost,
+  type IAssetHost,
+} from '@scholaracle/scraper-core';
 import type { ISlcDeltaOp } from '@scholaracle/contracts';
 import type { IPageDriver } from '@scholaracle/scraper-core';
 
@@ -28,6 +40,9 @@ const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 /** Milliseconds before we give up on a single file fetch inside the WebView. */
 const FETCH_TIMEOUT_MS = 30_000;
+
+/** Article snapshot PDF is only worth storing when we grabbed a real page. */
+const SNAPSHOT_MIN_CHARS = 200;
 
 export interface IWebViewAssetHostConfig {
   /** Authenticated page driver from the current sync (with portal cookies). */
@@ -44,7 +59,7 @@ export interface IWebViewAssetHostConfig {
   readonly apiBaseUrl: string;
 }
 
-/** Shape of the data returned from the in-WebView fetch. */
+/** Shape of the data returned from the in-WebView file fetch. */
 interface IFetchedAsset {
   readonly base64: string;
   readonly mimeType: string;
@@ -52,6 +67,28 @@ interface IFetchedAsset {
   /** SHA-256 hex digest of the file bytes, computed in the WebView via SubtleCrypto. */
   readonly sha256: string;
   readonly fileName: string;
+}
+
+interface IFetchedHtml {
+  readonly kind: 'html';
+  readonly mimeType: string;
+  readonly html: string;
+  readonly fileName: string;
+  readonly size: number;
+}
+
+interface IFetchedBinary extends IFetchedAsset {
+  readonly kind: 'binary';
+}
+
+type IFetchedPage = IFetchedHtml | IFetchedBinary;
+
+interface IUploadTarget {
+  readonly uploadUrl: string;
+  readonly driver: IPageDriver;
+  readonly connectorToken: string;
+  readonly sourceId: string;
+  readonly provider: string;
 }
 
 /**
@@ -105,6 +142,94 @@ async function fetchAssetInWebView(
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetch a public (or session) URL and return HTML or binary bytes.
+ * Self-contained — runs inside the WebView.
+ */
+async function fetchPageInWebView(
+  url: string,
+  maxBytes: number,
+  timeoutMs: number
+): Promise<IFetchedPage | null> {
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), timeoutMs);
+    const resp = await fetch(url, { credentials: 'include', signal: controller.signal });
+    clearTimeout(tid);
+    if (!resp.ok) return null;
+
+    const buffer = await resp.arrayBuffer();
+    if (buffer.byteLength > maxBytes) return null;
+
+    const bytes = new Uint8Array(buffer);
+    const mimeType = resp.headers.get('content-type') ?? 'application/octet-stream';
+    const pathName = new URL(url).pathname;
+    const segments = pathName.split('/').filter(Boolean);
+    const raw = segments[segments.length - 1] ?? 'file';
+    const fileName = decodeURIComponent(raw);
+
+    const lower = mimeType.toLowerCase();
+    const looksPdf =
+      bytes.length >= 4 &&
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46;
+    const isBinary =
+      looksPdf ||
+      lower.startsWith('application/pdf') ||
+      lower.startsWith('image/') ||
+      lower.startsWith('video/') ||
+      lower.startsWith('audio/') ||
+      lower.startsWith('application/zip') ||
+      lower.startsWith('application/msword') ||
+      lower.startsWith('application/vnd.');
+
+    if (isBinary) {
+      const CHUNK = 8192;
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...Array.from(bytes.slice(i, i + CHUNK)));
+      }
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return {
+        kind: 'binary',
+        base64: btoa(binary),
+        mimeType,
+        size: bytes.length,
+        sha256: hashArray.map((b) => b.toString(16).padStart(2, '0')).join(''),
+        fileName,
+      };
+    }
+
+    return {
+      kind: 'html',
+      mimeType,
+      html: new TextDecoder('utf-8').decode(buffer).slice(0, 200_000),
+      fileName,
+      size: bytes.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  const nodeBuffer = (
+    globalThis as { Buffer?: { from: (b: Uint8Array) => { toString: (enc: string) => string } } }
+  ).Buffer;
+  if (nodeBuffer !== undefined) {
+    return nodeBuffer.from(bytes).toString('base64');
+  }
+  const CHUNK = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(binary);
 }
 
 export class WebViewAssetHost implements IAssetHost {
@@ -179,23 +304,22 @@ export class WebViewAssetHost implements IAssetHost {
     if (!fileUrl) return op;
 
     const action = classifyResource({ url: fileUrl, type });
+    const target: IUploadTarget = { uploadUrl, driver, connectorToken, sourceId, provider };
 
     if (action === 'leaveLink') {
       return {
         ...op,
-        record: { ...record, linkAccessibility: 'authenticated' },
+        record: {
+          ...record,
+          linkAccessibility: isInteractiveHost(fileUrl) ? 'public' : 'authenticated',
+        },
       };
     }
 
     if (action === 'extractText') {
-      // Text extraction happens in the scraper recipe; here we just mark accessibility.
-      return {
-        ...op,
-        record: { ...record, linkAccessibility: 'public' },
-      };
+      return this._extractTextOp(op, record, fileUrl, target);
     }
 
-    // action === 'rehost'
     const entityExternalId = op.key?.externalId as string | undefined;
     const courseExternalId = record?.['courseExternalId'] as string | undefined;
     if (!entityExternalId) return op;
@@ -204,15 +328,75 @@ export class WebViewAssetHost implements IAssetHost {
       op,
       record,
       fileUrl,
-      uploadUrl,
-      driver,
-      connectorToken,
-      sourceId,
-      provider,
+      target,
       entityType: 'courseMaterial',
       entityExternalId,
       courseExternalId: courseExternalId ?? '',
     });
+  }
+
+  private async _extractTextOp(
+    op: ISlcDeltaOp,
+    record: Record<string, unknown> | undefined,
+    fileUrl: string,
+    target: IUploadTarget
+  ): Promise<ISlcDeltaOp> {
+    const publicOp = {
+      ...op,
+      record: { ...record, linkAccessibility: 'public' as const },
+    };
+    try {
+      const page = await target.driver.evaluate(
+        fetchPageInWebView,
+        fileUrl,
+        MAX_FILE_BYTES,
+        FETCH_TIMEOUT_MS
+      );
+      if (!page) return publicOp;
+
+      if (page.kind === 'binary') {
+        const entityExternalId = op.key?.externalId as string | undefined;
+        const courseExternalId = record?.['courseExternalId'] as string | undefined;
+        if (!entityExternalId) return publicOp;
+        return this._rehostUrl({
+          op,
+          record,
+          fileUrl,
+          target,
+          entityType: 'courseMaterial',
+          entityExternalId,
+          courseExternalId: courseExternalId ?? '',
+          prefetched: page,
+        });
+      }
+
+      const text = extractPageText(page.html);
+      let nextRecord: Record<string, unknown> = {
+        ...record,
+        linkAccessibility: 'public',
+        ...(text !== '' ? { extractedText: text } : {}),
+      };
+
+      const entityExternalId = op.key?.externalId as string | undefined;
+      if (
+        text.length >= SNAPSHOT_MIN_CHARS &&
+        entityExternalId !== undefined &&
+        entityExternalId !== ''
+      ) {
+        nextRecord = await this._maybeUploadSnapshot({
+          record: nextRecord,
+          text,
+          fileUrl,
+          target,
+          entityExternalId,
+          courseExternalId: (record?.['courseExternalId'] as string | undefined) ?? '',
+        });
+      }
+
+      return { ...op, record: nextRecord };
+    } catch {
+      return publicOp;
+    }
   }
 
   /**
@@ -236,6 +420,7 @@ export class WebViewAssetHost implements IAssetHost {
 
     const rewritten: unknown[] = [];
     let changed = false;
+    const target: IUploadTarget = { uploadUrl, driver, connectorToken, sourceId, provider };
 
     for (const att of attachments) {
       if (typeof att !== 'object' || att === null) {
@@ -267,32 +452,11 @@ export class WebViewAssetHost implements IAssetHost {
           continue;
         }
 
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${connectorToken}`,
-          },
-          body: JSON.stringify({
-            data: asset.base64,
-            sourceId,
-            provider,
-            originalUrl: fileUrl,
-            contentHash: asset.sha256,
-            fileName: asset.fileName,
-            mimeType: asset.mimeType,
-            entityType: 'assignment',
-            entityExternalId,
-            courseExternalId: courseExternalId ?? '',
-          }),
+        const serverUrl = await this._uploadAsset(asset, fileUrl, target, {
+          entityType: 'assignment',
+          entityExternalId,
+          courseExternalId: courseExternalId ?? '',
         });
-
-        if (!uploadRes.ok) {
-          rewritten.push(att);
-          continue;
-        }
-
-        const { serverUrl } = (await uploadRes.json()) as { serverUrl?: string };
         if (!serverUrl) {
           rewritten.push(att);
           continue;
@@ -313,66 +477,115 @@ export class WebViewAssetHost implements IAssetHost {
     op: ISlcDeltaOp;
     record: Record<string, unknown> | undefined;
     fileUrl: string;
-    uploadUrl: string;
-    driver: IPageDriver;
-    connectorToken: string;
-    sourceId: string;
-    provider: string;
+    target: IUploadTarget;
     entityType: string;
     entityExternalId: string;
     courseExternalId: string;
+    prefetched?: IFetchedAsset;
   }): Promise<ISlcDeltaOp> {
     const {
       op,
       record,
       fileUrl,
-      uploadUrl,
-      driver,
-      connectorToken,
-      sourceId,
-      provider,
+      target,
       entityType,
       entityExternalId,
       courseExternalId,
+      prefetched,
     } = params;
 
     try {
-      const asset = await driver.evaluate(
-        fetchAssetInWebView,
-        fileUrl,
-        MAX_FILE_BYTES,
-        FETCH_TIMEOUT_MS
-      );
+      const asset =
+        prefetched ??
+        (await target.driver.evaluate(
+          fetchAssetInWebView,
+          fileUrl,
+          MAX_FILE_BYTES,
+          FETCH_TIMEOUT_MS
+        ));
       if (!asset) return op;
 
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${connectorToken}`,
-        },
-        body: JSON.stringify({
-          data: asset.base64,
-          sourceId,
-          provider,
-          originalUrl: fileUrl,
-          contentHash: asset.sha256,
-          fileName: asset.fileName,
-          mimeType: asset.mimeType,
-          entityType,
-          entityExternalId,
-          courseExternalId,
-        }),
+      const serverUrl = await this._uploadAsset(asset, fileUrl, target, {
+        entityType,
+        entityExternalId,
+        courseExternalId,
       });
-
-      if (!uploadRes.ok) return op;
-
-      const { serverUrl } = (await uploadRes.json()) as { serverUrl?: string };
       if (!serverUrl) return op;
 
       return { ...op, record: { ...record, url: serverUrl } };
     } catch {
       return op;
     }
+  }
+
+  private async _uploadAsset(
+    asset: IFetchedAsset,
+    originalUrl: string,
+    target: IUploadTarget,
+    ids: {
+      readonly entityType: string;
+      readonly entityExternalId: string;
+      readonly courseExternalId: string;
+    }
+  ): Promise<string | null> {
+    const uploadRes = await fetch(target.uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${target.connectorToken}`,
+      },
+      body: JSON.stringify({
+        data: asset.base64,
+        sourceId: target.sourceId,
+        provider: target.provider,
+        originalUrl,
+        contentHash: asset.sha256,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        entityType: ids.entityType,
+        entityExternalId: ids.entityExternalId,
+        courseExternalId: ids.courseExternalId,
+      }),
+    });
+
+    if (!uploadRes.ok) return null;
+    const { serverUrl } = (await uploadRes.json()) as { serverUrl?: string };
+    return serverUrl ?? null;
+  }
+
+  /** Optional one-page PDF of extracted article text. Original href is kept. */
+  private async _maybeUploadSnapshot(params: {
+    record: Record<string, unknown>;
+    text: string;
+    fileUrl: string;
+    target: IUploadTarget;
+    entityExternalId: string;
+    courseExternalId: string;
+  }): Promise<Record<string, unknown>> {
+    const { record, text, fileUrl, target, entityExternalId, courseExternalId } = params;
+    try {
+      const title = typeof record['title'] === 'string' ? record['title'] : 'Article';
+      const pdf = buildSimplePdf(title, text);
+      const ascii = new TextDecoder().decode(pdf);
+      const contentHash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        ascii
+      );
+      const asset: IFetchedAsset = {
+        base64: uint8ToBase64(pdf),
+        mimeType: 'application/pdf',
+        size: pdf.byteLength,
+        sha256: contentHash,
+        fileName: 'article-snapshot.pdf',
+      };
+      await this._uploadAsset(asset, fileUrl, target, {
+        entityType: 'courseMaterial',
+        entityExternalId,
+        courseExternalId,
+      });
+    } catch {
+      // Fail-open: extractedText is already on the record.
+    }
+    return record;
   }
 }

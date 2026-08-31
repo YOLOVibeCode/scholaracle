@@ -570,23 +570,25 @@ async function putDemoAssetBytes(store: IAssetStore): Promise<void> {
 }
 
 /**
- * Keep demo material → assignment joins current on idempotent re-seed.
- * Does not insert missing docs; only $sets known joins on existing materials.
+ * Keep demo materials, extractedText, assignment joins, and asset metadata
+ * current on every seed — including when assignments already exist.
  */
-async function syncDemoMaterialAssignmentJoins(
-  materialsColl: ReturnType<Db['collection']>,
+async function upsertDemoMaterialsAndAssets(
+  config: ISeedRouterConfig,
   userId: string
 ): Promise<void> {
+  const materialsColl = config.database.collection('slc_course_materials');
+  const assetsColl = config.database.collection('slc_assets');
   for (const doc of buildDemoMaterialDocs(userId)) {
-    const record = doc['record'] as Record<string, unknown>;
-    const assignmentExternalId = record['assignmentExternalId'];
-    if (typeof assignmentExternalId !== 'string') {
-      continue;
-    }
-    await materialsColl.updateOne(
-      { userId, externalId: doc['externalId'] },
-      { $set: { 'record.assignmentExternalId': assignmentExternalId } }
-    );
+    const externalId = doc['externalId'] as string;
+    await materialsColl.updateOne({ userId, externalId }, { $set: doc }, { upsert: true });
+  }
+  for (const doc of buildDemoAssetDocs(userId)) {
+    const assetId = doc['assetId'] as string;
+    await assetsColl.updateOne({ userId, assetId }, { $set: doc }, { upsert: true });
+  }
+  if (config.assetStore) {
+    await putDemoAssetBytes(config.assetStore);
   }
 }
 
@@ -788,8 +790,6 @@ async function handleDemoSeed(
   const assignmentsColl = config.database.collection('slc_assignments');
   const coursesColl = config.database.collection('slc_courses');
   const eventSeriesColl = config.database.collection('slc_event_series');
-  const materialsColl = config.database.collection('slc_course_materials');
-  const assetsColl = config.database.collection('slc_assets');
   const gradeHistoryColl = config.database.collection('slc_grade_history');
   const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
   const attendanceColl = config.database.collection('slc_attendance_events');
@@ -804,25 +804,15 @@ async function handleDemoSeed(
     await assignmentsColl.insertMany(assignmentDocs);
     const eventDocs = buildDemoEventSeries(userId, baseDate);
     await eventSeriesColl.insertMany(eventDocs);
-    const materialDocs = buildDemoMaterialDocs(userId);
-    await materialsColl.insertMany(materialDocs);
-    const assetDocs = buildDemoAssetDocs(userId);
-    if (assetDocs.length > 0) {
-      await assetsColl.insertMany(assetDocs);
-    }
     const gradeHistoryDocs = buildDemoGradeHistory(userId, baseDate);
     await gradeHistoryColl.insertMany(gradeHistoryDocs);
     const gradeSnapshotDocs = buildDemoGradeSnapshots(userId, baseDate);
     await gradeSnapshotsColl.insertMany(gradeSnapshotDocs);
     const attendanceDocs = buildDemoAttendanceDocs(userId, baseDate);
     await attendanceColl.insertMany(attendanceDocs);
-  } else {
-    await syncDemoMaterialAssignmentJoins(materialsColl, userId);
   }
 
-  if (config.assetStore) {
-    await putDemoAssetBytes(config.assetStore);
-  }
+  await upsertDemoMaterialsAndAssets(config, userId);
 
   if (emmaId && liamId) {
     const existingAlerts = await config.database.collection('alerts').countDocuments({

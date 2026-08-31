@@ -114,6 +114,7 @@ function makeApiResponse(
         },
         needsSchoolLogin: [],
         moreFromCourse: [],
+        capturedPages: [],
       },
     ],
     assets: [

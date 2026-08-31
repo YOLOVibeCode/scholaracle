@@ -23,7 +23,13 @@ export {
   type IResourceLink,
   type ResourceKind,
 } from './resourcePartition';
-export { extractHostname, normalizeUrl, isSameNormalizedUrl, isSchoolLoginHost } from './urlHost';
+export {
+  extractHostname,
+  normalizeUrl,
+  isSameNormalizedUrl,
+  isSchoolLoginHost,
+  isInteractiveHomeworkHost,
+} from './urlHost';
 export { CourseOfflinePack } from './offlinePack/CourseOfflinePack';
 export type {
   ICourseOfflinePack,

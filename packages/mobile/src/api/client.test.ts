@@ -482,6 +482,43 @@ describe('ScholarmancyApiClient auth', () => {
     });
   });
 
+  describe('getStudentMaterials', () => {
+    const STUDENT_ID = 'stu-abc123';
+
+    it('GETs /api/students/:id/materials without an assignment filter', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const body = {
+        studentId: STUDENT_ID,
+        studentName: 'Emma Lewis',
+        totalMaterials: 1,
+        courses: [
+          {
+            courseExternalId: 'course-1',
+            courseName: 'English 10',
+            materials: [
+              {
+                externalId: 'm-spark',
+                title: 'SparkNotes snapshot',
+                type: 'link',
+                extractedText: 'Scout narrates.',
+                assignmentExternalId: 'demo-emma-eng10-a9',
+              },
+            ],
+          },
+        ],
+      };
+      const fetchMock = mockFetchSequence({ status: 200, body });
+      const res = await client.getStudentMaterials(STUDENT_ID);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/students/${STUDENT_ID}/materials`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+      expect(res.courses[0]?.materials[0]?.extractedText).toBe('Scout narrates.');
+    });
+  });
+
   /**
    * Real production sources/runs shape (from API research):
    *   Sources: [{ id, provider, displayName, pluginId, ... }]  — field is `id` not `sourceId`
@@ -849,6 +886,7 @@ describe('ScholarmancyApiClient auth', () => {
       primaryAsset: null,
       needsSchoolLogin: [],
       moreFromCourse: [],
+      capturedPages: [],
     };
 
     it('getStudioToday GETs /api/studio/today', async () => {
