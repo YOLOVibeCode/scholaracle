@@ -119,10 +119,10 @@ describe('classifyResource — extractText cases', () => {
     ).toBe('extractText');
   });
 
-  it('type: link with content-type text/html → extractText', () => {
+  it('type: link with content-type text/html on a static host → extractText', () => {
     expect(
       classifyResource({
-        url: 'https://khanacademy.org/math/algebra',
+        url: 'https://www.sparknotes.com/lit/mocking/',
         contentType: 'text/html; charset=utf-8',
         type: 'link',
       })
@@ -199,5 +199,35 @@ describe('classifyResource — leaveLink cases', () => {
 
   it('missing url → leaveLink (cannot act on it)', () => {
     expect(classifyResource({ url: '', type: 'link' })).toBe('leaveLink');
+  });
+});
+
+describe('classifyResource — interactive hosts → leaveLink', () => {
+  it('Khan Academy HTML is not extracted', () => {
+    expect(
+      classifyResource({
+        url: 'https://www.khanacademy.org/science/ap-biology/cell-communication-and-cell-cycle',
+        contentType: 'text/html',
+        type: 'link',
+      })
+    ).toBe('leaveLink');
+  });
+
+  it('YouTube type: video is not rehosted', () => {
+    expect(
+      classifyResource({
+        url: 'https://www.youtube.com/watch?v=abc',
+        type: 'video',
+      })
+    ).toBe('leaveLink');
+  });
+
+  it('Desmos calculator is not extracted', () => {
+    expect(
+      classifyResource({
+        url: 'https://www.desmos.com/calculator',
+        type: 'link',
+      })
+    ).toBe('leaveLink');
   });
 });

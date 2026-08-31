@@ -68,9 +68,32 @@ const SCHOOL_HOST_SUFFIXES = [
   'schoology.com',
 ] as const;
 
+/** Keep in sync with scraper-core resourceClassifier INTERACTIVE_HOST_PATTERNS. */
+const INTERACTIVE_HOST_SUFFIXES = [
+  'khanacademy.org',
+  'desmos.com',
+  'youtube.com',
+  'youtu.be',
+  'vimeo.com',
+  'nearpod.com',
+  'kahoot.com',
+  'quizizz.com',
+  'ixl.com',
+] as const;
+
+function hostMatchesSuffix(host: string, suffix: string): boolean {
+  return host === suffix || host.endsWith(`.${suffix}`);
+}
+
 export function isSchoolLoginHost(href: string): boolean {
   const host = extractHostname(href);
   if (host === '') return false;
   if (host === 'classroom.google.com') return true;
-  return SCHOOL_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+  return SCHOOL_HOST_SUFFIXES.some((suffix) => hostMatchesSuffix(host, suffix));
+}
+
+export function isInteractiveHomeworkHost(href: string): boolean {
+  const host = extractHostname(href);
+  if (host === '') return false;
+  return INTERACTIVE_HOST_SUFFIXES.some((suffix) => hostMatchesSuffix(host, suffix));
 }

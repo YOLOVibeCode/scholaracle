@@ -1,5 +1,5 @@
 /**
- * DashboardScreen — student detail view with assignments, grades, and sync history.
+ * DashboardScreen — student detail view with assignments, grades, documents, and sync history.
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -15,14 +15,23 @@ import {
 import { apiClient, type IAssignmentItem, type ISyncRunItem } from '../api/client';
 import { ApiError } from '../api/ApiError';
 import { formatDate, statusColor } from '../grades/format';
-import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
+import type {
+  ICourseGrade,
+  ICourseGradeAssignment,
+  ICourseMaterial,
+  IStudentMaterialsResponse,
+} from '@scholaracle/contracts';
+import { openURL } from 'expo-linking';
 
 interface IDashboardData {
   readonly assignments: IAssignmentItem[];
   readonly overallGPA: number | null;
   readonly grades: readonly ICourseGrade[];
   readonly recentRuns: ISyncRunItem[];
+  readonly materials: IStudentMaterialsResponse;
 }
+
+type DashboardTab = 'grades' | 'assignments' | 'documents' | 'runs';
 
 interface IDashboardScreenProps {
   /** Mongo `id` from GET /api/students — used for all API calls. */
@@ -48,23 +57,26 @@ export function DashboardScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'assignments' | 'grades' | 'runs'>('grades');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('grades');
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
 
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setIsLoading(true);
       setError(null);
       try {
-        const [assignmentsRes, gradesRes, runsRes] = await Promise.all([
+        const [assignmentsRes, gradesRes, runsRes, materialsRes] = await Promise.all([
           apiClient.getStudentAssignments(studentId),
           apiClient.getStudentGrades(studentId),
           apiClient.getStudentRuns(studentId),
+          apiClient.getStudentMaterials(studentId),
         ]);
         setData({
           assignments: assignmentsRes,
           overallGPA: gradesRes.overallGPA ?? null,
           grades: gradesRes.courseGrades,
           recentRuns: runsRes,
+          materials: materialsRes,
         });
       } catch (err: unknown) {
         const message =
@@ -130,14 +142,20 @@ export function DashboardScreen({
       </View>
 
       <View style={styles.tabs}>
-        {(['grades', 'assignments', 'runs'] as const).map((tab) => (
+        {(['grades', 'assignments', 'documents', 'runs'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'grades' ? 'Grades' : tab === 'assignments' ? 'Assignments' : 'History'}
+              {tab === 'grades'
+                ? 'Grades'
+                : tab === 'assignments'
+                  ? 'Assignments'
+                  : tab === 'documents'
+                    ? 'Docs'
+                    : 'History'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -243,6 +261,57 @@ export function DashboardScreen({
         />
       )}
 
+      {data !== null && activeTab === 'documents' && (
+        <SectionList
+          sections={documentSections(data.materials)}
+          keyExtractor={(item) => item.externalId}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          ListEmptyComponent={
+            <Text style={styles.emptyDocs} testID="dashboard-documents-empty">
+              No materials found for this student.
+            </Text>
+          }
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          )}
+          renderItem={({ item }) => {
+            const href = item.downloadUrl ?? item.url;
+            const expanded = expandedDocId === item.externalId;
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                testID="dashboard-document-item"
+                onPress={() => {
+                  if (href != null && href !== '') {
+                    void openURL(href);
+                    return;
+                  }
+                  if (item.extractedText != null && item.extractedText !== '') {
+                    setExpandedDocId(expanded ? null : item.externalId);
+                  }
+                }}
+              >
+                <View style={styles.cardRow}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.statusBadge}>{item.type}</Text>
+                </View>
+                {item.fileName != null && item.fileName !== '' ? (
+                  <Text style={styles.cardSub}>{item.fileName}</Text>
+                ) : null}
+                {item.linkAccessibility === 'authenticated' ? (
+                  <Text style={styles.cardSub}>Needs school login</Text>
+                ) : null}
+                {item.extractedText != null && item.extractedText !== '' ? (
+                  <Text style={styles.cardSub} numberOfLines={expanded ? undefined : 3}>
+                    {item.extractedText}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+
       {data !== null && activeTab === 'runs' && (
         <SectionList
           sections={[{ title: 'Recent Syncs', data: data?.recentRuns ?? [] }]}
@@ -264,6 +333,14 @@ export function DashboardScreen({
       )}
     </View>
   );
+}
+
+function documentSections(
+  materials: IStudentMaterialsResponse
+): Array<{ title: string; data: ICourseMaterial[] }> {
+  return materials.courses
+    .filter((course) => course.materials.length > 0)
+    .map((course) => ({ title: course.courseName, data: [...course.materials] }));
 }
 
 function groupAssignmentsByStatus(
@@ -329,7 +406,7 @@ const styles = StyleSheet.create({
   },
   tab: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   tabActive: { borderBottomWidth: 2, borderBottomColor: '#4361ee' },
-  tabText: { color: '#6c757d', fontWeight: '500' },
+  tabText: { color: '#6c757d', fontWeight: '500', fontSize: 13 },
   tabTextActive: { color: '#4361ee', fontWeight: '700' },
   sectionHeader: {
     fontSize: 12,
@@ -391,4 +468,11 @@ const styles = StyleSheet.create({
   },
   gpaLabel: { color: '#dbe2ff', fontSize: 14, fontWeight: '600' },
   gpaValue: { color: '#fff', fontSize: 24, fontWeight: '700' },
+  emptyDocs: {
+    fontSize: 14,
+    color: '#6c757d',
+    textAlign: 'center',
+    marginTop: 32,
+    paddingHorizontal: 24,
+  },
 });

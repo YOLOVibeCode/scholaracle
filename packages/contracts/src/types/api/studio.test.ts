@@ -72,6 +72,7 @@ const PACK: IWorkPackView = {
       },
     },
   ],
+  capturedPages: [],
 };
 
 describe('IStudentSession', () => {
@@ -191,6 +192,7 @@ describe('IWorkPackView', () => {
       moreFromCourse: [],
     });
     expect(parsed.primaryAsset).toBeNull();
+    expect(parsed.capturedPages).toEqual([]);
   });
 
   it('parseWorkPackView rejects a course dump mixed at top level', () => {

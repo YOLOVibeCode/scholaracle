@@ -54,6 +54,7 @@ const PACK = {
   },
   needsSchoolLogin: [],
   moreFromCourse: [],
+  capturedPages: [],
 };
 
 describe('studio API client', () => {

@@ -14,7 +14,12 @@ import { seedRouter } from '../seed/seed';
 import { authMiddleware } from '../../middleware/auth';
 import { requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
-import { DEMO_USER, DEMO_STUDENT_USER_EMMA, DEMO_STUDENT_USER_LIAM } from '../seed/demo-data';
+import {
+  DEMO_USER,
+  DEMO_STUDENT_USER_EMMA,
+  DEMO_STUDENT_USER_LIAM,
+  DEMO_LAB_SAFETY_HASH,
+} from '../seed/demo-data';
 import { studioRouter } from './studio';
 
 const CELL_DIVISION_ID = 'demo-emma-ap-bio-a5';
@@ -127,7 +132,7 @@ describe('GET /api/studio — student session', () => {
     expect(view.primaryAsset).not.toBeNull();
     expect(view.primaryAsset?.fileName).toBe('lab-safety.pdf');
     expect(view.primaryAsset?.assetId).toBe('demo-asset-demo-emma-ap-bio-lab-safety');
-    expect(view.primaryAsset?.contentHash).toBe('demo-demo-emma-ap-bio-lab-safety-hash');
+    expect(view.primaryAsset?.contentHash).toBe(DEMO_LAB_SAFETY_HASH);
     expect(view.primaryAsset?.downloadUrl).toMatch(
       /\/api\/assets\/demo-asset-demo-emma-ap-bio-lab-safety/
     );
@@ -139,6 +144,18 @@ describe('GET /api/studio — student session', () => {
     expect(exp).toBeGreaterThan(now);
     expect(exp).toBeLessThanOrEqual(now + 24 * 60 * 60 + 5);
     expect(view.moreFromCourse.some((item) => /syllabus/i.test(item.title))).toBe(true);
+    expect(view.needsSchoolLogin.some((l) => l.kind === 'needs-internet')).toBe(true);
+  });
+
+  it('surfaces SparkNotes snapshot text on Emma’s essay pack', async () => {
+    const res = await request(app)
+      .get('/api/studio/assignments/demo-emma-eng10-a9')
+      .set('Authorization', `Bearer ${emmaToken}`);
+    expect(res.status).toBe(200);
+    const view = parseWorkPackView(res.body);
+    expect(view.capturedPages.some((p) => /Scout Finch|conscience vs law/i.test(p.text))).toBe(
+      true
+    );
   });
 
   it('returns Missing assignment 1 pack with the Algebra formula sheet', async () => {

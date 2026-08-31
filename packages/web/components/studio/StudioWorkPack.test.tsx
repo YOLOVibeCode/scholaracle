@@ -22,6 +22,7 @@ const VIEW: IWorkPackView = {
   },
   needsSchoolLogin: [],
   moreFromCourse: [],
+  capturedPages: [],
 };
 
 jest.mock('@/lib/api/client', () => ({

@@ -354,6 +354,11 @@ export class ScholarmancyApiClient {
     );
   }
 
+  /** All course materials for a student (parent Documents tab). Signed URLs expire in 24h. */
+  async getStudentMaterials(studentId: string): Promise<IStudentMaterialsResponse> {
+    return this._get<IStudentMaterialsResponse>(`/api/students/${studentId}/materials`);
+  }
+
   async getStudentRuns(studentId: string): Promise<ISyncRunItem[]> {
     const sources = await this._get<ISourceListItem[]>(`/api/students/${studentId}/sources`);
     const allRuns: ISyncRunItem[] = [];

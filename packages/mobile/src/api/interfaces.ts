@@ -8,6 +8,7 @@ import type {
   IStudentListItem,
   IStudentCreateRequest,
   IStudentGradesResponse,
+  IStudentMaterialsResponse,
   IAuthLoginResponse,
   IAuthUser,
   ITodayView,
@@ -44,6 +45,7 @@ export interface IStudentReadApi {
   createStudent(request: IStudentCreateRequest): Promise<IStudentListItem>;
   getStudentAssignments(studentId: string): Promise<readonly unknown[]>;
   getStudentGrades(studentId: string): Promise<IStudentGradesResponse>;
+  getStudentMaterials(studentId: string): Promise<IStudentMaterialsResponse>;
   getStudentRuns(studentId: string): Promise<readonly unknown[]>;
 }
 
