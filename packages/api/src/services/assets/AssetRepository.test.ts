@@ -29,7 +29,10 @@ describe('AssetRepository', () => {
     coll.findOne.mockResolvedValue(null);
     const repo = new AssetRepository(mockDb(coll));
     expect(await repo.findByAssetId('a1')).toBeNull();
-    expect(coll.findOne).toHaveBeenCalledWith({ assetId: 'a1', deletedAt: null });
+    expect(coll.findOne).toHaveBeenCalledWith(
+      { assetId: 'a1', deletedAt: null },
+      { sort: { uploadedAt: -1 } }
+    );
   });
 
   it('softDeleteByEntity calls updateMany with entityType and entityExternalId', async () => {
