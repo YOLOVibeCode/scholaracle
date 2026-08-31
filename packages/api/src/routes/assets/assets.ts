@@ -240,71 +240,70 @@ export function createAssetServeRouter(config: IAssetsRouterConfig): Router {
         })
       : connectorAuth;
 
-  router.get(
-    '/:assetId',
-    downloadAuth,
-    asyncHandler(async (req: IAssetAuthenticatedRequest, res: Response) => {
-      const userId = req.assetUserId ?? '';
-      const assetId = req.params['assetId'];
-      if (!assetId) {
-        throw new ValidationError('Missing assetId');
-      }
-      const asset = await assetRepo.findByAssetId(assetId);
-      if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
-        throw new NotFoundError('Asset not found');
-      }
-      const etag = `"${asset.contentHash}"`;
-      const lastModified =
-        asset.uploadedAt instanceof Date
-          ? asset.uploadedAt.toUTCString()
-          : new Date(asset.uploadedAt as unknown as string).toUTCString();
-      res.setHeader('ETag', etag);
-      res.setHeader('Last-Modified', lastModified);
-      res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
-      // Web (2800) fetches signed tickets from the API (2801); helmet CORP same-origin would block.
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      const ifNoneMatch = req.get('If-None-Match');
-      if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === asset.contentHash)) {
-        res.status(304).end();
-        return;
-      }
-      await assetRepo.updateLastAccessed(assetId);
-      const { stream } = await store.get(asset.storageKey);
-      res.setHeader('Content-Type', asset.mimeType);
-      if (asset.fileSize) res.setHeader('Content-Length', String(asset.fileSize));
-      stream.pipe(res);
-    })
-  );
+  const serveGet = asyncHandler(async (req: IAssetAuthenticatedRequest, res: Response) => {
+    const userId = req.assetUserId ?? '';
+    const assetId = req.params['assetId'];
+    if (!assetId) {
+      throw new ValidationError('Missing assetId');
+    }
+    const asset = await assetRepo.findByAssetId(assetId);
+    if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
+      throw new NotFoundError('Asset not found');
+    }
+    const etag = `"${asset.contentHash}"`;
+    const lastModified =
+      asset.uploadedAt instanceof Date
+        ? asset.uploadedAt.toUTCString()
+        : new Date(asset.uploadedAt as unknown as string).toUTCString();
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', lastModified);
+    // private + no immutable: Railway's edge was serving a stale 24h PDF
+    // after demo seed rewrote the bytes on the volume.
+    res.setHeader('Cache-Control', 'private, max-age=60, must-revalidate');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    const ifNoneMatch = req.get('If-None-Match');
+    if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === asset.contentHash)) {
+      res.status(304).end();
+      return;
+    }
+    await assetRepo.updateLastAccessed(assetId);
+    const { stream } = await store.get(asset.storageKey);
+    res.setHeader('Content-Type', asset.mimeType);
+    if (asset.fileSize) res.setHeader('Content-Length', String(asset.fileSize));
+    stream.pipe(res);
+  });
 
-  router.head(
-    '/:assetId',
-    downloadAuth,
-    asyncHandler(async (req: IAssetAuthenticatedRequest, res: Response) => {
-      const userId = req.assetUserId ?? '';
-      const assetId = req.params['assetId'];
-      if (!assetId) {
-        res.status(400).end();
-        return;
-      }
-      const asset = await assetRepo.findByAssetId(assetId);
-      if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
-        res.status(404).end();
-        return;
-      }
-      const etag = `"${asset.contentHash}"`;
-      const lastModified =
-        asset.uploadedAt instanceof Date
-          ? asset.uploadedAt.toUTCString()
-          : new Date(asset.uploadedAt as unknown as string).toUTCString();
-      res.setHeader('ETag', etag);
-      res.setHeader('Last-Modified', lastModified);
-      res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('Content-Type', asset.mimeType);
-      res.setHeader('Content-Length', String(asset.fileSize));
-      res.status(200).end();
-    })
-  );
+  const serveHead = asyncHandler(async (req: IAssetAuthenticatedRequest, res: Response) => {
+    const userId = req.assetUserId ?? '';
+    const assetId = req.params['assetId'];
+    if (!assetId) {
+      res.status(400).end();
+      return;
+    }
+    const asset = await assetRepo.findByAssetId(assetId);
+    if (!asset || (!req.signedUrlAccess && asset.userId !== userId)) {
+      res.status(404).end();
+      return;
+    }
+    const etag = `"${asset.contentHash}"`;
+    const lastModified =
+      asset.uploadedAt instanceof Date
+        ? asset.uploadedAt.toUTCString()
+        : new Date(asset.uploadedAt as unknown as string).toUTCString();
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', lastModified);
+    res.setHeader('Cache-Control', 'private, max-age=60, must-revalidate');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Content-Type', asset.mimeType);
+    res.setHeader('Content-Length', String(asset.fileSize));
+    res.status(200).end();
+  });
+
+  // /file is the signed-ticket path. Bare /:assetId stays for older clients.
+  router.get('/:assetId/file', downloadAuth, serveGet);
+  router.head('/:assetId/file', downloadAuth, serveHead);
+  router.get('/:assetId', downloadAuth, serveGet);
+  router.head('/:assetId', downloadAuth, serveHead);
 
   router.post(
     '/prune',

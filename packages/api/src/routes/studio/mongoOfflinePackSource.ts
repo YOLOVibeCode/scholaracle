@@ -173,7 +173,7 @@ export async function buildOfflinePack(
     const downloadUrl =
       jwtSecret !== undefined && jwtSecret !== '' && resolvedBaseUrl !== ''
         ? signAssetUrl(resolvedBaseUrl, assetId, jwtSecret)
-        : `${resolvedBaseUrl}/api/assets/${assetId}`;
+        : `${resolvedBaseUrl}/api/assets/${assetId}/file`;
 
     seenAssetIds.add(assetId);
     assets.push({

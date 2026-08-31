@@ -305,7 +305,7 @@ describe('students API contract', () => {
     }
     const own = attachments.find((a) => (a['url'] as string).includes('/api/assets/'));
     const portal = attachments.find((a) => (a['url'] as string).includes('school.example.com'));
-    expect(own?.['downloadUrl']).toContain('/api/assets/asset-uuid-1?sig=');
+    expect(own?.['downloadUrl']).toContain('/api/assets/asset-uuid-1/file?sig=');
     expect(own?.['downloadUrl']).toContain('&exp=');
     expect(portal?.['downloadUrl']).toBeUndefined();
   });

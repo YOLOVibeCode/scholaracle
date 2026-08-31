@@ -83,7 +83,7 @@ describe('signOwnAssetAttachments', () => {
       SECRET
     );
 
-    expect(result?.[0]?.downloadUrl).toContain('/api/assets/asset-1?sig=');
+    expect(result?.[0]?.downloadUrl).toContain('/api/assets/asset-1/file?sig=');
     expect(result?.[0]?.downloadUrl).toContain('&exp=');
     expect(result?.[0]?.url).toBe(`${BASE}/api/assets/asset-1`);
     expect(result?.[1]?.downloadUrl).toBeUndefined();

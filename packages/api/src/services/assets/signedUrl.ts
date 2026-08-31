@@ -15,7 +15,7 @@ export function signAssetUrl(
 ): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
   const sig = createHmac('sha256', secret).update(`${assetId}:${exp}`).digest('hex');
-  return `${baseUrl.replace(/\/$/, '')}/api/assets/${assetId}?sig=${sig}&exp=${exp}`;
+  return `${baseUrl.replace(/\/$/, '')}/api/assets/${assetId}/file?sig=${sig}&exp=${exp}`;
 }
 
 /**
