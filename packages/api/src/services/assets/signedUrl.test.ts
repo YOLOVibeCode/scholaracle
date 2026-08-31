@@ -8,7 +8,7 @@ describe('signAssetUrl / verifyAssetSignature', () => {
     const before = Math.floor(Date.now() / 1000);
     const url = signAssetUrl('http://test.example', ASSET_ID, SECRET);
     const parsed = new URL(url);
-    expect(parsed.pathname).toBe(`/api/assets/${ASSET_ID}`);
+    expect(parsed.pathname).toBe(`/api/assets/${ASSET_ID}/file`);
     const sig = parsed.searchParams.get('sig');
     const exp = Number(parsed.searchParams.get('exp'));
     expect(sig).toMatch(/^[a-f0-9]{64}$/);

@@ -132,7 +132,7 @@ export async function loadStudentMaterials(
       downloadUrl =
         params.jwtSecret !== undefined && params.jwtSecret !== '' && baseUrl !== ''
           ? signAssetUrl(baseUrl, asset.assetId, params.jwtSecret)
-          : `${baseUrl}/api/assets/${asset.assetId}`;
+          : `${baseUrl}/api/assets/${asset.assetId}/file`;
     }
 
     const material: ICourseMaterial = {

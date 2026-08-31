@@ -131,7 +131,15 @@ describe('Asset serve router — HTTP caching', () => {
       .get(`/api/assets/${assetId}`)
       .set('Authorization', `Bearer ${testToken}`);
     expect(res.status).toBe(200);
-    expect(res.headers['cache-control']).toBe('private, max-age=86400, immutable');
+    expect(res.headers['cache-control']).toBe('private, max-age=60, must-revalidate');
+  });
+
+  it('serves the same bytes on /file (signed-ticket path, cache-bust from bare /:id)', async () => {
+    const res = await request(app)
+      .get(`/api/assets/${assetId}/file`)
+      .set('Authorization', `Bearer ${testToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['etag']).toBe(`"${contentHash}"`);
   });
 
   it('allows the web origin to read bytes (CORP cross-origin)', async () => {
