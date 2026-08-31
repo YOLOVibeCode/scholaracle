@@ -64,7 +64,9 @@ export class AssetRepository implements IAssetReader, IAssetWriter {
   }
 
   async findByAssetId(assetId: string): Promise<IAssetDocument | null> {
-    const doc = await this._db.collection(COLLECTION).findOne({ assetId, deletedAt: null });
+    const doc = await this._db
+      .collection(COLLECTION)
+      .findOne({ assetId, deletedAt: null }, { sort: { uploadedAt: -1 } });
     return doc as IAssetDocument | null;
   }
 

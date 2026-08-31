@@ -125,4 +125,54 @@ describe('Demo seed — asset bytes', () => {
       .set('If-None-Match', `"${DEMO_LAB_SAFETY_HASH}"`);
     expect(cached.status).toBe(304);
   });
+
+  it('GET after seed ignores leftover demo assets owned by another user', async () => {
+    await database.collection('slc_assets').insertOne({
+      assetId: DEMO_LAB_SAFETY_ASSET_ID,
+      sourceId: 'demo',
+      userId: 'old-demo-user',
+      originalUrl: 'https://demo.scholaracle.com/files/lab-safety.pdf',
+      storageKey: DEMO_LAB_SAFETY_STORAGE_KEY,
+      fileName: 'lab-safety.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 1177,
+      contentHash: 'demo-demo-emma-ap-bio-lab-safety-hash',
+      entityType: 'courseMaterial',
+      entityExternalId: 'demo-emma-ap-bio-lab-safety',
+      deletedAt: null,
+      uploadedAt: new Date('2026-08-11T15:11:02.501Z'),
+      lastAccessedAt: new Date('2026-08-11T15:11:02.501Z'),
+    });
+
+    const seedRes = await request(app).post('/api/seed/demo');
+    expect(seedRes.status).toBe(200);
+
+    const login = await authService.login(DEMO_USER.email, DEMO_USER.password);
+    expect(login.success).toBe(true);
+
+    const res = await request(app)
+      .get(`/api/assets/${DEMO_LAB_SAFETY_ASSET_ID}`)
+      .set('Authorization', `Bearer ${login.token}`)
+      .buffer(true)
+      .parse((incoming, callback) => {
+        const chunks: Buffer[] = [];
+        incoming.on('data', (chunk: Buffer) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        incoming.on('end', () => {
+          callback(null, Buffer.concat(chunks));
+        });
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['etag']).toBe(`"${DEMO_LAB_SAFETY_HASH}"`);
+    expect(res.headers['content-length']).toBe(String(DEMO_MINIMAL_PDF.length));
+    expect((res.body as Buffer).equals(DEMO_MINIMAL_PDF)).toBe(true);
+
+    const leftover = await database.collection('slc_assets').findOne({
+      assetId: DEMO_LAB_SAFETY_ASSET_ID,
+      userId: 'old-demo-user',
+    });
+    expect(leftover?.['deletedAt']).toEqual(expect.any(Date));
+  });
 });
