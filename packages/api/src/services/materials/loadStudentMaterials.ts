@@ -122,6 +122,7 @@ export async function loadStudentMaterials(
     const mimeType = asset?.mimeType ?? optionalString(rec?.['mimeType'] ?? doc['mimeType']);
     const postedAt = optionalString(rec?.['postedAt'] ?? doc['postedAt']);
     const description = optionalString(rec?.['description'] ?? doc['description']);
+    const extractedText = optionalString(rec?.['extractedText']);
     const fileSize = asset?.fileSize ?? (doc['fileSize'] as number | undefined);
     const linkAccessibility = rec?.['linkAccessibility'] as
       ICourseMaterial['linkAccessibility'] | undefined;
@@ -144,6 +145,7 @@ export async function loadStudentMaterials(
       ...(mimeType !== undefined ? { mimeType } : {}),
       ...(postedAt !== undefined ? { postedAt } : {}),
       ...(description !== undefined ? { description } : {}),
+      ...(extractedText !== undefined ? { extractedText } : {}),
       ...(fileSize !== undefined ? { fileSize } : {}),
       ...(asset?.assetId !== undefined && asset.assetId !== '' ? { assetId: asset.assetId } : {}),
       ...(asset?.contentHash !== undefined ? { contentHash: asset.contentHash } : {}),

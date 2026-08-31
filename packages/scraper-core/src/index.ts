@@ -90,6 +90,11 @@ export {
   sanitizeEnrichedOps,
   DEFAULT_ENRICHER_TIMEOUT_MS,
   classifyResource,
+  isInteractiveHost,
+  isPortalHost,
+  extractPageText,
+  EXTRACTED_TEXT_MAX_CHARS,
+  buildSimplePdf,
 } from './pipeline';
 
 // Community Scraper Platform (CSP-1): manifest + module contract + resolvers

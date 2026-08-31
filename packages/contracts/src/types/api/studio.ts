@@ -31,6 +31,7 @@ export const WORK_PACK_VIEW_KEYS = [
   'humanStatus',
   'instructionsText',
   'primaryAsset',
+  'capturedPages',
   'needsSchoolLogin',
   'moreFromCourse',
 ] as const;
@@ -70,7 +71,7 @@ export interface ITodayView {
   readonly alsoToday: readonly INextStep[];
 }
 
-export type WorkPackLinkKind = 'school-login' | 'external';
+export type WorkPackLinkKind = 'school-login' | 'external' | 'needs-internet';
 
 export interface IWorkPackLink {
   readonly label: string;
@@ -93,6 +94,13 @@ export interface IWorkPackMoreItem {
   readonly href?: string;
 }
 
+/** Public article text grabbed at scrape time — readable offline without the website. */
+export interface ICapturedPage {
+  readonly title: string;
+  readonly text: string;
+  readonly href?: string;
+}
+
 /**
  * One assignment, stacked for doing the work. Course extras stay in
  * `moreFromCourse` — never a top-level course dump.
@@ -104,6 +112,7 @@ export interface IWorkPackView {
   readonly humanStatus: string;
   readonly instructionsText: string;
   readonly primaryAsset: IWorkPackAsset | null;
+  readonly capturedPages: readonly ICapturedPage[];
   readonly needsSchoolLogin: readonly IWorkPackLink[];
   readonly moreFromCourse: readonly IWorkPackMoreItem[];
 }
@@ -196,14 +205,28 @@ function parseAsset(value: unknown, label: string): IWorkPackAsset {
   };
 }
 
+function parseCapturedPage(value: unknown, label: string): ICapturedPage {
+  if (!isRecord(value)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  unexpectedOrMissing(value, ['title', 'text'], ['href'], label);
+  return {
+    title: parseString(value['title'], `${label}.title`),
+    text: parseString(value['text'], `${label}.text`),
+    ...(value['href'] !== undefined ? { href: parseString(value['href'], `${label}.href`) } : {}),
+  };
+}
+
 function parseLink(value: unknown, label: string): IWorkPackLink {
   if (!isRecord(value)) {
     throw new ValidationError(`Invalid ${label}: expected object`);
   }
   unexpectedOrMissing(value, ['label', 'href', 'kind'], [], label);
   const kind = value['kind'];
-  if (kind !== 'school-login' && kind !== 'external') {
-    throw new ValidationError(`Invalid ${label}.kind: expected school-login or external`);
+  if (kind !== 'school-login' && kind !== 'external' && kind !== 'needs-internet') {
+    throw new ValidationError(
+      `Invalid ${label}.kind: expected school-login, external, or needs-internet`
+    );
   }
   return {
     label: parseString(value['label'], `${label}.label`),
@@ -266,7 +289,7 @@ export function parseWorkPackView(input: unknown): IWorkPackView {
       'needsSchoolLogin',
       'moreFromCourse',
     ],
-    ['dueAt'],
+    ['dueAt', 'capturedPages'],
     'IWorkPackView'
   );
   const linksRaw = input['needsSchoolLogin'];
@@ -276,6 +299,10 @@ export function parseWorkPackView(input: unknown): IWorkPackView {
   }
   if (!Array.isArray(moreRaw)) {
     throw new ValidationError('Invalid IWorkPackView.moreFromCourse: expected array');
+  }
+  const capturedRaw = input['capturedPages'];
+  if (capturedRaw !== undefined && !Array.isArray(capturedRaw)) {
+    throw new ValidationError('Invalid IWorkPackView.capturedPages: expected array');
   }
   const primary =
     input['primaryAsset'] === null
@@ -287,6 +314,9 @@ export function parseWorkPackView(input: unknown): IWorkPackView {
     humanStatus: parseString(input['humanStatus'], 'IWorkPackView.humanStatus'),
     instructionsText: parseString(input['instructionsText'], 'IWorkPackView.instructionsText'),
     primaryAsset: primary,
+    capturedPages: (capturedRaw ?? []).map((page, i) =>
+      parseCapturedPage(page, `IWorkPackView.capturedPages[${i}]`)
+    ),
     needsSchoolLogin: linksRaw.map((link, i) =>
       parseLink(link, `IWorkPackView.needsSchoolLogin[${i}]`)
     ),
@@ -333,4 +363,8 @@ export function assertNoGradeLeak(view: ITodayView | IWorkPackView, showGrades: 
   scanCopy(view.title, showGrades);
   scanCopy(view.humanStatus, showGrades);
   scanCopy(view.instructionsText, showGrades);
+  for (const page of view.capturedPages) {
+    scanCopy(page.title, showGrades);
+    scanCopy(page.text, showGrades);
+  }
 }

@@ -117,6 +117,7 @@ describe('Demo seed — asset bytes', () => {
     expect(res.headers['content-type']).toMatch(/pdf/);
     expect(Buffer.isBuffer(res.body)).toBe(true);
     expect((res.body as Buffer).equals(DEMO_MINIMAL_PDF)).toBe(true);
+    expect((res.body as Buffer).toString('utf8')).toContain('Goggles');
 
     const cached = await request(app)
       .get(`/api/assets/${DEMO_LAB_SAFETY_ASSET_ID}`)

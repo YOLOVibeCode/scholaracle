@@ -28,6 +28,23 @@ const PORTAL_HOST_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Interactive homework sites — a print/PDF or innerText grab is a login wall
+ * or an empty shell. Keep the link; mark needs-internet in the work pack.
+ * Keep this list in sync with studio-core `urlHost.ts`.
+ */
+const INTERACTIVE_HOST_PATTERNS: RegExp[] = [
+  /(^|\.)khanacademy\.org$/i,
+  /(^|\.)desmos\.com$/i,
+  /(^|\.)youtube\.com$/i,
+  /(^|\.)youtu\.be$/i,
+  /(^|\.)vimeo\.com$/i,
+  /(^|\.)nearpod\.com$/i,
+  /(^|\.)kahoot\.com$/i,
+  /(^|\.)quizizz\.com$/i,
+  /(^|\.)ixl\.com$/i,
+];
+
+/**
  * URL path patterns that indicate a native download endpoint on portal hosts.
  * These can be rehosted even though they are on a portal host.
  */
@@ -65,10 +82,19 @@ const BINARY_RECORD_TYPES = new Set([
   'study_guide',
 ]);
 
-function isPortalHost(url: string): boolean {
+export function isPortalHost(url: string): boolean {
   try {
     const host = new URL(url).hostname;
     return PORTAL_HOST_PATTERNS.some((p) => p.test(host));
+  } catch {
+    return false;
+  }
+}
+
+export function isInteractiveHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return INTERACTIVE_HOST_PATTERNS.some((p) => p.test(host));
   } catch {
     return false;
   }
@@ -111,6 +137,9 @@ export function classifyResource(params: IClassifyResourceParams): ResourceActio
 
   // Empty URL — cannot act on it
   if (!url) return 'leaveLink';
+
+  // Interactive SPAs / video sites: do not rehost or extract — honest link.
+  if (isInteractiveHost(url)) return 'leaveLink';
 
   // Step 1: Record type is explicitly a binary/downloadable asset type
   if (type !== undefined && BINARY_RECORD_TYPES.has(type)) {

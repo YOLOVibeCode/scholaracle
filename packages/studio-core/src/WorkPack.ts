@@ -13,7 +13,7 @@ import type { IWorkPack, IWorkPackAssignment, IWorkPackSource } from '@scholarac
 import { extractDescriptionLinks, stripHtmlToText } from './descriptionLinks';
 import { humanAssignmentStatus } from './humanAssignmentStatus';
 import { partitionMaterials } from './resourcePartition';
-import { isSameNormalizedUrl, isSchoolLoginHost } from './urlHost';
+import { isSameNormalizedUrl, isSchoolLoginHost, isInteractiveHomeworkHost } from './urlHost';
 
 export function createStaticWorkPackSource(input: {
   readonly assignment: IWorkPackAssignment;
@@ -59,8 +59,9 @@ function alreadyListed(href: string, listed: readonly IWorkPackLink[]): boolean 
 function kindForHref(href: string, materials: readonly ICourseMaterial[]): WorkPackLinkKind {
   const match = materials.find((m) => m.url != null && isSameNormalizedUrl(m.url, href));
   if (match?.linkAccessibility === 'authenticated') return 'school-login';
-  if (match?.linkAccessibility === 'public') return 'external';
   if (isSchoolLoginHost(href)) return 'school-login';
+  if (isInteractiveHomeworkHost(href)) return 'needs-internet';
+  if (match?.linkAccessibility === 'public') return 'external';
   return 'external';
 }
 
@@ -85,6 +86,7 @@ function assignmentFallbackLinks(
 ): IWorkPackLink[] {
   const links: IWorkPackLink[] = [];
   for (const material of forAssignment) {
+    if (material.extractedText != null && material.extractedText !== '') continue;
     const asset = toAsset(material);
     if (primary && asset && asset.assetId === primary.assetId) continue;
     const href = material.url ?? material.downloadUrl;
@@ -130,12 +132,31 @@ export class WorkPack implements IWorkPack {
       }
     }
 
+    const capturedPages = forAssignment.flatMap((m) => {
+      const text = m.extractedText;
+      if (text === undefined || text === '') return [];
+      return [
+        {
+          title: m.title,
+          text,
+          ...(m.url != null && m.url !== '' ? { href: m.url } : {}),
+        },
+      ];
+    });
+
     const allMaterials = materialsRes.courses.flatMap((c) => c.materials);
     const needsSchoolLogin: IWorkPackLink[] = assignmentFallbackLinks(forAssignment, primaryAsset);
 
     const html = assignment.descriptionHtml ?? '';
     for (const extracted of extractDescriptionLinks(html)) {
       if (alreadyListed(extracted.href, needsSchoolLogin)) continue;
+      if (
+        capturedPages.some(
+          (p) => p.href !== undefined && isSameNormalizedUrl(p.href, extracted.href)
+        )
+      ) {
+        continue;
+      }
       if (
         primaryAsset?.downloadUrl &&
         isSameNormalizedUrl(extracted.href, primaryAsset.downloadUrl)
@@ -166,6 +187,7 @@ export class WorkPack implements IWorkPack {
       humanStatus: humanAssignmentStatus(assignment.status),
       instructionsText: stripped !== '' ? stripped : 'No instructions from the teacher yet.',
       primaryAsset,
+      capturedPages,
       needsSchoolLogin,
       moreFromCourse: courseMaterials.map((m) => toMoreItem(m)),
       ...(assignment.dueAt !== undefined ? { dueAt: assignment.dueAt } : {}),

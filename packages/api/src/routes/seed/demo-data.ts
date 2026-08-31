@@ -1,8 +1,5 @@
-/**
- * Realistic demo data for "Try Demo" flow.
- * Demo user: demo@scholarmancy.com / DemoPass123! (Sarah Mitchell)
- * Students: Emma Mitchell (10th), Liam Mitchell (7th)
- */
+import { createHash } from 'node:crypto';
+import { buildSimplePdf } from '@scholaracle/scraper-core';
 
 export const DEMO_USER = {
   email: 'demo@scholarmancy.com',
@@ -38,19 +35,108 @@ export const DEMO_STUDENT_USER_LIAM = {
   name: 'Liam Mitchell',
 } as const;
 
-/** Tiny valid-enough PDF so GET /api/assets returns real bytes (not metadata-only). */
-export const DEMO_MINIMAL_PDF = Buffer.from(
-  '%PDF-1.1\n' +
-    '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
-    '2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n' +
-    '3 0 obj<</Type/Page/MediaBox[0 0 200 200]/Parent 2 0 R>>endobj\n' +
-    'trailer<</Root 1 0 R>>\n' +
-    '%%EOF\n',
-  'utf8'
+export const SPARKNOTES_DEMO_TEXT =
+  'DEMO SNAPSHOT of a public study page (what airplane mode can still show). ' +
+  'To Kill a Mockingbird is narrated by Scout Finch. Atticus defends Tom Robinson. ' +
+  'Themes to track: conscience vs law, empathy, and growing up in Maycomb. ' +
+  'Use this as a starting outline, then cite the novel itself in your essay.';
+
+export const PRIMARY_SOURCE_DEMO_TEXT =
+  'When in the Course of human events, it becomes necessary for one people to dissolve the ' +
+  'political bands which have connected them with another... We hold these truths to be ' +
+  'self-evident, that all men are created equal, that they are endowed by their Creator with ' +
+  'certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness.';
+
+export const READING_LIST_DEMO_TEXT =
+  'Required reading this term: To Kill a Mockingbird (Lee); selected sonnets (handout); ' +
+  'one independent novel from the library cart. Log pages in the reading journal every Friday.';
+
+const DEMO_PDF_BODIES: Readonly<Record<string, string>> = {
+  'demo-emma-ap-bio-syllabus':
+    'Westfield High School  2025-26\n' +
+    'Teacher: Dr. Patel  Period 3\n' +
+    'Units: cells, genetics, evolution, ecology. Labs most Fridays. Safety contract required before any wet lab.',
+  'demo-emma-ap-bio-lab-safety':
+    '1. Goggles on before chemicals come out. Keep them on until cleanup is checked.\n' +
+    '2. Tie back hair. No open-toe shoes.\n' +
+    '3. Report spills to Dr. Patel immediately. Do not taste or smell unknowns.\n' +
+    '4. Wash hands before leaving. Sign the safety contract on page 2 before Thursday lab.',
+  'demo-emma-ap-bio-study-guide':
+    'Chapter 5 - Cell cycle\n' +
+    'Know: G1, S, G2, mitosis vs meiosis, checkpoints, cancer as unregulated division.\n' +
+    'Practice: label a spindle diagram; compare haploid vs diploid outcomes.',
+  'demo-emma-alg2-syllabus':
+    'Algebra II  Westfield High  Ms. Chen  Period 1\n' +
+    'Graphing calculator recommended. Weekly quiz Fridays. Missing work drops the grade fast - turn in late for 70% credit within one week.',
+  'demo-emma-alg2-formula':
+    'Quadratic formula: x = (-b +/- sqrt(b^2 - 4ac)) / 2a\n' +
+    'Vertex form: y = a(x-h)^2 + k\n' +
+    'Exponential: y = ab^x    Log: log_b(xy) = log_b x + log_b y\n' +
+    'Bring this sheet to Missing assignment 1. Show work; circling the answer is not enough.',
+  'demo-emma-eng10-syllabus':
+    'English 10 Honors  Mr. Alvarez  Period 5\n' +
+    'Major texts: To Kill a Mockingbird, selected poetry, one independent novel. Essays use MLA. Drafts due before finals.',
+  'demo-emma-eng10-rubric':
+    'Essay rubric (100 pts)\n' +
+    'Claim & structure 30  Evidence from the text 30  Analysis (not summary) 25  Conventions 15\n' +
+    'A: arguable thesis, quoted evidence, explains how the quote proves the claim.\n' +
+    'C: thesis is a topic, quotes dumped without commentary.',
+  'demo-emma-wh-syllabus':
+    'World History  Ms. Brooks  Period 2\n' +
+    'This unit: Age of Exploration. Primary sources every Friday. Timeline PDF is required reading for the Chapter 2 quiz.',
+  'demo-emma-wh-timeline':
+    '1492 Columbus reaches the Caribbean\n' +
+    '1494 Treaty of Tordesillas\n' +
+    '1519-21 Cortes and the Aztec Empire\n' +
+    '1532 Pizarro and the Inca\n' +
+    '1588 Spanish Armada\n' +
+    'Use this timeline on the Chapter 2 quiz. Dates must be in order.',
+  'demo-emma-span2-vocab':
+    'Unidad 4 - La comida\n' +
+    'el desayuno, el almuerzo, la cena, la cuenta, el camarero, sabroso, pedir, probar\n' +
+    'Write 8 original sentences. No translator paragraphs.',
+  'demo-emma-pe-fitness':
+    'Weekly fitness log\n' +
+    'Date | Activity | Minutes | Heart-rate notes\n' +
+    'Fill five days. PE / Health - Coach Rivera.',
+  'demo-liam-math7-syllabus':
+    'Math 7  Mr. Singh  Period 4\n' +
+    'Ratios, percents, intro algebra. Homework nightly. Show work.',
+  'demo-liam-la-rubric':
+    'Book report rubric\n' +
+    'Summary 20  Character 20  Theme 30  Conventions 20  Effort 10\n' +
+    'Theme must be a sentence, not one word.',
+  'demo-liam-science-lab':
+    'Lab guidelines\n' +
+    'No tasting. Clean station. Graph in pencil. Conclusion restates the question and uses data.',
+  'demo-liam-art-project':
+    'Color study project\n' +
+    'Pick a still life. Complementary colors in the background. Due Friday. Sign the back.',
+  'demo-emma-eng10-spark': SPARKNOTES_DEMO_TEXT,
+  'demo-emma-wh-primary1': PRIMARY_SOURCE_DEMO_TEXT,
+  'demo-emma-eng10-reading': READING_LIST_DEMO_TEXT,
+};
+
+function demoPdfBuffer(externalId: string, title: string): Buffer {
+  const body = DEMO_PDF_BODIES[externalId] ?? `${title}\nWestfield High School demo handout.`;
+  return Buffer.from(buildSimplePdf(title, body));
+}
+
+function sha256Hex(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+/** Lab-safety PDF bytes — real readable page, not an empty MediaBox. */
+export const DEMO_LAB_SAFETY_BYTES = demoPdfBuffer(
+  'demo-emma-ap-bio-lab-safety',
+  'Lab Safety Handout'
 );
 
+/** @deprecated Use DEMO_LAB_SAFETY_BYTES. Kept so older tests still import a Buffer. */
+export const DEMO_MINIMAL_PDF = DEMO_LAB_SAFETY_BYTES;
+
 export const DEMO_LAB_SAFETY_ASSET_ID = 'demo-asset-demo-emma-ap-bio-lab-safety';
-export const DEMO_LAB_SAFETY_HASH = 'demo-demo-emma-ap-bio-lab-safety-hash';
+export const DEMO_LAB_SAFETY_HASH = sha256Hex(DEMO_LAB_SAFETY_BYTES);
 export const DEMO_LAB_SAFETY_STORAGE_KEY = 'demo/demo-asset-demo-emma-ap-bio-lab-safety';
 
 /** Blended-family demo contacts (emails); create users for accepted ones when seeding. */
@@ -589,6 +675,8 @@ export interface DemoMaterialInput {
   readonly fileName?: string;
   readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
   readonly hasAsset?: boolean;
+  /** Readable article snapshot for offline work packs. */
+  readonly extractedText?: string;
   /** Linked assignment externalId (layer-1 join for the work pack). */
   readonly assignmentExternalId?: string;
 }
@@ -630,7 +718,7 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     externalId: 'demo-emma-ap-bio-yt',
     title: 'YouTube - AP Bio Review',
     type: 'video',
-    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    url: 'https://www.youtube.com/results?search_query=AP+Biology+cell+cycle',
     linkAccessibility: 'public',
   },
   {
@@ -699,6 +787,9 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'link',
     url: 'https://example.com/reading-list',
     linkAccessibility: 'public',
+    extractedText: READING_LIST_DEMO_TEXT,
+    fileName: 'reading-list.pdf',
+    hasAsset: true,
   },
   {
     courseExternalId: 'demo-emma-eng10',
@@ -708,6 +799,9 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'link',
     url: 'https://www.sparknotes.com/lit/mocking/',
     linkAccessibility: 'public',
+    extractedText: SPARKNOTES_DEMO_TEXT,
+    fileName: 'sparknotes-snapshot.pdf',
+    hasAsset: true,
     assignmentExternalId: 'demo-emma-eng10-a9',
   },
   // Emma - World History
@@ -738,6 +832,9 @@ const DEMO_MATERIAL_INPUTS: readonly DemoMaterialInput[] = [
     type: 'link',
     url: 'https://example.com/primary-1',
     linkAccessibility: 'public',
+    extractedText: PRIMARY_SOURCE_DEMO_TEXT,
+    fileName: 'declaration-excerpt.pdf',
+    hasAsset: true,
     assignmentExternalId: 'demo-emma-wh-a1',
   },
   {
@@ -853,6 +950,7 @@ export function buildDemoMaterialDocs(userId: string): Array<Record<string, unkn
       fileName: m.fileName,
       linkAccessibility: m.linkAccessibility,
       assignmentExternalId: m.assignmentExternalId,
+      extractedText: m.extractedText,
     },
   }));
 }
@@ -863,23 +961,26 @@ export function buildDemoMaterialDocs(userId: string): Array<Record<string, unkn
 export function buildDemoAssetDocs(userId: string): Array<Record<string, unknown>> {
   const sourceId = 'demo';
   const now = new Date();
-  return DEMO_MATERIAL_INPUTS.filter((m) => m.hasAsset === true).map((m) => ({
-    assetId: `demo-asset-${m.externalId}`,
-    sourceId,
-    userId,
-    originalUrl: `https://demo.scholaracle.com/files/${encodeURIComponent(m.fileName ?? 'document.pdf')}`,
-    storageKey: `demo/demo-asset-${m.externalId}`,
-    fileName: m.fileName ?? 'document.pdf',
-    mimeType: 'application/pdf',
-    fileSize: DEMO_MINIMAL_PDF.length,
-    contentHash: `demo-${m.externalId}-hash`,
-    entityType: 'courseMaterial',
-    entityExternalId: m.externalId,
-    courseExternalId: m.courseExternalId,
-    deletedAt: null,
-    uploadedAt: now,
-    lastAccessedAt: now,
-  }));
+  return DEMO_MATERIAL_INPUTS.filter((m) => m.hasAsset === true).map((m) => {
+    const bytes = demoPdfBuffer(m.externalId, m.title);
+    return {
+      assetId: `demo-asset-${m.externalId}`,
+      sourceId,
+      userId,
+      originalUrl: `https://demo.scholaracle.com/files/${encodeURIComponent(m.fileName ?? 'document.pdf')}`,
+      storageKey: `demo/demo-asset-${m.externalId}`,
+      fileName: m.fileName ?? 'document.pdf',
+      mimeType: 'application/pdf',
+      fileSize: bytes.length,
+      contentHash: sha256Hex(bytes),
+      entityType: 'courseMaterial',
+      entityExternalId: m.externalId,
+      courseExternalId: m.courseExternalId,
+      deletedAt: null,
+      uploadedAt: now,
+      lastAccessedAt: now,
+    };
+  });
 }
 
 /** Files to put into IAssetStore when seeding demo (same tiny PDF per hosted material). */
@@ -890,7 +991,7 @@ export function demoAssetByteFiles(): ReadonlyArray<{
 }> {
   return DEMO_MATERIAL_INPUTS.filter((m) => m.hasAsset === true).map((m) => ({
     storageKey: `demo/demo-asset-${m.externalId}`,
-    bytes: DEMO_MINIMAL_PDF,
+    bytes: demoPdfBuffer(m.externalId, m.title),
     contentType: 'application/pdf',
   }));
 }

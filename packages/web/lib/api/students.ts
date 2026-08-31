@@ -344,6 +344,7 @@ export interface ICourseMaterial {
   readonly downloadUrl?: string;
   /** When 'authenticated', link requires school login; show lock indicator. */
   readonly linkAccessibility?: 'public' | 'authenticated' | 'unknown';
+  readonly extractedText?: string;
   /** Non-null when this material is linked to a specific assignment. */
   readonly assignmentExternalId?: string | null;
 }
@@ -462,7 +463,9 @@ export const studentsApi = {
     if (filters?.to) params.set('to', filters.to);
     if (filters?.upcoming === true) params.set('upcoming', 'true');
     const query = params.toString() ? `?${params.toString()}` : '';
-    return await apiClient.get<IAssignmentWorkflowResponse>(`/students/${id}/assignment-workflow${query}`);
+    return await apiClient.get<IAssignmentWorkflowResponse>(
+      `/students/${id}/assignment-workflow${query}`
+    );
   },
 
   /**
@@ -522,7 +525,9 @@ export const studentsApi = {
     if (filters?.to) params.set('to', filters.to);
     if (filters?.limit != null) params.set('limit', String(filters.limit));
     const query = params.toString() ? `?${params.toString()}` : '';
-    return await apiClient.get<IActivityTimelineResponse>(`/students/${studentId}/activity${query}`);
+    return await apiClient.get<IActivityTimelineResponse>(
+      `/students/${studentId}/activity${query}`
+    );
   },
 
   /**

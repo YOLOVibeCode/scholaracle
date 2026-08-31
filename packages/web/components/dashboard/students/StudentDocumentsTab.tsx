@@ -91,7 +91,7 @@ export function StudentDocumentsTab({ studentId }: StudentDocumentsTabProps) {
       .map((course) => {
         const filtered = course.materials.filter((m) => {
           if (typeFilter !== 'all' && m.type !== typeFilter) return false;
-          if (q && !m.title.toLowerCase().includes(q) && !(m.fileName?.toLowerCase().includes(q)))
+          if (q && !m.title.toLowerCase().includes(q) && !m.fileName?.toLowerCase().includes(q))
             return false;
           return true;
         });
@@ -102,15 +102,12 @@ export function StudentDocumentsTab({ studentId }: StudentDocumentsTabProps) {
 
   const totalFiltered = useMemo(
     () => filteredCourses.reduce((sum, c) => sum + c.materials.length, 0),
-    [filteredCourses],
+    [filteredCourses]
   );
 
   if (loading) {
     return (
-      <div
-        className="text-muted-foreground py-8 text-center"
-        data-testid="documents-tab-loading"
-      >
+      <div className="text-muted-foreground py-8 text-center" data-testid="documents-tab-loading">
         Loading materials…
       </div>
     );
@@ -206,11 +203,12 @@ function MaterialRow({ material }: { material: ICourseMaterial }) {
         <p className="truncate text-sm font-medium">{material.title}</p>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {material.fileName && <span className="truncate">{material.fileName}</span>}
-          {material.postedAt && (
-            <span>{new Date(material.postedAt).toLocaleDateString()}</span>
-          )}
+          {material.postedAt && <span>{new Date(material.postedAt).toLocaleDateString()}</span>}
           {sizeLabel && <span>{sizeLabel}</span>}
         </div>
+        {material.extractedText != null && material.extractedText !== '' ? (
+          <p className="mt-1 line-clamp-3 text-xs text-foreground/80">{material.extractedText}</p>
+        ) : null}
       </div>
 
       <Badge variant="secondary" className="shrink-0 capitalize">
@@ -234,11 +232,7 @@ function MaterialRow({ material }: { material: ICourseMaterial }) {
           data-testid="material-download"
           title={material.downloadUrl ? 'Download' : 'Open link'}
         >
-          <a
-            href={material.downloadUrl ?? material.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={material.downloadUrl ?? material.url} target="_blank" rel="noopener noreferrer">
             {material.downloadUrl ? (
               <Download className="h-4 w-4" />
             ) : (

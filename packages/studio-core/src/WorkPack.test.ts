@@ -160,7 +160,7 @@ describe('WorkPack', () => {
     );
     expect(view.primaryAsset?.fileName).toBe('lab-safety.pdf');
     expect(view.needsSchoolLogin.some((l) => l.href === KHAN)).toBe(true);
-    expect(view.needsSchoolLogin.find((l) => l.href === KHAN)?.kind).toBe('external');
+    expect(view.needsSchoolLogin.find((l) => l.href === KHAN)?.kind).toBe('needs-internet');
   });
 
   it('authenticated description links go in needsSchoolLogin, not primary', async () => {
@@ -187,9 +187,32 @@ describe('WorkPack', () => {
       'demo-emma-ap-bio-a5'
     );
     const khan = view.needsSchoolLogin.find((l) => l.href === KHAN);
-    expect(khan?.kind).toBe('external');
+    expect(khan?.kind).toBe('needs-internet');
     const lms = view.needsSchoolLogin.find((l) => l.href === LMS);
     expect(lms?.kind).toBe('school-login');
+  });
+
+  it('extractedText on an assignment material becomes a captured page, not a fallback link', async () => {
+    const spark: ICourseMaterial = material({
+      externalId: 'demo-emma-eng10-spark',
+      title: 'SparkNotes - To Kill a Mockingbird',
+      type: 'link',
+      url: 'https://www.sparknotes.com/lit/mocking/',
+      linkAccessibility: 'public',
+      assignmentExternalId: 'demo-emma-ap-bio-a5',
+      extractedText: 'Scout narrates. Atticus defends Tom Robinson. Cite the novel.',
+    });
+    const view = await new WorkPack(
+      fakeSource(CELL_DIVISION, materialsResponse([LAB_SAFETY, spark]))
+    ).load(SESSION_OFF, 'demo-emma-ap-bio-a5');
+    expect(view.capturedPages).toEqual([
+      {
+        title: 'SparkNotes - To Kill a Mockingbird',
+        text: 'Scout narrates. Atticus defends Tom Robinson. Cite the novel.',
+        href: 'https://www.sparknotes.com/lit/mocking/',
+      },
+    ]);
+    expect(view.needsSchoolLogin.some((l) => l.href === spark.url)).toBe(false);
   });
 
   it('course-level syllabus / study guide / YouTube are moreFromCourse, never primary', async () => {

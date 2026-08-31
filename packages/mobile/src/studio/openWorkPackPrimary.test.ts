@@ -20,6 +20,7 @@ const PACK: IWorkPackView = {
   },
   needsSchoolLogin: [],
   moreFromCourse: [],
+  capturedPages: [],
 };
 
 describe('openWorkPackPrimary', () => {

@@ -6,5 +6,7 @@ export {
   sanitizeEnrichedOps,
   DEFAULT_ENRICHER_TIMEOUT_MS,
 } from './enrichment';
-export { classifyResource } from './resourceClassifier';
+export { classifyResource, isInteractiveHost, isPortalHost } from './resourceClassifier';
 export type { ResourceAction, IClassifyResourceParams } from './resourceClassifier';
+export { extractPageText, EXTRACTED_TEXT_MAX_CHARS } from './extractPageText';
+export { buildSimplePdf } from './buildSimplePdf';

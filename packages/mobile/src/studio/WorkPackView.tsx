@@ -55,12 +55,31 @@ export function WorkPackView({
         <Text style={styles.instructions}>{view.instructionsText}</Text>
       </View>
 
+      {view.capturedPages.length > 0 ? (
+        <View testID="studio-pack-captured">
+          <Text style={styles.alsoHeader}>Read here — saved for offline</Text>
+          {view.capturedPages.map((page) => (
+            <View key={page.title} style={styles.captured}>
+              <Text style={styles.capturedTitle}>{page.title}</Text>
+              <Text style={styles.instructions}>{page.text}</Text>
+              {page.href != null && page.href !== '' ? (
+                <TouchableOpacity onPress={() => onOpenLink(page.href as string)}>
+                  <Text style={styles.link}>Open original</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       {view.needsSchoolLogin.length > 0 ? (
         <View testID="studio-pack-fallbacks">
           <Text style={styles.alsoHeader}>Needs school login / other links</Text>
           {view.needsSchoolLogin.map((link) => (
             <TouchableOpacity key={link.href} onPress={() => onOpenLink(link.href)}>
-              <Text style={styles.link}>{link.label}</Text>
+              <Text style={styles.link}>
+                {link.kind === 'needs-internet' ? `${link.label} (needs internet)` : link.label}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -106,6 +125,8 @@ const styles = StyleSheet.create({
   error: { color: '#dc3545', fontSize: 14 },
   instructions: { fontSize: 16, lineHeight: 24, color: '#1a1a2e' },
   alsoHeader: { fontSize: 13, fontWeight: '600', color: '#6c757d', marginBottom: 8 },
+  captured: { marginBottom: 12 },
+  capturedTitle: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', marginBottom: 6 },
   link: { fontSize: 16, color: '#4361ee', paddingVertical: 6 },
   moreItem: { fontSize: 15, color: '#1a1a2e', paddingVertical: 4 },
 });

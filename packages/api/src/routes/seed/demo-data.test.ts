@@ -283,7 +283,7 @@ describe('buildDemoMaterialDocs', () => {
 });
 
 describe('demo asset bytes', () => {
-  it('buildDemoAssetDocs uses a stable fileSize matching DEMO_MINIMAL_PDF', () => {
+  it('buildDemoAssetDocs uses a contentHash of the real lab-safety PDF bytes', () => {
     const docs = buildDemoAssetDocs('user-1');
     const lab = docs.find((d) => d['assetId'] === DEMO_LAB_SAFETY_ASSET_ID);
     expect(lab).toBeDefined();
@@ -292,12 +292,20 @@ describe('demo asset bytes', () => {
     expect(lab?.['fileSize']).toBe(DEMO_MINIMAL_PDF.length);
   });
 
-  it('demoAssetByteFiles includes lab-safety PDF bytes (not metadata-only)', () => {
+  it('demoAssetByteFiles includes readable lab-safety PDF bytes (not an empty page)', () => {
     const files = demoAssetByteFiles();
     const lab = files.find((f) => f.storageKey === DEMO_LAB_SAFETY_STORAGE_KEY);
     expect(lab).toBeDefined();
     expect(lab?.contentType).toBe('application/pdf');
     expect(Buffer.compare(lab!.bytes, DEMO_MINIMAL_PDF)).toBe(0);
     expect(lab!.bytes.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+    expect(lab!.bytes.toString('utf8')).toContain('Goggles');
+  });
+
+  it('SparkNotes material has extractedText for offline reading', () => {
+    const docs = buildDemoMaterialDocs('user-mat');
+    const spark = docs.find((d) => d['externalId'] === 'demo-emma-eng10-spark');
+    const record = spark!['record'] as Record<string, unknown>;
+    expect(String(record['extractedText'])).toMatch(/Scout Finch/);
   });
 });
