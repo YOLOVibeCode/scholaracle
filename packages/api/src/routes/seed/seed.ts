@@ -579,11 +579,23 @@ async function upsertDemoMaterialsAndAssets(
 ): Promise<void> {
   const materialsColl = config.database.collection('slc_course_materials');
   const assetsColl = config.database.collection('slc_assets');
+  const assetDocs = buildDemoAssetDocs(userId);
+  const assetIds = assetDocs
+    .map((doc) => doc['assetId'])
+    .filter((id): id is string => typeof id === 'string' && id !== '');
+  if (assetIds.length > 0) {
+    // Deterministic demo assetIds are not globally unique. A leftover owner
+    // (recreated demo user) makes GET /api/assets/:id serve stale Content-Length.
+    await assetsColl.updateMany(
+      { assetId: { $in: assetIds }, userId: { $ne: userId }, deletedAt: null },
+      { $set: { deletedAt: new Date() } }
+    );
+  }
   for (const doc of buildDemoMaterialDocs(userId)) {
     const externalId = doc['externalId'] as string;
     await materialsColl.updateOne({ userId, externalId }, { $set: doc }, { upsert: true });
   }
-  for (const doc of buildDemoAssetDocs(userId)) {
+  for (const doc of assetDocs) {
     const assetId = doc['assetId'] as string;
     await assetsColl.updateOne({ userId, assetId }, { $set: doc }, { upsert: true });
   }
