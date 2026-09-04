@@ -29,6 +29,16 @@ export function readBuiltAt(): string {
 }
 
 /**
+ * Cheap liveness probe — process up, no DB or external checks.
+ */
+export function livenessHandler(_req: Request, res: Response): void {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+  });
+}
+
+/**
  * Health check endpoint.
  * Returns server status and current timestamp.
  */

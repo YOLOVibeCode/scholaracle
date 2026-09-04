@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { MongoClient, type Db } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { healthRouter } from './routes/health';
+import { healthRouter, livenessHandler } from './routes/health';
 import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
@@ -353,6 +353,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   const notificationInit = initializeNotificationService(config);
   const { notificationService, emailTransport, fromEmail, fromName } = notificationInit;
 
+  app.get('/health', livenessHandler);
   app.use('/api/health', healthRouter);
 
   // Seed endpoint (development/test only)
