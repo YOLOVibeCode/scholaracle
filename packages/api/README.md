@@ -41,6 +41,7 @@ pnpm test:coverage
 
 ## Endpoints
 
+- `GET /health` - Liveness check (process uptime, no auth)
 - `GET /api/health` - Health check
 - `POST /api/alerts` - Create and process alert
 

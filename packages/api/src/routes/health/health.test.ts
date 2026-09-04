@@ -1,6 +1,6 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { healthRouter } from './health';
+import { healthRouter, livenessHandler } from './health';
 
 describe('Health Router', () => {
   let app: Express;
@@ -9,6 +9,24 @@ describe('Health Router', () => {
     app = express();
     app.use(express.json());
     app.use('/api/health', healthRouter);
+  });
+
+  describe('GET /health', () => {
+    let livenessApp: Express;
+
+    beforeEach(() => {
+      livenessApp = express();
+      livenessApp.get('/health', livenessHandler);
+    });
+
+    it('should return 200 with status ok and uptime', async () => {
+      const response = await request(livenessApp).get('/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('ok');
+      expect(typeof response.body.uptime).toBe('number');
+      expect(response.body.uptime).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe('GET /api/health', () => {

@@ -1,1 +1,1 @@
-export { healthRouter } from './health';
+export { healthRouter, livenessHandler } from './health';
