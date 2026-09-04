@@ -158,18 +158,38 @@ the rest is on you.
 ## How changes land
 
 `main` is protected by required checks (Quality Gate, Build, and per-package
-Test jobs) but **not** by required reviews, and `.github/workflows/auto-merge.yml`
-enables squash auto-merge on every non-fork PR. In practice:
+Test jobs) but **not** by required reviews. `.github/workflows/auto-merge.yml`
+enables squash auto-merge on non-fork PRs that touch only application code,
+tests, and docs. In practice:
 
 ```
 feature branch → PR → CI green → auto-merge to main → dev auto-deploys
   → deploy.yml verifies dev + runs E2E → production deploys (Railway check-suite gate)
+  → OTA update to the TestFlight preview channel (free; no EAS build)
 ```
 
 **A green PR is a production deploy.** Write every PR as if it ships within the
-hour, because it does. Keep diffs minimal, keep the PR description honest about
-what was and was not verified, and if you are not confident, say so in the PR
-body and title (`[needs-human]`) so a person can pause auto-merge.
+hour, because it does. Keep diffs minimal and keep the PR description honest
+about what was and was not verified.
+
+**The gate.** EAS *builds* burn build credits and are human-only. So a PR does
+**not** auto-merge — it gets the `needs-human` label and waits for a person —
+when its title starts with `[needs-human]` or it touches any of:
+
+- `.github/workflows/**`
+- `packages/mobile/.eas/**`, `packages/mobile/eas.json`, `packages/mobile/app.json`,
+  `packages/mobile/app.config.*`, `packages/mobile/plugins/**`,
+  `packages/mobile/ios/**`, `packages/mobile/android/**` (native fingerprint →
+  forces a new TestFlight binary)
+- `packages/mobile/package.json`, root `package.json`, `pnpm-lock.yaml`,
+  `pnpm-workspace.yaml` (dependency changes)
+- `Dockerfile.*`, `railway.json`, `railway.toml`
+- `AGENTS.md`, `.cursor/**` (the guardrails themselves)
+
+If your change genuinely needs one of those files, make it, say why in the PR
+body, and expect a human to merge. Do not work around the gate by moving the
+change elsewhere. If you are not confident a change is safe to ship, prefix
+the title with `[needs-human]`.
 
 ## Definition of done for any change
 
