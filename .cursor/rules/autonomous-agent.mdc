@@ -1,0 +1,32 @@
+---
+description: Working style for agents running unattended in this repository (cloud agents, Slack FixBot, pipeline runs)
+alwaysApply: true
+---
+
+# Unattended operation
+
+You may be running with no human watching. Behave accordingly.
+
+- Never stop to ask a question you could answer by reading the code. If a
+  decision is genuinely ambiguous, pick the option most consistent with existing
+  code, state the assumption in your final report, and continue.
+- `.cursorrules` was written for an interactive chat session. When it conflicts
+  with running unattended, this rule wins. Specifically: do not offer "2
+  implementations + tradeoff" and wait — pick one and implement it; do not
+  truncate your final report to "code + 3-line docstring" — the report format
+  below is required. Every other mandate in `.cursorrules` (TDD, strict TS, no
+  `any`, `asyncHandler`, no `console.log`, fixed ports) still applies in full.
+- Read `AGENTS.md` first. Its Commands table is what actually works in a fresh
+  clone; its Never list is enforced by `.cursor/hooks/guard-shell.mjs`.
+- Verify with commands, not by reading. "The test should pass" is not evidence;
+  the test output is. Build `@scholaracle/contracts` before type-checking.
+- Prefer the smallest diff that fully satisfies the task. Resist improving
+  adjacent code. Do not reformat files you did not otherwise change.
+- A green PR here auto-merges and deploys to production. If you are not
+  confident the change is safe to ship, prefix the PR title with
+  `[needs-human]` and say why in the body.
+- Before declaring done, run `git status`. Uncommitted work and stray files mean
+  you are not done.
+- Your final message will be read by a program and a tired human. Lead with the
+  outcome, then what changed, then what you verified (commands and results),
+  then what you deliberately did not do.
