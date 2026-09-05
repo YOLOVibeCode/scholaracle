@@ -16,6 +16,16 @@ name: Auto-merge
 # pull_request_target: this workflow always runs from the BASE branch's
 # definition, so a PR cannot edit the gate away in the same change. We never
 # check out PR code here; the only inputs are PR metadata via the API.
+#
+# AUTOMERGE_TOKEN (repo secret) is REQUIRED to arm auto-merge. Auto-merge is
+# performed by GitHub on behalf of whoever armed it. Armed with the workflow's
+# own GITHUB_TOKEN, the merge is attributed to github-actions[bot], and pushes
+# made by GITHUB_TOKEN never start workflows: no CI, no deploy.yml, no check
+# suites on the merge commit — so Railway's "Wait for CI" has nothing to wait
+# for and ships main straight to production without the dev + E2E verification.
+# That is exactly what happened on PR #14. With a user token the merge is a
+# normal push and the whole main → dev → E2E → prod chain runs. If the secret
+# is missing we hold the PR instead of quietly bypassing the gate.
 
 on:
   pull_request_target:
@@ -100,12 +110,27 @@ jobs:
 
       - name: Enable auto-merge (squash)
         if: steps.decide.outputs.gated == 'false'
+        env:
+          AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
         run: |
           set -euo pipefail
           gh label create "$GATE_LABEL" --color B60205 --force \
             --description "Touches build/deploy config or guardrails; a human must merge" >/dev/null
           gh pr edit "$PR" --remove-label "$GATE_LABEL" 2>/dev/null || true
-          gh pr merge --auto --squash "$PR"
+
+          if [ -z "${AUTOMERGE_TOKEN:-}" ]; then
+            marker="<!-- auto-merge-token-missing -->"
+            if ! gh pr view "$PR" --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+              gh pr comment "$PR" --body "$marker
+          **Auto-merge not armed: repo secret \`AUTOMERGE_TOKEN\` is missing.**
+
+          Arming with the workflow's GITHUB_TOKEN would merge as github-actions[bot], which starts no workflows on the merge commit, so Railway would deploy to production without the dev + E2E verification in deploy.yml. Add the secret (a token for a user with write access; fine-grained: Contents + Pull requests, read/write) or merge manually."
+            fi
+            echo "::error::AUTOMERGE_TOKEN missing; refusing to arm auto-merge (would bypass the deploy gate)."
+            exit 1
+          fi
+          # Arm as the token's user so the merge is a normal push that runs CI + deploy.yml.
+          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge --auto --squash "$PR"
 
       - name: Hold for a human
         if: steps.decide.outputs.gated == 'true'

@@ -172,6 +172,14 @@ feature branch → PR → CI green → auto-merge to main → dev auto-deploys
 hour, because it does. Keep diffs minimal and keep the PR description honest
 about what was and was not verified.
 
+Two mechanics worth knowing: Cloud Agents open PRs as **drafts**, and the gate
+ignores drafts; the Slack bot marks the PR ready for review only after its
+verifier reports done, so a failed verify never becomes merge-eligible. And
+auto-merge is armed with the `AUTOMERGE_TOKEN` repo secret (a user token), not
+the workflow's `GITHUB_TOKEN` — a merge by github-actions[bot] would start no
+workflows on `main`, and production would deploy without the dev + E2E run.
+If that secret is missing, the gate refuses to arm and comments on the PR.
+
 **The gate.** EAS *builds* burn build credits and are human-only. So a PR does
 **not** auto-merge — it gets the `needs-human` label and waits for a person —
 when its title starts with `[needs-human]` or it touches any of:
