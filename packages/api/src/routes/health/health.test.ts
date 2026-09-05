@@ -58,8 +58,18 @@ describe('Health Router', () => {
         branch: 'main',
         builtAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
         uptimeSeconds: expect.any(Number),
+        nodeVersion: expect.stringMatching(/^v\d+.\d+.\d+/),
         timestamp: expect.any(String),
       });
+    });
+
+    it('should include nodeVersion matching process.version', async () => {
+      const response = await request(app).get('/api/health/version');
+
+      expect(response.status).toBe(200);
+      expect(typeof response.body.nodeVersion).toBe('string');
+      expect(response.body.nodeVersion).toMatch(/^v\d+.\d+.\d+/);
+      expect(response.body.nodeVersion).toBe(process.version);
     });
 
     it('should include uptimeSeconds as a non-negative integer', async () => {
