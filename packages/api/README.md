@@ -49,6 +49,7 @@ pnpm test:coverage
   - `builtAt` — ISO timestamp (image build via `/app/BUILT_AT` or `SCHOLARMANCY_BUILT_AT`, else process start)
   - `uptimeSeconds` — integer seconds since process start
   - `nodeVersion` — Node runtime string from `process.version` (e.g. `"v20.11.0"`)
+  - `platform` — OS platform string from `process.platform` (e.g. `"linux"`, `"darwin"`, `"win32"`)
   - `timestamp` — ISO timestamp of the request (not deploy identity)
 - `POST /api/alerts` - Create and process alert
 
