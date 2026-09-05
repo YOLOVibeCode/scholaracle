@@ -55,6 +55,7 @@ healthRouter.get('/version', (_req: Request, res: Response) => {
     builtAt: readBuiltAt(),
     uptimeSeconds: Math.floor(process.uptime()),
     nodeVersion: process.version,
+    platform: process.platform,
     timestamp: new Date().toISOString(),
   });
 });
