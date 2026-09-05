@@ -22,9 +22,12 @@ You may be running with no human watching. Behave accordingly.
   the test output is. Build `@scholaracle/contracts` before type-checking.
 - Prefer the smallest diff that fully satisfies the task. Resist improving
   adjacent code. Do not reformat files you did not otherwise change.
-- A green PR here auto-merges and deploys to production. If you are not
-  confident the change is safe to ship, prefix the PR title with
-  `[needs-human]` and say why in the body.
+- A green PR here auto-merges and deploys to production, unless it touches the
+  gated paths listed in `AGENTS.md` ("The gate": workflows, EAS/native/app
+  config, dependencies, Dockerfiles, Railway config, the guardrails). Those PRs
+  wait for a human; never route around that. If you are not confident the
+  change is safe to ship, prefix the PR title with `[needs-human]` and say why
+  in the body.
 - Before declaring done, run `git status`. Uncommitted work and stray files mean
   you are not done.
 - Your final message will be read by a program and a tired human. Lead with the
