@@ -57,8 +57,17 @@ describe('Health Router', () => {
         commit: 'abc123def456',
         branch: 'main',
         builtAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/),
+        uptimeSeconds: expect.any(Number),
         timestamp: expect.any(String),
       });
+    });
+
+    it('should include uptimeSeconds as a non-negative integer', async () => {
+      const response = await request(app).get('/api/health/version');
+
+      expect(response.status).toBe(200);
+      expect(Number.isInteger(response.body.uptimeSeconds)).toBe(true);
+      expect(response.body.uptimeSeconds).toBeGreaterThanOrEqual(0);
     });
 
     it('should report a stable builtAt across requests', async () => {
