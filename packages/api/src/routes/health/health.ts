@@ -54,6 +54,7 @@ healthRouter.get('/version', (_req: Request, res: Response) => {
     branch: process.env['RAILWAY_GIT_BRANCH'] ?? 'unknown',
     builtAt: readBuiltAt(),
     uptimeSeconds: Math.floor(process.uptime()),
+    nodeVersion: process.version,
     timestamp: new Date().toISOString(),
   });
 });
