@@ -1,31 +1,128 @@
 name: Auto-merge
 
-# Automatically enables auto-merge on PRs opened by org members / collaborators.
-# Merge fires when required status checks pass (see branch protection).
-# External contributors (CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE) still
-# need explicit action — we never auto-merge strangers' code.
+# Enables squash auto-merge on PRs from branches in this repo, EXCEPT when the
+# PR needs a human. Merge then fires when required status checks pass (see
+# branch protection). External contributors (forks) always need explicit action.
+#
+# Why the gate exists: a green PR is a production deploy (main → dev → E2E →
+# prod), and deploy.yml publishes an OTA update to the TestFlight preview
+# channel. OTA updates are free. EAS *builds* are not — they burn build
+# credits and are deliberately human-only (workflow_dispatch). Unattended
+# agents (Slack FixBot → Cursor cloud agent) open PRs here, so anything that
+# could add a build trigger, change the native fingerprint (which forces a
+# rebuild), rewire deploys, or weaken the agent guardrails must wait for a
+# person. Everything else — app code, tests, docs — auto-merges as before.
+#
+# pull_request_target: this workflow always runs from the BASE branch's
+# definition, so a PR cannot edit the gate away in the same change. We never
+# check out PR code here; the only inputs are PR metadata via the API.
 
 on:
-  pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, edited]
 
 permissions:
   contents: write
   pull-requests: write
+  issues: write
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_REPO: ${{ github.repository }}
+  PR: ${{ github.event.pull_request.number }}
+  PR_TITLE: ${{ github.event.pull_request.title }}
+  GATE_LABEL: needs-human
+  # Paths where a merge can cost money or change what/where we deploy.
+  # Extended regex, matched against each changed file path.
+  PROTECTED_PATHS: >-
+    ^\.github/workflows/|
+    ^packages/mobile/\.eas/|
+    ^packages/mobile/eas\.json$|
+    ^packages/mobile/app\.json$|
+    ^packages/mobile/app\.config\.(js|ts|mjs|cjs)$|
+    ^packages/mobile/plugins/|
+    ^packages/mobile/(ios|android)/|
+    ^packages/mobile/package\.json$|
+    ^pnpm-lock\.yaml$|
+    ^pnpm-workspace\.yaml$|
+    ^package\.json$|
+    ^Dockerfile\.|
+    ^railway\.(json|toml)$|
+    ^AGENTS\.md$|
+    ^\.cursor/
 
 jobs:
-  enable-auto-merge:
-    name: Enable auto-merge (non-fork PRs only)
-    # Only auto-merge PRs from branches in this repo (not forks).
-    # Any PR from outside the repo must be merged explicitly, so external
-    # contributions can never sneak into main just because CI is green.
+  gate:
+    name: Auto-merge gate (non-fork PRs only)
+    # Only PRs from branches in this repo (not forks). Any PR from outside the
+    # repo must be merged explicitly, so external contributions can never sneak
+    # into main just because CI is green.
     if: >-
       !github.event.pull_request.draft
       && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      - name: Decide whether this PR may auto-merge
+        id: decide
+        run: |
+          set -euo pipefail
+          reasons=()
+
+          case "$PR_TITLE" in
+            \[needs-human\]*|\[NEEDS-HUMAN\]*) reasons+=("title is marked [needs-human]") ;;
+          esac
+
+          # Collapse the multi-line env into one ERE alternation.
+          regex=$(printf '%s' "$PROTECTED_PATHS" | tr -d ' \n')
+          files=$(gh api "repos/${GH_REPO}/pulls/${PR}/files" --paginate --jq '.[].filename')
+          hits=$(printf '%s\n' "$files" | grep -E "$regex" || true)
+          if [ -n "$hits" ]; then
+            reasons+=("touches build/deploy-config paths:")
+            while IFS= read -r f; do reasons+=("  - \`$f\`"); done <<< "$hits"
+          fi
+
+          if [ ${#reasons[@]} -gt 0 ]; then
+            echo "gated=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "reasons<<EOF"
+              printf '%s\n' "${reasons[@]}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "Gated:"; printf '%s\n' "${reasons[@]}"
+          else
+            echo "gated=false" >> "$GITHUB_OUTPUT"
+            echo "No protected paths touched; auto-merge allowed."
+          fi
+
       - name: Enable auto-merge (squash)
-        run: gh pr merge --auto --squash ${{ github.event.pull_request.number }}
+        if: steps.decide.outputs.gated == 'false'
+        run: |
+          set -euo pipefail
+          gh label create "$GATE_LABEL" --color B60205 --force \
+            --description "Touches build/deploy config or guardrails; a human must merge" >/dev/null
+          gh pr edit "$PR" --remove-label "$GATE_LABEL" 2>/dev/null || true
+          gh pr merge --auto --squash "$PR"
+
+      - name: Hold for a human
+        if: steps.decide.outputs.gated == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
+          REASONS: ${{ steps.decide.outputs.reasons }}
+        run: |
+          set -euo pipefail
+          gh label create "$GATE_LABEL" --color B60205 --force \
+            --description "Touches build/deploy config or guardrails; a human must merge" >/dev/null
+          gh pr edit "$PR" --add-label "$GATE_LABEL"
+          # Revoke auto-merge if an earlier, clean revision enabled it.
+          gh pr merge --disable-auto "$PR" 2>/dev/null || true
+
+          marker="<!-- auto-merge-gate -->"
+          if ! gh pr view "$PR" --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+            why="Why: a green PR deploys to production and OTA-publishes to the TestFlight preview channel. Those are fine unattended. Changes to CI/deploy workflows, EAS config, native/app config, dependencies, Dockerfiles, Railway config, or the agent guardrails can trigger EAS builds (which burn build credits) or change where code ships, so they wait for a person. Review, then merge manually."
+            body=$(printf '%s\n**Auto-merge is off for this PR — a human must merge it.**\n\n%s\n\n%s\n' \
+              "$marker" "$REASONS" "$why")
+            gh pr comment "$PR" --body "$body"
+          fi
