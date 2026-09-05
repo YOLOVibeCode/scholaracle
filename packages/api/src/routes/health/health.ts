@@ -53,6 +53,7 @@ healthRouter.get('/version', (_req: Request, res: Response) => {
     commit: process.env['RAILWAY_GIT_COMMIT_SHA'] ?? 'unknown',
     branch: process.env['RAILWAY_GIT_BRANCH'] ?? 'unknown',
     builtAt: readBuiltAt(),
+    uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
 });
