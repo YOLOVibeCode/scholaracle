@@ -1,5 +1,5 @@
 ---
-description: Working style for agents running unattended in this repository (cloud agents, Slack FixBot, pipeline runs)
+description: Working style for agents running unattended in this repository (cloud agents, Slack @CloudAgents jobs from #scholarmancy-fixbot, pipeline runs)
 alwaysApply: true
 ---
 
