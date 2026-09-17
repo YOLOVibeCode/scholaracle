@@ -1,0 +1,27 @@
+---
+description: This repo is Slack fix-bot enabled (#scholarmancy-fixbot). Fixes MUST go through the fix-bot flow - branch, PR against main, verified - never a direct push. A green PR is a production deploy.
+alwaysApply: true
+---
+
+# Slack fix bot: scholarmancy
+
+This repository is wired to the **@CloudAgents** Slack bot (source: `rvegajr/cloud-agents`).
+
+| Fact | Value |
+| --- | --- |
+| Channel | `#scholarmancy-fixbot` (`-fixbot` is the channel suffix, not the bot) |
+| Project key | `scholarmancy` (implied inside the channel; elsewhere say `@CloudAgents scholarmancy ...`) |
+| Repo @ base | `YOLOVibeCode/scholaracle` @ `main` |
+| Engine | a Cursor Cloud Agent (`bc-...`). `@Cursor` is Cursor's official Slack app, a different product |
+| Retired names | Demo App, FileDrop, Cursor FixBot, `@Demo`, FixBot. Never tell a human to mention them |
+
+## Applying fixes: the imperative
+
+When asked to fix, patch, or change behavior in this repo, you MUST:
+
+1. **Work on a branch, never on `main`.** Direct pushes to `main` are forbidden. Cloud agents already start on `cursor/<slug>`; local sessions branch first.
+2. **End every fix in a pull request against `main`.** Slack-launched runs create the PR automatically (`autopr` defaults to true). If no PR exists when you finish, say so in one line: `No PR yet: base main, head <branch>`. Never claim a PR was opened unless you have its URL.
+3. **Verify with commands before you report.** Run the gate from `AGENTS.md` (`pnpm --filter @scholaracle/contracts build`, then `pnpm type-check`, `pnpm lint:strict`, and `pnpm --filter @scholaracle/<pkg> test` for every package you touched) and paste the result. The Slack bot flips the draft PR to ready only when the verifier reports done; the merge gate ignores drafts, so a fix without evidence never becomes merge-eligible.
+4. **Remember that a green PR ships.** `main` auto-merges and deploys to production within the hour. Keep the diff minimal and the PR description honest about what was and was not verified. If the change touches a `needs-human` path (workflows, EAS/native mobile config, dependencies, Docker/Railway files, `AGENTS.md`, `.cursor/**`), prefix the PR title with `[needs-human]` and say why.
+5. **Write the final message for the Slack thread.** Outcome first, then files changed, then what was verified, then what you deliberately did not touch. The bot forwards it verbatim to `#scholarmancy-fixbot`.
+6. **Route humans through Slack for new fixes.** If someone (especially on a phone) asks how to get a fix started, the answer is: post `@CloudAgents <what is wrong, where, how to reproduce>` in `#scholarmancy-fixbot`. Options: `branch=<name>`, `autopr=false`, `model=<id>`. The Cursor iOS app can review, mark ready, and merge a PR but cannot create one; launches belong in Slack.
