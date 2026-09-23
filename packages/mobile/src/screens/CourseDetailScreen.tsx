@@ -6,9 +6,18 @@
  * loaded — no data fetching happens here.
  */
 
-import React from 'react';
-import { View, Text, SectionList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  SectionList,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Button,
+} from 'react-native';
 import type { ICourseGrade, ICourseGradeAssignment } from '@scholaracle/contracts';
+import { apiClient } from '../api/client';
 import { formatDate, formatPoints, statusColor } from '../grades/format';
 import {
   buildCategoryRollup,
@@ -19,16 +28,59 @@ import {
 } from '../grades/gradeBreakdown';
 
 interface ICourseDetailScreenProps {
+  readonly studentId: string;
   readonly course: ICourseGrade;
   onBack(): void;
   onOpenAssignment(assignment: ICourseGradeAssignment): void;
+  onCourseUpdated(course: ICourseGrade): void;
 }
 
 export function CourseDetailScreen({
+  studentId,
   course,
   onBack,
   onOpenAssignment,
+  onCourseUpdated,
 }: ICourseDetailScreenProps): React.ReactElement {
+  const [tutorialDraft, setTutorialDraft] = useState(course.tutorialWindow ?? '');
+  const [isSavingTutorial, setIsSavingTutorial] = useState(false);
+
+  useEffect(() => {
+    setTutorialDraft(course.tutorialWindow ?? '');
+  }, [course.tutorialWindow, course.courseExternalId]);
+
+  const saveTutorial = async (): Promise<void> => {
+    setIsSavingTutorial(true);
+    try {
+      await apiClient.updateCourseTutorial(
+        studentId,
+        course.courseExternalId,
+        tutorialDraft.trim()
+      );
+      const grades = await apiClient.getStudentGrades(studentId);
+      const updated = grades.courseGrades.find(
+        (c) => c.courseExternalId === course.courseExternalId
+      );
+      if (updated) onCourseUpdated(updated);
+    } finally {
+      setIsSavingTutorial(false);
+    }
+  };
+
+  const resetTutorial = async (): Promise<void> => {
+    setIsSavingTutorial(true);
+    try {
+      await apiClient.resetCourseTutorial(studentId, course.courseExternalId);
+      const grades = await apiClient.getStudentGrades(studentId);
+      const updated = grades.courseGrades.find(
+        (c) => c.courseExternalId === course.courseExternalId
+      );
+      if (updated) onCourseUpdated(updated);
+    } finally {
+      setIsSavingTutorial(false);
+    }
+  };
+
   const sections = buildCourseDetailSections(course);
   const rollup = buildCategoryRollup(course.assignments);
   const isRiskVisible =
@@ -101,6 +153,40 @@ export function CourseDetailScreen({
                 </Text>
               </View>
             ) : null}
+            <View style={styles.scheduleCard} testID="card-course-schedule">
+              {course.classMeetingSummary ? (
+                <Text style={styles.scheduleLine} testID="text-class-meeting">
+                  Class: {course.classMeetingSummary}
+                </Text>
+              ) : null}
+              <Text style={styles.scheduleLabel}>Tutorial window</Text>
+              <TextInput
+                testID="input-tutorial-window"
+                style={styles.tutorialInput}
+                value={tutorialDraft}
+                onChangeText={setTutorialDraft}
+              />
+              <View style={styles.tutorialActions}>
+                <Button
+                  title={isSavingTutorial ? 'Saving…' : 'Save tutorial'}
+                  testID="btn-save-tutorial"
+                  disabled={isSavingTutorial || tutorialDraft.trim().length === 0}
+                  onPress={() => {
+                    void saveTutorial();
+                  }}
+                />
+                {course.canResetTutorial ? (
+                  <Button
+                    title="Reset to synced"
+                    testID="btn-reset-tutorial"
+                    disabled={isSavingTutorial}
+                    onPress={() => {
+                      void resetTutorial();
+                    }}
+                  />
+                ) : null}
+              </View>
+            </View>
           </View>
         }
         renderSectionHeader={({ section }) => (
@@ -207,6 +293,25 @@ const styles = StyleSheet.create({
   rollupPoints: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
   rollupPercent: { fontSize: 12, color: '#6c757d', marginTop: 2 },
   totalLine: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
+  scheduleCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 12,
+    padding: 14,
+  },
+  scheduleLine: { fontSize: 14, color: '#495057', marginBottom: 8 },
+  scheduleLabel: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
+  tutorialInput: {
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  tutorialActions: { gap: 8 },
   sectionHeader: {
     fontSize: 12,
     fontWeight: '700',

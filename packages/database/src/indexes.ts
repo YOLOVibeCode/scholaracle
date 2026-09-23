@@ -98,6 +98,12 @@ export async function createIndexes(database: Db): Promise<void> {
   );
   await agendaOverrides.createIndex({ userId: 1, snoozedUntil: 1 });
 
+  const courseTutorialOverrides = database.collection('course_tutorial_overrides');
+  await courseTutorialOverrides.createIndex(
+    { userId: 1, studentId: 1, mergedCourseId: 1 },
+    { unique: true }
+  );
+
   // Refresh tokens (TTL for automatic cleanup)
   const refreshTokensCollection = database.collection('refresh_tokens');
   await refreshTokensCollection.createIndex({ tokenHash: 1 }, { unique: true });

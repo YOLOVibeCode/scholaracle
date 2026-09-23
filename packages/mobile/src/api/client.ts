@@ -333,10 +333,25 @@ export class ScholarmancyApiClient {
   async getStudentGrades(studentId: string): Promise<IStudentGradesResponse> {
     const current = await this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades`);
     if (current.courseGrades.length > 0) return current;
-    // Off-season (e.g. summer): every term has ended, so the server's
-    // current-only default filters ALL courses out. Fall back to all
-    // grading periods so the most recent term's grades still render.
     return this._get<IStudentGradesResponse>(`/api/students/${studentId}/grades?currentOnly=false`);
+  }
+
+  async updateCourseTutorial(
+    studentId: string,
+    mergedCourseId: string,
+    tutorialWindow: string
+  ): Promise<void> {
+    await this._patch<{ tutorialWindow: string }>(
+      `/api/students/${studentId}/courses/${encodeURIComponent(mergedCourseId)}/tutorial`,
+      { tutorialWindow }
+    );
+  }
+
+  async resetCourseTutorial(studentId: string, mergedCourseId: string): Promise<void> {
+    await this._delete<{ success: boolean }>(
+      `/api/students/${studentId}/courses/${encodeURIComponent(mergedCourseId)}/tutorial`,
+      {}
+    );
   }
 
   /**

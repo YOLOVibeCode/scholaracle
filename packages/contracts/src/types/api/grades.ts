@@ -74,6 +74,12 @@ export interface ICourseGrade {
   readonly riskExplanation?: string;
   readonly materialCount: number;
   readonly assignments: readonly ICourseGradeAssignment[];
+  /** Human-readable class meeting time from SIS scrape (not tutorial). */
+  readonly classMeetingSummary?: string;
+  /** Effective tutorial window (parent manual override or scrape). */
+  readonly tutorialWindow?: string;
+  readonly isTutorialManual?: boolean;
+  readonly canResetTutorial?: boolean;
 }
 
 export interface IStudentGradesResponse {

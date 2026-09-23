@@ -8,6 +8,7 @@ import {
   AlertRepository,
   SubscriptionRepository,
   UserRepository,
+  CourseTutorialOverrideRepository,
   PLAN_FEATURES,
   type IDataSource,
   type IDataSourceCredentials,
@@ -30,18 +31,25 @@ import {
   type ISourceListItem,
   type IRunListItem,
   type IStudentMaterialsResponse,
+  type ISlcCourse,
 } from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IInviteEmailSender } from '../../services/InviteEmailSender';
 import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { encryptCredentials } from '../../utils/credentialsCipher';
-import { addSourceSchema, updateSourceSchema, credentialsSchema } from './schemas';
+import {
+  addSourceSchema,
+  updateSourceSchema,
+  credentialsSchema,
+  patchCourseTutorialSchema,
+} from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
 import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
 import { loadStudentMaterials } from '../../services/materials/loadStudentMaterials';
+import { buildMergedCourseScheduleMaps } from '../../services/courses/courseScheduleForGrades';
 import { StudentProvisioner } from '../../services/provision/StudentProvisioner';
 import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLoginAudit';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
@@ -1066,6 +1074,66 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   );
 
   /**
+   * PATCH /api/students/:id/courses/:mergedCourseId/tutorial
+   * Parent manual override for tutorial window (survives re-scrape until reset).
+   */
+  router.patch(
+    '/:id/courses/:mergedCourseId/tutorial',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+      const { id: studentDbId, mergedCourseId } = req.params;
+      if (!studentDbId || !mergedCourseId) {
+        throw new ValidationError('Missing student ID or course ID');
+      }
+      const body = patchCourseTutorialSchema.parse(req.body);
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Student not found');
+      }
+      const repo = new CourseTutorialOverrideRepository(config.database);
+      const saved = await repo.upsertManual({
+        userId: student.dataUserId(),
+        studentId: studentDbId,
+        mergedCourseId,
+        tutorialWindow: body.tutorialWindow,
+      });
+      res.status(200).json({
+        tutorialWindow: saved.tutorialWindow,
+        isTutorialManual: true,
+        canResetTutorial: true,
+      });
+    })
+  );
+
+  router.delete(
+    '/:id/courses/:mergedCourseId/tutorial',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+      const { id: studentDbId, mergedCourseId } = req.params;
+      if (!studentDbId || !mergedCourseId) {
+        throw new ValidationError('Missing student ID or course ID');
+      }
+      const student = await studentRepository.findById(studentDbId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Student not found');
+      }
+      const repo = new CourseTutorialOverrideRepository(config.database);
+      await repo.deleteByStudentAndMergedCourse({
+        userId: student.dataUserId(),
+        studentId: studentDbId,
+        mergedCourseId,
+      });
+      res.status(200).json({ success: true });
+    })
+  );
+
+  /**
    * GET /api/students/:id/grades
    * Get per-course grades and assignment breakdown for a student.
    */
@@ -1205,6 +1273,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const courseIds = [...new Set([...assignmentCourseIds, ...snapshotCourseIds])];
 
       const courseMap = new Map<string, string>();
+      const courseRecordsByExternalId = new Map<string, Partial<ISlcCourse>>();
       const courseSourceInfo = new Map<
         string,
         { provider: string; sourceId: string; teacherName?: string; period?: string }
@@ -1220,6 +1289,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             'record.name': 1,
             'record.teacherName': 1,
             'record.period': 1,
+            'record.startTime': 1,
+            'record.endTime': 1,
+            'record.daysOfWeek': 1,
+            'record.tutorialWindow': 1,
           })
           .toArray();
         for (const c of courseDocs) {
@@ -1227,6 +1300,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           const rec = c['record'] as Record<string, unknown> | undefined;
           const name = (rec?.['title'] as string) ?? (rec?.['name'] as string) ?? undefined;
           if (extId && name) courseMap.set(extId, name);
+          if (extId && rec) {
+            courseRecordsByExternalId.set(extId, {
+              period: rec['period'] as string | undefined,
+              startTime: rec['startTime'] as string | undefined,
+              endTime: rec['endTime'] as string | undefined,
+              daysOfWeek: rec['daysOfWeek'] as readonly number[] | undefined,
+              tutorialWindow: rec['tutorialWindow'] as string | undefined,
+            });
+          }
           courseSourceInfo.set(extId, {
             provider: (c['provider'] as string) ?? '',
             sourceId: (c['sourceId'] as string) ?? '',
@@ -1260,6 +1342,19 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           extIdToMergedId.set(src.externalId, group.mergedId);
         }
       }
+
+      const tutorialOverrideRepo = new CourseTutorialOverrideRepository(config.database);
+      const tutorialOverrides = await tutorialOverrideRepo.listByStudent({
+        userId: dataUserId,
+        studentId: studentDbIdStr,
+      });
+      const tutorialOverrideByMerged = new Map(
+        tutorialOverrides.map((o) => [o.mergedCourseId, o] as const)
+      );
+      const mergedScheduleById = buildMergedCourseScheduleMaps({
+        courseRecordsByExternalId,
+        mergedIdToSources,
+      });
 
       type AssignmentStatus = 'missing' | 'submitted' | 'graded' | 'late' | 'unknown';
       const courseData = new Map<
@@ -1434,6 +1529,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         riskLevel: 'none' | 'low' | 'medium' | 'high' | 'critical';
         riskExplanation?: string;
         materialCount: number;
+        classMeetingSummary?: string;
+        tutorialWindow?: string;
+        isTutorialManual?: boolean;
+        canResetTutorial?: boolean;
         assignments: Array<{
           externalId: string;
           title: string;
@@ -1554,6 +1653,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           }
         }
 
+        const scheduleView = mergedScheduleById.get(courseExternalId);
+        const manualOverride = tutorialOverrideByMerged.get(courseExternalId);
+        const scrapedTutorial = scheduleView?.scrapedTutorialWindow;
+        const effectiveTutorial = manualOverride?.tutorialWindow ?? scrapedTutorial;
+
         courseGrades.push({
           courseExternalId,
           courseName,
@@ -1571,6 +1675,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           riskLevel,
           riskExplanation,
           materialCount: matCount,
+          classMeetingSummary: scheduleView?.classMeetingSummary,
+          tutorialWindow: effectiveTutorial,
+          isTutorialManual: manualOverride != null,
+          canResetTutorial: manualOverride != null,
           assignments: data.assignments.sort((a, b) => {
             const ta = a.dueAt ? new Date(a.dueAt).getTime() : 0;
             const tb = b.dueAt ? new Date(b.dueAt).getTime() : 0;

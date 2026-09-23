@@ -338,8 +338,12 @@ function AppContent(): React.ReactElement {
   if (nav.view === 'course-detail' && nav.student && nav.course) {
     return (
       <CourseDetailScreen
+        studentId={nav.student.id}
         course={nav.course}
         onBack={() => setNav({ view: 'dashboard', student: nav.student })}
+        onCourseUpdated={(updatedCourse) =>
+          setNav({ view: 'course-detail', student: nav.student, course: updatedCourse })
+        }
         onOpenAssignment={(assignment) =>
           setNav({
             view: 'assignment-detail',

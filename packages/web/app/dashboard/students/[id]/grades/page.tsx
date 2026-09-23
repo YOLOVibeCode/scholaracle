@@ -9,6 +9,7 @@ import { studentsApi, type IStudentGradesResponse, type ICourseAssignment, type 
 import { GradeSidebar } from '@/components/dashboard/students/GradeSidebar';
 import { AssignmentTable } from '@/components/dashboard/students/AssignmentTable';
 import { CourseGradeSummaryCard } from '@/components/dashboard/students/CourseGradeSummaryCard';
+import { CourseSchedulePanel } from '@/components/dashboard/students/CourseSchedulePanel';
 import { AssignmentDetailDrawer } from '@/components/dashboard/students/AssignmentDetailDrawer';
 
 export default function StudentGradesPage() {
@@ -135,6 +136,15 @@ export default function StudentGradesPage() {
 
         {selectedCourse ? (
           <>
+            <CourseSchedulePanel
+              studentId={studentId}
+              courseExternalId={selectedCourse.courseExternalId}
+              classMeetingSummary={selectedCourse.classMeetingSummary}
+              tutorialWindow={selectedCourse.tutorialWindow}
+              isTutorialManual={selectedCourse.isTutorialManual}
+              canResetTutorial={selectedCourse.canResetTutorial}
+              onUpdated={() => void loadGrades()}
+            />
             <CourseGradeSummaryCard course={selectedCourse} studentId={studentId} />
             <div>
               <h2 className="mb-2 text-lg font-semibold">{selectedCourse.courseName} — Assignments</h2>

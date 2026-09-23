@@ -266,7 +266,14 @@ describe('students API contract', () => {
         'materialCount',
         'assignments',
       ],
-      ['gradeBreakdown', 'riskExplanation'],
+      [
+        'gradeBreakdown',
+        'riskExplanation',
+        'classMeetingSummary',
+        'tutorialWindow',
+        'isTutorialManual',
+        'canResetTutorial',
+      ],
       'ICourseGrade'
     );
 

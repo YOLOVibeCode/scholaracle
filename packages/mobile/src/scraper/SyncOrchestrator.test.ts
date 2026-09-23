@@ -234,6 +234,31 @@ describe('runSyncPipeline', () => {
     });
   });
 
+  it('does not call scraper-assist or Anthropic during a normal sync', async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/ai/scraper-assist') || url.includes('anthropic.com')) {
+        throw new Error(`unexpected AI fetch: ${url}`);
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock as typeof fetch;
+    try {
+      const recorder = makeRecorder();
+      const uploader = makeUploader();
+      const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+      await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+        resolver: stubResolver({}),
+      });
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes('scraper-assist'))).toBe(false);
+      expect(urls.some((u) => u.includes('anthropic.com'))).toBe(false);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it('should resolve addPhase before the next pipeline step runs', async () => {
     const events: string[] = [];
     const recorder: IRunRecorder = {
