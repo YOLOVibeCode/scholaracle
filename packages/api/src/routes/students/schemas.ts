@@ -32,3 +32,9 @@ export const credentialsSchema = z
   });
 
 export type ICredentialsBody = z.infer<typeof credentialsSchema>;
+
+export const patchCourseTutorialSchema = z.object({
+  tutorialWindow: z.string().min(1, 'tutorialWindow is required').max(200),
+});
+
+export type IPatchCourseTutorialBody = z.infer<typeof patchCourseTutorialSchema>;

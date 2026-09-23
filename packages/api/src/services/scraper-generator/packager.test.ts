@@ -132,6 +132,12 @@ describe('Packager', () => {
       expect(runJs).toContain('/envelope');
       expect(runJs).toContain('/complete');
     });
+
+    it('run.js does not embed client-side LLM API keys', () => {
+      const runJs = getRunJsContent(buildPackageOptions());
+      expect(runJs).not.toContain('ANTHROPIC_API_KEY');
+      expect(runJs).not.toMatch(/api\.anthropic\.com/);
+    });
   });
 
   describe('packageSingleFile (Windows)', () => {

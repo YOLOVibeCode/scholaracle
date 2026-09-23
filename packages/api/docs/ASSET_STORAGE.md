@@ -42,7 +42,8 @@
 | Env | Description |
 |-----|-------------|
 | `ASSET_STORAGE_PATH` | For local store: directory path (default `./data/assets`). On Railway Volume, set to `RAILWAY_VOLUME_MOUNT_PATH` or e.g. `$RAILWAY_VOLUME_MOUNT_PATH/assets`. |
-| `ASSET_STORE` | `local` (default) or `s3`. |
+| `ASSET_STORE` | `local` (default), `s3`, or `relay`. |
+| Relay (when `ASSET_STORE=relay`) | `NOCTUSOFT_RELAY_API_KEY` (required); optional `AWS_S3_BUCKET` (default `scholarmancy`), `AWS_S3_ENDPOINT` (default `https://api.storage.noctusoft.com`). Uses S3-compatible API. |
 | S3 (when `ASSET_STORE=s3`) | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET` (required); `AWS_S3_ENDPOINT` (optional, e.g. `https://storage.railway.app` for Railway Buckets). |
 
 **Railway Buckets (CLI):**

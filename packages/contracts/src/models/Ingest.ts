@@ -249,6 +249,8 @@ export interface ISlcCourse {
   readonly description?: string;
   /** Link to the course on the platform. */
   readonly url?: string;
+  /** Tutorial / advisory period window, e.g. "Tue/Thu 7:15–7:45 AM" (separate from class meeting). */
+  readonly tutorialWindow?: string;
 }
 
 /**

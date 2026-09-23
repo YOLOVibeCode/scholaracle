@@ -223,3 +223,24 @@ describe('attendance courseExternalId — Skyward', () => {
     // no raw array index in id — the positive assertion above is sufficient
   });
 });
+
+describe('tutorialWindow — Skyward', () => {
+  it('should emit tutorialWindow on course when extract includes tutorial text', () => {
+    const extract = makeExtract({
+      courses: [
+        {
+          name: 'Algebra',
+          period: '2',
+          time: '8:00 AM - 9:00 AM',
+          teacher: 'Smith',
+          currentGrade: '95',
+          grades: {},
+          tutorialWindow: 'Tutorial: Tue/Thu 7:15–7:45 AM',
+        },
+      ],
+    });
+    const ops = transformSkywardExtract(extract, ctx);
+    const courseOp = ops.find((o) => o.entity === 'course');
+    expect(courseOp?.record?.['tutorialWindow']).toBe('Tue/Thu 7:15–7:45 AM');
+  });
+});
