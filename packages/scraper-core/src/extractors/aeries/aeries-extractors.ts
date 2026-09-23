@@ -20,6 +20,7 @@ export interface IAeriesCourseExtract {
   readonly currentPercent: number | null;
   readonly missingCount: number;
   readonly assignments: IAeriesAssignmentExtract[];
+  readonly tutorialWindow?: string;
 }
 
 export interface IAeriesAssignmentExtract {

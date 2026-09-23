@@ -77,6 +77,7 @@ id (`canvas-course-12345`). Always emit `title` plus at least one join hint:
 | startTime | string | Daily start time HH:MM (24h or 12h) |
 | endTime | string | Daily end time HH:MM |
 | daysOfWeek | number[] | Days class meets: 0=Sun, 1=Mon, ... 6=Sat |
+| tutorialWindow | string | Tutorial/advisory window, e.g. "Tue/Thu 7:15–7:45 AM" (separate from class meeting) |
 | termExternalId | string | Link to the academic term entity |
 | description | string | Course description or syllabus summary |
 | url | string | Direct link to course page on the platform |

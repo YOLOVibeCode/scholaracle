@@ -3,6 +3,7 @@ import type {
   ISkywardFullExtract,
   ISkywardScheduleEntry,
 } from '../../extractors/skyward/skyward-extractors';
+import { parseTutorialWindow } from '../parseTutorialWindow';
 
 // ---------------------------------------------------------------------------
 // LDISD 2025-2026 grading periods (Texas 6-weeks; used for termExternalId and expiration)
@@ -153,6 +154,14 @@ function parseTimeRange(time: string): { startTime?: string; endTime?: string } 
   return {};
 }
 
+function resolveTutorialWindow(...sources: (string | undefined)[]): string | undefined {
+  for (const source of sources) {
+    const parsed = parseTutorialWindow(source);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
 function normalizeAttendanceStatus(
   raw: string
 ): 'present' | 'absent' | 'tardy' | 'excused' | 'unexcused' | 'partial' | 'field_trip' {
@@ -267,6 +276,7 @@ export function transformSkywardExtract(
     const courseExtId = courseExtIdFor(course.period, course.name, course._cni);
     const sched = scheduleByPeriod.get(course.period);
     const { startTime, endTime } = parseTimeRange(sched?.time || course.time);
+    const tutorialWindow = resolveTutorialWindow(course.tutorialWindow, sched?.tutorialWindow);
 
     ops.push({
       op: 'upsert',
@@ -280,6 +290,7 @@ export function transformSkywardExtract(
         startTime: startTime || undefined,
         endTime: endTime || undefined,
         room: sched?.room || undefined,
+        tutorialWindow: tutorialWindow || undefined,
       },
     });
 

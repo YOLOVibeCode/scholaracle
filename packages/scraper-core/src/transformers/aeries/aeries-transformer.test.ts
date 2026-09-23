@@ -55,6 +55,23 @@ function makeCourse(
 // native-ids: stable course externalId
 // ---------------------------------------------------------------------------
 
+describe('tutorialWindow — Aeries', () => {
+  it('should emit tutorialWindow on course when extract includes tutorial text', () => {
+    const extract = makeExtract({
+      students: [
+        makeStudent({
+          courses: [
+            makeCourse({ tutorialWindow: 'Tutorial Tue/Thu 7:15–7:45 AM' }),
+          ],
+        }),
+      ],
+    });
+    const ops = transformAeriesExtract(extract, ctx);
+    const courseOp = ops.find((o) => o.entity === 'course');
+    expect(courseOp?.record?.['tutorialWindow']).toBe('Tue/Thu 7:15–7:45 AM');
+  });
+});
+
 describe('native IDs — Aeries', () => {
   it('course externalId uses studentId+period+slug, NOT array index', () => {
     const extract = makeExtract({ students: [makeStudent({ courses: [makeCourse()] })] });

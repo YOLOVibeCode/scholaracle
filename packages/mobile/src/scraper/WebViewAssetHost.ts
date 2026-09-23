@@ -241,7 +241,7 @@ export class WebViewAssetHost implements IAssetHost {
 
   async processOps(ops: ISlcDeltaOp[]): Promise<ISlcDeltaOp[]> {
     const { driver, connectorToken, sourceId, provider, apiBaseUrl } = this._config;
-    const uploadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/ingest/v1/assets/upload-base64`;
+    const uploadUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/ingest/v1/assets/upload`;
 
     const result: ISlcDeltaOp[] = [];
     for (const op of ops) {
@@ -528,24 +528,25 @@ export class WebViewAssetHost implements IAssetHost {
       readonly courseExternalId: string;
     }
   ): Promise<string | null> {
+    const form = new FormData();
+    const binary = Uint8Array.from(atob(asset.base64), (c) => c.charCodeAt(0));
+    const blob = new Blob([binary], { type: asset.mimeType });
+    form.append('file', blob, asset.fileName);
+    form.append('sourceId', target.sourceId);
+    form.append('provider', target.provider);
+    form.append('originalUrl', originalUrl);
+    form.append('contentHash', asset.sha256);
+    form.append('fileName', asset.fileName);
+    form.append('entityType', ids.entityType);
+    form.append('entityExternalId', ids.entityExternalId);
+    form.append('courseExternalId', ids.courseExternalId);
+
     const uploadRes = await fetch(target.uploadUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         Authorization: `Bearer ${target.connectorToken}`,
       },
-      body: JSON.stringify({
-        data: asset.base64,
-        sourceId: target.sourceId,
-        provider: target.provider,
-        originalUrl,
-        contentHash: asset.sha256,
-        fileName: asset.fileName,
-        mimeType: asset.mimeType,
-        entityType: ids.entityType,
-        entityExternalId: ids.entityExternalId,
-        courseExternalId: ids.courseExternalId,
-      }),
+      body: form,
     });
 
     if (!uploadRes.ok) return null;

@@ -226,6 +226,8 @@ describe('WebViewAssetHost.processOps', () => {
     const result = await host.processOps([op]);
 
     expect(result[0]?.record?.['url']).toBe('https://api.scholarmancy.com/api/assets/asset-1');
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/ingest/v1/assets/upload');
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('upload-base64');
   });
 
   it('keeps original op when evaluate returns null (file too large / fetch error)', async () => {

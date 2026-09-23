@@ -590,9 +590,14 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
 
-  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
-  const digestInsightService = anthropicApiKey
-    ? new DigestInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
+  const litellmKey = process.env['LITELLM_API_KEY']?.trim();
+  const anthropicApiKey = process.env['ANTHROPIC_API_KEY']?.trim();
+  const llmApiKey = litellmKey ?? anthropicApiKey;
+  const llmBaseUrl = litellmKey ? 'https://api.noctusoft.com/v1' : undefined;
+  const digestInsightService = llmApiKey
+    ? new DigestInsightService({
+        llmClient: new LlmClient({ apiKey: llmApiKey, baseUrl: llmBaseUrl }),
+      })
     : undefined;
 
   // Scheduled digest flush (runs every 60 seconds)
@@ -611,8 +616,10 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   );
 
   // Scheduled glance email flush (runs every 60 seconds)
-  const glanceInsightService = anthropicApiKey
-    ? new GlanceInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
+  const glanceInsightService = llmApiKey
+    ? new GlanceInsightService({
+        llmClient: new LlmClient({ apiKey: llmApiKey, baseUrl: llmBaseUrl }),
+      })
     : undefined;
   safeInterval(
     'glance-email',

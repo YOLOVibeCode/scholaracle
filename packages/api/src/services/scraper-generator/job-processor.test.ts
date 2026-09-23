@@ -300,13 +300,13 @@ describe('processScraperGenerationJob', () => {
         captchaDetected: false,
         mfaRequired: false,
       });
-      mockGenerate.mockRejectedValue(new Error('ANTHROPIC_API_KEY not set'));
+      mockGenerate.mockRejectedValue(new Error('LITELLM_API_KEY or ANTHROPIC_API_KEY is required'));
 
       await processScraperGenerationJob(db, 'job-ai-fail');
 
       const job = await db.collection('scraper_generation_jobs').findOne({ jobId: 'job-ai-fail' });
       expect(job?.['status']).toBe('failed');
-      expect(job?.['error']).toContain('ANTHROPIC_API_KEY');
+      expect(job?.['error']).toMatch(/LITELLM_API_KEY|ANTHROPIC_API_KEY/);
     });
 
     it('fails if generated code fails validation', async () => {

@@ -129,6 +129,10 @@ export interface ICourseGrade {
   readonly riskExplanation?: string;
   readonly materialCount?: number;
   readonly assignments: readonly ICourseAssignment[];
+  readonly classMeetingSummary?: string;
+  readonly tutorialWindow?: string;
+  readonly isTutorialManual?: boolean;
+  readonly canResetTutorial?: boolean;
 }
 
 export interface IStudentGradesResponse {
@@ -420,6 +424,25 @@ export const studentsApi = {
    */
   async getGrades(id: string): Promise<IStudentGradesResponse | null> {
     return await apiClient.get<IStudentGradesResponse>(`/students/${id}/grades`);
+  },
+
+  async updateCourseTutorial(
+    studentId: string,
+    mergedCourseId: string,
+    tutorialWindow: string
+  ): Promise<boolean> {
+    const response = await apiClient.request<{ tutorialWindow: string }>(
+      `/students/${studentId}/courses/${encodeURIComponent(mergedCourseId)}/tutorial`,
+      { method: 'PATCH', body: JSON.stringify({ tutorialWindow }) }
+    );
+    return Boolean(response.tutorialWindow);
+  },
+
+  async resetCourseTutorial(studentId: string, mergedCourseId: string): Promise<void> {
+    await apiClient.delete<{ success: boolean }>(
+      `/students/${studentId}/courses/${encodeURIComponent(mergedCourseId)}/tutorial`,
+      {}
+    );
   },
 
   /**

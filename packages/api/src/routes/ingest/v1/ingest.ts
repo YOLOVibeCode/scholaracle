@@ -48,12 +48,18 @@ import {
 import { logger } from '../../../logger';
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
+import type { IAssetStore } from '../../../services/assets/IAssetStore';
+import { runBatchMaterialMatching } from '../../../services/materialMatching/batchMaterialMatcher';
+import { runVisionDescribeByContentHash } from '../../../services/materialMatching/visionDescribeByHash';
+import { createScraperAssistRouter } from './scraperAssist';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
   /** When set, enqueue notify jobs after creating alerts so notifications are delivered. */
   readonly queue?: MongoQueue;
+  /** Asset blob store for post-ingest vision dedupe. */
+  readonly assetStore?: IAssetStore;
   /**
    * Join-gap enrichment mode for envelope ingest. Defaults to ENRICH_OPS_MODE
    * or `off`. Tests inject this so they do not mutate process.env.
@@ -542,121 +548,22 @@ async function generateAlertsFromIngestedAssignments(params: {
 }
 
 // ---------------------------------------------------------------------------
-// LLM-based material-to-assignment matching (Layer 3)
+// Post-ingest intelligence (batched LLM matching + vision dedupe)
 // ---------------------------------------------------------------------------
 
-/**
- * For materials that Layers 1+2 (modules, descriptions) couldn't match,
- * use an LLM to semantically match file names to assignment titles.
- * Fire-and-forget — failures are non-fatal.
- */
-async function matchUnmatchedMaterialsViaLlm(params: {
+async function runPostIngestIntelligence(params: {
   readonly database: Db;
   readonly userId: string;
+  readonly assetStore?: IAssetStore;
 }): Promise<void> {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
-  if (!apiKey) return;
-
-  const materialsColl = params.database.collection('slc_course_materials');
-  const assignmentsColl = params.database.collection('slc_assignments');
-
-  // Find materials with no assignmentExternalId
-  const unmatched = await materialsColl
-    .find({
+  if (params.assetStore) {
+    await runVisionDescribeByContentHash({
+      database: params.database,
       userId: params.userId,
-      deletedAt: null,
-      $or: [
-        { 'record.assignmentExternalId': null },
-        { 'record.assignmentExternalId': { $exists: false } },
-      ],
-    })
-    .toArray();
-
-  if (unmatched.length === 0) return;
-
-  // Group by course
-  const byCourse = new Map<string, typeof unmatched>();
-  for (const m of unmatched) {
-    const cid = m['courseExternalId'] as string;
-    if (!cid) continue;
-    if (!byCourse.has(cid)) byCourse.set(cid, []);
-    byCourse.get(cid)!.push(m);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  const { LlmClient } = await import('@scholaracle/agents');
-  const llm = new LlmClient({ apiKey });
-
-  for (const [courseExtId, materials] of byCourse) {
-    const assignments = await assignmentsColl
-      .find({
-        userId: params.userId,
-        deletedAt: null,
-        courseExternalId: courseExtId,
-      })
-      .project({ externalId: 1, 'record.title': 1 })
-      .toArray();
-
-    if (assignments.length === 0) continue;
-
-    const assignmentList = assignments.map((a) => ({
-      id: a['externalId'] as string,
-      title: (a['record'] as Record<string, unknown>)?.['title'] as string,
-    }));
-
-    const fileList = materials.map((m) => {
-      const rec = m['record'] as Record<string, unknown>;
-      const entry: { id: string; name: string; description?: string } = {
-        id: m['externalId'] as string,
-        name: (rec?.['title'] as string) ?? '',
-      };
-      const extracted = rec?.['extractedText'] as string | undefined;
-      if (extracted) entry.description = extracted;
-      return entry;
+      assetStore: params.assetStore,
     });
-
-    try {
-      const response = await llm.complete(
-        [
-          {
-            role: 'user',
-            content: `Match these course files to their most relevant assignment. Return a JSON array of objects with "fileId", "assignmentId", and "confidence" (0-1). Only include matches with confidence >= 0.7. If no good match exists for a file, omit it. Some files have a "description" field with AI-analyzed content — use it for matching when the filename alone is ambiguous.\n\nFiles:\n${JSON.stringify(fileList)}\n\nAssignments:\n${JSON.stringify(assignmentList)}`,
-          },
-        ],
-        {
-          maxTokens: 4096,
-          system:
-            'You are a school data matching assistant. Match course material filenames to assignment titles based on semantic similarity, topic overlap, and naming patterns (e.g. "5.A" prefix matches "5.A - Independent Practice", "Camera Parts.pptx" matches "Parts of a camera"). Return ONLY a valid JSON array, no markdown fences.',
-        }
-      );
-
-      // Extract JSON from response (handle possible markdown fences)
-      const jsonStr = response.content
-        .replace(/```json\s*/g, '')
-        .replace(/```\s*/g, '')
-        .trim();
-      const matches = JSON.parse(jsonStr) as Array<{
-        fileId: string;
-        assignmentId: string;
-        confidence: number;
-      }>;
-
-      for (const m of matches) {
-        if (m.confidence < 0.7) continue;
-        await materialsColl.updateOne(
-          { userId: params.userId, externalId: m.fileId },
-          { $set: { 'record.assignmentExternalId': m.assignmentId } }
-        );
-      }
-
-      // eslint-disable-next-line no-console
-      console.log(
-        `[MaterialMatcher] LLM matched ${matches.filter((m) => m.confidence >= 0.7).length}/${fileList.length} files for course ${courseExtId}`
-      );
-    } catch (err) {
-      console.error(`[MaterialMatcher] LLM matching failed for course ${courseExtId}:`, err);
-    }
   }
+  await runBatchMaterialMatching({ database: params.database, userId: params.userId });
 }
 
 /** Maps entity type to MongoDB collection name. */
@@ -1074,25 +981,7 @@ async function applyOps(params: {
           });
         }
 
-        // Server-side vision analysis: if this is an image with a stored URL and no
-        // extractedText, analyze it with Claude vision (API key stays server-side).
-        if (!record['extractedText']) {
-          const storedUrl = record['url'] as string | undefined;
-          const mimeType = record['mimeType'] as string | undefined;
-          const fileName = record['fileName'] as string | undefined;
-          void import('../../../services/VisionAnalysisService').then(
-            ({ analyzeCourseMaterialImage }) => {
-              analyzeCourseMaterialImage({
-                database: params.database,
-                collection: collection.collectionName,
-                filter: baseFilter,
-                mimeType,
-                storedUrl,
-                fileName,
-              }).catch(() => {});
-            }
-          );
-        }
+        // Post-commit vision runs in runVisionDescribeByContentHash (deduped by content hash).
       } else {
         await collection.updateOne(
           baseFilter,
@@ -1151,6 +1040,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   const sourceRepo = new IngestSourceRepository(config.database);
   const runRepo = new IngestRunRepository(config.database);
   const studentRepo = new StudentRepository(config.database);
+
+  if (config.jwtSecret) {
+    router.use(
+      '/ai',
+      createScraperAssistRouter({ database: config.database, jwtSecret: config.jwtSecret })
+    );
+  }
 
   // --- Device auth (public start/poll; approve requires user JWT) ---
 
@@ -1533,11 +1429,12 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         queue: config.queue,
       });
       // LLM-based material matching (Layer 3) — fire-and-forget
-      void matchUnmatchedMaterialsViaLlm({
+      void runPostIngestIntelligence({
         database: config.database,
         userId: runDataUserId,
+        assetStore: config.assetStore,
       }).catch((err: unknown) => {
-        console.error('[MaterialMatcher] post-ingest LLM matching failed:', err);
+        console.error('[MaterialMatcher] post-ingest intelligence failed:', err);
       });
       res.status(200).json({
         success: true,
