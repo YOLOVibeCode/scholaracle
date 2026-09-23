@@ -5,14 +5,16 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
-import { AuthService } from '@scholaracle/auth';
+import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import { studentsRouter } from './students';
+import { ingestV1Router } from '../ingest/v1/ingest';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 
 describe('Course tutorial override (integration)', () => {
   jest.setTimeout(60_000);
+  const jwtSecret = 'test-jwt-secret-min-32-chars!!';
   let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let database: Db;
@@ -36,6 +38,7 @@ describe('Course tutorial override (integration)', () => {
       requireParent,
       studentsRouter({ database, baseUrl: 'http://test.example' })
     );
+    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
     app.use(createErrorHandler());
 
     const reg = await authService.register('tutorial-parent@test.com', 'password123', 'Parent');
@@ -60,6 +63,79 @@ describe('Course tutorial override (integration)', () => {
     await client.close();
     await mongoServer.stop();
   });
+
+  async function ingestCourseTutorialUpsert(tutorialWindow: string): Promise<void> {
+    const connectorToken = new ConnectorTokenService(jwtSecret).createToken(userId, randomJti());
+    await request(app)
+      .post('/api/ingest/v1/sources')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId: 'src-ingest-tutorial',
+        provider: 'skyward',
+        adapterId: 'skyward-browser',
+        displayName: 'Skyward',
+        portalBaseUrl: 'https://skyward.example.edu',
+      });
+    const runRes = await request(app)
+      .post('/api/ingest/v1/runs')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({ sourceId: 'src-ingest-tutorial' });
+    expect(runRes.status).toBe(200);
+    const runId = runRes.body.runId as string;
+    const now = new Date().toISOString();
+    const envelope = {
+      schemaVersion: 'slc.ingest.v1',
+      run: {
+        runId,
+        startedAt: now,
+        provider: 'skyward',
+        adapterId: 'skyward-browser',
+        adapterVersion: '1.0.0',
+        mode: 'delta',
+        timezone: 'America/Los_Angeles',
+      },
+      source: {
+        sourceId: 'src-ingest-tutorial',
+        displayName: 'Skyward',
+        portalBaseUrl: 'https://skyward.example.edu',
+      },
+      ops: [
+        {
+          op: 'upsert',
+          entity: 'course',
+          key: {
+            provider: 'skyward',
+            adapterId: 'skyward-browser',
+            externalId: 'skyward-course-alg',
+            studentExternalId: 'stu-ext-1',
+          },
+          observedAt: now,
+          record: {
+            title: 'Algebra 1',
+            tutorialWindow,
+            period: '3',
+            daysOfWeek: [2, 4],
+            startTime: '09:00',
+            endTime: '09:50',
+          },
+        },
+      ],
+    };
+    const upload = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send(envelope);
+    expect(upload.status).toBe(200);
+    const complete = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/complete`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({});
+    expect(complete.status).toBe(200);
+  }
+
+  function randomJti(): string {
+    return `jti-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
 
   it('manual tutorial persists after course record re-scrape; reset restores scraped value', async () => {
     const createRes = await request(app)
@@ -132,12 +208,7 @@ describe('Course tutorial override (integration)', () => {
       .send({ tutorialWindow: 'Mon/Wed 8:00 AM (manual)' });
     expect(patchRes.status).toBe(200);
 
-    await database
-      .collection('slc_courses')
-      .updateOne(
-        { userId, externalId: courseExternalId },
-        { $set: { 'record.tutorialWindow': 'Fri 7:00 AM (new scrape)' } }
-      );
+    await ingestCourseTutorialUpsert('Fri 7:00 AM (new scrape)');
 
     const gradesManual = await request(app)
       .get(`/api/students/${studentId}/grades`)
