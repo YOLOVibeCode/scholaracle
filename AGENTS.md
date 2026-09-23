@@ -25,7 +25,7 @@ portal login, password storage, or a server-side scraper path.
 
 This product does not sign up for OpenAI, Twilio, or SendGrid. It calls two Noctusoft platforms. The product id is the only difference.
 
-- **LLM Relay** — OpenAI-compatible API at `https://api.noctusoft.com/v1` on litellm-vm (Azure `20.46.250.159`, Tailscale `100.112.233.46`). Virtual key. No provider SDK. Not noctusoft-relay on `ns`.
+- **LLM Relay** — OpenAI-compatible API at `https://ai.noctusoft.com/v1` on litellm-vm (Azure `20.46.250.159`, Tailscale `100.112.233.46`). Virtual key. No provider SDK. Not noctusoft-relay on `ns`.
   - Only the API and workers hold `LITELLM_API_KEY`. Scrapers call a model only to write or repair their own code, through `POST /api/ingest/v1/ai/scraper-assist`. A scrape run is generated code and makes no model calls.
   - Linking data across sources runs on the API after ingest: file-to-assignment matching packs many courses into one call, and a file is sent again only when it, its description, or its course's assignments changed. Each distinct image (by content hash) is described once.
 - **Mail** — `POST /email/send` or SendGrid drop-in `POST /v3/mail/send` on `api.sendgrid.noctusoft.com`, with the product key and `X-App-Env` (`dev` captures in smtp4dev, `uat` tags and sends, anything else is real delivery).
