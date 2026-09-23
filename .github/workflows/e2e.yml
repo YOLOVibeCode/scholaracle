@@ -72,8 +72,9 @@ jobs:
         if: inputs.base_url == '' || inputs.base_url == null
         run: |
           mkdir -p /home/runner/work/scholarmancy/scholaracle/packages
-          ln -s /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
-          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build
+          ln -sf /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
+          ln -sf /home/runner/work/scholaracle/scholaracle/packages/scraper-core /home/runner/work/scholarmancy/scholaracle/packages/scraper-core
+          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/scraper-core build
           cd /home/runner/work/scholaracle_scrapers && npm install && npx tsc --build
 
       - name: Build packages

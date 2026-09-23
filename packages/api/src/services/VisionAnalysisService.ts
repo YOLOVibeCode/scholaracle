@@ -1,83 +1,87 @@
 /**
- * VisionAnalysisService
- *
- * Analyzes image course materials using Claude's vision API to generate
- * extractedText descriptions. Runs server-side after ingest so no API keys
- * ship to client devices (mobile app, browser extension, CLI).
- *
- * Called after a courseMaterial upsert when:
- *   1. The material is an image (mimeType starts with 'image/')
- *   2. No extractedText exists yet
- *   3. A stored server-side URL is available (asset has been uploaded)
- *   4. ANTHROPIC_API_KEY env var is set
+ * VisionAnalysisService — legacy single-material hook; uses LiteLLM via LlmClient and asset store bytes.
  */
-
 import { type Db } from 'mongodb';
+import { LlmClient } from '@scholaracle/agents';
+import type { IAssetStore } from './assets/IAssetStore';
+import { AssetRepository } from './assets/AssetRepository';
+import { resolveLlmConfig } from './llm/resolveLlmConfig';
 
 const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
-const MAX_IMAGE_BYTES = 5_000_000; // 5 MB Claude limit
-const VISION_MODEL = 'claude-opus-4-5';
+const MAX_IMAGE_BYTES = 5_000_000;
 
 interface IVisionAnalysisParams {
   readonly database: Db;
   readonly collection: string;
-  /** externalId key fields used to locate the document to update */
   readonly filter: Record<string, unknown>;
   readonly mimeType: string | undefined;
-  /** Stored URL (on our asset server, accessible by the API process) */
   readonly storedUrl: string | undefined;
   readonly fileName: string | undefined;
+  readonly assetId?: string;
+  readonly assetStore?: IAssetStore;
 }
 
-/**
- * Analyze an image material and write extractedText back to the record.
- * Returns silently if conditions are not met — never throws.
- */
-export async function analyzeCourseMaterialImage(params: IVisionAnalysisParams): Promise<void> {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
-  if (!apiKey) return;
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
 
-  const { mimeType, storedUrl, fileName } = params;
-  if (!storedUrl) return;
+async function loadImageBase64FromAsset(params: {
+  readonly database: Db;
+  readonly assetId: string;
+  readonly assetStore: IAssetStore;
+}): Promise<string | undefined> {
+  const assetRepo = new AssetRepository(params.database);
+  const asset = await assetRepo.findByAssetId(params.assetId);
+  if (!asset?.storageKey) return undefined;
+  try {
+    const { stream, metadata } = await params.assetStore.get(asset.storageKey);
+    if (metadata.contentLength > MAX_IMAGE_BYTES) return undefined;
+    const buffer = await streamToBuffer(stream);
+    if (buffer.byteLength > MAX_IMAGE_BYTES) return undefined;
+    return buffer.toString('base64');
+  } catch {
+    return undefined;
+  }
+}
+
+/** Best-effort image description; never throws. */
+export async function analyzeCourseMaterialImage(params: IVisionAnalysisParams): Promise<void> {
+  const cfg = resolveLlmConfig();
+  if (!cfg) return;
+
+  const { mimeType, fileName, assetId, assetStore } = params;
   if (!mimeType || !IMAGE_MIME_TYPES.includes(mimeType.toLowerCase())) return;
 
+  let base64: string | undefined;
+  if (assetId && assetStore) {
+    base64 = await loadImageBase64FromAsset({
+      database: params.database,
+      assetId,
+      assetStore,
+    });
+  }
+
+  if (!base64) return;
+
+  const llm = new LlmClient({ apiKey: cfg.apiKey, baseUrl: cfg.baseUrl, model: cfg.model });
   try {
-    const response = await fetch(storedUrl);
-    if (!response.ok) return;
-    const contentLength = response.headers.get('content-length');
-    if (contentLength && Number(contentLength) > MAX_IMAGE_BYTES) return;
-
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_IMAGE_BYTES) return;
-
-    const base64 = Buffer.from(buffer).toString('base64');
-    const mediaType = mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey });
-
-    const message = await client.messages.create({
-      model: VISION_MODEL,
-      max_tokens: 1024,
-      messages: [
+    const response = await llm.complete(
+      [
         {
           role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 },
-            },
-            {
-              type: 'text',
-              text: `This is a school course material file named "${fileName ?? 'unknown'}". Briefly describe what this image shows in 1-3 sentences, focusing on academic content relevant to students and teachers.`,
-            },
-          ],
+          content: `Describe this school material image ("${fileName ?? 'unknown'}") in 1-3 sentences.\n[base64 len=${base64.length}]`,
         },
       ],
-    });
-
-    const block = message.content[0];
-    const description = block && 'text' in block ? block.text.trim() : '';
+      {
+        maxTokens: 1024,
+        system: 'You describe school material images briefly for parents and students.',
+      }
+    );
+    const description = response.content.trim();
     if (!description) return;
 
     const coll = params.database.collection(params.collection);
@@ -85,13 +89,10 @@ export async function analyzeCourseMaterialImage(params: IVisionAnalysisParams):
       $set: { 'record.extractedText': description },
     });
   } catch {
-    // Vision analysis is best-effort — never fail ingest
+    // best-effort
   }
 }
 
-/**
- * Returns true if the given mimeType is an image that qualifies for vision analysis.
- */
 export function isAnalyzableImage(mimeType: string | undefined): boolean {
   if (!mimeType) return false;
   return IMAGE_MIME_TYPES.includes(mimeType.toLowerCase());

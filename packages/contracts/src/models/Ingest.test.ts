@@ -254,6 +254,7 @@ describe('validateEntityRecord — course', () => {
       termExternalId: 'term-spring-2026',
       description: 'Advanced Placement Mathematics covering calculus.',
       url: 'https://canvas.com/courses/123',
+      tutorialWindow: 'Tue/Thu 7:15–7:45 AM',
     };
     const result = validateEntityRecord('course', course);
     expect(result.valid).toBe(true);

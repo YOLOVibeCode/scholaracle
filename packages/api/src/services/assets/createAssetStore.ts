@@ -4,12 +4,26 @@ import { LocalAssetStore } from './LocalAssetStore';
 import { S3AssetStore } from './S3AssetStore';
 
 /**
- * Create IAssetStore from env. ASSET_STORE=local (default) | s3.
+ * Create IAssetStore from env. ASSET_STORE=local (default) | s3 | relay.
  * Local: ASSET_STORAGE_PATH (default ./data/assets).
- * S3: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_S3_BUCKET; optional AWS_S3_ENDPOINT (e.g. https://storage.railway.app).
+ * S3: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_S3_BUCKET; optional AWS_S3_ENDPOINT.
+ * Relay: NOCTUSOFT_RELAY_API_KEY (S3-compatible API at api.storage.noctusoft.com, bucket scholarmancy).
  */
 export function createAssetStore(): IAssetStore {
   const kind = process.env['ASSET_STORE'] ?? 'local';
+  if (kind === 'relay') {
+    const relayKey = process.env['NOCTUSOFT_RELAY_API_KEY'];
+    if (!relayKey) {
+      throw new Error('ASSET_STORE=relay requires NOCTUSOFT_RELAY_API_KEY');
+    }
+    return new S3AssetStore({
+      accessKeyId: relayKey,
+      secretAccessKey: relayKey,
+      region: process.env['AWS_REGION'] ?? 'auto',
+      bucket: process.env['AWS_S3_BUCKET'] ?? 'scholarmancy',
+      endpoint: process.env['AWS_S3_ENDPOINT'] ?? 'https://api.storage.noctusoft.com',
+    });
+  }
   if (kind === 's3') {
     const accessKeyId = process.env['AWS_ACCESS_KEY_ID'];
     const secretAccessKey = process.env['AWS_SECRET_ACCESS_KEY'];

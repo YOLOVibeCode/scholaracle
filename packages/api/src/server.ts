@@ -561,7 +561,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret, queue: notificationQueue }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret,
+        queue: notificationQueue,
+        assetStore: createAssetStore(),
+      })
+    );
 
     const sourceInviteStore = new SourceInviteRepository(database);
     const sourceInviteService = new SourceInviteService(
