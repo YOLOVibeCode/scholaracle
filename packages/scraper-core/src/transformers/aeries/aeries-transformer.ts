@@ -1,5 +1,6 @@
 import type { ISlcDeltaOp } from '@scholaracle/contracts';
 import type { IAeriesFullExtract } from '../../extractors/aeries/aeries-extractors';
+import { parseTutorialWindow } from '../parseTutorialWindow';
 
 // ---------------------------------------------------------------------------
 // Transform: IAeriesFullExtract -> ISlcDeltaOp[]
@@ -133,6 +134,7 @@ export function transformAeriesExtract(
         period: course.period || undefined,
         room: course.room || undefined,
         termExternalId: termExtId,
+        tutorialWindow: parseTutorialWindow(course.tutorialWindow) || undefined,
       },
     });
 

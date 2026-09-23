@@ -34,6 +34,7 @@ export * from './repositories/CommunicationLogRepository';
 export * from './repositories/CommunicationTemplateRepository';
 export * from './repositories/CommunicationBatchRepository';
 export * from './repositories/AgendaOverrideRepository';
+export * from './repositories/CourseTutorialOverrideRepository';
 export * from './repositories/CouponRepository';
 export * from './repositories/SmsDigestPendingRepository';
 export * from './repositories/EmailDigestPendingRepository';

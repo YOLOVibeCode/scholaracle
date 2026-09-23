@@ -1121,3 +1121,36 @@ describe('ScholarmancyApiClient source invites', () => {
     await expect(client.redeemSourceInvite('ab'.repeat(32))).rejects.toThrow();
   });
 });
+
+describe('ScholarmancyApiClient course tutorial', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+    client = new ScholarmancyApiClient(BASE_URL);
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+  });
+
+  it('updateCourseTutorial PATCHes tutorial route', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: { tutorialWindow: 'Wed 8:00 AM' },
+    });
+    await client.updateCourseTutorial('stu-db', 'merged-alg', 'Wed 8:00 AM');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/api/students/stu-db/courses/merged-alg/tutorial');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(String(init.body))).toEqual({ tutorialWindow: 'Wed 8:00 AM' });
+  });
+
+  it('resetCourseTutorial DELETEs tutorial route', async () => {
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    await client.resetCourseTutorial('stu-db', 'merged-alg');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/api/students/stu-db/courses/merged-alg/tutorial');
+    expect(init.method).toBe('DELETE');
+  });
+});

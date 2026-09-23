@@ -17,6 +17,7 @@ export interface ISkywardCourseExtract {
   readonly currentGrade: string;
   readonly grades: Record<string, string>;
   readonly _cni?: string;
+  readonly tutorialWindow?: string;
 }
 
 export interface ISkywardAssignmentExtract {
@@ -53,6 +54,7 @@ export interface ISkywardScheduleEntry {
   readonly course: string;
   readonly teacher: string;
   readonly room: string;
+  readonly tutorialWindow?: string;
 }
 
 export interface ISkywardFullExtract {

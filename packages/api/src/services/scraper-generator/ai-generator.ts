@@ -1,6 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { LlmClient } from '@scholaracle/agents';
 import { getScraperSystemPrompt, getScraperGeneratePrompt } from './prompts';
 import type { IPageAnalysis } from './crawler';
+import { resolveLlmConfig } from '../llm/resolveLlmConfig';
 
 export interface IGenerateRequest {
   readonly platformName: string;
@@ -24,26 +25,26 @@ export interface IGeneratedScraper {
  * Calls Claude to generate scraper code for a given platform.
  */
 export async function generateScraperWithAI(request: IGenerateRequest): Promise<IGeneratedScraper> {
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required for scraper generation');
+  const cfg = resolveLlmConfig();
+  if (!cfg) {
+    throw new Error('LITELLM_API_KEY or ANTHROPIC_API_KEY is required for scraper generation');
   }
 
-  const anthropic = new Anthropic({ apiKey });
+  const llm = new LlmClient({
+    apiKey: cfg.apiKey,
+    baseUrl: cfg.baseUrl,
+    model: cfg.model ?? 'claude-sonnet-4-20250514',
+  });
 
   const systemPrompt = getScraperSystemPrompt();
   const userPrompt = getScraperGeneratePrompt(request, request.pageAnalysis);
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 12000,
+  const response = await llm.complete([{ role: 'user', content: userPrompt }], {
+    maxTokens: 12000,
     system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
   });
 
-  const text = response.content[0] && 'text' in response.content[0] ? response.content[0].text : '';
-
-  return parseGeneratedFiles(text, request.platformName);
+  return parseGeneratedFiles(response.content, request.platformName);
 }
 
 function parseGeneratedFiles(response: string, platformName: string): IGeneratedScraper {

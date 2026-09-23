@@ -195,12 +195,11 @@ jobs:
 
       - name: Build scrapers dependency
         run: |
-          # Create symlink so scrapers can resolve @scholaracle/contracts
+          # Symlink monorepo packages for scholaracle_scrapers file: deps (@scholaracle/contracts, @scholaracle/scraper-core)
           mkdir -p /home/runner/work/scholarmancy/scholaracle/packages
-          ln -s /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
-          # Build contracts first (scrapers depend on it)
-          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build
-          # Install and build scrapers
+          ln -sf /home/runner/work/scholaracle/scholaracle/packages/contracts /home/runner/work/scholarmancy/scholaracle/packages/contracts
+          ln -sf /home/runner/work/scholaracle/scholaracle/packages/scraper-core /home/runner/work/scholarmancy/scholaracle/packages/scraper-core
+          cd /home/runner/work/scholaracle/scholaracle && pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/scraper-core build
           cd /home/runner/work/scholaracle_scrapers && npm install && npx tsc --build
 
       - name: Cache Next.js build
