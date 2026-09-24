@@ -3,14 +3,19 @@ import express, { type Express } from 'express';
 import { billingRouter } from './billing';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import type { SquareService } from '../../services/SquareService';
+import type { RelayBillingClient } from '../../services/billing/RelayBillingClient';
 
 // Mock @scholaracle/database
 jest.mock('@scholaracle/database', () => {
   const mockFindByUserId = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
+  const mockCreateSubscription = jest.fn();
+  const mockUpdateSubscription = jest.fn();
   return {
     SubscriptionRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserId,
+      create: mockCreateSubscription,
+      update: mockUpdateSubscription,
     })),
     PaymentRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserIdPayments,
@@ -21,6 +26,8 @@ jest.mock('@scholaracle/database', () => {
     })),
     __mockFindByUserId: mockFindByUserId,
     __mockFindByUserIdPayments: mockFindByUserIdPayments,
+    __mockCreateSubscription: mockCreateSubscription,
+    __mockUpdateSubscription: mockUpdateSubscription,
   };
 });
 
@@ -64,6 +71,62 @@ describe('Billing Routes', () => {
       })
     );
     app.use(createErrorHandler());
+  });
+
+  describe('POST /api/billing/checkout (relay)', () => {
+    let mockRelay: jest.Mocked<
+      Pick<
+        RelayBillingClient,
+        | 'createCheckout'
+        | 'createOrder'
+        | 'getSkus'
+        | 'getEntitlements'
+        | 'createBillingPortalSession'
+      >
+    >;
+
+    beforeEach(() => {
+      mockRelay = {
+        createCheckout: jest.fn(),
+        createOrder: jest.fn(),
+        getSkus: jest.fn(),
+        getEntitlements: jest.fn(),
+        createBillingPortalSession: jest.fn(),
+      };
+
+      app = express();
+      app.use(express.json());
+      app.use((req, _res, next) => {
+        (req as unknown as { userId: string; userEmail: string }).userId = 'user-1';
+        (req as unknown as { userId: string; userEmail: string }).userEmail = 'test@example.com';
+        next();
+      });
+      app.use(
+        '/api/billing',
+        billingRouter({
+          database: {} as unknown as import('mongodb').Db,
+          relayBillingClient: mockRelay as unknown as RelayBillingClient,
+        })
+      );
+      app.use(createErrorHandler());
+    });
+
+    it('returns Stripe checkout URL from relay', async () => {
+      mockRelay.createCheckout.mockResolvedValue({
+        url: 'https://checkout.stripe.com/c/pay/cs_test_abc',
+        sessionId: 'cs_test_abc',
+      });
+
+      const res = await request(app)
+        .post('/api/billing/checkout')
+        .set('Origin', 'http://localhost:2800')
+        .send({ plan: 'starter', billingCycle: 'monthly' })
+        .expect(200);
+
+      expect(res.body.url).toContain('checkout.stripe.com');
+      expect(mockRelay.createCheckout).toHaveBeenCalled();
+      expect(mockSquareService.createPaymentLink).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST /api/billing/checkout', () => {
