@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { SubscriptionRepository, PaymentRepository, CouponRepository } from '@scholaracle/database';
+import {
+  SubscriptionRepository,
+  PaymentRepository,
+  CouponRepository,
+  type SubscriptionPlan,
+} from '@scholaracle/database';
 import {
   AuthenticationError,
   ConflictError,
@@ -9,12 +14,15 @@ import {
 } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { SquareService } from '../../services/SquareService';
+import type { RelayBillingClient } from '../../services/billing/RelayBillingClient';
+import { syncEntitlementsFromRelay } from '../../services/billing/syncEntitlementsFromRelay';
+import { resolveAnnualOrderSku } from '../../services/billing/relayPlanMapping';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
-import type { SubscriptionPlan } from '@scholaracle/database';
 
 export interface IBillingRouterDeps {
   readonly database: Db;
-  readonly squareService: SquareService;
+  readonly squareService?: SquareService;
+  readonly relayBillingClient?: RelayBillingClient;
 }
 
 export function billingRouter(deps: IBillingRouterDeps): Router {
@@ -23,28 +31,23 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   const paymentRepo = new PaymentRepository(deps.database);
   const couponRepo = new CouponRepository(deps.database);
 
-  /**
-   * POST /api/billing/checkout
-   * Create a Square payment link for subscription purchase.
-   */
   router.post(
     '/checkout',
     asyncHandler((req: Request, res: Response) => handleCheckout(req as IAuthenticatedRequest, res))
   );
 
-  /**
-   * POST /api/billing/portal
-   * Square does not have a customer portal. Returns settings URL for managing account.
-   */
   router.post(
     '/portal',
     asyncHandler((req: Request, res: Response) => handlePortal(req as IAuthenticatedRequest, res))
   );
 
-  /**
-   * GET /api/billing/subscription
-   * Get current user's subscription details.
-   */
+  router.post(
+    '/sync-entitlements',
+    asyncHandler((req: Request, res: Response) =>
+      handleSyncEntitlements(req as IAuthenticatedRequest, res)
+    )
+  );
+
   router.get(
     '/subscription',
     asyncHandler((req: Request, res: Response) =>
@@ -52,10 +55,6 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     )
   );
 
-  /**
-   * POST /api/billing/validate-coupon
-   * Validate a coupon code and return discount details.
-   */
   router.post(
     '/validate-coupon',
     asyncHandler(async (req: Request, res: Response) => {
@@ -84,11 +83,6 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     })
   );
 
-  /**
-   * POST /api/billing/redeem-coupon
-   * Redeem a free-time coupon (trial_extension or free_plan) to start a trial subscription
-   * without going through Square checkout.
-   */
   router.post(
     '/redeem-coupon',
     asyncHandler((req: Request, res: Response) =>
@@ -96,10 +90,6 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     )
   );
 
-  /**
-   * GET /api/billing/invoices
-   * Get current user's payment/invoice history (from our DB).
-   */
   router.get(
     '/invoices',
     asyncHandler((req: Request, res: Response) =>
@@ -131,38 +121,127 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     const validCycle: 'monthly' | 'annual' = billingCycle === 'annual' ? 'annual' : 'monthly';
 
     const origin = req.headers.origin ?? 'http://localhost:2800';
+    const redirectUrl = successUrl ?? `${origin}/dashboard/billing?checkout=success`;
+    const cancelRedirectUrl = cancelUrl ?? `${origin}/dashboard/billing`;
+
+    if (deps.relayBillingClient) {
+      const idempotencyKey = `checkout-${userId}-${validPlan}-${validCycle}`;
+      if (validCycle === 'annual') {
+        const skus = await deps.relayBillingClient.getSkus();
+        const sku = resolveAnnualOrderSku(validPlan, skus);
+        const { url, sessionId } = await deps.relayBillingClient.createOrder({
+          userId,
+          email,
+          items: [{ sku, quantity: 1 }],
+          redirectUrl,
+          idempotencyKey,
+        });
+        res.json({ success: true, sessionId, url });
+        return;
+      }
+
+      const { url, sessionId } = await deps.relayBillingClient.createCheckout({
+        userId,
+        email,
+        plan: validPlan,
+        redirectUrl,
+        idempotencyKey,
+      });
+      res.json({ success: true, sessionId, url });
+      return;
+    }
+
+    if (!deps.squareService) {
+      throw new ValidationError('Billing is not configured');
+    }
+
     const { url, orderId } = await deps.squareService.createPaymentLink({
       userId,
       email,
       plan: validPlan,
       billingCycle: validCycle,
-      successUrl: successUrl ?? `${origin}/billing/success`,
-      cancelUrl: cancelUrl ?? `${origin}/billing/cancel`,
+      successUrl: redirectUrl,
+      cancelUrl: cancelRedirectUrl,
     });
 
     res.json({ success: true, sessionId: orderId, url });
   }
 
+  async function handleSyncEntitlements(req: IAuthenticatedRequest, res: Response): Promise<void> {
+    const userId = req.userId;
+    if (!userId) {
+      throw new AuthenticationError('Authentication required');
+    }
+    if (!deps.relayBillingClient) {
+      throw new ValidationError('Relay billing is not configured');
+    }
+
+    const payload = await deps.relayBillingClient.getEntitlements(userId);
+    const grants = payload.entitlements ?? payload.grants ?? [];
+
+    const synced = await syncEntitlementsFromRelay(userId, grants, {
+      findSubscription: async (uid) => {
+        const sub = await subscriptionRepo.findByUserId(uid);
+        return sub ? { plan: sub.plan, status: sub.status } : null;
+      },
+      createSubscription: async (data) => {
+        await subscriptionRepo.create(data);
+      },
+      updateSubscription: async (uid, updates) => {
+        await subscriptionRepo.update(uid, updates);
+      },
+    });
+
+    if (!synced) {
+      res.json({ success: true, subscription: { plan: 'free', status: 'active' as const } });
+      return;
+    }
+
+    res.json({
+      success: true,
+      subscription: {
+        plan: synced.plan,
+        status: synced.status,
+      },
+    });
+  }
+
   async function handlePortal(req: IAuthenticatedRequest, res: Response): Promise<void> {
     const userId = req.userId;
+    const email = req.userEmail;
 
     if (!userId) {
       throw new AuthenticationError('Authentication required');
     }
 
     const subscription = await subscriptionRepo.findByUserId(userId);
-    const customerId = subscription?.squareCustomerId ?? subscription?.stripeCustomerId;
+    const customerId = subscription?.stripeCustomerId ?? subscription?.squareCustomerId;
+    const origin = req.headers.origin ?? 'http://localhost:2800';
+    const redirectUrl = `${origin}/dashboard/billing`;
+
+    if (deps.relayBillingClient && (customerId || email)) {
+      const portal = await deps.relayBillingClient.createBillingPortalSession({
+        email: email ?? '',
+        customerId,
+        redirectUrl,
+      });
+      res.json({
+        success: true,
+        hasPortal: true,
+        url: portal.url,
+      });
+      return;
+    }
+
     if (!customerId) {
       throw new NotFoundError('No billing account found');
     }
 
-    const origin = req.headers.origin ?? 'http://localhost:2800';
-
     res.json({
       success: true,
       hasPortal: false,
-      manageUrl: `${origin}/dashboard/billing`,
-      url: `${origin}/dashboard/billing`,
+      manageUrl: redirectUrl,
+      url: redirectUrl,
       message: 'Manage your subscription from the billing page.',
     });
   }

@@ -58,7 +58,7 @@ export const billingApi = {
   },
 
   /**
-   * Create a Square payment link and return its URL.
+   * Start relay Stripe Checkout and return the hosted payment URL.
    * @param plan - Subscription plan (starter, premium, family, enterprise)
    * @param billingCycle - monthly or annual
    */
@@ -73,7 +73,7 @@ export const billingApi = {
   },
 
   /**
-   * Create a billing portal session. Square does not provide a portal; returns settings URL.
+   * Open Stripe Billing Portal (via relay) or fallback billing page URL.
    */
   async createPortal(): Promise<string | null> {
     try {
@@ -116,8 +116,21 @@ export const billingApi = {
   },
 
   /**
+   * Sync subscription from relay entitlements after Stripe redirect (pre-webhook).
+   */
+  async syncAfterCheckout(): Promise<ISubscriptionInfo> {
+    try {
+      const res = await apiClient.post<ISubscriptionResponse>('/billing/sync-entitlements', {});
+      return res.subscription;
+    } catch (error) {
+      console.error('Failed to sync entitlements:', error);
+      return { plan: 'free', status: 'active' };
+    }
+  },
+
+  /**
    * Redeem a free-time coupon (trial_extension or free_plan) to start a trial
-   * subscription without going through Square checkout.
+   * subscription without going through paid checkout.
    */
   async redeemCoupon(
     code: string,
