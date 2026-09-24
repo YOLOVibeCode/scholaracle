@@ -60,17 +60,22 @@ function BillingPageContent() {
   useEffect(() => {
     void (async () => {
       try {
-        const [sub, inv] = await Promise.all([
-          billingApi.getSubscription(),
-          billingApi.getInvoices(),
-        ]);
+        const isCheckoutSuccess = searchParams.get('checkout') === 'success';
+        const sub = isCheckoutSuccess
+          ? await billingApi.syncAfterCheckout()
+          : await billingApi.getSubscription();
+        const inv = await billingApi.getInvoices();
         setSubscription(sub);
         setInvoices(inv);
+        if (isCheckoutSuccess) {
+          setToastType('success');
+          setToast('Subscription updated');
+        }
       } finally {
         setIsLoading(false);
       }
     })();
-  }, []);
+  }, [searchParams]);
 
   const handleManageBilling = async () => {
     setIsPortalLoading(true);
@@ -136,8 +141,13 @@ function BillingPageContent() {
 
   const isFreePlan = subscription?.plan === 'free';
 
+  const isCheckoutSuccess = searchParams.get('checkout') === 'success';
+
   return (
     <div className="space-y-6" data-testid="billing-page">
+      {isCheckoutSuccess ? (
+        <span data-testid="billing-checkout-success-sync" className="sr-only" aria-hidden="true" />
+      ) : null}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
         <p className="text-gray-600 dark:text-gray-400">Manage your subscription and billing</p>

@@ -86,7 +86,7 @@ describe('billingApi', () => {
       fetchSpy.mockResolvedValue(fakeResponse({
         success: true,
         sessionId: 'order_123',
-        url: 'https://square.link/example',
+        url: 'https://checkout.stripe.com/c/pay/cs_test_abc',
       }));
 
       const result = await billingApi.createCheckout('starter', 'monthly');
@@ -98,7 +98,7 @@ describe('billingApi', () => {
           body: JSON.stringify({ plan: 'starter', billingCycle: 'monthly' }),
         }),
       );
-      expect(result).toBe('https://square.link/example');
+      expect(result).toBe('https://checkout.stripe.com/c/pay/cs_test_abc');
     });
 
     it('returns null when the request fails', async () => {
@@ -107,6 +107,25 @@ describe('billingApi', () => {
       const result = await billingApi.createCheckout('starter', 'monthly');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('syncAfterCheckout', () => {
+    it('POSTs to /billing/sync-entitlements', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          subscription: { plan: 'premium', status: 'active' },
+        })
+      );
+
+      const result = await billingApi.syncAfterCheckout();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/billing/sync-entitlements`,
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.plan).toBe('premium');
     });
   });
 

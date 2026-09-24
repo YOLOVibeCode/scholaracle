@@ -65,9 +65,12 @@ import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { squareWebhookRouter } from './routes/webhooks/square';
+import { relayWebhookRouter } from './routes/webhooks/relay';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
 import { SquareService } from './services/SquareService';
+import { RelayBillingClient } from './services/billing/RelayBillingClient';
+import { resolveRelayBillingConfig } from './services/billing/resolveRelayBillingConfig';
 import { seedRouter } from './routes/seed/seed';
 import { createAccountRouter } from './routes/account/account';
 import { ingestV1Router } from './routes/ingest/v1';
@@ -117,6 +120,11 @@ export interface IServerConfig {
   readonly squareWebhookNotificationUrl?: string;
   /** Optional Square API host override (e.g. Noctusoft relay). */
   readonly squareBaseUrl?: string;
+  readonly relayApiKey?: string;
+  readonly relayApiBaseUrl?: string;
+  readonly relayWebhookSecret?: string;
+  readonly relayWebhookCallbackUrl?: string;
+  readonly relayStoreAlias?: string;
 }
 
 /**
@@ -333,7 +341,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // express.raw() ever sees it (body-parser skips once req._body is set).
   const jsonParser = express.json({ limit: '10mb' });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/webhooks/square') {
+    if (req.path === '/api/webhooks/square' || req.path === '/api/webhooks/relay') {
       next();
       return;
     }
@@ -706,14 +714,43 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
     app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
 
-    if (squareService) {
+    const relayApiKey = config.relayApiKey ?? process.env['RELAY_API_KEY'];
+    const relayApiBaseUrl = config.relayApiBaseUrl ?? process.env['RELAY_API_BASE_URL'];
+    const relayWebhookSecret = config.relayWebhookSecret ?? process.env['RELAY_WEBHOOK_SECRET'];
+    const relayWebhookCallbackUrl =
+      config.relayWebhookCallbackUrl ?? process.env['RELAY_WEBHOOK_CALLBACK_URL'];
+    const relayStoreAlias = config.relayStoreAlias ?? process.env['RELAY_STORE_ALIAS'];
+
+    const relayBillingConfig =
+      relayApiKey && relayApiBaseUrl
+        ? {
+            apiKey: relayApiKey,
+            baseUrl: relayApiBaseUrl.replace(/\/$/, ''),
+            storeAlias:
+              relayStoreAlias ?? (nodeEnv === 'production' ? 'scholarmancy' : 'scholarmancy-dev'),
+            webhookSecret: relayWebhookSecret,
+            webhookCallbackUrl: relayWebhookCallbackUrl,
+          }
+        : resolveRelayBillingConfig();
+
+    const relayBillingClient = relayBillingConfig
+      ? new RelayBillingClient(relayBillingConfig)
+      : undefined;
+
+    if (squareService || relayBillingClient) {
       app.use(
         '/api/billing',
         authMiddleware(authService),
         requireParent,
-        billingRouter({ database, squareService })
+        billingRouter({
+          database,
+          ...(squareService ? { squareService } : {}),
+          ...(relayBillingClient ? { relayBillingClient } : {}),
+        })
       );
-      // Square webhook uses raw body for signature verification
+    }
+
+    if (squareService) {
       app.use(
         '/api/webhooks/square',
         express.raw({ type: 'application/json' }),
@@ -724,6 +761,26 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
           next();
         },
         squareWebhookRouter({ database, squareService })
+      );
+    }
+
+    if (relayBillingClient && relayBillingConfig?.webhookSecret) {
+      const callbackUrl =
+        relayBillingConfig.webhookCallbackUrl ?? `${resolveApiBaseUrl(baseUrl)}/api/webhooks/relay`;
+      app.use(
+        '/api/webhooks/relay',
+        express.raw({ type: 'application/json' }),
+        (req: Request, _res: Response, next: NextFunction) => {
+          if (Buffer.isBuffer(req.body)) {
+            (req as unknown as { body: string }).body = req.body.toString('utf8');
+          }
+          next();
+        },
+        relayWebhookRouter({
+          database,
+          webhookSecret: relayBillingConfig.webhookSecret!,
+          callbackUrl,
+        })
       );
     }
   }
