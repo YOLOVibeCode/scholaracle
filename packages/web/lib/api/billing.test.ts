@@ -86,7 +86,7 @@ describe('billingApi', () => {
       fetchSpy.mockResolvedValue(fakeResponse({
         success: true,
         sessionId: 'order_123',
-        url: 'https://square.link/example',
+        url: 'https://store.noctusoft.com/checkout/example',
       }));
 
       const result = await billingApi.createCheckout('starter', 'monthly');
@@ -98,7 +98,7 @@ describe('billingApi', () => {
           body: JSON.stringify({ plan: 'starter', billingCycle: 'monthly' }),
         }),
       );
-      expect(result).toBe('https://square.link/example');
+      expect(result).toBe('https://store.noctusoft.com/checkout/example');
     });
 
     it('returns null when the request fails', async () => {
@@ -152,7 +152,7 @@ describe('billingApi', () => {
           currency: 'usd',
           status: 'paid',
           date: '2025-01-15T00:00:00.000Z',
-          pdfUrl: 'https://square.com/receipt/1',
+          pdfUrl: 'https://store.noctusoft.com/receipt/1',
         },
       ];
       fetchSpy.mockResolvedValue(fakeResponse({ success: true, invoices }));

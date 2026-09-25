@@ -64,6 +64,7 @@ export async function createIndexes(database: Db): Promise<void> {
   await paymentsCollection.createIndex({ status: 1 });
   await paymentsCollection.createIndex({ stripePaymentIntentId: 1 });
   await paymentsCollection.createIndex({ squarePaymentId: 1 });
+  await paymentsCollection.createIndex({ storePaymentId: 1 });
 
   // Communication logs collection indexes
   const communicationLogsCollection = database.collection('communication_logs');

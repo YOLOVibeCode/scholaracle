@@ -55,6 +55,10 @@ export interface IPaymentData {
   readonly squarePaymentId?: string;
   readonly squareOrderId?: string;
 
+  // Noctusoft store
+  readonly storePaymentId?: string;
+  readonly storeOrderId?: string;
+
   // Receipt
   readonly receiptUrl?: string;
   readonly receiptNumber?: string;
@@ -97,6 +101,8 @@ export class Payment {
   public readonly stripeInvoiceId?: string;
   public readonly squarePaymentId?: string;
   public readonly squareOrderId?: string;
+  public readonly storePaymentId?: string;
+  public readonly storeOrderId?: string;
   public readonly receiptUrl?: string;
   public readonly receiptNumber?: string;
   public readonly invoiceNumber?: string;
@@ -129,6 +135,8 @@ export class Payment {
     this.stripeInvoiceId = data.stripeInvoiceId;
     this.squarePaymentId = data.squarePaymentId;
     this.squareOrderId = data.squareOrderId;
+    this.storePaymentId = data.storePaymentId;
+    this.storeOrderId = data.storeOrderId;
     this.receiptUrl = data.receiptUrl;
     this.receiptNumber = data.receiptNumber;
     this.invoiceNumber = data.invoiceNumber;

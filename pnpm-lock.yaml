@@ -180,9 +180,6 @@ importers:
       rrule:
         specifier: ^2.7.2
         version: 2.8.1
-      square:
-        specifier: ^44.0.0
-        version: 44.2.1
       twilio:
         specifier: ^5.0.0
         version: 5.13.1

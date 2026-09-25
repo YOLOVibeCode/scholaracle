@@ -73,12 +73,11 @@ services:
       # Firebase (optional)
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
-      # Square (optional)
-      SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:-}
-      SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-sandbox}
-      SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:-}
-      SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY:-}
-      SQUARE_WEBHOOK_NOTIFICATION_URL: ${SQUARE_WEBHOOK_NOTIFICATION_URL:-}
+      RELAY_URL: ${RELAY_URL:-https://store.noctusoft.com}
+      RELAY_API_KEY: ${RELAY_API_KEY:-}
+      RELAY_WEBHOOK_SECRET: ${RELAY_WEBHOOK_SECRET:-}
+      RELAY_STORE_ALIAS: ${RELAY_STORE_ALIAS:-scholarmancy-dev}
+      RELAY_STORE_MODE: ${RELAY_STORE_MODE:-test}
       # Credential encryption (for non-portal secrets, e.g. API tokens stored at rest)
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
       # AI (optional - for LLM material matching)
