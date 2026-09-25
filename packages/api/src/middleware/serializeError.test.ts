@@ -22,7 +22,7 @@ describe('serializeError', () => {
       [new NotFoundError('Student not found'), 404, ERROR_CODES.NOT_FOUND],
       [new ConflictError('Duplicate email'), 409, ERROR_CODES.CONFLICT],
       [new RateLimitError('Slow down'), 429, ERROR_CODES.RATE_LIMITED],
-      [new ExternalServiceError('Square unavailable'), 502, ERROR_CODES.EXTERNAL_SERVICE_ERROR],
+      [new ExternalServiceError('Store unavailable'), 502, ERROR_CODES.EXTERNAL_SERVICE_ERROR],
     ])('should pass through %s message in production', (error, status, code) => {
       // Act
       const result = serializeError(error, REQUEST_ID, true);

@@ -40,7 +40,7 @@ export async function checkAiRateLimit(
   const userRepo = new UserRepository(database);
   const usageRepo = new AiUsageRepository(database);
 
-  // Authoritative source: subscriptions collection (updated by Square webhook)
+  // Authoritative source: subscriptions collection (updated by store webhooks)
   const subscription = await subscriptionRepo.findByUserId(userId);
   let rawPlan = subscription?.plan as PlanForRateLimit | undefined;
 

@@ -1,20 +1,15 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { SubscriptionRepository, PaymentRepository, CouponRepository } from '@scholaracle/database';
-import {
-  AuthenticationError,
-  ConflictError,
-  NotFoundError,
-  ValidationError,
-} from '@scholaracle/contracts';
+import { AuthenticationError, ConflictError, ValidationError } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { SquareService } from '../../services/SquareService';
+import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
 
 export interface IBillingRouterDeps {
   readonly database: Db;
-  readonly squareService: SquareService;
+  readonly storeClient: INoctusoftStoreClient;
 }
 
 export function billingRouter(deps: IBillingRouterDeps): Router {
@@ -25,7 +20,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
   /**
    * POST /api/billing/checkout
-   * Create a Square payment link for subscription purchase.
+   * Create a Noctusoft store checkout session for subscription purchase.
    */
   router.post(
     '/checkout',
@@ -34,7 +29,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
   /**
    * POST /api/billing/portal
-   * Square does not have a customer portal. Returns settings URL for managing account.
+   * Store billing portal is managed in-app; returns billing settings URL.
    */
   router.post(
     '/portal',
@@ -87,7 +82,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   /**
    * POST /api/billing/redeem-coupon
    * Redeem a free-time coupon (trial_extension or free_plan) to start a trial subscription
-   * without going through Square checkout.
+   * without going through store checkout.
    */
   router.post(
     '/redeem-coupon',
@@ -131,7 +126,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     const validCycle: 'monthly' | 'annual' = billingCycle === 'annual' ? 'annual' : 'monthly';
 
     const origin = req.headers.origin ?? 'http://localhost:2800';
-    const { url, orderId } = await deps.squareService.createPaymentLink({
+    const checkout = await deps.storeClient.createCheckout({
       userId,
       email,
       plan: validPlan,
@@ -140,7 +135,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       cancelUrl: cancelUrl ?? `${origin}/billing/cancel`,
     });
 
-    res.json({ success: true, sessionId: orderId, url });
+    res.json({ success: true, sessionId: checkout.sessionId, url: checkout.url });
   }
 
   async function handlePortal(req: IAuthenticatedRequest, res: Response): Promise<void> {
@@ -148,12 +143,6 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
     if (!userId) {
       throw new AuthenticationError('Authentication required');
-    }
-
-    const subscription = await subscriptionRepo.findByUserId(userId);
-    const customerId = subscription?.squareCustomerId ?? subscription?.stripeCustomerId;
-    if (!customerId) {
-      throw new NotFoundError('No billing account found');
     }
 
     const origin = req.headers.origin ?? 'http://localhost:2800';

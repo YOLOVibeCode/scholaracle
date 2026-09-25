@@ -2,19 +2,16 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { PaymentRepository, AuditLogRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
-import { ExternalServiceError, NotFoundError, ValidationError } from '@scholaracle/contracts';
+import { NotFoundError, ValidationError } from '@scholaracle/contracts';
 import {
   adminAuthMiddleware,
   type IAdminAuthenticatedRequest,
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 import { asyncHandler } from '../../../middleware/asyncHandler';
-import type { SquareService } from '../../../services/SquareService';
-
 export interface IPaymentsRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
-  readonly squareService?: SquareService;
 }
 
 async function handleGetPayments(
@@ -105,7 +102,7 @@ async function handleRefundPayment(
   auditLogRepository: AuditLogRepository,
   adminId: string,
   adminEmail: string,
-  config: IPaymentsRouterConfig
+  _config: IPaymentsRouterConfig
 ): Promise<void> {
   const { id } = req.params;
   if (!id) {
@@ -120,20 +117,9 @@ async function handleRefundPayment(
 
   const amountInCents = Math.round(amount * 100);
 
-  // Attempt real refund via Square if configured
   const payment = await paymentRepository.findById(id);
   if (!payment) {
     throw new NotFoundError('Payment not found');
-  }
-
-  if (config.squareService && payment.squarePaymentId) {
-    try {
-      await config.squareService.refundPayment(payment.squarePaymentId, amountInCents, reason);
-    } catch (err) {
-      throw new ExternalServiceError(
-        `Square refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`
-      );
-    }
   }
 
   const success = await paymentRepository.recordRefund(id, amountInCents, adminId, reason);
