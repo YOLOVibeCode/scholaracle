@@ -2,9 +2,8 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { billingRouter } from './billing';
 import { createErrorHandler } from '../../middleware/errorHandler';
-import type { SquareService } from '../../services/SquareService';
+import type { StoreBillingService } from '../../services/StoreBillingService';
 
-// Mock @scholaracle/database
 jest.mock('@scholaracle/database', () => {
   const mockFindByUserId = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
@@ -33,19 +32,24 @@ const {
   __mockFindByUserIdPayments: jest.Mock;
 };
 
-function createMockSquareService(): jest.Mocked<Pick<SquareService, 'createPaymentLink'>> {
+function createMockStoreBillingService(): jest.Mocked<
+  Pick<StoreBillingService, 'createCheckout' | 'getEntitlements'>
+> {
   return {
-    createPaymentLink: jest.fn(),
+    createCheckout: jest.fn(),
+    getEntitlements: jest.fn().mockResolvedValue({ entitlements: [] }),
   };
 }
 
 describe('Billing Routes', () => {
   let app: Express;
-  let mockSquareService: jest.Mocked<Pick<SquareService, 'createPaymentLink'>>;
+  let mockStoreBillingService: jest.Mocked<
+    Pick<StoreBillingService, 'createCheckout' | 'getEntitlements'>
+  >;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSquareService = createMockSquareService();
+    mockStoreBillingService = createMockStoreBillingService();
 
     app = express();
     app.use(express.json());
@@ -60,16 +64,16 @@ describe('Billing Routes', () => {
       '/api/billing',
       billingRouter({
         database: {} as unknown as import('mongodb').Db,
-        squareService: mockSquareService as unknown as SquareService,
+        storeBillingService: mockStoreBillingService as unknown as StoreBillingService,
       })
     );
     app.use(createErrorHandler());
   });
 
   describe('POST /api/billing/checkout', () => {
-    it('should create a payment link', async () => {
-      mockSquareService.createPaymentLink.mockResolvedValue({
-        url: 'https://square.link/example',
+    it('should create a store checkout session', async () => {
+      mockStoreBillingService.createCheckout.mockResolvedValue({
+        url: 'https://store.example/checkout',
         orderId: 'order_123',
       });
 
@@ -80,18 +84,18 @@ describe('Billing Routes', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.sessionId).toBe('order_123');
-      expect(res.body.url).toBe('https://square.link/example');
+      expect(res.body.url).toBe('https://store.example/checkout');
     });
 
     it('should default to starter plan if not provided', async () => {
-      mockSquareService.createPaymentLink.mockResolvedValue({
-        url: 'https://square.link/example',
+      mockStoreBillingService.createCheckout.mockResolvedValue({
+        url: 'https://store.example/checkout',
         orderId: 'order_123',
       });
 
       const res = await request(app).post('/api/billing/checkout').send({}).expect(200);
 
-      expect(mockSquareService.createPaymentLink).toHaveBeenCalledWith(
+      expect(mockStoreBillingService.createCheckout).toHaveBeenCalledWith(
         expect.objectContaining({
           plan: 'starter',
           billingCycle: 'monthly',
@@ -169,7 +173,7 @@ describe('Billing Routes', () => {
           currency: 'usd',
           status: 'succeeded',
           createdAt: new Date('2025-01-15'),
-          receiptUrl: 'https://square.com/receipt/1',
+          receiptUrl: 'https://store.example/receipt/1',
         },
       ]);
 

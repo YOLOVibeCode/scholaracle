@@ -8,13 +8,13 @@ import {
   ValidationError,
 } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { SquareService } from '../../services/SquareService';
+import type { StoreBillingService } from '../../services/StoreBillingService';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
 
 export interface IBillingRouterDeps {
   readonly database: Db;
-  readonly squareService: SquareService;
+  readonly storeBillingService: StoreBillingService;
 }
 
 export function billingRouter(deps: IBillingRouterDeps): Router {
@@ -25,7 +25,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
   /**
    * POST /api/billing/checkout
-   * Create a Square payment link for subscription purchase.
+   * Create a Noctusoft store checkout session for subscription purchase.
    */
   router.post(
     '/checkout',
@@ -34,7 +34,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
   /**
    * POST /api/billing/portal
-   * Square does not have a customer portal. Returns settings URL for managing account.
+   * Store has no customer portal. Returns billing page URL for managing account.
    */
   router.post(
     '/portal',
@@ -87,7 +87,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   /**
    * POST /api/billing/redeem-coupon
    * Redeem a free-time coupon (trial_extension or free_plan) to start a trial subscription
-   * without going through Square checkout.
+   * without going through store checkout.
    */
   router.post(
     '/redeem-coupon',
@@ -131,7 +131,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     const validCycle: 'monthly' | 'annual' = billingCycle === 'annual' ? 'annual' : 'monthly';
 
     const origin = req.headers.origin ?? 'http://localhost:2800';
-    const { url, orderId } = await deps.squareService.createPaymentLink({
+    const { url, orderId } = await deps.storeBillingService.createCheckout({
       userId,
       email,
       plan: validPlan,
@@ -176,6 +176,23 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
     const subscription = await subscriptionRepo.findByUserId(userId);
     if (!subscription) {
+      const entitlements = await deps.storeBillingService.getEntitlements(userId);
+      const active = entitlements.entitlements.find(
+        (e) => e.status === 'active' || e.status === 'trialing'
+      );
+      if (active?.plan) {
+        const plan = active.plan as SubscriptionPlan;
+        res.json({
+          success: true,
+          subscription: {
+            plan,
+            status: active.status ?? 'active',
+            currentPeriodEnd: active.currentPeriodEnd,
+            billingCycle: active.billingCycle ?? 'monthly',
+          },
+        });
+        return;
+      }
       res.json({
         success: true,
         subscription: { plan: 'free', status: 'active' },

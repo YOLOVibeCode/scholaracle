@@ -64,10 +64,10 @@ import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
 import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
-import { squareWebhookRouter } from './routes/webhooks/square';
+import { storeWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
-import { SquareService } from './services/SquareService';
+import { StoreBillingService } from './services/StoreBillingService';
 import { seedRouter } from './routes/seed/seed';
 import { createAccountRouter } from './routes/account/account';
 import { ingestV1Router } from './routes/ingest/v1';
@@ -110,13 +110,11 @@ export interface IServerConfig {
   readonly twilioApiKeySecret?: string;
   readonly twilioFromNumber?: string;
   readonly twilioMessagingServiceSid?: string;
-  readonly squareAccessToken?: string;
-  readonly squareEnvironment?: 'sandbox' | 'production';
-  readonly squareLocationId?: string;
-  readonly squareWebhookSignatureKey?: string;
-  readonly squareWebhookNotificationUrl?: string;
-  /** Optional Square API host override (e.g. Noctusoft relay). */
-  readonly squareBaseUrl?: string;
+  readonly noctusoftStoreBaseUrl?: string;
+  readonly noctusoftStoreProductKey?: string;
+  readonly noctusoftStoreApiKey?: string;
+  readonly noctusoftStoreWebhookSecret?: string;
+  readonly noctusoftStoreTestAlias?: string;
 }
 
 /**
@@ -327,13 +325,13 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // Cookie parsing (for refresh_token httpOnly cookie)
   app.use(cookieParser());
 
-  // Body parsing with size limit. The Square webhook route is excluded: it
+  // Body parsing with size limit. The Noctusoft store webhook route is excluded: it
   // needs the raw request body for HMAC signature verification, and a global
   // express.json() would consume the stream before the route-level
   // express.raw() ever sees it (body-parser skips once req._body is set).
   const jsonParser = express.json({ limit: '10mb' });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/webhooks/square') {
+    if (req.path === '/api/webhooks/noctusoft/store') {
       next();
       return;
     }
@@ -662,32 +660,32 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl,
       })
     );
-    // Square service (optional — created early so admin payments can use it for refunds)
-    const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
-    const squareLocationId = config.squareLocationId ?? process.env['SQUARE_LOCATION_ID'];
-    const squareEnv = (config.squareEnvironment ??
-      process.env['SQUARE_ENVIRONMENT'] ??
-      'sandbox') as 'sandbox' | 'production';
-    const squareWebhookKey =
-      config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
-    const squareWebhookUrl =
-      config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
-    const squareBaseUrl = config.squareBaseUrl ?? process.env['SQUARE_BASE_URL'];
+    // Noctusoft store billing (optional — checkout, webhooks, admin refunds)
+    const storeBaseUrl =
+      config.noctusoftStoreBaseUrl ??
+      process.env['NOCTUSOFT_STORE_BASE_URL'] ??
+      'https://store.noctusoft.com';
+    const storeProductKey =
+      config.noctusoftStoreProductKey ?? process.env['NOCTUSOFT_STORE_PRODUCT_KEY'];
+    const storeApiKey = config.noctusoftStoreApiKey ?? process.env['NOCTUSOFT_STORE_API_KEY'];
+    const storeWebhookSecret =
+      config.noctusoftStoreWebhookSecret ?? process.env['NOCTUSOFT_STORE_WEBHOOK_SECRET'];
+    const storeTestAlias =
+      config.noctusoftStoreTestAlias ?? process.env['NOCTUSOFT_STORE_TEST_ALIAS'];
 
-    const squareService =
-      squareAccessToken && squareLocationId
-        ? new SquareService({
-            accessToken: squareAccessToken,
-            environment: squareEnv,
-            locationId: squareLocationId,
-            webhookSignatureKey: squareWebhookKey,
-            webhookNotificationUrl: squareWebhookUrl,
-            ...(squareBaseUrl ? { baseUrl: squareBaseUrl } : {}),
+    const storeBillingService =
+      storeProductKey && storeApiKey && storeWebhookSecret
+        ? new StoreBillingService({
+            baseUrl: storeBaseUrl,
+            productKey: storeProductKey,
+            apiKey: storeApiKey,
+            webhookSecret: storeWebhookSecret,
+            testStoreAlias: storeTestAlias,
           })
         : undefined;
 
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
-    app.use('/api/admin/payments', paymentsRouter({ database, squareService }));
+    app.use('/api/admin/payments', paymentsRouter({ database, storeBillingService }));
     app.use('/api/admin/coupons', couponsRouter({ database }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
@@ -706,16 +704,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
     app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
 
-    if (squareService) {
+    if (storeBillingService) {
       app.use(
         '/api/billing',
         authMiddleware(authService),
         requireParent,
-        billingRouter({ database, squareService })
+        billingRouter({ database, storeBillingService })
       );
-      // Square webhook uses raw body for signature verification
       app.use(
-        '/api/webhooks/square',
+        '/api/webhooks/noctusoft/store',
         express.raw({ type: 'application/json' }),
         (req: Request, _res: Response, next: NextFunction) => {
           if (Buffer.isBuffer(req.body)) {
@@ -723,7 +720,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
           }
           next();
         },
-        squareWebhookRouter({ database, squareService })
+        storeWebhookRouter({ database, storeBillingService })
       );
     }
   }

@@ -9,12 +9,12 @@ import {
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 import { asyncHandler } from '../../../middleware/asyncHandler';
-import type { SquareService } from '../../../services/SquareService';
+import type { StoreBillingService } from '../../../services/StoreBillingService';
 
 export interface IPaymentsRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
-  readonly squareService?: SquareService;
+  readonly storeBillingService?: StoreBillingService;
 }
 
 async function handleGetPayments(
@@ -120,18 +120,22 @@ async function handleRefundPayment(
 
   const amountInCents = Math.round(amount * 100);
 
-  // Attempt real refund via Square if configured
+  // Attempt real refund via Noctusoft store when configured
   const payment = await paymentRepository.findById(id);
   if (!payment) {
     throw new NotFoundError('Payment not found');
   }
 
-  if (config.squareService && payment.squarePaymentId) {
+  if (config.storeBillingService && payment.squarePaymentId) {
     try {
-      await config.squareService.refundPayment(payment.squarePaymentId, amountInCents, reason);
+      await config.storeBillingService.refundPayment(
+        payment.squarePaymentId,
+        amountInCents,
+        reason
+      );
     } catch (err) {
       throw new ExternalServiceError(
-        `Square refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+        `Store refund failed: ${err instanceof Error ? err.message : 'Unknown error'}`
       );
     }
   }

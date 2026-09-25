@@ -215,40 +215,4 @@ describe('AnalyticsService', () => {
       expect(count).toBe(0);
     });
   });
-
-  describe('getSquarePlusRecommendation', () => {
-    it('should recommend Square Plus when paying users >= 150', async () => {
-      const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      const users = await database.collection('users');
-      for (let i = 0; i < 150; i++) {
-        await users.insertOne({
-          email: `paying${i}@test.com`,
-          passwordHash,
-          name: `Paying ${i}`,
-          subscription: { plan: 'premium', status: 'active' },
-        });
-      }
-
-      const rec = await analyticsService.getSquarePlusRecommendation();
-      expect(rec.payingUserCount).toBe(150);
-      expect(rec.threshold).toBe(150);
-      expect(rec.considerSquarePlus).toBe(true);
-      expect(rec.message).toContain('Square Plus');
-    });
-
-    it('should not recommend Square Plus when paying users < 150', async () => {
-      const passwordHash = await UserRepository.hashPassword('TestPass123!');
-      await userRepository.create({
-        email: 'one@test.com',
-        passwordHash,
-        name: 'One',
-        subscription: { plan: 'premium', status: 'active' },
-      });
-
-      const rec = await analyticsService.getSquarePlusRecommendation();
-      expect(rec.payingUserCount).toBe(1);
-      expect(rec.considerSquarePlus).toBe(false);
-      expect(rec.message).toContain('150');
-    });
-  });
 });
