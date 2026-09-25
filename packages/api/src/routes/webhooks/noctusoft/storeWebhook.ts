@@ -7,7 +7,7 @@ import {
   WebhookEventRepository,
   type IWebhookEventWriter,
 } from '@scholaracle/database';
-import type { IStoreEventV1 } from '../../../store-client/types';
+import type { IStoreEventV1 } from '@scholaracle/store-client';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import type { StoreBillingService } from '../../../services/StoreBillingService';
 import {
