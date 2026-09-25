@@ -15,6 +15,7 @@
     { "path": "../agents" },
     { "path": "../logger" },
     { "path": "../scraper-core" },
-    { "path": "../studio-core" }
+    { "path": "../studio-core" },
+    { "path": "../store-client" }
   ]
 }

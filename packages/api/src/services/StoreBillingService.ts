@@ -4,7 +4,7 @@ import {
   verifyStoreWebhookSignature,
   type IEntitlementsResponse,
   type StoreClient,
-} from '../store-client';
+} from '@scholaracle/store-client';
 import type { SubscriptionPlan } from '@scholaracle/database';
 
 export interface IStoreBillingServiceConfig {
