@@ -64,10 +64,10 @@ import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
 import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
-import { squareWebhookRouter } from './routes/webhooks/square';
+import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { billingRouter } from './routes/billing';
-import { SquareService } from './services/SquareService';
+import { NoctusoftStoreClient, resolveNoctusoftStoreConfig } from './services/noctusoft-store';
 import { seedRouter } from './routes/seed/seed';
 import { createAccountRouter } from './routes/account/account';
 import { ingestV1Router } from './routes/ingest/v1';
@@ -110,13 +110,11 @@ export interface IServerConfig {
   readonly twilioApiKeySecret?: string;
   readonly twilioFromNumber?: string;
   readonly twilioMessagingServiceSid?: string;
-  readonly squareAccessToken?: string;
-  readonly squareEnvironment?: 'sandbox' | 'production';
-  readonly squareLocationId?: string;
-  readonly squareWebhookSignatureKey?: string;
-  readonly squareWebhookNotificationUrl?: string;
-  /** Optional Square API host override (e.g. Noctusoft relay). */
-  readonly squareBaseUrl?: string;
+  readonly relayUrl?: string;
+  readonly relayApiKey?: string;
+  readonly relayWebhookSecret?: string;
+  readonly relayStoreAlias?: string;
+  readonly relayStoreMode?: 'test' | 'live';
 }
 
 /**
@@ -327,13 +325,13 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // Cookie parsing (for refresh_token httpOnly cookie)
   app.use(cookieParser());
 
-  // Body parsing with size limit. The Square webhook route is excluded: it
+  // Body parsing with size limit. The Noctusoft store webhook route is excluded: it
   // needs the raw request body for HMAC signature verification, and a global
   // express.json() would consume the stream before the route-level
   // express.raw() ever sees it (body-parser skips once req._body is set).
   const jsonParser = express.json({ limit: '10mb' });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/webhooks/square') {
+    if (req.path === '/api/webhooks/noctusoft') {
       next();
       return;
     }
@@ -662,32 +660,27 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl,
       })
     );
-    // Square service (optional — created early so admin payments can use it for refunds)
-    const squareAccessToken = config.squareAccessToken ?? process.env['SQUARE_ACCESS_TOKEN'];
-    const squareLocationId = config.squareLocationId ?? process.env['SQUARE_LOCATION_ID'];
-    const squareEnv = (config.squareEnvironment ??
-      process.env['SQUARE_ENVIRONMENT'] ??
-      'sandbox') as 'sandbox' | 'production';
-    const squareWebhookKey =
-      config.squareWebhookSignatureKey ?? process.env['SQUARE_WEBHOOK_SIGNATURE_KEY'];
-    const squareWebhookUrl =
-      config.squareWebhookNotificationUrl ?? process.env['SQUARE_WEBHOOK_NOTIFICATION_URL'];
-    const squareBaseUrl = config.squareBaseUrl ?? process.env['SQUARE_BASE_URL'];
-
-    const squareService =
-      squareAccessToken && squareLocationId
-        ? new SquareService({
-            accessToken: squareAccessToken,
-            environment: squareEnv,
-            locationId: squareLocationId,
-            webhookSignatureKey: squareWebhookKey,
-            webhookNotificationUrl: squareWebhookUrl,
-            ...(squareBaseUrl ? { baseUrl: squareBaseUrl } : {}),
-          })
-        : undefined;
+    const relayEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...(config.relayUrl !== undefined ? { RELAY_URL: config.relayUrl } : {}),
+      ...(config.relayApiKey !== undefined ? { RELAY_API_KEY: config.relayApiKey } : {}),
+      ...(config.relayWebhookSecret !== undefined
+        ? { RELAY_WEBHOOK_SECRET: config.relayWebhookSecret }
+        : {}),
+      ...(config.relayStoreAlias !== undefined
+        ? { RELAY_STORE_ALIAS: config.relayStoreAlias }
+        : {}),
+      ...(config.relayStoreMode !== undefined ? { RELAY_STORE_MODE: config.relayStoreMode } : {}),
+    };
+    const storeConfig = resolveNoctusoftStoreConfig(relayEnv);
+    const webhookSecret =
+      config.relayWebhookSecret ??
+      relayEnv['RELAY_WEBHOOK_SECRET'] ??
+      process.env['RELAY_WEBHOOK_SECRET'];
+    const storeClient = storeConfig ? new NoctusoftStoreClient(storeConfig) : undefined;
 
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
-    app.use('/api/admin/payments', paymentsRouter({ database, squareService }));
+    app.use('/api/admin/payments', paymentsRouter({ database }));
     app.use('/api/admin/coupons', couponsRouter({ database }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
@@ -706,16 +699,18 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
     app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
 
-    if (squareService) {
+    if (storeClient && storeConfig) {
       app.use(
         '/api/billing',
         authMiddleware(authService),
         requireParent,
-        billingRouter({ database, squareService })
+        billingRouter({ database, storeClient })
       );
-      // Square webhook uses raw body for signature verification
+    }
+
+    if (webhookSecret) {
       app.use(
-        '/api/webhooks/square',
+        '/api/webhooks/noctusoft',
         express.raw({ type: 'application/json' }),
         (req: Request, _res: Response, next: NextFunction) => {
           if (Buffer.isBuffer(req.body)) {
@@ -723,7 +718,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
           }
           next();
         },
-        squareWebhookRouter({ database, squareService })
+        noctusoftWebhookRouter({
+          database,
+          webhookSecret,
+        })
       );
     }
   }
