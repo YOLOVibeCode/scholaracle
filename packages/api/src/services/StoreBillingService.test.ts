@@ -1,5 +1,5 @@
 import { StoreBillingService } from './StoreBillingService';
-import type { StoreClient } from '../store-client';
+import type { StoreClient } from '@scholaracle/store-client';
 
 describe('StoreBillingService', () => {
   it('createCheckout maps plan to store SKU and returns url + orderId', async () => {
