@@ -7,6 +7,7 @@ export interface IPaymentReader {
   findByUserId(userId: string): Promise<readonly Payment[]>;
   findByStripeId(stripePaymentIntentId: string): Promise<Payment | null>;
   findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null>;
+  findByStorePaymentId(storePaymentId: string): Promise<Payment | null>;
   getRevenueByPeriod(startDate: Date, endDate: Date): Promise<number>;
   getLifetimeValueByUserId(userId: string): Promise<number>;
 }
@@ -101,6 +102,19 @@ export class PaymentRepository implements IPaymentRepository {
    */
   public async findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null> {
     const document = await this._collection.findOne({ squarePaymentId });
+
+    if (!document || !document._id) {
+      return null;
+    }
+
+    return new Payment(document, document._id);
+  }
+
+  /**
+   * Find payment by Noctusoft store payment ID.
+   */
+  public async findByStorePaymentId(storePaymentId: string): Promise<Payment | null> {
+    const document = await this._collection.findOne({ storePaymentId });
 
     if (!document || !document._id) {
       return null;

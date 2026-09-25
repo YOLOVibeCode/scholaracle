@@ -58,7 +58,7 @@ export const billingApi = {
   },
 
   /**
-   * Create a Square payment link and return its URL.
+   * Create a store checkout session and return its URL.
    * @param plan - Subscription plan (starter, premium, family, enterprise)
    * @param billingCycle - monthly or annual
    */
@@ -73,7 +73,7 @@ export const billingApi = {
   },
 
   /**
-   * Create a billing portal session. Square does not provide a portal; returns settings URL.
+   * Create a billing portal session; returns in-app billing settings URL.
    */
   async createPortal(): Promise<string | null> {
     try {
@@ -117,7 +117,7 @@ export const billingApi = {
 
   /**
    * Redeem a free-time coupon (trial_extension or free_plan) to start a trial
-   * subscription without going through Square checkout.
+   * subscription without going through store checkout.
    */
   async redeemCoupon(
     code: string,

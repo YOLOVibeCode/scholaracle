@@ -8,16 +8,6 @@ const PLAN_PRICING: Record<'free' | 'premium' | 'family', { monthly: number }> =
   family: { monthly: 29 },
 };
 
-/** Square Plus plan becomes cost-effective at ~150 paying users (saves ~$0.36/user on processing). */
-export const SQUARE_PLUS_THRESHOLD = 150;
-
-export interface ISquarePlusRecommendation {
-  readonly payingUserCount: number;
-  readonly threshold: number;
-  readonly considerSquarePlus: boolean;
-  readonly message?: string;
-}
-
 export interface IRevenueDataPoint {
   readonly period: string;
   readonly revenue: number;
@@ -49,7 +39,6 @@ export interface IAnalyticsService {
     months: number
   ): Promise<readonly IGrowthDataPoint[]>;
   countPayingUsers(): Promise<number>;
-  getSquarePlusRecommendation(): Promise<ISquarePlusRecommendation>;
 }
 
 /**
@@ -282,22 +271,5 @@ export class AnalyticsService implements IAnalyticsService {
       'subscription.status': { $in: ['active', 'trialing'] },
       'subscription.plan': { $nin: ['free', null, ''] },
     });
-  }
-
-  /**
-   * Recommendation for when Square Plus plan ($49/mo) becomes cost-effective (~150 paying users).
-   */
-  public async getSquarePlusRecommendation(): Promise<ISquarePlusRecommendation> {
-    const payingUserCount = await this.countPayingUsers();
-    const considerSquarePlus = payingUserCount >= SQUARE_PLUS_THRESHOLD;
-    const message = considerSquarePlus
-      ? `At ${payingUserCount} paying users, Square Plus ($49/mo) likely saves on processing fees. Evaluate upgrade.`
-      : `${payingUserCount} paying users; consider Square Plus when you reach ${SQUARE_PLUS_THRESHOLD}.`;
-    return {
-      payingUserCount,
-      threshold: SQUARE_PLUS_THRESHOLD,
-      considerSquarePlus,
-      message,
-    };
   }
 }

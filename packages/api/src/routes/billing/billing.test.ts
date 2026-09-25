@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { billingRouter } from './billing';
 import { createErrorHandler } from '../../middleware/errorHandler';
-import type { SquareService } from '../../services/SquareService';
+import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 
 // Mock @scholaracle/database
 jest.mock('@scholaracle/database', () => {
@@ -33,19 +33,19 @@ const {
   __mockFindByUserIdPayments: jest.Mock;
 };
 
-function createMockSquareService(): jest.Mocked<Pick<SquareService, 'createPaymentLink'>> {
+function createMockStoreClient(): jest.Mocked<INoctusoftStoreClient> {
   return {
-    createPaymentLink: jest.fn(),
+    createCheckout: jest.fn(),
   };
 }
 
 describe('Billing Routes', () => {
   let app: Express;
-  let mockSquareService: jest.Mocked<Pick<SquareService, 'createPaymentLink'>>;
+  let mockStoreClient: jest.Mocked<INoctusoftStoreClient>;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSquareService = createMockSquareService();
+    mockStoreClient = createMockStoreClient();
 
     app = express();
     app.use(express.json());
@@ -60,17 +60,17 @@ describe('Billing Routes', () => {
       '/api/billing',
       billingRouter({
         database: {} as unknown as import('mongodb').Db,
-        squareService: mockSquareService as unknown as SquareService,
+        storeClient: mockStoreClient,
       })
     );
     app.use(createErrorHandler());
   });
 
   describe('POST /api/billing/checkout', () => {
-    it('should create a payment link', async () => {
-      mockSquareService.createPaymentLink.mockResolvedValue({
-        url: 'https://square.link/example',
-        orderId: 'order_123',
+    it('should create a checkout session', async () => {
+      mockStoreClient.createCheckout.mockResolvedValue({
+        url: 'https://store.noctusoft.com/checkout/example',
+        sessionId: 'order_123',
       });
 
       const res = await request(app)
@@ -80,18 +80,18 @@ describe('Billing Routes', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.sessionId).toBe('order_123');
-      expect(res.body.url).toBe('https://square.link/example');
+      expect(res.body.url).toBe('https://store.noctusoft.com/checkout/example');
     });
 
     it('should default to starter plan if not provided', async () => {
-      mockSquareService.createPaymentLink.mockResolvedValue({
-        url: 'https://square.link/example',
-        orderId: 'order_123',
+      mockStoreClient.createCheckout.mockResolvedValue({
+        url: 'https://store.noctusoft.com/checkout/example',
+        sessionId: 'order_123',
       });
 
       const res = await request(app).post('/api/billing/checkout').send({}).expect(200);
 
-      expect(mockSquareService.createPaymentLink).toHaveBeenCalledWith(
+      expect(mockStoreClient.createCheckout).toHaveBeenCalledWith(
         expect.objectContaining({
           plan: 'starter',
           billingCycle: 'monthly',
@@ -102,26 +102,11 @@ describe('Billing Routes', () => {
   });
 
   describe('POST /api/billing/portal', () => {
-    it('should return settings URL when subscription has squareCustomerId', async () => {
-      mockFindByUserId.mockResolvedValue({
-        squareCustomerId: 'sq_cus_1',
-        plan: 'starter',
-        status: 'active',
-      });
-
+    it('should return billing settings URL', async () => {
       const res = await request(app).post('/api/billing/portal').send({}).expect(200);
 
       expect(res.body.success).toBe(true);
-      expect(res.body.url).toBeDefined();
-    });
-
-    it('should return 404 if no billing account found', async () => {
-      mockFindByUserId.mockResolvedValue(null);
-
-      const res = await request(app).post('/api/billing/portal').send({}).expect(404);
-
-      expect(res.body.error).toContain('No billing account');
-      expect(res.body.code).toBe('NOT_FOUND');
+      expect(res.body.url).toContain('/dashboard/billing');
     });
   });
 
@@ -164,12 +149,12 @@ describe('Billing Routes', () => {
     it('should return formatted invoices from payments', async () => {
       mockFindByUserIdPayments.mockResolvedValue([
         {
-          squarePaymentId: 'pay_1',
+          storePaymentId: 'pay_1',
           amount: 1900,
           currency: 'usd',
           status: 'succeeded',
           createdAt: new Date('2025-01-15'),
-          receiptUrl: 'https://square.com/receipt/1',
+          receiptUrl: 'https://store.noctusoft.com/receipt/1',
         },
       ]);
 
