@@ -9,12 +9,8 @@ describe('NoctusoftStoreClient', () => {
     storeMode: 'test' as const,
   };
 
-  it('POSTs /checkout with relay headers and metadata', async () => {
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ url: 'https://store.noctusoft.com/pay/abc', sessionId: 'sess_1' }),
-    });
-
+  it('mints a signed /buy/:store/:code URL for the plan SKU', async () => {
+    const fetchMock = jest.fn();
     const client = new NoctusoftStoreClient(config, fetchMock);
     const result = await client.createCheckout({
       userId: 'user-1',
@@ -25,21 +21,12 @@ describe('NoctusoftStoreClient', () => {
       cancelUrl: 'https://app/cancel',
     });
 
-    expect(result.url).toBe('https://store.noctusoft.com/pay/abc');
-    expect(result.sessionId).toBe('sess_1');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://store.noctusoft.com/checkout',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'X-Api-Key': 'nsk_test_billing',
-          'X-Test-Store': 'scholarmancy-dev',
-          'X-Store-Mode': 'test',
-        }),
-      })
+    expect(result.url).toMatch(
+      /^https:\/\/store\.noctusoft\.com\/buy\/scholarmancy-dev\/NOCTU-SCHOLARMANCY-STARTER-MONTHLY\?/
     );
-    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
-    expect(body.sku).toBe('NOCTU-SCHOLARMANCY-STARTER-MONTHLY');
-    expect(body.metadata.userId).toBe('user-1');
+    expect(result.url).toContain('user=user-1');
+    expect(result.url).toContain('sig=');
+    expect(result.sessionId).toMatch(/^buy:/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
