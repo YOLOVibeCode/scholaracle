@@ -1,5 +1,9 @@
 import { PLAN_PRICING, type BillingCycle, type SubscriptionPlan } from '@scholaracle/database';
-import type { INoctusoftStoreWebhookData } from '../noctusoft-store/types';
+import type {
+  INoctusoftStoreWebhookData,
+  INoctusoftStoreWebhookEventV1,
+} from '../noctusoft-store/types';
+import { planFromStoreSku } from '../noctusoft-store/planStoreSkus';
 
 export interface IResolvedWebhookBilling {
   readonly userId: string;
@@ -34,25 +38,34 @@ function resolvePlanFromAmount(amountCents: number): {
   return { plan: 'starter', cycle: 'monthly' };
 }
 
-/** Normalizes store webhook payload into subscription update fields. */
+/**
+ * Normalizes a store webhook into subscription update fields. Event v1 carries
+ * the buyer, item, money, and refs at the top level; the plan comes from the
+ * item's store SKU. Pre-v1 bodies put everything under `data`.
+ */
 export function resolveWebhookBillingContext(
-  data: INoctusoftStoreWebhookData
+  event: INoctusoftStoreWebhookEventV1
 ): IResolvedWebhookBilling | null {
-  const userId = data.userId ?? data.metadata?.['userId'];
+  const data: INoctusoftStoreWebhookData = event.data ?? {};
+  const userId = event.buyer?.userId ?? data.userId ?? data.metadata?.['userId'];
   if (!userId) return null;
 
+  const fromSku =
+    planFromStoreSku(event.item?.code) ??
+    planFromStoreSku(event.item?.key) ??
+    planFromStoreSku(event.subscription?.planKey);
   const metaPlan = parsePlan(data.plan ?? data.metadata?.['plan']);
   const metaCycle =
     (data.billingCycle ?? data.metadata?.['billingCycle'])?.toLowerCase() === 'annual'
       ? 'annual'
       : 'monthly';
 
-  const amountCents = data.amountCents ?? 0;
+  const amountCents = event.money?.amountCents ?? data.amountCents ?? 0;
   const amountResolved = resolvePlanFromAmount(amountCents);
-  const plan = metaPlan ?? amountResolved.plan;
-  const billingCycle = metaPlan ? metaCycle : amountResolved.cycle;
+  const plan = fromSku?.plan ?? metaPlan ?? amountResolved.plan;
+  const billingCycle = fromSku?.billingCycle ?? (metaPlan ? metaCycle : amountResolved.cycle);
 
-  const currency = (data.currency ?? 'usd').toLowerCase();
+  const currency = (event.money?.currency ?? data.currency ?? 'usd').toLowerCase();
 
   return {
     userId,
@@ -60,7 +73,7 @@ export function resolveWebhookBillingContext(
     billingCycle,
     amountCents,
     currency,
-    paymentId: data.paymentId,
-    orderId: data.orderId,
+    paymentId: event.refs?.paymentId ?? data.paymentId,
+    orderId: event.refs?.orderId ?? data.orderId,
   };
 }
