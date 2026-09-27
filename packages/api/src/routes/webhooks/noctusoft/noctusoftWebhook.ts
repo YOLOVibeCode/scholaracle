@@ -63,7 +63,7 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
       }
     }
 
-    const resolved = resolveWebhookBillingContext(event.data ?? {});
+    const resolved = resolveWebhookBillingContext(event);
     if (resolved) {
       if (PAID_EVENTS.has(event.type)) {
         await activateOrRenewSubscription(

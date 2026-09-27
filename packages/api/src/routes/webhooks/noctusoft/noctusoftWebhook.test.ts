@@ -93,6 +93,49 @@ describe('Noctusoft store webhook', () => {
     expect(sub!['billingCycle']).toBe('annual');
   });
 
+  it('creates subscription from an event v1 subscription.started (buyer + item code)', async () => {
+    const body = JSON.stringify({
+      id: 'rel_evt_v1_started',
+      type: 'subscription.started',
+      version: 1,
+      store: 'scholarmancy',
+      product: 'scholarmancy',
+      mode: 'test',
+      occurredAt: '2026-09-27T16:00:00Z',
+      buyer: { userId: 'user_v1', email: 'parent@example.com' },
+      item: {
+        code: 'NOCTU-SCHOLARMANCY-FAMILY-ANNUAL',
+        key: 'family-annual',
+        kind: 'plan',
+        name: 'Family (annual)',
+        quantity: 1,
+      },
+      money: { amountCents: 49999, currency: 'USD', refundedCents: 0, feeCents: null },
+      refs: {
+        orderId: 'ord_rel_1',
+        paymentId: 'pay_rel_1',
+        subscriptionId: 'sub_rel_1',
+        refundId: null,
+        disputeId: null,
+      },
+      subscription: { ref: 'sub_rel_1', status: 'active', planKey: 'family-annual' },
+      seller: null,
+      action: null,
+      entitlements: {},
+    });
+
+    const res = await request(app)
+      .post('/webhook')
+      .set('Content-Type', 'application/json')
+      .set('x-noctusoft-signature', sign(body))
+      .send(body);
+
+    expect(res.status).toBe(200);
+    const sub = await database.collection('subscriptions').findOne({ userId: 'user_v1' });
+    expect(sub!['plan']).toBe('family');
+    expect(sub!['billingCycle']).toBe('annual');
+  });
+
   it('dedupes repeated event id', async () => {
     const body = makeEvent(
       'subscription.renewed',
