@@ -30,7 +30,17 @@ function signBuyLink(args: {
   const exp = Math.floor(Date.now() / 1000) + 86400;
   const nonce = randomBytes(12).toString('hex');
   const qty = 1;
-  const mac = ['buy-link-v1', args.store, args.code, args.user, args.email, args.returnUrl, qty, exp, nonce]
+  const mac = [
+    'buy-link-v1',
+    args.store,
+    args.code,
+    args.user,
+    args.email,
+    args.returnUrl,
+    qty,
+    exp,
+    nonce,
+  ]
     .map((p) => (p == null ? '' : String(p)))
     .join('|');
   const sig = createHmac('sha256', args.secret).update(mac).digest('hex');
