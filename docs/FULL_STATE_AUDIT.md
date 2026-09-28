@@ -149,7 +149,8 @@
 | Notification prefs | ✓ APP_SPEC | ✓ PUT /settings/notifications | ✓ settings.test.ts | ✓ FEAT-P-008 |
 | Alert thresholds | ✓ APP_SPEC | ✓ PUT /settings/alerts | ✓ settings.test.ts | ✓ FEAT-P-009 |
 | Billing subscription | — | ✓ GET /billing/subscription | ✓ billing.test.ts | ✓ GAP-BILLING (page render) |
-| Checkout (Square) | — | ✓ POST /billing/checkout | ✓ billing.test.ts | ✓ E2E-BILLING-CHECKOUT |
+| Checkout (Noctusoft store buy link) | — | ✓ POST /billing/checkout | ✓ billing.test.ts | ✓ E2E-BILLING-CHECKOUT |
+| Cancel / update card | — | ✓ POST /billing/cancel, POST /billing/portal | ✓ billing.test.ts | — |
 | Invoices | — | ✓ GET /billing/invoices | ✓ billing.test.ts | ✓ E2E-BILLING-CHECKOUT |
 
 ### 3.8 Admin Features

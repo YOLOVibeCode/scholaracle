@@ -84,7 +84,7 @@ See table and rationale below. One price per tier; simple to explain and impleme
 - **Checkout:** Price is computed from *current* student count (or “slots” they choose). Either:
   - **Dynamic:** At checkout, `createPaymentLink(plan, billingCycle, studentCount)` → amount = pricingFormula(studentCount). Subscription stores `maxStudents` and optionally `studentCountAtPurchase` for display; renewal uses current count or a “locked” count depending on your policy.
   - **Slots:** Plans are “1 student”, “2 students”, … “10 students” with fixed prices (same as fixed tiers but every number is a tier). No formula; just more plan options.
-- **Adding a student mid-cycle:** If over limit, block add until upgrade. On upgrade, pro-rate or charge at next renewal (Square subscription or one-off top-up). If you do true per-user and count can change, consider monthly reconciliation (“you have 4 students now, next invoice = 4 × $X”) or lock count until renewal.
+- **Adding a student mid-cycle:** If over limit, block add until upgrade. On upgrade, pro-rate or charge at next renewal (store plan change or a one-off store charge). If you do true per-user and count can change, consider monthly reconciliation (“you have 4 students now, next invoice = 4 × $X”) or lock count until renewal.
 - **Database:** Keep `Subscription.plan`; add optional `billingStudentCount` or derive from `maxStudents` / plan. `PLAN_PRICING` becomes a function or a table keyed by plan + count.
 
 ---

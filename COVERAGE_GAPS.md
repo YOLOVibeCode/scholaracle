@@ -49,8 +49,8 @@ Citations are `file:line` for first relevant test or `—` when none exists.
 
 | Area | Status | Evidence | Gap |
 |------|--------|----------|-----|
-| Stripe/Square webhook signature validation | ⚠️ | `packages/api/src/routes/webhooks/square/squareWebhook.test.ts` exists | 0 `test()` matches in grep — file may be empty/disabled. Verify and expand. |
-| Webhook idempotency / replay | ❌ | — | RISK-001 |
+| Store webhook signature validation | ✓ | `packages/api/src/routes/webhooks/noctusoft/noctusoftWebhook.test.ts`, `noctusoftWebhook.rawbody.test.ts` | Square was removed (#24) |
+| Webhook idempotency / replay | ⚠️ | Store webhook dedupes on event id (`noctusoftWebhook.test.ts`) | No replay time window; Twilio has no dedupe (RISK-001/007) |
 | Twilio inbound webhook | ⚠️ | `packages/api/src/routes/webhooks/twilio/twilio-webhook.test.ts` | also 0 matches found; signature middleware exists |
 | Communication delivery status (sent → delivered → opened → clicked) | ❌ | — | RISK-009 |
 | Connector token refresh on 401 | ❌ | — | RISK-010 |
@@ -99,7 +99,7 @@ Citations are `file:line` for first relevant test or `—` when none exists.
 
 ## Top-5 Most Urgent Coverage Gaps
 
-1. **Webhook idempotency + refund round-trip** (Stripe/Square) — RISK-001/007. Money-critical, zero E2E.
+1. **Webhook refund round-trip** (Noctusoft store) — RISK-001/007. Unit-tested; no E2E against the store sandbox yet.
 2. **Cross-tenant IDOR sweep** on `/api/students/:id`, `/api/alerts/:id`, `/api/admin/customers/:id` — RISK-002.
 3. **Admin MFA E2E** with speakeasy TOTP — RISK-003.
 4. **Blended-family revocation ACL** (parent removed → access denied) — RISK-005.

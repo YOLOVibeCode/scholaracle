@@ -49,6 +49,7 @@ export interface IPaymentData {
   // Noctusoft store
   readonly storePaymentId?: string;
   readonly storeOrderId?: string;
+  readonly storeSubscriptionId?: string;
 
   // Receipt
   readonly receiptUrl?: string;
@@ -89,6 +90,7 @@ export class Payment {
   public readonly expiryYear?: number;
   public readonly storePaymentId?: string;
   public readonly storeOrderId?: string;
+  public readonly storeSubscriptionId?: string;
   public readonly receiptUrl?: string;
   public readonly receiptNumber?: string;
   public readonly invoiceNumber?: string;
@@ -118,6 +120,7 @@ export class Payment {
     this.expiryYear = data.expiryYear;
     this.storePaymentId = data.storePaymentId;
     this.storeOrderId = data.storeOrderId;
+    this.storeSubscriptionId = data.storeSubscriptionId;
     this.receiptUrl = data.receiptUrl;
     this.receiptNumber = data.receiptNumber;
     this.invoiceNumber = data.invoiceNumber;

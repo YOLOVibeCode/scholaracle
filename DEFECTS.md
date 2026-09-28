@@ -8,6 +8,7 @@
 
 ## DEF-001 — Square webhook idempotency keys on `paymentId`, not `event.id`
 
+- **Status:** Closed. Square billing was removed (#24, #26). The Noctusoft store webhook (`packages/api/src/routes/webhooks/noctusoft/noctusoftWebhook.ts`) dedupes on the event id through `WebhookEventRepository` before any write; covered by `'dedupes repeated event id'` in `noctusoftWebhook.test.ts`.
 - **Severity:** Sev-1
 - **Area:** Billing / Money
 - **Source:** RISK-001, COVERAGE_GAPS §3
@@ -23,6 +24,7 @@
 
 ## DEF-002 — Refund events silently 200 with no state change
 
+- **Status:** Closed for the store. `purchase.refunded` updates the payment it names by store payment ref, adding to what was refunded and skipping a refund the admin route already recorded. Admin refunds move money through the store (`POST /payments/:ref/refund`). Tests: `noctusoftWebhook.test.ts` (refund cases), `payments.test.ts`.
 - **Severity:** Sev-1
 - **Area:** Billing / Money
 - **Repro:**
@@ -83,6 +85,7 @@
 
 ## DEF-007 — No `event.id` persistence — webhook replay attacks possible across providers
 
+- **Status:** Store half closed: the Noctusoft store webhook records every event id (DEF-001). Twilio is still open.
 - **Severity:** Sev-1
 - **Area:** Webhooks / replay attacks
 - **Repro:** Capture a valid signed Square (or Twilio) webhook body + signature. Replay it 24h later — server still accepts the signature (no time-bound nonce / no event.id store).
