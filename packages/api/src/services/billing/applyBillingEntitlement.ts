@@ -16,6 +16,7 @@ export interface IActivateSubscriptionParams {
   readonly currency: string;
   readonly paymentId?: string;
   readonly orderId?: string;
+  readonly storeSubscriptionId?: string;
   readonly description: string;
 }
 
@@ -71,6 +72,7 @@ export async function activateOrRenewSubscription(
     currentPeriodEnd: periodEnd,
     lastPaymentDate: params.amountCents > 0 ? new Date() : undefined,
     lastPaymentAmount: params.amountCents > 0 ? params.amountCents : undefined,
+    ...(params.storeSubscriptionId ? { storeSubscriptionId: params.storeSubscriptionId } : {}),
   };
 
   if (subscription) {
@@ -85,6 +87,7 @@ export async function activateOrRenewSubscription(
       billingCycle: params.billingCycle,
       lastPaymentDate: params.amountCents > 0 ? new Date() : undefined,
       lastPaymentAmount: params.amountCents > 0 ? params.amountCents : undefined,
+      ...(params.storeSubscriptionId ? { storeSubscriptionId: params.storeSubscriptionId } : {}),
     });
   }
 

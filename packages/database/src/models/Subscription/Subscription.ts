@@ -136,13 +136,8 @@ export interface ISubscriptionData {
   readonly nextPaymentDate?: Date;
   readonly nextPaymentAmount?: number;
 
-  // Legacy Stripe integration (Square is primary)
-  readonly stripeSubscriptionId?: string;
-  readonly stripeCustomerId?: string;
-
-  // Square Integration
-  readonly squareSubscriptionId?: string;
-  readonly squareCustomerId?: string;
+  // Noctusoft store subscription ref (opaque; pass it back to the store)
+  readonly storeSubscriptionId?: string;
 
   // History
   readonly events?: readonly ISubscriptionEvent[];
@@ -172,10 +167,7 @@ export class Subscription {
   public readonly lastPaymentAmount?: number;
   public readonly nextPaymentDate?: Date;
   public readonly nextPaymentAmount?: number;
-  public readonly stripeSubscriptionId?: string;
-  public readonly stripeCustomerId?: string;
-  public readonly squareSubscriptionId?: string;
-  public readonly squareCustomerId?: string;
+  public readonly storeSubscriptionId?: string;
   public readonly events: readonly ISubscriptionEvent[];
   public readonly createdAt: Date;
   public readonly updatedAt: Date;
@@ -198,10 +190,7 @@ export class Subscription {
     this.lastPaymentAmount = data.lastPaymentAmount;
     this.nextPaymentDate = data.nextPaymentDate;
     this.nextPaymentAmount = data.nextPaymentAmount;
-    this.stripeSubscriptionId = data.stripeSubscriptionId;
-    this.stripeCustomerId = data.stripeCustomerId;
-    this.squareSubscriptionId = data.squareSubscriptionId;
-    this.squareCustomerId = data.squareCustomerId;
+    this.storeSubscriptionId = data.storeSubscriptionId;
     this.events = data.events ?? [];
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();

@@ -26,7 +26,7 @@ describe('Noctusoft webhook raw body through createApp', () => {
       {
         relayApiKey: 'nsk_test',
         relayWebhookSecret: webhookSecret,
-        relayStoreAlias: 'scholarmancy-dev',
+        relayStoreAlias: 'scholarmancy',
         relayStoreMode: 'test',
       },
       database
@@ -39,7 +39,10 @@ describe('Noctusoft webhook raw body through createApp', () => {
       version: 1,
       id: 'evt_rawbody_1',
       type: 'subscription.started',
-      data: { userId: 'u1', plan: 'starter', billingCycle: 'monthly' },
+      buyer: { userId: 'u1', email: 'parent@example.com' },
+      item: { code: 'NOCTU-SCHOLARMANCY-STARTER-MONTHLY', kind: 'plan' },
+      money: { amountCents: 999, currency: 'USD' },
+      refs: { paymentId: 'pay_rawbody_1', subscriptionId: 'sub_rawbody_1' },
     });
 
     const response = await request(app)
@@ -58,7 +61,7 @@ describe('Noctusoft webhook raw body through createApp', () => {
       version: 1,
       id: 'evt_rawbody_2',
       type: 'subscription.started',
-      data: {},
+      buyer: { userId: 'u1', email: 'parent@example.com' },
     });
 
     const response = await request(app)

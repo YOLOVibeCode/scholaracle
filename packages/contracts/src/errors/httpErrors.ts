@@ -65,7 +65,7 @@ export class RateLimitError extends AppError {
   }
 }
 
-/** 502 — an upstream service (Square, SendGrid, Canvas, ...) failed. */
+/** 502 — an upstream service (Noctusoft store, SendGrid, Canvas, ...) failed. */
 export class ExternalServiceError extends AppError {
   constructor(message = 'External service error', details?: unknown, cause?: unknown) {
     super(message, { status: 502, code: ERROR_CODES.EXTERNAL_SERVICE_ERROR, details, cause });

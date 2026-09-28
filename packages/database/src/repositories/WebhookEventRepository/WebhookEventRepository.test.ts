@@ -2,7 +2,7 @@
  * Tests for WebhookEventRepository — DEFECTS.md DEF-001 + DEF-007.
  *
  * Provides idempotency for webhook delivery by recording (provider, eventId)
- * with TTL. Used by Square (and later Twilio) webhook handlers to reject
+ * with TTL. Used by the Noctusoft store webhook (and later Twilio) to reject
  * duplicate / replayed events.
  */
 import { MongoClient, type Db } from 'mongodb';
@@ -33,18 +33,18 @@ describe('WebhookEventRepository', () => {
 
   describe('recordIfNew', () => {
     it('returns true when the event is new', async () => {
-      const isNew = await repo.recordIfNew('square', 'evt_a');
+      const isNew = await repo.recordIfNew('noctusoft', 'evt_a');
       expect(isNew).toBe(true);
     });
 
     it('returns false when the same (provider, eventId) is replayed', async () => {
-      await repo.recordIfNew('square', 'evt_b');
-      const isNewSecondTime = await repo.recordIfNew('square', 'evt_b');
+      await repo.recordIfNew('noctusoft', 'evt_b');
+      const isNewSecondTime = await repo.recordIfNew('noctusoft', 'evt_b');
       expect(isNewSecondTime).toBe(false);
     });
 
     it('treats different providers with the same eventId as distinct', async () => {
-      const isFirst = await repo.recordIfNew('square', 'evt_shared');
+      const isFirst = await repo.recordIfNew('noctusoft', 'evt_shared');
       const isSecond = await repo.recordIfNew('twilio', 'evt_shared');
       expect(isFirst).toBe(true);
       expect(isSecond).toBe(true);
@@ -52,12 +52,12 @@ describe('WebhookEventRepository', () => {
 
     it('persists processedAt and an expiresAt for TTL cleanup', async () => {
       const before = Date.now();
-      await repo.recordIfNew('square', 'evt_ttl');
+      await repo.recordIfNew('noctusoft', 'evt_ttl');
       const after = Date.now();
 
       const doc = await database
         .collection('webhook_events')
-        .findOne({ provider: 'square', eventId: 'evt_ttl' });
+        .findOne({ provider: 'noctusoft', eventId: 'evt_ttl' });
       expect(doc).toBeTruthy();
       const processedAt = (doc!['processedAt'] as Date).getTime();
       const expiresAt = (doc!['expiresAt'] as Date).getTime();
@@ -68,10 +68,10 @@ describe('WebhookEventRepository', () => {
 
     it('honours a caller-supplied ttlMs', async () => {
       const ttlMs = 60_000; // 1 minute
-      await repo.recordIfNew('square', 'evt_short_ttl', ttlMs);
+      await repo.recordIfNew('noctusoft', 'evt_short_ttl', ttlMs);
       const doc = await database
         .collection('webhook_events')
-        .findOne({ provider: 'square', eventId: 'evt_short_ttl' });
+        .findOne({ provider: 'noctusoft', eventId: 'evt_short_ttl' });
       const processedAt = (doc!['processedAt'] as Date).getTime();
       const expiresAt = (doc!['expiresAt'] as Date).getTime();
       expect(expiresAt - processedAt).toBeGreaterThanOrEqual(ttlMs - 1);
@@ -81,12 +81,12 @@ describe('WebhookEventRepository', () => {
 
   describe('hasBeenSeen', () => {
     it('returns false for an unrecorded event', async () => {
-      expect(await repo.hasBeenSeen('square', 'never_seen')).toBe(false);
+      expect(await repo.hasBeenSeen('noctusoft', 'never_seen')).toBe(false);
     });
 
     it('returns true after recordIfNew', async () => {
-      await repo.recordIfNew('square', 'evt_seen');
-      expect(await repo.hasBeenSeen('square', 'evt_seen')).toBe(true);
+      await repo.recordIfNew('noctusoft', 'evt_seen');
+      expect(await repo.hasBeenSeen('noctusoft', 'evt_seen')).toBe(true);
     });
   });
 
