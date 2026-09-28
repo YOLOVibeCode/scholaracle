@@ -99,6 +99,26 @@ describe('Billing Routes', () => {
       );
       expect(res.body.success).toBe(true);
     });
+
+    it('sends the buyer back to the billing page after the store checkout', async () => {
+      mockStoreClient.createCheckout.mockResolvedValue({
+        url: 'https://store.noctusoft.com/buy/scholarmancy/NOCTU-SCHOLARMANCY-STARTER-MONTHLY',
+        sessionId: 'buy:abc',
+      });
+
+      await request(app)
+        .post('/api/billing/checkout')
+        .set('Origin', 'https://web-uat.scholarmancy.com')
+        .send({ plan: 'starter', billingCycle: 'monthly' })
+        .expect(200);
+
+      expect(mockStoreClient.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          successUrl: 'https://web-uat.scholarmancy.com/dashboard/billing?checkout=success',
+          cancelUrl: 'https://web-uat.scholarmancy.com/dashboard/billing?checkout=cancelled',
+        })
+      );
+    });
   });
 
   describe('POST /api/billing/portal', () => {
@@ -161,6 +181,7 @@ describe('Billing Routes', () => {
       const res = await request(app).get('/api/billing/invoices').expect(200);
 
       expect(res.body.invoices).toHaveLength(1);
+      expect(res.body.invoices[0].id).toBe('pay_1');
       expect(res.body.invoices[0].amount).toBe(19);
       expect(res.body.invoices[0].currency).toBe('usd');
     });

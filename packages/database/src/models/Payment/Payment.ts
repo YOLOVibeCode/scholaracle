@@ -46,15 +46,6 @@ export interface IPaymentData {
   readonly expiryMonth?: number;
   readonly expiryYear?: number;
 
-  // Legacy Stripe integration (Square is primary)
-  readonly stripePaymentIntentId?: string;
-  readonly stripeChargeId?: string;
-  readonly stripeInvoiceId?: string;
-
-  // Square Integration
-  readonly squarePaymentId?: string;
-  readonly squareOrderId?: string;
-
   // Noctusoft store
   readonly storePaymentId?: string;
   readonly storeOrderId?: string;
@@ -96,11 +87,6 @@ export class Payment {
   public readonly brand?: CardBrand;
   public readonly expiryMonth?: number;
   public readonly expiryYear?: number;
-  public readonly stripePaymentIntentId?: string;
-  public readonly stripeChargeId?: string;
-  public readonly stripeInvoiceId?: string;
-  public readonly squarePaymentId?: string;
-  public readonly squareOrderId?: string;
   public readonly storePaymentId?: string;
   public readonly storeOrderId?: string;
   public readonly receiptUrl?: string;
@@ -130,11 +116,6 @@ export class Payment {
     this.brand = data.brand;
     this.expiryMonth = data.expiryMonth;
     this.expiryYear = data.expiryYear;
-    this.stripePaymentIntentId = data.stripePaymentIntentId;
-    this.stripeChargeId = data.stripeChargeId;
-    this.stripeInvoiceId = data.stripeInvoiceId;
-    this.squarePaymentId = data.squarePaymentId;
-    this.squareOrderId = data.squareOrderId;
     this.storePaymentId = data.storePaymentId;
     this.storeOrderId = data.storeOrderId;
     this.receiptUrl = data.receiptUrl;
