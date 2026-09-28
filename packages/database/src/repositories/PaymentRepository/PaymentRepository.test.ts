@@ -65,21 +65,21 @@ describe('PaymentRepository', () => {
     });
   });
 
-  describe('findByStripeId', () => {
-    it('should find payment by stripe id', async () => {
+  describe('findByStorePaymentId', () => {
+    it('should find payment by store payment ref', async () => {
       await repository.create({
         userId: '507f1f77bcf86cd799439011',
         amount: 1900,
         currency: 'usd',
         status: 'succeeded',
         paymentMethod: 'card',
-        stripePaymentIntentId: 'pi_test123',
+        storePaymentId: 'pay_rel_test123',
       });
 
-      const payment = await repository.findByStripeId('pi_test123');
+      const payment = await repository.findByStorePaymentId('pay_rel_test123');
 
       expect(payment).not.toBeNull();
-      expect(payment?.stripePaymentIntentId).toBe('pi_test123');
+      expect(payment?.storePaymentId).toBe('pay_rel_test123');
     });
   });
 

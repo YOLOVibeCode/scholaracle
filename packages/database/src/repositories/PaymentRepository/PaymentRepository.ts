@@ -5,8 +5,6 @@ import { Payment, type IPaymentData, type PaymentStatus } from '../../models/Pay
 export interface IPaymentReader {
   findById(id: string): Promise<Payment | null>;
   findByUserId(userId: string): Promise<readonly Payment[]>;
-  findByStripeId(stripePaymentIntentId: string): Promise<Payment | null>;
-  findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null>;
   findByStorePaymentId(storePaymentId: string): Promise<Payment | null>;
   getRevenueByPeriod(startDate: Date, endDate: Date): Promise<number>;
   getLifetimeValueByUserId(userId: string): Promise<number>;
@@ -76,38 +74,6 @@ export class PaymentRepository implements IPaymentRepository {
     const documents = await this._collection.find({ userId }).sort({ createdAt: -1 }).toArray();
 
     return documents.map((doc) => new Payment(doc, doc._id));
-  }
-
-  /**
-   * Find payment by Stripe payment intent ID.
-   *
-   * @param stripePaymentIntentId - Stripe payment intent ID
-   * @returns Payment or null if not found
-   */
-  public async findByStripeId(stripePaymentIntentId: string): Promise<Payment | null> {
-    const document = await this._collection.findOne({ stripePaymentIntentId });
-
-    if (!document || !document._id) {
-      return null;
-    }
-
-    return new Payment(document, document._id);
-  }
-
-  /**
-   * Find payment by Square payment ID.
-   *
-   * @param squarePaymentId - Square payment ID
-   * @returns Payment or null if not found
-   */
-  public async findBySquarePaymentId(squarePaymentId: string): Promise<Payment | null> {
-    const document = await this._collection.findOne({ squarePaymentId });
-
-    if (!document || !document._id) {
-      return null;
-    }
-
-    return new Payment(document, document._id);
   }
 
   /**

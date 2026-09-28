@@ -131,8 +131,8 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       email,
       plan: validPlan,
       billingCycle: validCycle,
-      successUrl: successUrl ?? `${origin}/billing/success`,
-      cancelUrl: cancelUrl ?? `${origin}/billing/cancel`,
+      successUrl: successUrl ?? `${origin}/dashboard/billing?checkout=success`,
+      cancelUrl: cancelUrl ?? `${origin}/dashboard/billing?checkout=cancelled`,
     });
 
     res.json({ success: true, sessionId: checkout.sessionId, url: checkout.url });
@@ -273,7 +273,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     const payments = await paymentRepo.findByUserId(userId);
 
     const invoices = payments.slice(0, limit).map((p) => ({
-      id: p.squarePaymentId ?? p.stripeInvoiceId ?? p._id?.toString(),
+      id: p.storePaymentId ?? p._id?.toString(),
       amount: p.amount / 100,
       currency: p.currency,
       status: p.status,

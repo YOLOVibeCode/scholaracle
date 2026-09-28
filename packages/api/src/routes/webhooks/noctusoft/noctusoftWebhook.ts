@@ -66,23 +66,28 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
     const resolved = resolveWebhookBillingContext(event);
     if (resolved) {
       if (PAID_EVENTS.has(event.type)) {
-        await activateOrRenewSubscription(
-          { database: deps.database },
-          {
-            userId: resolved.userId,
-            plan: resolved.plan,
-            billingCycle: resolved.billingCycle,
-            amountCents: resolved.amountCents,
-            currency: resolved.currency,
-            paymentId: resolved.paymentId,
-            orderId: resolved.orderId,
-            description: `Noctusoft store ${event.type} — ${resolved.plan} (${resolved.billingCycle})`,
-          }
-        );
-      } else if (
-        event.type === 'subscription.canceled' ||
-        event.type === 'subscription.cancelled'
-      ) {
+        if (resolved.plan === null || resolved.billingCycle === null) {
+          logger.warn(
+            { eventId, type: event.type, item: event.item?.code ?? event.item?.key ?? null },
+            'Store event names no Scholarmancy plan; nothing granted'
+          );
+        } else {
+          await activateOrRenewSubscription(
+            { database: deps.database },
+            {
+              userId: resolved.userId,
+              plan: resolved.plan,
+              billingCycle: resolved.billingCycle,
+              amountCents: resolved.amountCents,
+              currency: resolved.currency,
+              paymentId: resolved.paymentId,
+              orderId: resolved.orderId,
+              storeSubscriptionId: resolved.subscriptionId,
+              description: `Noctusoft store ${event.type} — ${resolved.plan} (${resolved.billingCycle})`,
+            }
+          );
+        }
+      } else if (event.type === 'subscription.canceled') {
         await revokeOrMarkPastDue({ database: deps.database }, resolved.userId, 'cancelled');
       } else if (event.type === 'subscription.payment_failed') {
         await revokeOrMarkPastDue({ database: deps.database }, resolved.userId, 'past_due');

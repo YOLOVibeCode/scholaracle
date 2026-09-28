@@ -30,7 +30,7 @@ This product does not sign up for OpenAI, Twilio, or SendGrid. It calls two Noct
   - Linking data across sources runs on the API after ingest: file-to-assignment matching packs many courses into one call, and a file is sent again only when it, its description, or its course's assignments changed. Each distinct image (by content hash) is described once.
 - **Mail** — `POST /email/send` or SendGrid drop-in `POST /v3/mail/send` on `api.sendgrid.noctusoft.com`, with the product key and `X-App-Env` (`dev` captures in smtp4dev, `uat` tags and sends, anything else is real delivery).
 - **Text** — `POST /sms/send` or Twilio drop-in on `api.twilio.noctusoft.com`.
-- **One store** — the product's billing alias on noctusoft-relay. Square item codes are `NOCTU-{PRODUCT}-…`. The Square category is `Noctusoft — {brand}`.
+- **One store** — the `scholarmancy` row on store.noctusoft.com. Checkout is a signed buy link (`/buy/scholarmancy/NOCTU-SCHOLARMANCY-{PLAN}-{MONTHLY|ANNUAL}`); entitlements arrive as Noctusoft event v1 at `/api/webhooks/noctusoft`. The app never holds a payment provider's key, id, or type. Test-mode events go to the row's sandbox callback (api-uat, which the preview TestFlight build uses); live events go to api.scholarmancy.com.
 - **Marketplace** — Connect Hub, the FieldView shape: `POST /connect/{productKey}/recipients/{seller}/charge`. The seller is the merchant. The fee lives on that product's `connect_apps` row.
 
 ## Layout

@@ -48,7 +48,7 @@ test.describe('Parity Pass E2E', () => {
       await expect(manageBtn).toBeVisible();
     }
     
-    // Billing page rendered = test passes (checkout flow requires Square redirect)
+    // Billing page rendered = test passes (checkout leaves for the Noctusoft store)
   });
 
   test('E2E-ADMIN-NOTES: Admin notes page/section renders', async ({ page, loginAsRole }) => {

@@ -41,7 +41,7 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.goto();
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
-    // Excluding any third-party iframes (e.g. Stripe checkout) — we test those separately.
+    // Excluding any third-party iframes — we test those separately.
     await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 

@@ -197,7 +197,7 @@ describe('Payment', () => {
       expect(payment.expiryYear).toBe(2026);
     });
 
-    it('should accept optional Stripe integration fields', () => {
+    it('should accept optional Noctusoft store refs', () => {
       // Arrange
       const data = {
         userId: 'user-123',
@@ -205,18 +205,16 @@ describe('Payment', () => {
         currency: 'usd',
         status: 'succeeded' as const,
         paymentMethod: 'card' as const,
-        stripePaymentIntentId: 'pi_abc123',
-        stripeChargeId: 'ch_def456',
-        stripeInvoiceId: 'in_ghi789',
+        storePaymentId: 'pay_rel_abc123',
+        storeOrderId: 'ord_rel_def456',
       };
 
       // Act
       const payment = new Payment(data);
 
       // Assert
-      expect(payment.stripePaymentIntentId).toBe('pi_abc123');
-      expect(payment.stripeChargeId).toBe('ch_def456');
-      expect(payment.stripeInvoiceId).toBe('in_ghi789');
+      expect(payment.storePaymentId).toBe('pay_rel_abc123');
+      expect(payment.storeOrderId).toBe('ord_rel_def456');
     });
 
     it('should accept optional receipt fields', () => {

@@ -39,7 +39,7 @@
 - [ ] **JWT_SECRET** set in production (no default).
 - [ ] **CORS_ORIGINS** set to real front-end origin(s).
 - [ ] **Seeding** disabled in production (already gated in `packages/api/src/routes/seed/seed.ts`).
-- [ ] **Square** environment: use `production` when going live (not `sandbox`).
+- [ ] **Billing**: production API has `RELAY_API_KEY`, `RELAY_WEBHOOK_SECRET`, and `RELAY_STORE_ALIAS=scholarmancy`, and the `scholarmancy` store row is live (not pinned to test). While the row is pinned to test, every purchase is test mode and its event goes to the sandbox callback (api-uat), not to production.
 - [ ] **Asset store**: production S3 (or intended backend) configured; see `packages/api/docs/ASSET_STORAGE.md`.
 - [ ] **Email**: SendGrid (or SMTP) configured for production; see `docs/full-ux-e2e-with-mailpit.md`.
 
@@ -66,7 +66,7 @@
 
 1. [ ] Scholaracle: `pnpm build` and `pnpm test` pass.
 2. [ ] Scrapers: `npm run build` and `npm test` pass.
-3. [ ] Production env: `JWT_SECRET`, `CORS_ORIGINS`, Square env, email transport, asset store.
+3. [ ] Production env: `JWT_SECRET`, `CORS_ORIGINS`, store billing (`RELAY_*`), email transport, asset store.
 4. [ ] Invite email: ensure SendGrid (or configured transport) and `BASE_URL` are set so parent invite emails are sent.
 5. [ ] Optional: run scraper-flow-readiness manual checklist (single/bundle/all-students).
 6. [ ] Optional: run grade-history-trends-production-checklist if shipping Trends.
