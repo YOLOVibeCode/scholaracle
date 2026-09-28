@@ -7,10 +7,12 @@ import type { INoctusoftStoreClient } from '../../services/noctusoft-store/Noctu
 // Mock @scholaracle/database
 jest.mock('@scholaracle/database', () => {
   const mockFindByUserId = jest.fn();
+  const mockUpdateSubscription = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
   return {
     SubscriptionRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserId,
+      update: mockUpdateSubscription,
     })),
     PaymentRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserIdPayments,
@@ -20,6 +22,7 @@ jest.mock('@scholaracle/database', () => {
       recordRedemption: jest.fn().mockResolvedValue(null),
     })),
     __mockFindByUserId: mockFindByUserId,
+    __mockUpdateSubscription: mockUpdateSubscription,
     __mockFindByUserIdPayments: mockFindByUserIdPayments,
   };
 });
@@ -27,17 +30,33 @@ jest.mock('@scholaracle/database', () => {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   __mockFindByUserId: mockFindByUserId,
+  __mockUpdateSubscription: mockUpdateSubscription,
   __mockFindByUserIdPayments: mockFindByUserIdPayments,
 } = require('@scholaracle/database') as {
   __mockFindByUserId: jest.Mock;
+  __mockUpdateSubscription: jest.Mock;
   __mockFindByUserIdPayments: jest.Mock;
 };
 
 function createMockStoreClient(): jest.Mocked<INoctusoftStoreClient> {
   return {
     createCheckout: jest.fn(),
+    cancelSubscription: jest.fn(),
+    updatePaymentMethod: jest.fn(),
+    refundPayment: jest.fn(),
   };
 }
+
+const paidSubscription = {
+  plan: 'starter',
+  status: 'active',
+  billingCycle: 'monthly',
+  currentPeriodStart: new Date('2026-09-28'),
+  currentPeriodEnd: new Date('2026-10-28'),
+  cancelAtPeriodEnd: false,
+  storeSubscriptionId: 'ns_sub_1',
+  isActive: () => true,
+};
 
 describe('Billing Routes', () => {
   let app: Express;
@@ -122,11 +141,63 @@ describe('Billing Routes', () => {
   });
 
   describe('POST /api/billing/portal', () => {
-    it('should return billing settings URL', async () => {
+    it('should return billing settings URL when there is no store subscription', async () => {
+      mockFindByUserId.mockResolvedValue(null);
+
       const res = await request(app).post('/api/billing/portal').send({}).expect(200);
 
       expect(res.body.success).toBe(true);
       expect(res.body.url).toContain('/dashboard/billing');
+      expect(mockStoreClient.updatePaymentMethod).not.toHaveBeenCalled();
+    });
+
+    it('opens the store page to update the card on a paid subscription', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.updatePaymentMethod.mockResolvedValue(
+        'https://billing.stripe.com/p/session/test_1'
+      );
+
+      const res = await request(app)
+        .post('/api/billing/portal')
+        .set('Origin', 'https://web-uat.scholarmancy.com')
+        .send({})
+        .expect(200);
+
+      expect(mockStoreClient.updatePaymentMethod).toHaveBeenCalledWith(
+        'ns_sub_1',
+        'https://web-uat.scholarmancy.com/dashboard/billing'
+      );
+      expect(res.body.hasPortal).toBe(true);
+      expect(res.body.url).toBe('https://billing.stripe.com/p/session/test_1');
+    });
+  });
+
+  describe('POST /api/billing/cancel', () => {
+    it('cancels the store subscription at period end and marks it locally', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.cancelSubscription.mockResolvedValue({
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: '2026-10-28T03:45:34.000Z',
+      });
+
+      const res = await request(app).post('/api/billing/cancel').send({}).expect(200);
+
+      expect(mockStoreClient.cancelSubscription).toHaveBeenCalledWith('ns_sub_1');
+      expect(mockUpdateSubscription).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ cancelAtPeriodEnd: true })
+      );
+      expect(res.body.subscription.cancelAtPeriodEnd).toBe(true);
+      expect(res.body.subscription.currentPeriodEnd).toBe('2026-10-28T03:45:34.000Z');
+    });
+
+    it('answers 409 when there is no store subscription to cancel', async () => {
+      mockFindByUserId.mockResolvedValue({ ...paidSubscription, storeSubscriptionId: undefined });
+
+      const res = await request(app).post('/api/billing/cancel').send({}).expect(409);
+
+      expect(res.body.code).toBe('CONFLICT');
+      expect(mockStoreClient.cancelSubscription).not.toHaveBeenCalled();
     });
   });
 

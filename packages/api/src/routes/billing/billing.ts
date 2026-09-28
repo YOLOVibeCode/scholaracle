@@ -29,11 +29,21 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
   /**
    * POST /api/billing/portal
-   * Store billing portal is managed in-app; returns billing settings URL.
+   * With a store subscription: the store's page to update the card.
+   * Otherwise the in-app billing page.
    */
   router.post(
     '/portal',
     asyncHandler((req: Request, res: Response) => handlePortal(req as IAuthenticatedRequest, res))
+  );
+
+  /**
+   * POST /api/billing/cancel
+   * Cancel the store subscription at the end of the paid period.
+   */
+  router.post(
+    '/cancel',
+    asyncHandler((req: Request, res: Response) => handleCancel(req as IAuthenticatedRequest, res))
   );
 
   /**
@@ -146,13 +156,54 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     }
 
     const origin = req.headers.origin ?? 'http://localhost:2800';
+    const billingUrl = `${origin}/dashboard/billing`;
+
+    const subscription = await subscriptionRepo.findByUserId(userId);
+    if (subscription?.storeSubscriptionId && subscription.isActive()) {
+      const url = await deps.storeClient.updatePaymentMethod(
+        subscription.storeSubscriptionId,
+        billingUrl
+      );
+      res.json({ success: true, hasPortal: true, manageUrl: url, url });
+      return;
+    }
 
     res.json({
       success: true,
       hasPortal: false,
-      manageUrl: `${origin}/dashboard/billing`,
-      url: `${origin}/dashboard/billing`,
+      manageUrl: billingUrl,
+      url: billingUrl,
       message: 'Manage your subscription from the billing page.',
+    });
+  }
+
+  async function handleCancel(req: IAuthenticatedRequest, res: Response): Promise<void> {
+    const userId = req.userId;
+
+    if (!userId) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const subscription = await subscriptionRepo.findByUserId(userId);
+    if (!subscription?.storeSubscriptionId || !subscription.isActive()) {
+      throw new ConflictError('There is no paid subscription to cancel');
+    }
+
+    const result = await deps.storeClient.cancelSubscription(subscription.storeSubscriptionId);
+    const currentPeriodEnd = result.currentPeriodEnd
+      ? new Date(result.currentPeriodEnd)
+      : subscription.currentPeriodEnd;
+    await subscriptionRepo.update(userId, { cancelAtPeriodEnd: true, currentPeriodEnd });
+
+    res.json({
+      success: true,
+      subscription: {
+        plan: subscription.plan,
+        status: subscription.status,
+        billingCycle: subscription.billingCycle,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: true,
+      },
     });
   }
 

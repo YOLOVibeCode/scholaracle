@@ -61,10 +61,9 @@ pnpm --filter @scholaracle/api test
 - Install (Percy): `pnpm --filter @scholaracle/e2e add -D @percy/cli @percy/playwright`.
 
 ### 6. Webhook replay-and-signature hardening tests — **Effort: S (½ day)**
-- Once DEF-001/002/007 are fixed, expand `squareWebhook.idempotency.test.ts`:
-  - same `event.id`, two distinct `payment.id` → still single `webhook_events` row, single payment row.
+- DEF-001/002 are closed for the Noctusoft store webhook (`noctusoftWebhook.test.ts` covers event-id dedupe and refunds). Still to add there:
   - timestamp outside replay window → 401.
-- Add equivalent for Twilio webhook.
+- Add event-id dedupe and a replay window for the Twilio webhook (DEF-007).
 
 ### 7. Concurrent JWT refresh test — **Effort: S (½ day)**
 - RISK-004. Use `Promise.all([refresh, refresh, refresh])` against `/api/auth/refresh` and assert exactly one succeeds (token rotation).
@@ -97,7 +96,7 @@ pnpm --filter @scholaracle/api test
 | e2e spec | `packages/e2e/tests/15-blended-family-revocation.spec.ts` | 5 revocation tests |
 | e2e spec | `packages/e2e/tests/16-admin-mfa.spec.ts` | 5 MFA tests |
 | e2e spec | `packages/e2e/tests/17-cross-tenant-idor.spec.ts` | 6 IDOR tests |
-| api spec | `packages/api/src/routes/webhooks/square/squareWebhook.idempotency.test.ts` | 5 webhook hardening tests |
+| api spec | `packages/api/src/routes/webhooks/noctusoft/noctusoftWebhook.test.ts` | Store webhook: signature, event-id dedupe, grants, refunds, cancel (replaced the Square suite) |
 | api spec | `packages/api/src/routes/students/students.idor.test.ts` | 6 student route IDOR tests |
 | docs | `UX_REPORT.md` | Heuristic sweep |
 | docs | `DEFECTS.md` | 10 defects with regression-test pointers |

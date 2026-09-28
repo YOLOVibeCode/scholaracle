@@ -1,13 +1,19 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { WebhookEventRepository, type IWebhookEventWriter } from '@scholaracle/database';
+import {
+  UserRepository,
+  WebhookEventRepository,
+  type IWebhookEventWriter,
+} from '@scholaracle/database';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import { verifyNoctusoftWebhookSignature } from '../../../services/noctusoft-store/verifyNoctusoftWebhookSignature';
 import type { INoctusoftStoreWebhookEventV1 } from '../../../services/noctusoft-store/types';
 import { resolveWebhookBillingContext } from '../../../services/billing/resolveWebhookBillingContext';
 import {
   activateOrRenewSubscription,
+  recordStoreRefund,
   revokeOrMarkPastDue,
+  syncCancelAtPeriodEnd,
 } from '../../../services/billing/applyBillingEntitlement';
 import { logger } from '../../../logger';
 
@@ -18,9 +24,11 @@ export interface INoctusoftWebhookDeps {
 }
 
 const PAID_EVENTS = new Set(['purchase.paid', 'subscription.started', 'subscription.renewed']);
+const OBJECT_ID_HEX = /^[0-9a-f]{24}$/i;
 
 export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
   const router = Router();
+  const userRepo = new UserRepository(deps.database);
   const defaultWebhookRepo = new WebhookEventRepository(deps.database);
   void defaultWebhookRepo.ensureIndexes().catch((err: unknown) => {
     logger.error({ err }, 'Failed to ensure webhook_events indexes');
@@ -64,7 +72,21 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
     }
 
     const resolved = resolveWebhookBillingContext(event);
-    if (resolved) {
+    if (event.type === 'purchase.refunded') {
+      await recordStoreRefund(
+        { database: deps.database },
+        {
+          paymentId: event.refs?.paymentId ?? null,
+          refundId: event.refs?.refundId ?? null,
+          refundedCents: event.money?.refundedCents ?? 0,
+        }
+      );
+    } else if (resolved && !(await isScholarmancyUser(resolved.userId))) {
+      logger.warn(
+        { eventId, type: event.type },
+        'Store event names a buyer who is not a Scholarmancy user; nothing changed'
+      );
+    } else if (resolved) {
       if (PAID_EVENTS.has(event.type)) {
         if (resolved.plan === null || resolved.billingCycle === null) {
           logger.warn(
@@ -83,8 +105,19 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
               paymentId: resolved.paymentId,
               orderId: resolved.orderId,
               storeSubscriptionId: resolved.subscriptionId,
+              recordChargeWithoutPaymentRef:
+                event.type === 'subscription.started' && event.subscription?.status === 'active',
               description: `Noctusoft store ${event.type} — ${resolved.plan} (${resolved.billingCycle})`,
             }
+          );
+        }
+      } else if (event.type === 'subscription.changed') {
+        const cancelScheduled = event.subscription?.cancelScheduled;
+        if (typeof cancelScheduled === 'boolean') {
+          await syncCancelAtPeriodEnd(
+            { database: deps.database },
+            resolved.userId,
+            cancelScheduled
           );
         }
       } else if (event.type === 'subscription.canceled') {
@@ -95,6 +128,11 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
     }
 
     res.json({ received: true });
+  }
+
+  async function isScholarmancyUser(userId: string): Promise<boolean> {
+    if (!OBJECT_ID_HEX.test(userId)) return false;
+    return (await userRepo.findById(userId)) !== null;
   }
 
   return router;

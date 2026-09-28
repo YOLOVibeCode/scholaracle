@@ -62,9 +62,15 @@ export const billingApi = {
    * @param plan - Subscription plan (starter, premium, family, enterprise)
    * @param billingCycle - monthly or annual
    */
-  async createCheckout(plan: string, billingCycle: 'monthly' | 'annual' = 'monthly'): Promise<string | null> {
+  async createCheckout(
+    plan: string,
+    billingCycle: 'monthly' | 'annual' = 'monthly'
+  ): Promise<string | null> {
     try {
-      const res = await apiClient.post<ICheckoutResponse>('/billing/checkout', { plan, billingCycle });
+      const res = await apiClient.post<ICheckoutResponse>('/billing/checkout', {
+        plan,
+        billingCycle,
+      });
       return res.url;
     } catch (error) {
       console.error('Failed to create checkout:', error);
@@ -73,7 +79,21 @@ export const billingApi = {
   },
 
   /**
-   * Create a billing portal session; returns in-app billing settings URL.
+   * Cancel the paid subscription at the end of the current period.
+   */
+  async cancelSubscription(): Promise<ISubscriptionInfo | null> {
+    try {
+      const res = await apiClient.post<ISubscriptionResponse>('/billing/cancel');
+      return res.subscription;
+    } catch (error) {
+      console.error('Failed to cancel subscription:', error);
+      return null;
+    }
+  },
+
+  /**
+   * The store's page to update the card on a paid subscription, or the
+   * in-app billing page when there is none.
    */
   async createPortal(): Promise<string | null> {
     try {
@@ -101,9 +121,7 @@ export const billingApi = {
   /**
    * Validate a coupon code.
    */
-  async validateCoupon(
-    code: string
-  ): Promise<{
+  async validateCoupon(code: string): Promise<{
     valid: boolean;
     coupon?: { code: string; type: string; value: number; discountLabel: string };
     error?: string;

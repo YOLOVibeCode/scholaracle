@@ -123,6 +123,29 @@ describe('PaymentRepository', () => {
       expect(updated?.status).toBe('refunded');
       expect(updated?.amountRefunded).toBe(1900);
     });
+
+    it('adds partial refunds together, caps at the charge, and keeps the refund ref', async () => {
+      const payment = await repository.create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+      });
+      const id = payment._id!.toString();
+
+      await repository.recordRefund(id, 1000, 'admin-1', 'Partial', 'ns_ref_1');
+      const afterFirst = await repository.findById(id);
+      expect(afterFirst?.status).toBe('partially_refunded');
+      expect(afterFirst?.amountRefunded).toBe(1000);
+      expect(afterFirst?.refundId).toBe('ns_ref_1');
+
+      await repository.recordRefund(id, 1500, 'admin-1', 'Rest', 'ns_ref_2');
+      const afterSecond = await repository.findById(id);
+      expect(afterSecond?.status).toBe('refunded');
+      expect(afterSecond?.amountRefunded).toBe(1900);
+      expect(afterSecond?.refundId).toBe('ns_ref_2');
+    });
   });
 
   describe('getLifetimeValueByUserId', () => {

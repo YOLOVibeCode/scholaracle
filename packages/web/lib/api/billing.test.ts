@@ -15,7 +15,9 @@ function fakeResponse(body: unknown, status = 200): Response {
     statusText: isOk ? 'OK' : 'Error',
     type: 'basic' as ResponseType,
     url: '',
-    clone: function () { return this as Response; },
+    clone: function () {
+      return this as Response;
+    },
     body: null,
     bodyUsed: false,
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -63,7 +65,7 @@ describe('billingApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         `${BASE}/billing/subscription`,
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(sub);
     });
@@ -83,11 +85,13 @@ describe('billingApi', () => {
 
   describe('createCheckout', () => {
     it('POSTs to /billing/checkout with plan and billingCycle and returns URL', async () => {
-      fetchSpy.mockResolvedValue(fakeResponse({
-        success: true,
-        sessionId: 'order_123',
-        url: 'https://store.noctusoft.com/checkout/example',
-      }));
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          sessionId: 'order_123',
+          url: 'https://store.noctusoft.com/checkout/example',
+        })
+      );
 
       const result = await billingApi.createCheckout('starter', 'monthly');
 
@@ -96,7 +100,7 @@ describe('billingApi', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ plan: 'starter', billingCycle: 'monthly' }),
-        }),
+        })
       );
       expect(result).toBe('https://store.noctusoft.com/checkout/example');
     });
@@ -111,21 +115,56 @@ describe('billingApi', () => {
   });
 
   // -------------------------------------------------------------------------
+  // cancelSubscription
+  // -------------------------------------------------------------------------
+
+  describe('cancelSubscription', () => {
+    it('POSTs to /billing/cancel and returns the subscription as it will end', async () => {
+      const sub: ISubscriptionInfo = {
+        plan: 'starter',
+        status: 'active',
+        billingCycle: 'monthly',
+        currentPeriodEnd: '2026-10-28T03:45:34.000Z',
+        cancelAtPeriodEnd: true,
+      };
+      fetchSpy.mockResolvedValue(fakeResponse({ success: true, subscription: sub }));
+
+      const result = await billingApi.cancelSubscription();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/billing/cancel`,
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result).toEqual(sub);
+    });
+
+    it('returns null when the request fails', async () => {
+      fetchSpy.mockRejectedValue(new Error('Cancel failed'));
+
+      const result = await billingApi.cancelSubscription();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // createPortal
   // -------------------------------------------------------------------------
 
   describe('createPortal', () => {
     it('POSTs to /billing/portal and returns URL', async () => {
-      fetchSpy.mockResolvedValue(fakeResponse({
-        success: true,
-        url: 'http://localhost:2800/settings',
-      }));
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          url: 'http://localhost:2800/settings',
+        })
+      );
 
       const result = await billingApi.createPortal();
 
       expect(fetchSpy).toHaveBeenCalledWith(
         `${BASE}/billing/portal`,
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({ method: 'POST' })
       );
       expect(result).toBe('http://localhost:2800/settings');
     });
@@ -161,7 +200,7 @@ describe('billingApi', () => {
 
       expect(fetchSpy).toHaveBeenCalledWith(
         `${BASE}/billing/invoices`,
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
       expect(result).toEqual(invoices);
     });
