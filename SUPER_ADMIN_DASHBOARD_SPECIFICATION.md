@@ -82,7 +82,6 @@ export class AdminUser {
 
 export interface ICustomerData extends IUserData {
   // Billing Information
-  readonly squareCustomerId?: string;
   readonly billingEmail?: string;
   readonly billingAddress?: IAddress;
   
@@ -148,9 +147,8 @@ export interface ISubscriptionData {
   readonly nextPaymentDate?: Date;
   readonly nextPaymentAmount?: number;
   
-  // Square Integration
-  readonly squareSubscriptionId?: string;
-  readonly squareInvoiceId?: string;
+  // Noctusoft store ref (opaque)
+  readonly storeSubscriptionId?: string;
   
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -193,10 +191,10 @@ export interface IPaymentData {
   readonly last4?: string;
   readonly brand?: string;
   
-  // Square Integration
-  readonly squarePaymentId?: string;
-  readonly squareOrderId?: string;
-  readonly squareInvoiceId?: string;
+  // Noctusoft store refs (opaque)
+  readonly storePaymentId?: string;
+  readonly storeOrderId?: string;
+  readonly storeSubscriptionId?: string;
   
   // Receipt
   readonly receiptUrl?: string;
@@ -635,7 +633,7 @@ interface IAuditLog {
 - [ ] Subscription management
 - [ ] Refund processing
 - [ ] Invoice generation
-- [ ] Square webhook integration
+- [x] Noctusoft store webhook (event v1)
 
 ### Phase 4: Communication (Week 7)
 - [ ] Communication log viewer
@@ -682,7 +680,7 @@ interface IAuditLog {
   - `audit_logs`
 
 ### Integrations
-- Square for payment processing
+- Noctusoft store (store.noctusoft.com) for payments; the app holds no payment provider key
 - SendGrid for transactional email
 - Twilio for SMS
 

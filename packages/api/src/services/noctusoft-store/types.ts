@@ -1,8 +1,10 @@
 /** Store webhook event v1 types delivered to product apps. */
 export type NoctusoftStoreEventType =
   | 'purchase.paid'
+  | 'purchase.refunded'
   | 'subscription.started'
   | 'subscription.renewed'
+  | 'subscription.changed'
   | 'subscription.canceled'
   | 'subscription.payment_failed';
 
@@ -22,13 +24,20 @@ export interface INoctusoftStoreWebhookEventV1 {
   readonly money?: {
     readonly amountCents?: number | null;
     readonly currency?: string | null;
+    /** On purchase.refunded: this refund's amount, not a running total. */
+    readonly refundedCents?: number | null;
   } | null;
   readonly refs?: {
     readonly orderId?: string | null;
     readonly paymentId?: string | null;
     readonly subscriptionId?: string | null;
+    readonly refundId?: string | null;
   } | null;
-  readonly subscription?: { readonly planKey?: string | null } | null;
+  readonly subscription?: {
+    readonly planKey?: string | null;
+    readonly status?: string | null;
+    readonly cancelScheduled?: boolean | null;
+  } | null;
 }
 
 export interface INoctusoftStoreCheckoutResult {

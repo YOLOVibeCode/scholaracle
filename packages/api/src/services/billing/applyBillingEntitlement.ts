@@ -17,6 +17,12 @@ export interface IActivateSubscriptionParams {
   readonly paymentId?: string;
   readonly orderId?: string;
   readonly storeSubscriptionId?: string;
+  /**
+   * The store never forwards a subscription's first invoice, so its charge
+   * arrives on subscription.started with no payment ref. The webhook's event-id
+   * dedupe is what keeps it from being recorded twice.
+   */
+  readonly recordChargeWithoutPaymentRef?: boolean;
   readonly description: string;
 }
 
@@ -50,15 +56,16 @@ export async function activateOrRenewSubscription(
 
   const periodEnd = addPeriodEnd(params.billingCycle);
 
-  if (params.paymentId && params.amountCents > 0) {
+  if ((params.paymentId || params.recordChargeWithoutPaymentRef) && params.amountCents > 0) {
     await paymentRepo.create({
       userId: params.userId,
       amount: params.amountCents,
       currency: params.currency,
       status: 'succeeded',
       paymentMethod: 'card',
-      storePaymentId: params.paymentId,
-      storeOrderId: params.orderId,
+      ...(params.paymentId ? { storePaymentId: params.paymentId } : {}),
+      ...(params.orderId ? { storeOrderId: params.orderId } : {}),
+      ...(params.storeSubscriptionId ? { storeSubscriptionId: params.storeSubscriptionId } : {}),
       description: params.description,
     });
   }
@@ -122,5 +129,44 @@ export async function revokeOrMarkPastDue(
     await userRepo.updateSubscription(userId, { plan: userPlan, status: userStatus });
   } catch {
     // Best-effort
+  }
+}
+
+/**
+ * Applies a store refund to the payment it names. A refund the admin route
+ * already recorded carries the same refund ref and is skipped.
+ */
+export async function recordStoreRefund(
+  deps: IBillingEntitlementDeps,
+  refund: {
+    readonly paymentId: string | null;
+    readonly refundId: string | null;
+    readonly refundedCents: number;
+  }
+): Promise<void> {
+  if (!refund.paymentId || refund.refundedCents <= 0) return;
+  const paymentRepo = new PaymentRepository(deps.database);
+  const payment = await paymentRepo.findByStorePaymentId(refund.paymentId);
+  if (!payment?._id) return;
+  if (refund.refundId && payment.refundId === refund.refundId) return;
+  await paymentRepo.recordRefund(
+    payment._id.toString(),
+    refund.refundedCents,
+    'noctusoft-store',
+    'Refunded in the store',
+    refund.refundId ?? undefined
+  );
+}
+
+/** Mirrors a cancel scheduled (or withdrawn) at the store onto the local subscription. */
+export async function syncCancelAtPeriodEnd(
+  deps: IBillingEntitlementDeps,
+  userId: string,
+  cancelAtPeriodEnd: boolean
+): Promise<void> {
+  const subscriptionRepo = new SubscriptionRepository(deps.database);
+  const subscription = await subscriptionRepo.findByUserId(userId);
+  if (subscription) {
+    await subscriptionRepo.update(userId, { cancelAtPeriodEnd });
   }
 }
