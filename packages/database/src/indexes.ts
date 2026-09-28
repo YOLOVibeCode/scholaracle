@@ -62,8 +62,6 @@ export async function createIndexes(database: Db): Promise<void> {
   const paymentsCollection = database.collection('payments');
   await paymentsCollection.createIndex({ userId: 1, createdAt: -1 });
   await paymentsCollection.createIndex({ status: 1 });
-  await paymentsCollection.createIndex({ stripePaymentIntentId: 1 });
-  await paymentsCollection.createIndex({ squarePaymentId: 1 });
   await paymentsCollection.createIndex({ storePaymentId: 1 });
 
   // Communication logs collection indexes

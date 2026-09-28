@@ -26,9 +26,9 @@ export interface IWebhookEventWriter {
 export interface IWebhookEventRepository extends IWebhookEventReader, IWebhookEventWriter {}
 
 /**
- * Repository for webhook event idempotency. Closes DEF-001 (Square dedup keyed
- * on payment.id instead of event.id) and DEF-007 (no replay window) by giving
- * webhook handlers a single, atomic dedup gate keyed on the provider's own
+ * Repository for webhook event idempotency. Closes DEF-001 (dedup keyed on
+ * payment.id instead of event.id) and DEF-007 (no replay window) by giving
+ * webhook handlers a single, atomic dedup gate keyed on the sender's own
  * event identifier.
  */
 export class WebhookEventRepository implements IWebhookEventRepository {

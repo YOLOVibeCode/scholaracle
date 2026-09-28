@@ -136,8 +136,7 @@ describe('Subscription', () => {
         lastPaymentAmount: 19,
         nextPaymentDate: new Date('2024-02-01'),
         nextPaymentAmount: 19,
-        stripeSubscriptionId: 'sub_abc123',
-        stripeCustomerId: 'cus_abc123',
+        storeSubscriptionId: 'sub_rel_abc123',
       });
 
       // Act
@@ -153,8 +152,7 @@ describe('Subscription', () => {
       expect(sub.lastPaymentAmount).toBe(19);
       expect(sub.nextPaymentDate).toEqual(new Date('2024-02-01'));
       expect(sub.nextPaymentAmount).toBe(19);
-      expect(sub.stripeSubscriptionId).toBe('sub_abc123');
-      expect(sub.stripeCustomerId).toBe('cus_abc123');
+      expect(sub.storeSubscriptionId).toBe('sub_rel_abc123');
     });
 
     it('should accept ObjectId for _id', () => {

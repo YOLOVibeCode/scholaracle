@@ -9,8 +9,4 @@ export {
   signNoctusoftWebhookBody,
   verifyNoctusoftWebhookSignature,
 } from './verifyNoctusoftWebhookSignature';
-export type {
-  INoctusoftStoreWebhookEventV1,
-  INoctusoftStoreWebhookData,
-  NoctusoftStoreEventType,
-} from './types';
+export type { INoctusoftStoreWebhookEventV1, NoctusoftStoreEventType } from './types';
