@@ -680,7 +680,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     const storeClient = storeConfig ? new NoctusoftStoreClient(storeConfig) : undefined;
 
     app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
-    app.use('/api/admin/payments', paymentsRouter({ database }));
+    app.use(
+      '/api/admin/payments',
+      paymentsRouter({ database, ...(storeClient ? { storeClient } : {}) })
+    );
     app.use('/api/admin/coupons', couponsRouter({ database }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));

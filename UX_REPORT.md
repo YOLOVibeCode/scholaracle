@@ -100,7 +100,7 @@
 | # | Sev | Heuristic | Finding | Fix |
 |---|-----|-----------|---------|-----|
 | UX-B-01 | Sev-1 | Money clarity | If trialing, no countdown banner ("Trial ends in 3 days"). | Persistent dismissible banner. |
-| UX-B-02 | Sev-1 | A11y — payment iframes | Stripe/Square checkout iframes need `title` attribute; default title is provider-set. | Wrap with `<iframe title="Secure payment form">`. |
+| UX-B-02 | Sev-1 | A11y — payment iframes | Resolved by design: checkout leaves the app for the Noctusoft store's hosted page, so the app embeds no payment iframe. | — |
 | UX-B-03 | Sev-2 | Nielsen #9 (Recover) | After a failed `payment.failed` webhook, dashboard banner is generic; no link to "Update card". | Inline CTA → `/dashboard/billing#payment-method`. |
 | UX-B-04 | Sev-2 | Nielsen #5 | Cancel-subscription confirm dialog — does it warn about data retention? | Add "We keep your data 30 days; you can reactivate." copy. |
 

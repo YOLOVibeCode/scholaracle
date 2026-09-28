@@ -13,7 +13,14 @@ export interface IPaymentReader {
 export interface IPaymentWriter {
   create(paymentData: IPaymentData): Promise<Payment>;
   updateStatus(id: string, status: PaymentStatus, failureReason?: string): Promise<boolean>;
-  recordRefund(id: string, amount: number, refundedBy: string, reason?: string): Promise<boolean>;
+  /** Adds `amount` to what was already refunded, capped at the charge. */
+  recordRefund(
+    id: string,
+    amount: number,
+    refundedBy: string,
+    reason?: string,
+    refundId?: string
+  ): Promise<boolean>;
 }
 
 export interface IPaymentRepository extends IPaymentReader, IPaymentWriter {}
@@ -130,7 +137,8 @@ export class PaymentRepository implements IPaymentRepository {
     id: string,
     amount: number,
     refundedBy: string,
-    reason?: string
+    reason?: string,
+    refundId?: string
   ): Promise<boolean> {
     const objectId = new ObjectId(id);
     const payment = await this.findById(id);
@@ -139,17 +147,20 @@ export class PaymentRepository implements IPaymentRepository {
       return false;
     }
 
-    const newStatus: PaymentStatus = payment.amount === amount ? 'refunded' : 'partially_refunded';
+    const totalRefunded = Math.min(payment.amount, payment.amountRefunded + amount);
+    const newStatus: PaymentStatus =
+      totalRefunded >= payment.amount ? 'refunded' : 'partially_refunded';
 
     const result = await this._collection.updateOne(
       { _id: objectId },
       {
         $set: {
           status: newStatus,
-          amountRefunded: amount,
+          amountRefunded: totalRefunded,
           refundedAt: new Date(),
           refundedBy,
           refundReason: reason,
+          ...(refundId ? { refundId } : {}),
           updatedAt: new Date(),
         },
       }

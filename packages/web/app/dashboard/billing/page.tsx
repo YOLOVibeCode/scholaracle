@@ -4,8 +4,22 @@ import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, ExternalLink, FileText, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { billingApi, type ISubscriptionInfo, type IInvoice } from '@/lib/api/billing';
 
@@ -28,24 +42,20 @@ type BillingCycle = 'monthly' | 'annual';
 
 function BillingPageContent() {
   const searchParams = useSearchParams();
-  const upgradePlan = useMemo(
-    () => searchParams.get('upgrade') ?? null,
-    [searchParams]
-  );
+  const upgradePlan = useMemo(() => searchParams.get('upgrade') ?? null, [searchParams]);
   const cycleParam = useMemo(
     () => (searchParams.get('cycle') === 'annual' ? 'annual' : 'monthly') as BillingCycle,
     [searchParams]
   );
 
-  const couponParam = useMemo(
-    () => searchParams.get('coupon') ?? null,
-    [searchParams]
-  );
+  const couponParam = useMemo(() => searchParams.get('coupon') ?? null, [searchParams]);
 
   const [subscription, setSubscription] = useState<ISubscriptionInfo | null>(null);
   const [invoices, setInvoices] = useState<IInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'error' | 'success'>('error');
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(cycleParam);
@@ -81,6 +91,20 @@ function BillingPageContent() {
       window.location.href = url;
     } else {
       setToast('Failed to open billing portal');
+    }
+  };
+
+  const handleCancel = async (): Promise<void> => {
+    setIsCancelling(true);
+    setToast(null);
+    const updated = await billingApi.cancelSubscription();
+    setIsCancelling(false);
+    setShowCancelConfirm(false);
+    if (updated) {
+      setSubscription(updated);
+      showToast('Your subscription will end at the close of this billing period.', 'success');
+    } else {
+      showToast('Failed to cancel subscription', 'error');
     }
   };
 
@@ -197,7 +221,11 @@ function BillingPageContent() {
           {isFreePlan ? (
             <>
               <div className="flex items-center gap-2" data-testid="billing-cycle-toggle">
-                <span className={billingCycle === 'monthly' ? 'font-medium' : 'text-muted-foreground text-sm'}>
+                <span
+                  className={
+                    billingCycle === 'monthly' ? 'font-medium' : 'text-muted-foreground text-sm'
+                  }
+                >
                   Monthly
                 </span>
                 <button
@@ -210,10 +238,19 @@ function BillingPageContent() {
                 >
                   <span
                     className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform"
-                    style={{ transform: billingCycle === 'annual' ? 'translateX(1.25rem)' : 'translateX(0)' }}
+                    style={{
+                      transform:
+                        billingCycle === 'annual' ? 'translateX(1.25rem)' : 'translateX(0)',
+                    }}
                   />
                 </button>
-                <span className={billingCycle === 'annual' ? 'font-medium text-sm' : 'text-muted-foreground text-sm'}>
+                <span
+                  className={
+                    billingCycle === 'annual'
+                      ? 'font-medium text-sm'
+                      : 'text-muted-foreground text-sm'
+                  }
+                >
                   Annual
                 </span>
               </div>
@@ -226,15 +263,27 @@ function BillingPageContent() {
               </Button>
             </>
           ) : (
-            <Button
-              variant="outline"
-              onClick={handleManageBilling}
-              disabled={isPortalLoading}
-              data-testid="button-manage-billing"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              {isPortalLoading ? 'Opening...' : 'Manage Billing'}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={handleManageBilling}
+                disabled={isPortalLoading}
+                data-testid="button-manage-billing"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                {isPortalLoading ? 'Opening...' : 'Manage Billing'}
+              </Button>
+              {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowCancelConfirm(true)}
+                  disabled={isCancelling}
+                  data-testid="button-cancel-subscription"
+                >
+                  Cancel subscription
+                </Button>
+              )}
+            </>
           )}
         </CardFooter>
       </Card>
@@ -247,9 +296,7 @@ function BillingPageContent() {
               <Gift className="h-5 w-5" />
               Have a coupon code?
             </CardTitle>
-            <CardDescription>
-              Enter a coupon code to start a free trial
-            </CardDescription>
+            <CardDescription>Enter a coupon code to start a free trial</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2">
@@ -258,7 +305,9 @@ function BillingPageContent() {
                 placeholder="e.g. TRYME30"
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleRedeemCoupon(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleRedeemCoupon();
+                }}
               />
               <Button
                 onClick={() => void handleRedeemCoupon()}
@@ -303,7 +352,13 @@ function BillingPageContent() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={invoice.status === 'succeeded' || invoice.status === 'paid' ? 'default' : 'outline'}>
+                    <Badge
+                      variant={
+                        invoice.status === 'succeeded' || invoice.status === 'paid'
+                          ? 'default'
+                          : 'outline'
+                      }
+                    >
                       {invoice.status}
                     </Badge>
                     {invoice.pdfUrl && (
@@ -323,6 +378,40 @@ function BillingPageContent() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel your subscription?</DialogTitle>
+            <DialogDescription>
+              You keep {PLAN_LABELS[subscription?.plan ?? 'free'] ?? 'your plan'} until
+              {subscription?.currentPeriodEnd
+                ? ` ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                : ' the end of this billing period'}
+              . After that the account moves to the free plan and you are not charged again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCancelConfirm(false)}
+              disabled={isCancelling}
+            >
+              Keep subscription
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void handleCancel()}
+              disabled={isCancelling}
+              data-testid="button-confirm-cancel"
+            >
+              {isCancelling ? 'Cancelling...' : 'Cancel subscription'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,16 +2,24 @@ import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { PaymentRepository, AuditLogRepository } from '@scholaracle/database';
 import { AdminAuthService } from '@scholaracle/auth';
-import { NotFoundError, ValidationError } from '@scholaracle/contracts';
+import {
+  ConflictError,
+  ExternalServiceError,
+  NotFoundError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import {
   adminAuthMiddleware,
   type IAdminAuthenticatedRequest,
 } from '../../../middleware/adminAuth';
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import type { INoctusoftStoreClient } from '../../../services/noctusoft-store/NoctusoftStoreClient';
 export interface IPaymentsRouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  /** Refunds move money through the store; absent when store billing is not configured. */
+  readonly storeClient?: INoctusoftStoreClient;
 }
 
 async function handleGetPayments(
@@ -102,14 +110,18 @@ async function handleRefundPayment(
   auditLogRepository: AuditLogRepository,
   adminId: string,
   adminEmail: string,
-  _config: IPaymentsRouterConfig
+  config: IPaymentsRouterConfig
 ): Promise<void> {
   const { id } = req.params;
   if (!id) {
     throw new ValidationError('Payment ID is required');
   }
 
-  const { amount, reason } = req.body;
+  const { amount, reason, recordOnly } = req.body as {
+    amount?: number;
+    reason?: string;
+    recordOnly?: boolean;
+  };
 
   if (!amount || !reason) {
     throw new ValidationError('Amount and reason are required');
@@ -122,7 +134,31 @@ async function handleRefundPayment(
     throw new NotFoundError('Payment not found');
   }
 
-  const success = await paymentRepository.recordRefund(id, amountInCents, adminId, reason);
+  let refundRef: string | null = null;
+  if (recordOnly !== true) {
+    if (!payment.storePaymentId) {
+      throw new ConflictError(
+        'The store holds no payment ref for this charge. Refund it in the store console, then record it with recordOnly.'
+      );
+    }
+    if (!config.storeClient) {
+      throw new ExternalServiceError('Store billing is not configured on this API');
+    }
+    const refund = await config.storeClient.refundPayment(payment.storePaymentId, {
+      amountCents: amountInCents,
+      reason,
+      idempotencyKey: `admin-refund:${id}:${payment.amountRefunded}:${amountInCents}`,
+    });
+    refundRef = refund.refundRef;
+  }
+
+  const success = await paymentRepository.recordRefund(
+    id,
+    amountInCents,
+    adminId,
+    reason,
+    refundRef ?? undefined
+  );
 
   if (!success) {
     throw new NotFoundError('Payment not found');
@@ -136,7 +172,7 @@ async function handleRefundPayment(
     entityType: 'payment',
     entityId: id,
     reason,
-    metadata: { amount: amountInCents },
+    metadata: { amount: amountInCents, refundRef, recordOnly: recordOnly === true },
     ipAddress: req.ip ?? 'unknown',
     userAgent: req.headers['user-agent'] ?? 'unknown',
   });

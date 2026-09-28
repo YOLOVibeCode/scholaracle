@@ -6,6 +6,7 @@ import { AdminStepUpChallengeRepository, PaymentRepository } from '@scholaracle/
 import { adminAuthRouter } from '../auth/auth';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
 import { createErrorHandler } from '../../../middleware/errorHandler';
+import type { INoctusoftStoreClient } from '../../../services/noctusoft-store/NoctusoftStoreClient';
 
 describe('Admin Payment Routes', () => {
   let app: Express;
@@ -14,6 +15,23 @@ describe('Admin Payment Routes', () => {
   let adminToken: string;
   let billingAdminToken: string;
   let billingAdminMfaSecret: string;
+  const storeClient: jest.Mocked<INoctusoftStoreClient> = {
+    createCheckout: jest.fn(),
+    cancelSubscription: jest.fn(),
+    updatePaymentMethod: jest.fn(),
+    refundPayment: jest.fn(),
+  };
+
+  async function createPayment(storePaymentId?: string) {
+    return new PaymentRepository(database).create({
+      userId: '507f1f77bcf86cd799439011',
+      amount: 1900,
+      currency: 'usd',
+      status: 'succeeded',
+      paymentMethod: 'card',
+      ...(storePaymentId ? { storePaymentId } : {}),
+    });
+  }
 
   beforeAll(async () => {
     const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -48,7 +66,10 @@ describe('Admin Payment Routes', () => {
         stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
       })
     );
-    app.use('/api/admin/payments', paymentsRouter({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/admin/payments',
+      paymentsRouter({ database, jwtSecret: 'test-secret', storeClient })
+    );
     app.use(createErrorHandler());
   });
 
@@ -57,6 +78,12 @@ describe('Admin Payment Routes', () => {
   });
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    storeClient.refundPayment.mockResolvedValue({
+      refundRef: 'ns_ref_1',
+      status: 'succeeded',
+      amountCents: 1900,
+    });
     await database.collection('payments').deleteMany({});
   });
 
@@ -125,15 +152,9 @@ describe('Admin Payment Routes', () => {
   });
 
   describe('POST /api/admin/payments/:id/refund', () => {
-    it('should process full refund', async () => {
+    it('refunds the full amount through the store', async () => {
       const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
-      const payment = await new PaymentRepository(database).create({
-        userId: '507f1f77bcf86cd799439011',
-        amount: 1900,
-        currency: 'usd',
-        status: 'succeeded',
-        paymentMethod: 'card',
-      });
+      const payment = await createPayment('ns_pay_1');
 
       const response = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
@@ -146,17 +167,21 @@ describe('Admin Payment Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
+      expect(storeClient.refundPayment).toHaveBeenCalledWith(
+        'ns_pay_1',
+        expect.objectContaining({
+          amountCents: 1900,
+          reason: 'Customer request',
+          idempotencyKey: expect.any(String),
+        })
+      );
+      const stored = await new PaymentRepository(database).findById(payment._id!.toString());
+      expect(stored!.amountRefunded).toBe(1900);
     });
 
-    it('should process partial refund', async () => {
+    it('refunds part of a payment through the store', async () => {
       const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
-      const payment = await new PaymentRepository(database).create({
-        userId: '507f1f77bcf86cd799439011',
-        amount: 1900,
-        currency: 'usd',
-        status: 'succeeded',
-        paymentMethod: 'card',
-      });
+      const payment = await createPayment('ns_pay_2');
 
       const response = await request(app)
         .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
@@ -169,6 +194,42 @@ describe('Admin Payment Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
+      expect(storeClient.refundPayment).toHaveBeenCalledWith(
+        'ns_pay_2',
+        expect.objectContaining({ amountCents: 1000 })
+      );
+    });
+
+    it('answers 409 for a charge the store holds no payment ref for', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
+      const payment = await createPayment();
+
+      const response = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
+        .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ amount: 19, reason: 'Customer request' });
+
+      expect(response.status).toBe(409);
+      expect(storeClient.refundPayment).not.toHaveBeenCalled();
+      const stored = await new PaymentRepository(database).findById(payment._id!.toString());
+      expect(stored!.amountRefunded).toBe(0);
+    });
+
+    it('records a refund made outside the app when recordOnly is set', async () => {
+      const stepUpToken = await getStepUpToken(app, billingAdminToken, billingAdminMfaSecret);
+      const payment = await createPayment();
+
+      const response = await request(app)
+        .post(`/api/admin/payments/${payment._id!.toString()}/refund`)
+        .set('Authorization', `Bearer ${billingAdminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ amount: 19, reason: 'Refunded in the store console', recordOnly: true });
+
+      expect(response.status).toBe(200);
+      expect(storeClient.refundPayment).not.toHaveBeenCalled();
+      const stored = await new PaymentRepository(database).findById(payment._id!.toString());
+      expect(stored!.amountRefunded).toBe(1900);
     });
 
     it('should require refund reason', async () => {
@@ -195,13 +256,7 @@ describe('Admin Payment Routes', () => {
     });
 
     it('should require step-up when MFA is enabled', async () => {
-      const payment = await new PaymentRepository(database).create({
-        userId: '507f1f77bcf86cd799439011',
-        amount: 1900,
-        currency: 'usd',
-        status: 'succeeded',
-        paymentMethod: 'card',
-      });
+      const payment = await createPayment('ns_pay_3');
 
       // Billing admin already has MFA from createTestAdmin
       const billingTokenWithMFA = billingAdminToken;
