@@ -166,11 +166,11 @@ async function handleRegister(
 
   let normalizedPhone: string | undefined;
   if (phone?.trim()) {
-    try {
-      normalizedPhone = normalizePhoneE164(phone);
-    } catch {
+    const parsed = normalizePhoneE164(phone);
+    if (!parsed) {
       throw new ValidationError('Invalid phone number');
     }
+    normalizedPhone = parsed;
   }
   const hasSmsConsent = smsConsent === true;
   if (hasSmsConsent && !normalizedPhone) {

@@ -85,11 +85,14 @@ async function sendContactSmsConfirmationIfNeeded(
   if (!phone?.trim() || !alertChannels?.includes('sms') || !config.guardedSmsSender) {
     return;
   }
+  const e164 = normalizePhoneE164(phone);
+  if (!e164) {
+    return;
+  }
   try {
-    const e164 = normalizePhoneE164(phone);
     await config.guardedSmsSender.sendDoubleOptInConfirmation(e164, inviterName);
   } catch {
-    // Invalid phone on contact — skip SMS confirmation
+    // Relay or delivery failure — skip surfacing to client
   }
 }
 

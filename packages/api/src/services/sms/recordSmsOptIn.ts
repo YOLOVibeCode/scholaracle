@@ -11,6 +11,9 @@ export async function recordSmsOptInFromRequest(
   source: string
 ): Promise<string> {
   const phoneE164 = normalizePhoneE164(phone);
+  if (!phoneE164) {
+    throw new Error('Invalid phone number');
+  }
   await consentRepo.recordOptIn({
     phoneE164,
     purpose: SCHOLARMANCY_SMS_PURPOSE,

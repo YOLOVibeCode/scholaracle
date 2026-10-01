@@ -19,9 +19,11 @@ describe('GuardedSmsSender', () => {
       create: jest.fn().mockResolvedValue({}),
     } as unknown as CommunicationLogRepository;
     const relay = {
-      send: jest.fn().mockRejectedValue(
-        Object.assign(new Error('opt out'), { code: TWILIO_OPT_OUT_ERROR_CODE })
-      ),
+      send: jest
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error('opt out'), { code: TWILIO_OPT_OUT_ERROR_CODE })
+        ),
     } as unknown as NoctusoftSmsRelayClient;
 
     const sender = new GuardedSmsSender(relay, consent, commLogs);

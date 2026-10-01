@@ -9,7 +9,16 @@ describe('normalizePhoneE164', () => {
     expect(normalizePhoneE164('+15125550100')).toBe('+15125550100');
   });
 
-  it('rejects invalid numbers', () => {
-    expect(() => normalizePhoneE164('abc')).toThrow(/Invalid phone/);
+  it('normalizes UK numbers when given international format', () => {
+    expect(normalizePhoneE164('+447911123456')).toBe('+447911123456');
+  });
+
+  it('returns null for invalid numbers', () => {
+    expect(normalizePhoneE164('abc')).toBeNull();
+  });
+
+  it('requires non-empty input', () => {
+    expect(() => normalizePhoneE164('')).toThrow(/required/);
+    expect(() => normalizePhoneE164('   ')).toThrow(/required/);
   });
 });

@@ -107,7 +107,7 @@ async function flushSmsDigests(database: Db, guardedSender: GuardedSmsSender): P
     }
     const commLogRepo = new CommunicationLogRepository(database);
     try {
-      const sent = await guardedSender.sendTransactional(phone, body, {
+      await guardedSender.sendTransactional(phone, body, {
         userId,
         subject: `SMS Digest (${items.length} alerts)`,
         templateName: 'sms_digest',

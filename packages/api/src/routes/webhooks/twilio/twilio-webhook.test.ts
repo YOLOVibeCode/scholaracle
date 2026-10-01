@@ -130,6 +130,31 @@ describe('Twilio Webhooks (relay)', () => {
       const row = await repo.findByPhoneAndPurpose('+15005550007', SCHOLARMANCY_SMS_PURPOSE);
       expect(row?.revokedAt).toBeTruthy();
     });
+
+    it('clears opt-out on OptOutType=START', async () => {
+      const repo = new SmsConsentRepository(database);
+      await repo.recordOptOut('+15005550009', SCHOLARMANCY_SMS_PURPOSE);
+      const res = await signedPost(app, '/api/webhooks/twilio/sms', SMS_INBOUND_WEBHOOK_URL, {
+        From: '+15005550009',
+        Body: '',
+        OptOutType: 'START',
+      });
+      expect(res.status).toBe(200);
+      expect(res.text).toBe('<Response></Response>');
+      const row = await repo.findByPhoneAndPurpose('+15005550009', SCHOLARMANCY_SMS_PURPOSE);
+      expect(row?.revokedAt).toBeUndefined();
+    });
+
+    it('replies with HELP TwiML for OptOutType=HELP', async () => {
+      const res = await signedPost(app, '/api/webhooks/twilio/sms', SMS_INBOUND_WEBHOOK_URL, {
+        From: '+15005550010',
+        Body: '',
+        OptOutType: 'HELP',
+      });
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('Scholarmancy');
+      expect(res.text).toContain('support@scholarmancy.com');
+    });
   });
 
   describe('POST /status', () => {

@@ -37,6 +37,11 @@ export class GuardedSmsSender {
     meta: IGuardedSmsSendMeta = {}
   ): Promise<{ messageId: string }> {
     const phoneE164 = normalizePhoneE164(to);
+    if (!phoneE164) {
+      throw new DeliveryError('Invalid phone number', NotificationChannel.SMS, {
+        errorMessage: 'invalid_phone',
+      });
+    }
     const hasConsent = await this._consent.hasActiveConsent(phoneE164, this._purpose);
     if (!hasConsent) {
       throw new DeliveryError(
@@ -55,6 +60,11 @@ export class GuardedSmsSender {
     inviterName: string
   ): Promise<{ messageId: string }> {
     const phoneE164 = normalizePhoneE164(to);
+    if (!phoneE164) {
+      throw new DeliveryError('Invalid phone number', NotificationChannel.SMS, {
+        errorMessage: 'invalid_phone',
+      });
+    }
     const who = inviterName.trim() || 'Someone';
     const body = ensureBrandSmsBody(
       `${who} added this number for ${this._purpose}. Reply YES to receive these texts. Reply STOP to opt out.`

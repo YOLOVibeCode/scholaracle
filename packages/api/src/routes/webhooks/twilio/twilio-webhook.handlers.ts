@@ -52,7 +52,8 @@ const TWILIO_STATUS_MAP: Record<string, CommunicationStatus> = {
 
 function normalizeFromPhone(from: string): string {
   try {
-    return normalizePhoneE164(from);
+    const e164 = normalizePhoneE164(from);
+    return e164 ?? from.trim();
   } catch {
     return from.trim();
   }

@@ -389,11 +389,11 @@ async function handleUpdateSettings(
 
   let normalizedPhone: string | undefined;
   if (profile?.phone !== undefined && profile.phone.trim()) {
-    try {
-      normalizedPhone = normalizePhoneE164(profile.phone);
-    } catch {
+    const parsed = normalizePhoneE164(profile.phone);
+    if (!parsed) {
       throw new ValidationError('Invalid phone number');
     }
+    normalizedPhone = parsed;
   }
   const profileSmsConsent = profile?.smsConsent === true;
   if (profileSmsConsent && !normalizedPhone && profile?.phone !== undefined) {
