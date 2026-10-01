@@ -56,6 +56,8 @@ import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
+import type { GuardedSmsSender } from '@scholaracle/agents';
+import { normalizePhoneE164 } from '@scholaracle/agents';
 import { noopSink, registerNudgeRoutes } from './nudge';
 
 export interface IStudentsRouterConfig {
@@ -71,6 +73,24 @@ export interface IStudentsRouterConfig {
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
   /** Optional sender for magic login links (email + SMS). */
   readonly magicLinkSender?: IMagicLinkSender;
+  readonly guardedSmsSender?: GuardedSmsSender | null;
+}
+
+async function sendContactSmsConfirmationIfNeeded(
+  config: IStudentsRouterConfig,
+  inviterName: string,
+  phone?: string,
+  alertChannels?: readonly ('email' | 'sms')[]
+): Promise<void> {
+  if (!phone?.trim() || !alertChannels?.includes('sms') || !config.guardedSmsSender) {
+    return;
+  }
+  try {
+    const e164 = normalizePhoneE164(phone);
+    await config.guardedSmsSender.sendDoubleOptInConfirmation(e164, inviterName);
+  } catch {
+    // Invalid phone on contact — skip SMS confirmation
+  }
 }
 
 // Action-board wire types live in @scholaracle/contracts (types/api/actionBoard.ts).
@@ -516,6 +536,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       };
       const newShared: readonly ISharedParent[] = [...student.sharedWith, newContact];
       await studentRepository.update(student._id!, { sharedWith: newShared });
+      const inviter = await new UserRepository(config.database).findById(userId);
+      await sendContactSmsConfirmationIfNeeded(
+        config,
+        inviter?.name ?? 'A parent',
+        newContact.phone,
+        newContact.alertChannels
+      );
       const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
       try {
         await config.sendInviteEmail?.sendInvite({
@@ -677,6 +704,21 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new ForbiddenError('You can only edit your own contact prefs');
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      const nextContact = updatedShared[idx]!;
+      const includesSms = nextContact.alertChannels?.includes('sms') ?? false;
+      if (
+        isOwnerOrAdmin &&
+        includesSms &&
+        (body.phone !== undefined || body.alertChannels !== undefined)
+      ) {
+        const inviter = await new UserRepository(config.database).findById(userId);
+        await sendContactSmsConfirmationIfNeeded(
+          config,
+          inviter?.name ?? 'A parent',
+          nextContact.phone,
+          nextContact.alertChannels
+        );
+      }
       res.status(200).json({ success: true });
     })
   );

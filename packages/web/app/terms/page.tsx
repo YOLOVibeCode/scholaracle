@@ -48,14 +48,20 @@ export default function TermsPage() {
               </p>
             </section>
 
-            <section>
-              <h2 className="text-lg font-semibold">4. SMS Consent and Opt-In</h2>
+            <section id="sms">
+              <h2 className="text-lg font-semibold">4. Scholarmancy SMS Program</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                If you opt in to receive SMS notifications, you consent to receive automated text messages from
-                Scholarmancy at the phone number you provide. Message frequency depends on your alert settings.
-                Standard message and data rates may apply. You may opt out at any time by replying STOP,
-                UNSTOP to resubscribe, or HELP for assistance. Your carrier is not liable for delayed or
-                undelivered messages.
+                The Scholarmancy SMS program sends grade and assignment alerts and sign-in links to parents who
+                opt in on our registration or account settings pages by checking the SMS consent box and providing
+                a mobile number. Message frequency varies. Message and data rates may apply. Reply STOP to opt
+                out; reply HELP for help. For support, email{' '}
+                <Link
+                  href="mailto:support@scholarmancy.com"
+                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  support@scholarmancy.com
+                </Link>
+                . Carriers are not liable for delayed or undelivered messages.
               </p>
             </section>
 

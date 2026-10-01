@@ -29,14 +29,13 @@ import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { SMSDelivery, applyTwilioApiBaseUrl } from '@scholaracle/agents';
+import { createSmsStack } from '@scholaracle/agents';
 import { PushDelivery, ExpoPushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
-import twilio from 'twilio';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
-import type { Twilio } from 'twilio';
+import type { GuardedSmsSender } from '@scholaracle/agents';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { randomUUID } from 'crypto';
 import { createAdapterRunner } from './adapter-runner';
@@ -79,32 +78,7 @@ function getSendGridConfig(config: IWorkerConfig): {
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
       'notifications@scholarmancy.com',
-    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
-  };
-}
-
-/**
- * Get Twilio configuration from config or environment.
- *
- * @param config - Worker configuration
- * @returns Twilio configuration
- */
-function getTwilioConfig(config: IWorkerConfig): {
-  readonly accountSid: string;
-  readonly authToken: string;
-  readonly apiKeySid: string;
-  readonly apiKeySecret: string;
-  readonly fromNumber: string;
-  readonly messagingServiceSid: string;
-} {
-  return {
-    accountSid: config.twilioAccountSid ?? process.env['TWILIO_ACCOUNT_SID'] ?? '',
-    authToken: config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '',
-    apiKeySid: config.twilioApiKeySid ?? process.env['TWILIO_API_KEY_SID'] ?? '',
-    apiKeySecret: config.twilioApiKeySecret ?? process.env['TWILIO_API_KEY_SECRET'] ?? '',
-    fromNumber: config.twilioFromNumber ?? process.env['TWILIO_FROM_NUMBER'] ?? '',
-    messagingServiceSid:
-      config.twilioMessagingServiceSid ?? process.env['TWILIO_MESSAGING_SERVICE_SID'] ?? '',
+    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholarmancy',
   };
 }
 
@@ -117,12 +91,7 @@ const MAX_SMS_LENGTH = 1600;
  * Flush pending SMS digest: send one combined SMS per user with digest enabled, then clear pending.
  * Intended to run once per day at SMS_DIGEST_UTC_HOUR.
  */
-async function flushSmsDigests(
-  database: Db,
-  twilioClient: Twilio,
-  fromNumber: string,
-  messagingServiceSid?: string
-): Promise<void> {
+async function flushSmsDigests(database: Db, guardedSender: GuardedSmsSender): Promise<void> {
   const repo = new SmsDigestPendingRepository(database);
   const userIds = await repo.getDistinctUserIds();
   if (userIds.length === 0) return;
@@ -132,29 +101,17 @@ async function flushSmsDigests(
     if (items.length === 0) continue;
     const phone = items[0]!.phone;
     const parts = items.map((i) => `${i.subject}\n${i.body}`);
-    let body = `Scholaracle daily digest (${items.length} alert${items.length === 1 ? '' : 's'}):\n\n${parts.join('\n\n')}`;
+    let body = `Scholarmancy daily digest (${items.length} alert${items.length === 1 ? '' : 's'}):\n\n${parts.join('\n\n')}`;
     if (body.length > MAX_SMS_LENGTH) {
       body = `${body.substring(0, MAX_SMS_LENGTH - 3)}...`;
     }
     const commLogRepo = new CommunicationLogRepository(database);
     try {
-      const msg = await twilioClient.messages.create({
-        to: phone,
-        ...(messagingServiceSid ? { messagingServiceSid } : { from: fromNumber }),
-        body,
-      });
-      await commLogRepo.create({
+      const sent = await guardedSender.sendTransactional(phone, body, {
         userId,
-        channel: 'sms',
-        type: 'notification',
         subject: `SMS Digest (${items.length} alerts)`,
-        content: body,
-        recipientPhone: phone,
-        status: 'sent',
-        sentAt: new Date(),
-        triggeredBy: 'scheduled',
         templateName: 'sms_digest',
-        providerId: msg.sid,
+        triggeredBy: 'scheduled',
       });
       await repo.deleteByUserId(userId);
     } catch (err) {
@@ -220,23 +177,7 @@ function initializeNotificationService(
   emailTransport?: IEmailTransport
 ): NotificationService {
   const sendGridConfig = getSendGridConfig(config);
-  const twilioConfig = getTwilioConfig(config);
-
-  const hasApiKeyAuth = Boolean(
-    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
-  );
-  const hasAuthTokenAuth = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
-  const twilioClient =
-    hasApiKeyAuth || hasAuthTokenAuth
-      ? applyTwilioApiBaseUrl(
-          hasApiKeyAuth
-            ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-                accountSid: twilioConfig.accountSid,
-              })
-            : twilio(twilioConfig.accountSid, twilioConfig.authToken),
-          process.env['TWILIO_API_BASE_URL']
-        )
-      : ({} as unknown as Twilio);
+  const smsStack = database ? createSmsStack(database) : null;
 
   const transport: IEmailTransport = emailTransport ?? getEmailTransport(config);
 
@@ -250,16 +191,6 @@ function initializeNotificationService(
     },
     transport
   );
-  const smsDelivery = new SMSDelivery(
-    {
-      accountSid: twilioConfig.accountSid,
-      authToken: twilioConfig.authToken,
-      fromNumber: twilioConfig.fromNumber,
-      messagingServiceSid: twilioConfig.messagingServiceSid,
-    },
-    twilioClient
-  );
-
   const firebaseProjectId = config.firebaseProjectId ?? 'default';
   const pushDelivery = new PushDelivery({ projectId: firebaseProjectId });
 
@@ -289,7 +220,7 @@ function initializeNotificationService(
 
   const deliveryRouter = new DeliveryRouter([
     emailDelivery,
-    smsDelivery,
+    ...(smsStack ? [smsStack.smsDelivery] : []),
     ...(expoPushDelivery ? [expoPushDelivery] : []),
     pushDelivery,
     inAppDelivery,
@@ -552,35 +483,14 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
   syncScheduler.start();
 
-  const twilioConfig = getTwilioConfig(config);
-  const digestHasApiKey = Boolean(
-    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
-  );
-  const digestHasAuthToken = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
-  const twilioClientForDigest =
-    digestHasApiKey || digestHasAuthToken
-      ? applyTwilioApiBaseUrl(
-          digestHasApiKey
-            ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-                accountSid: twilioConfig.accountSid,
-              })
-            : twilio(twilioConfig.accountSid, twilioConfig.authToken),
-          process.env['TWILIO_API_BASE_URL']
-        )
-      : null;
-  const hasSender = Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
-  if (twilioClientForDigest && hasSender) {
+  const digestSmsStack = createSmsStack(database);
+  if (digestSmsStack) {
     safeInterval(
       'sms-digest',
       async () => {
         const now = new Date();
         if (now.getUTCHours() === DIGEST_UTC_HOUR) {
-          await flushSmsDigests(
-            database,
-            twilioClientForDigest,
-            twilioConfig.fromNumber,
-            twilioConfig.messagingServiceSid || undefined
-          );
+          await flushSmsDigests(database, digestSmsStack.guardedSender);
         }
       },
       60_000

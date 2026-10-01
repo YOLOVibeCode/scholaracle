@@ -27,7 +27,7 @@ export type {
   IExpoPushTokenStore,
   ExpoPushSender,
 } from './ExpoPushDelivery';
-export { SMSDelivery, applyTwilioApiBaseUrl } from './SMSDelivery';
-export type { ISMSDeliveryConfig } from './SMSDelivery';
+export { SMSDelivery } from './SMSDelivery';
+export * from '../sms';
 export { InAppDelivery } from './InAppDelivery';
 export { DeliveryRouter } from './DeliveryRouter';
