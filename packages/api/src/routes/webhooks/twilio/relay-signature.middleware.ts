@@ -26,10 +26,8 @@ export function requireRelayInboundSignature(options: IRelaySignatureOptions) {
       res.status(401).json({ error: 'Missing relay signature' });
       return;
     }
-    const rawBody =
-      typeof (req as { rawBody?: string }).rawBody === 'string'
-        ? (req as { rawBody: string }).rawBody
-        : '';
+    const captured = (req as Request & { rawBody?: unknown }).rawBody;
+    const rawBody = typeof captured === 'string' ? captured : '';
     const isValid = verifyRelayInboundSignature(options.publicUrl, rawBody, signature, secret);
     if (!isValid) {
       res.status(401).json({ error: 'Invalid relay signature' });
