@@ -71,6 +71,27 @@ describe('Twilio Webhooks (relay)', () => {
         .send({ Body: 'STOP', From: '+15005550006' });
       expect(res.status).toBe(401);
     });
+
+    it('rejects invalid signature with 401', async () => {
+      const rawBody = querystring.stringify({ From: '+15005550006', Body: 'STOP' });
+      const res = await request(app)
+        .post('/api/webhooks/twilio/sms')
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('x-relay-signature', 'not-valid-base64-sig')
+        .send(rawBody);
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects tampered body with 401', async () => {
+      const rawBody = querystring.stringify({ From: '+15005550006', Body: 'STOP' });
+      const sig = signRelayInboundBody(SMS_INBOUND_WEBHOOK_URL, rawBody, RELAY_SECRET);
+      const res = await request(app)
+        .post('/api/webhooks/twilio/sms')
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('x-relay-signature', sig)
+        .send(`${rawBody}&tampered=1`);
+      expect(res.status).toBe(401);
+    });
   });
 
   describe('POST /sms', () => {

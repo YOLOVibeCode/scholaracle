@@ -50,12 +50,6 @@ export interface IWorkerConfig {
   readonly sendGridApiKey?: string;
   readonly sendGridFromEmail?: string;
   readonly sendGridFromName?: string;
-  readonly twilioAccountSid?: string;
-  readonly twilioAuthToken?: string;
-  readonly twilioApiKeySid?: string;
-  readonly twilioApiKeySecret?: string;
-  readonly twilioFromNumber?: string;
-  readonly twilioMessagingServiceSid?: string;
   readonly firebaseProjectId?: string;
   readonly pollIntervalMs?: number;
   readonly concurrency?: number;
