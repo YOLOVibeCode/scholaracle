@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
+import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 
 const ALERT_TYPE_KEYS = [
   'missing_assignment',
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
 
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -84,6 +86,8 @@ export default function SettingsPage() {
         if (s.profile) {
           setName(s.profile.name ?? '');
           setEmail(s.profile.email ?? '');
+          setPhone(s.profile.phone ?? '');
+          setSmsConsent(s.profile.smsConsent ?? false);
           setOauthProviders([...(s.profile.oauthProviders ?? [])]);
         }
         setPushNotifications(s.notifications.push);
@@ -143,6 +147,10 @@ export default function SettingsPage() {
 
     const ok = await settingsApi.update({
       timezone,
+      profile: {
+        phone,
+        smsConsent,
+      },
       notifications: {
         push: pushNotifications,
         email: emailNotifications,
@@ -312,6 +320,12 @@ export default function SettingsPage() {
                 disabled={isSaving || !isLoaded}
               />
             </div>
+            <SmsOptInCheckbox
+              checked={smsConsent}
+              onChange={setSmsConsent}
+              disabled={isSaving || !isLoaded}
+              id="settings-sms-consent"
+            />
           </CardContent>
         </Card>
 

@@ -1,7 +1,13 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
-import { UserRepository, CommunicationLogRepository } from '@scholaracle/database';
+import {
+  UserRepository,
+  CommunicationLogRepository,
+  SmsConsentRepository,
+} from '@scholaracle/database';
+import { normalizePhoneE164 } from '@scholaracle/agents';
+import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -340,6 +346,8 @@ async function handleGetSettings(
     profile: {
       name: user.name,
       email: user.email,
+      phone: user.phone ?? '',
+      smsConsent: user.smsConsent ?? false,
       oauthProviders: user.oauthProviders ?? [],
     },
   });
@@ -355,7 +363,8 @@ async function handleGetSettings(
 async function handleUpdateSettings(
   req: Request,
   res: Response,
-  userRepository: UserRepository
+  userRepository: UserRepository,
+  consentRepo: SmsConsentRepository
 ): Promise<void> {
   const authReq = req as IAuthenticatedRequest;
   const userId = authReq.userId;
@@ -369,12 +378,27 @@ async function handleUpdateSettings(
     alerts,
     dashboard: dashboardBody,
     timezone,
+    profile,
   } = req.body as {
     notifications?: INotificationSettings;
     alerts?: IAlertThresholds;
     dashboard?: { gradeDisplay?: 'letter' | 'score' };
     timezone?: string;
+    profile?: { phone?: string; smsConsent?: boolean };
   };
+
+  let normalizedPhone: string | undefined;
+  if (profile?.phone !== undefined && profile.phone.trim()) {
+    const parsed = normalizePhoneE164(profile.phone);
+    if (!parsed) {
+      throw new ValidationError('Invalid phone number');
+    }
+    normalizedPhone = parsed;
+  }
+  const profileSmsConsent = profile?.smsConsent === true;
+  if (profileSmsConsent && !normalizedPhone && profile?.phone !== undefined) {
+    throw new ValidationError('Phone number is required when opting in to SMS');
+  }
 
   if (alerts) {
     const validationError = validateAlertThresholds(alerts);
@@ -504,11 +528,25 @@ async function handleUpdateSettings(
     },
   };
 
-  const userUpdate: { preferences: IUserPreferences; timezone?: string } = {
+  const userUpdate: {
+    preferences: IUserPreferences;
+    timezone?: string;
+    phone?: string;
+    smsConsent?: boolean;
+  } = {
     preferences: updatedPreferences,
   };
   if (timezone !== undefined) userUpdate.timezone = timezone;
+  if (profile?.phone !== undefined) {
+    userUpdate.phone = normalizedPhone ?? undefined;
+  }
+  if (profile?.smsConsent !== undefined) {
+    userUpdate.smsConsent = profileSmsConsent;
+  }
   await userRepository.update(userId, userUpdate);
+  if (profileSmsConsent && normalizedPhone) {
+    await recordSmsOptInFromRequest(consentRepo, req, normalizedPhone, '/dashboard/settings');
+  }
 
   const responseBody = buildSettingsResponse(updatedPreferences);
   res.status(200).json({
@@ -774,6 +812,7 @@ export function settingsRouter(config: ISettingsRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
   const commLogRepo = new CommunicationLogRepository(config.database);
+  const consentRepo = new SmsConsentRepository(config.database);
 
   /**
    * GET /api/settings
@@ -810,7 +849,9 @@ export function settingsRouter(config: ISettingsRouterConfig): Router {
    */
   router.put(
     '/',
-    asyncHandler((req: Request, res: Response) => handleUpdateSettings(req, res, userRepository))
+    asyncHandler((req: Request, res: Response) =>
+      handleUpdateSettings(req, res, userRepository, consentRepo)
+    )
   );
 
   /**

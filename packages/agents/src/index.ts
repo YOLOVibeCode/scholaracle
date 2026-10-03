@@ -10,4 +10,5 @@ export * from './scheduler';
 export * from './queue';
 export * from './worker';
 export * from './recipient-resolver';
+export * from './sms';
 export * from './ai';

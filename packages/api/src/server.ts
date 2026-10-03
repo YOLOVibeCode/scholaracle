@@ -86,14 +86,12 @@ import {
   SmtpTransport,
   MongoQueue,
 } from '@scholaracle/agents';
-import { SMSDelivery, applyTwilioApiBaseUrl } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
-import type { Twilio } from 'twilio';
 import type { IEmailTransport } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
-import twilio from 'twilio';
 import nodemailer from 'nodemailer';
+import { createSmsStack } from './services/sms/createSmsStack';
 
 export interface IServerConfig {
   readonly port?: number;
@@ -104,12 +102,6 @@ export interface IServerConfig {
   readonly sendGridApiKey?: string;
   readonly sendGridFromEmail?: string;
   readonly sendGridFromName?: string;
-  readonly twilioAccountSid?: string;
-  readonly twilioAuthToken?: string;
-  readonly twilioApiKeySid?: string;
-  readonly twilioApiKeySecret?: string;
-  readonly twilioFromNumber?: string;
-  readonly twilioMessagingServiceSid?: string;
   readonly relayUrl?: string;
   readonly relayApiKey?: string;
   readonly relayWebhookSecret?: string;
@@ -139,47 +131,23 @@ function getSendGridConfig(config: IServerConfig): {
 }
 
 /**
- * Get Twilio configuration from config or environment.
- *
- * @param config - Server configuration
- * @returns Twilio configuration
- */
-function getTwilioConfig(config: IServerConfig): {
-  readonly accountSid: string;
-  readonly authToken: string;
-  readonly apiKeySid: string;
-  readonly apiKeySecret: string;
-  readonly fromNumber: string;
-  readonly messagingServiceSid: string;
-} {
-  return {
-    accountSid: config.twilioAccountSid ?? process.env['TWILIO_ACCOUNT_SID'] ?? '',
-    authToken: config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '',
-    apiKeySid: config.twilioApiKeySid ?? process.env['TWILIO_API_KEY_SID'] ?? '',
-    apiKeySecret: config.twilioApiKeySecret ?? process.env['TWILIO_API_KEY_SECRET'] ?? '',
-    fromNumber: config.twilioFromNumber ?? process.env['TWILIO_FROM_NUMBER'] ?? '',
-    messagingServiceSid:
-      config.twilioMessagingServiceSid ?? process.env['TWILIO_MESSAGING_SERVICE_SID'] ?? '',
-  };
-}
-
-/**
  * Initialize notification service with delivery services.
  *
  * @param config - Server configuration
  * @returns Notification service and email infrastructure
  */
-function initializeNotificationService(config: IServerConfig): {
+function initializeNotificationService(
+  config: IServerConfig,
+  database?: Db
+): {
   notificationService: NotificationService;
   emailTransport: IEmailTransport;
   fromEmail: string;
   fromName: string;
-  twilioClient: import('twilio').Twilio | null;
-  twilioFromNumber: string;
-  twilioMessagingServiceSid: string;
+  guardedSmsSender: import('@scholaracle/agents').GuardedSmsSender | null;
 } {
   const sendGridConfig = getSendGridConfig(config);
-  const twilioConfig = getTwilioConfig(config);
+  const smsStack = database ? createSmsStack(database) : null;
 
   const smtpHost = process.env['SMTP_HOST'];
   const transport: IEmailTransport = smtpHost
@@ -211,36 +179,9 @@ function initializeNotificationService(config: IServerConfig): {
     },
     transport
   );
-  const hasApiKeyAuth = Boolean(
-    twilioConfig.accountSid && twilioConfig.apiKeySid && twilioConfig.apiKeySecret
-  );
-  const hasAuthTokenAuth = Boolean(twilioConfig.accountSid && twilioConfig.authToken);
-  const twilioConfigured =
-    (hasApiKeyAuth || hasAuthTokenAuth) &&
-    Boolean(twilioConfig.fromNumber || twilioConfig.messagingServiceSid);
-  const twilioClient = twilioConfigured
-    ? applyTwilioApiBaseUrl(
-        hasApiKeyAuth
-          ? twilio(twilioConfig.apiKeySid, twilioConfig.apiKeySecret, {
-              accountSid: twilioConfig.accountSid,
-            })
-          : twilio(twilioConfig.accountSid, twilioConfig.authToken),
-        process.env['TWILIO_API_BASE_URL']
-      )
-    : ({} as unknown as Twilio);
-  const smsDelivery = new SMSDelivery(
-    {
-      accountSid: twilioConfig.accountSid,
-      authToken: twilioConfig.authToken,
-      fromNumber: twilioConfig.fromNumber,
-      messagingServiceSid: twilioConfig.messagingServiceSid,
-    },
-    twilioClient
-  );
-
   const deliveryServices: readonly INotificationDelivery[] = [
     emailDelivery,
-    ...(twilioConfigured ? [smsDelivery] : []),
+    ...(smsStack ? [smsStack.smsDelivery] : []),
     // Push and InApp are optional; omit when not configured to avoid delivery errors.
   ];
   const deliveryRouter = new DeliveryRouter(deliveryServices);
@@ -253,9 +194,7 @@ function initializeNotificationService(config: IServerConfig): {
     emailTransport: transport,
     fromEmail: sendGridConfig.fromEmail,
     fromName: sendGridConfig.fromName,
-    twilioClient: twilioConfigured ? twilioClient : null,
-    twilioFromNumber: twilioConfig.fromNumber,
-    twilioMessagingServiceSid: twilioConfig.messagingServiceSid,
+    guardedSmsSender: smsStack?.guardedSender ?? null,
   };
 }
 
@@ -331,7 +270,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // express.raw() ever sees it (body-parser skips once req._body is set).
   const jsonParser = express.json({ limit: '10mb' });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/webhooks/noctusoft') {
+    if (req.path === '/api/webhooks/noctusoft' || req.path.startsWith('/api/webhooks/twilio')) {
       next();
       return;
     }
@@ -348,7 +287,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
 
-  const notificationInit = initializeNotificationService(config);
+  const notificationInit = initializeNotificationService(config, database);
   const { notificationService, emailTransport, fromEmail, fromName } = notificationInit;
 
   app.use('/api/health', healthRouter);
@@ -437,15 +376,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       emailTransport: magicEmailTransport,
       fromEmail: magicFromEmail,
       fromName: magicFromName,
-      twilioClient: magicTwilioClient,
-      twilioFromNumber,
-      twilioMessagingServiceSid,
+      guardedSmsSender,
     } = notificationInit;
     const magicLinkSender = new MagicLinkSender(
       magicEmailTransport,
       { fromEmail: magicFromEmail, fromName: magicFromName },
-      magicTwilioClient,
-      { fromNumber: twilioFromNumber, messagingServiceSid: twilioMessagingServiceSid }
+      guardedSmsSender
     );
 
     app.use(
@@ -459,6 +395,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         sendInviteEmail: inviteEmailSender,
         syncScheduler,
         magicLinkSender,
+        guardedSmsSender,
       })
     );
     app.use(
@@ -699,8 +636,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));
 
     // Twilio webhooks (inbound SMS, delivery status callbacks)
-    const twilioAuthToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
-    app.use('/api/webhooks/twilio', twilioWebhookRouter({ database, twilioAuthToken }));
+    app.use('/api/webhooks/twilio', twilioWebhookRouter({ database }));
 
     if (storeClient && storeConfig) {
       app.use(
