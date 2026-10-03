@@ -1,29 +1,47 @@
 import { Router } from 'express';
+import express from 'express';
 import type { Db } from 'mongodb';
-import { handleInboundSms } from './twilio-webhook.handlers';
-import { handleStatusCallback } from './twilio-webhook.handlers';
-import { requireTwilioSignature } from './twilio-signature.middleware';
+import { SMS_INBOUND_WEBHOOK_URL, SMS_STATUS_WEBHOOK_URL } from '@scholaracle/contracts';
+import { handleInboundSms, handleStatusCallback } from './twilio-webhook.handlers';
+import { requireRelayInboundSignature } from './relay-signature.middleware';
 
 export interface ITwilioWebhookRouterConfig {
   readonly database: Db;
-  readonly twilioAuthToken?: string;
+  readonly relayInboundSecret?: string;
+  readonly smsWebhookPublicUrl?: string;
+  readonly statusWebhookPublicUrl?: string;
+}
+
+function captureRawUrlencoded(): express.RequestHandler {
+  return express.urlencoded({
+    extended: false,
+    verify: (req, _res, buf) => {
+      (req as unknown as { rawBody: string }).rawBody = buf.toString('utf8');
+    },
+  });
 }
 
 /**
- * Twilio webhook router.
- * Mounts at /api/webhooks/twilio — receives inbound SMS and delivery status callbacks.
+ * Twilio webhook router (relay-forwarded inbound SMS + status).
  */
 export function twilioWebhookRouter(config: ITwilioWebhookRouterConfig): Router {
   const router = Router();
-  const authToken = config.twilioAuthToken ?? process.env['TWILIO_AUTH_TOKEN'] ?? '';
-  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const secret = config.relayInboundSecret ?? process.env['RELAY_INBOUND_SECRET'] ?? '';
+  const smsUrl = config.smsWebhookPublicUrl ?? SMS_INBOUND_WEBHOOK_URL;
+  const statusUrl = config.statusWebhookPublicUrl ?? SMS_STATUS_WEBHOOK_URL;
 
-  if (nodeEnv === 'production' && authToken) {
-    router.use(requireTwilioSignature(authToken));
-  }
-
-  router.post('/sms', handleInboundSms(config.database));
-  router.post('/status', handleStatusCallback(config.database));
+  router.post(
+    '/sms',
+    captureRawUrlencoded(),
+    requireRelayInboundSignature({ publicUrl: smsUrl, secret }),
+    handleInboundSms(config.database)
+  );
+  router.post(
+    '/status',
+    captureRawUrlencoded(),
+    requireRelayInboundSignature({ publicUrl: statusUrl, secret }),
+    handleStatusCallback(config.database)
+  );
 
   return router;
 }

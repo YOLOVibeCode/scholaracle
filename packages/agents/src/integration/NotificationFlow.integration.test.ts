@@ -19,7 +19,7 @@ import {
 } from '@scholaracle/contracts';
 import type { Db } from 'mongodb';
 import { MongoClient } from 'mongodb';
-import type { Twilio } from 'twilio';
+import type { GuardedSmsSender } from '../sms/GuardedSmsSender';
 
 describe('NotificationFlow Integration', () => {
   jest.setTimeout(30_000);
@@ -38,7 +38,7 @@ describe('NotificationFlow Integration', () => {
   let inAppDelivery: InAppDelivery;
   let pushDelivery: PushDelivery;
   let mockEmailTransport: jest.Mocked<IEmailTransport>;
-  let mockTwilio: jest.Mocked<Twilio>;
+  let mockGuardedSms: jest.Mocked<Pick<GuardedSmsSender, 'sendTransactional'>>;
 
   async function waitForCount(params: {
     readonly collection: string;
@@ -84,25 +84,16 @@ describe('NotificationFlow Integration', () => {
     } as unknown as jest.Mocked<IEmailTransport>;
     (mockEmailTransport.send as jest.Mock).mockResolvedValue({});
 
-    mockTwilio = {
-      messages: {
-        create: jest.fn(),
-      },
-    } as unknown as jest.Mocked<Twilio>;
+    mockGuardedSms = {
+      sendTransactional: jest.fn().mockResolvedValue({ messageId: 'sms-123' }),
+    };
 
     emailDelivery = new EmailDelivery(
       { fromEmail: 'test@example.com', fromName: 'Test' },
       mockEmailTransport
     );
 
-    smsDelivery = new SMSDelivery(
-      {
-        accountSid: 'test-account-sid',
-        authToken: 'test-auth-token',
-        fromNumber: '+1234567890',
-      },
-      mockTwilio
-    );
+    smsDelivery = new SMSDelivery(mockGuardedSms as unknown as GuardedSmsSender);
 
     inAppDelivery = new InAppDelivery();
     pushDelivery = new PushDelivery({ projectId: 'test' });
@@ -174,11 +165,6 @@ describe('NotificationFlow Integration', () => {
 
       // Mock SendGrid and Twilio responses
       (mockEmailTransport.send as jest.Mock).mockResolvedValue({ messageId: 'email-123' });
-
-      (mockTwilio.messages.create as jest.Mock).mockResolvedValue({
-        sid: 'sms-123',
-        status: 'queued',
-      });
 
       // Act Step 1: Generate notifications from alert
       const studentNotification = studentGenerator.generate(alert);

@@ -68,6 +68,10 @@ export async function createIndexes(database: Db): Promise<void> {
   const communicationLogsCollection = database.collection('communication_logs');
   await communicationLogsCollection.createIndex({ userId: 1, createdAt: -1 });
   await communicationLogsCollection.createIndex({ channel: 1, status: 1 });
+  await communicationLogsCollection.createIndex({ providerId: 1 });
+
+  const smsConsents = database.collection('sms_consents');
+  await smsConsents.createIndex({ phoneE164: 1, purpose: 1 }, { unique: true });
 
   // Alerts collection indexes (if not already created)
   const alertsCollection = database.collection('alerts');

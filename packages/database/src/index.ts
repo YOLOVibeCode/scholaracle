@@ -40,6 +40,7 @@ export * from './repositories/SmsDigestPendingRepository';
 export * from './repositories/EmailDigestPendingRepository';
 export * from './repositories/AiUsageRepository';
 export * from './repositories/WebhookEventRepository';
+export * from './repositories/SmsConsentRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';

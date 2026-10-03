@@ -5,141 +5,49 @@ import {
   NotificationChannel,
   DeliveryError,
 } from '@scholaracle/contracts';
-import type { Twilio } from 'twilio';
-
-export interface ISMSDeliveryConfig {
-  readonly accountSid: string;
-  readonly authToken: string;
-  readonly fromNumber: string;
-  readonly messagingServiceSid?: string;
-}
-
-const MAX_SMS_LENGTH = 1600;
+import type { GuardedSmsSender } from '../../sms/GuardedSmsSender';
 
 /**
- * SMS delivery service using Twilio.
- * Implements INotificationDelivery for SMS channel.
+ * SMS delivery via GuardedSmsSender (Noctusoft relay, consent-gated).
  */
 export class SMSDelivery implements INotificationDelivery {
-  private readonly _config: ISMSDeliveryConfig;
-  private readonly _twilio: Twilio;
+  constructor(private readonly _guarded: GuardedSmsSender) {}
 
-  constructor(config: ISMSDeliveryConfig, twilio: Twilio) {
-    this._config = config;
-    this._twilio = twilio;
-  }
-
-  /**
-   * Check if this delivery service supports the given channel.
-   *
-   * @param channel - The notification channel to check
-   * @returns True if this service can deliver via the channel
-   */
   public supports(channel: NotificationChannel): boolean {
     return channel === NotificationChannel.SMS;
   }
 
-  /**
-   * Deliver a notification via SMS.
-   *
-   * @param notification - The notification to deliver
-   * @returns Delivery result with success status and message ID
-   * @throws {DeliveryError} If delivery fails
-   */
   public async deliver(notification: Notification): Promise<DeliveryResult> {
     try {
       const smsBody = this._formatSmsBody(notification.subject, notification.body);
-
-      const message = await this._twilio.messages.create({
-        to: notification.userId,
-        ...(this._config.messagingServiceSid
-          ? { messagingServiceSid: this._config.messagingServiceSid }
-          : { from: this._config.fromNumber }),
-        body: smsBody,
+      const result = await this._guarded.sendTransactional(notification.userId, smsBody, {
+        userId: notification.userId,
+        subject: notification.subject,
+        templateName: 'notification',
+        triggeredBy: 'system',
       });
-
       return {
         success: true,
         channel: NotificationChannel.SMS,
-        messageId: message.sid,
+        messageId: result.messageId,
         deliveredAt: new Date(),
       };
     } catch (error) {
-      throw this._createDeliveryError(error, notification.id);
+      if (error instanceof DeliveryError) {
+        throw error;
+      }
+      throw new DeliveryError(
+        error instanceof Error ? error.message : 'Unknown SMS error',
+        NotificationChannel.SMS,
+        { notificationId: notification.id }
+      );
     }
   }
 
-  /**
-   * Create DeliveryError from unknown error.
-   *
-   * @param error - Unknown error
-   * @param notificationId - Notification ID for error context
-   * @returns DeliveryError instance
-   */
-  private _createDeliveryError(error: unknown, notificationId: string): DeliveryError {
-    const errorMessage = this._extractErrorMessage(error);
-    const errorCode = this._extractErrorCode(error);
-
-    return new DeliveryError(`Failed to deliver SMS: ${errorMessage}`, NotificationChannel.SMS, {
-      notificationId,
-      errorCode,
-      errorMessage,
-    });
-  }
-
-  /**
-   * Extract error message from unknown error.
-   *
-   * @param error - Unknown error
-   * @returns Error message string
-   */
-  private _extractErrorMessage(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    if (
-      error &&
-      typeof error === 'object' &&
-      'message' in error &&
-      typeof error.message === 'string'
-    ) {
-      return error.message;
-    }
-
-    return 'Unknown error occurred during SMS delivery';
-  }
-
-  /**
-   * Extract error code from unknown error.
-   *
-   * @param error - Unknown error
-   * @returns Error code or undefined
-   */
-  private _extractErrorCode(error: unknown): number | undefined {
-    if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'number') {
-      return error.code;
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Format SMS body from notification subject and body.
-   * Truncates if exceeds SMS length limit.
-   *
-   * @param subject - Notification subject
-   * @param body - Notification body
-   * @returns Formatted SMS body
-   */
   private _formatSmsBody(subject: string, body: string): string {
-    const fullBody = `${subject}\n\n${body}`;
-
-    if (fullBody.length <= MAX_SMS_LENGTH) {
-      return fullBody;
+    if (!subject.trim()) {
+      return body;
     }
-
-    const truncatedBody = body.substring(0, MAX_SMS_LENGTH - subject.length - 10);
-    return `${subject}\n\n${truncatedBody}...`;
+    return `${subject}\n\n${body}`;
   }
 }

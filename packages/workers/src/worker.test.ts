@@ -27,21 +27,6 @@ jest.mock('@sendgrid/mail', () => {
   };
 });
 
-// Mock Twilio
-jest.mock('twilio', () => {
-  return {
-    __esModule: true,
-    default: jest.fn(() => ({
-      messages: {
-        create: jest.fn().mockResolvedValue({
-          sid: 'sms-123',
-          status: 'queued',
-        }),
-      },
-    })),
-  };
-});
-
 import { startWorker, type IWorkerConfig } from './worker';
 import { MongoClient, type Db, type Collection } from 'mongodb';
 
@@ -94,9 +79,7 @@ describe('Worker', () => {
       'SENDGRID_API_KEY',
       'SENDGRID_FROM_EMAIL',
       'SENDGRID_FROM_NAME',
-      'TWILIO_ACCOUNT_SID',
-      'TWILIO_AUTH_TOKEN',
-      'TWILIO_FROM_NUMBER',
+      'NOCTUSOFT_API_KEY',
     ]) {
       savedEnv[key] = process.env[key];
     }
@@ -210,21 +193,6 @@ describe('Worker', () => {
       await triggerShutdown();
     });
 
-    it('should accept custom Twilio config values', async () => {
-      const config: IWorkerConfig = {
-        mongodbUri: 'mongodb://localhost:27017',
-        twilioAccountSid: 'AC-test-sid',
-        twilioAuthToken: 'test-auth-token',
-        twilioFromNumber: '+15551234567',
-      };
-
-      await startWorker(config);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(mockMongoClient.connect).toHaveBeenCalled();
-
-      await triggerShutdown();
-    });
-
     it('should fall back to SendGrid env vars when config omitted', async () => {
       process.env['SENDGRID_API_KEY'] = 'SG.env-key';
       process.env['SENDGRID_FROM_EMAIL'] = 'env@example.com';
@@ -237,10 +205,8 @@ describe('Worker', () => {
       await triggerShutdown();
     });
 
-    it('should fall back to Twilio env vars when config omitted', async () => {
-      process.env['TWILIO_ACCOUNT_SID'] = 'AC-env-sid';
-      process.env['TWILIO_AUTH_TOKEN'] = 'env-auth-token';
-      process.env['TWILIO_FROM_NUMBER'] = '+15559999999';
+    it('should start when NOCTUSOFT_API_KEY is set for SMS stack', async () => {
+      process.env['NOCTUSOFT_API_KEY'] = 'nsk_test_sms_key';
 
       await startWorker({ mongodbUri: 'mongodb://localhost:27017' });
       await new Promise((resolve) => setTimeout(resolve, 100));

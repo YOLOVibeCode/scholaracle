@@ -101,6 +101,10 @@ export interface IUserSettings {
 
 export interface IUpdateSettingsRequest {
   readonly dashboard?: IDashboardSettings;
+  readonly profile?: {
+    readonly phone?: string;
+    readonly smsConsent?: boolean;
+  };
   readonly notifications?: INotificationSettings;
   readonly alerts?: IAlertThresholds;
   readonly timezone?: string;
@@ -131,6 +135,8 @@ export interface IUserSettingsResponse extends IUserSettings {
   readonly profile?: {
     readonly name: string;
     readonly email: string;
+    readonly phone?: string;
+    readonly smsConsent?: boolean;
     readonly oauthProviders: readonly string[];
   };
 }
