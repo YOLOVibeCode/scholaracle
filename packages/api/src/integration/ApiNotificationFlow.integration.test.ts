@@ -22,23 +22,6 @@ jest.mock('@sendgrid/mail', () => {
   };
 });
 
-// Mock Twilio before importing server
-jest.mock('twilio', () => {
-  const mockCreate = jest.fn().mockResolvedValue({
-    sid: 'sms-123',
-    status: 'queued',
-  });
-
-  return {
-    __esModule: true,
-    default: jest.fn(() => ({
-      messages: {
-        create: mockCreate,
-      },
-    })),
-  };
-});
-
 // Mock Firebase Admin before importing server
 jest.mock('firebase-admin', () => {
   const mockSend = jest.fn().mockResolvedValue('fcm-message-id');
@@ -101,9 +84,6 @@ describe('API Notification Flow Integration', () => {
         sendGridApiKey: 'SG.test-key',
         sendGridFromEmail: 'test@example.com',
         sendGridFromName: 'Test',
-        twilioAccountSid: 'TEST_ACCOUNT_SID_PLACEHOLDER_NOT_REAL',
-        twilioAuthToken: 'test-token',
-        twilioFromNumber: '+1234567890',
       },
       database
     );

@@ -5,6 +5,13 @@ describe('App Store legal pages', () => {
   const read = (relative: string): string =>
     readFileSync(join(__dirname, '..', relative), 'utf8');
 
+  it('privacy policy includes required SMS no-sharing sentence', () => {
+    const src = read('privacy/page.tsx');
+    expect(src).toMatch(
+      /We do not share, sell, or provide your mobile phone number or SMS opt-in data to third parties or affiliates for marketing or promotional purposes/
+    );
+  });
+
   it('privacy policy covers Sign in with Apple, OAuth, and in-app deletion', () => {
     const src = read('privacy/page.tsx');
     expect(src).toMatch(/Sign in with Apple/);
@@ -18,6 +25,8 @@ describe('App Store legal pages', () => {
     const src = read('terms/page.tsx');
     expect(src).toMatch(/iOS app/);
     expect(src).toMatch(/delete-account/);
+    expect(src).toMatch(/id="sms"/);
+    expect(src).toMatch(/support@scholarmancy\.com/);
   });
 
   it('support page exposes a reachable support email', () => {

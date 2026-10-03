@@ -78,12 +78,15 @@ export default function PrivacyPage() {
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold">3. SMS Text Messaging</h2>
+              <h2 className="text-lg font-semibold">Text messages</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                By opting in to SMS notifications, you consent to receive text messages from Scholarmancy at the
-                phone number you provide. Message frequency varies based on your alert preferences. Standard
-                message and data rates may apply. You can opt out at any time by replying STOP to any message,
-                or by updating your notification preferences in your account settings. Reply HELP for support.
+                If you opt in, Scholarmancy sends text messages about grade and assignment alerts and sign-in
+                links to the mobile number you provide. Message frequency varies. Message and data rates may
+                apply. Reply STOP to opt out or HELP for help. You can also update notification preferences in
+                your account settings.
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                We do not share, sell, or provide your mobile phone number or SMS opt-in data to third parties or affiliates for marketing or promotional purposes.
               </p>
             </section>
 

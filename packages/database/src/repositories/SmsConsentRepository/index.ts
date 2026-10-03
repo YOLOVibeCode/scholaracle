@@ -1,0 +1,1 @@
+export { SmsConsentRepository } from './SmsConsentRepository';

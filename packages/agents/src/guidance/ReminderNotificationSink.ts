@@ -24,7 +24,7 @@ export class ReminderNotificationSink implements INotificationSink {
   }): Promise<void> {
     const email = await this._deps.resolveEmail(input.audience, input.studentId);
     if (email === null || email === '') return;
-    const subject = input.audience === 'parent' ? 'Scholaracle' : 'A next step';
+    const subject = input.audience === 'parent' ? 'Scholarmancy' : 'A next step';
     await this._deps.notificationService.sendReminder(
       email,
       'email',

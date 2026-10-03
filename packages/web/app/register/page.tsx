@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { authApi } from '@/lib/api/auth';
+import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -161,22 +162,11 @@ export default function RegisterPage() {
                   </Link>
                 </Label>
               </div>
-              <div className="flex items-start gap-2">
-                <input
-                  id="smsConsent"
-                  name="smsConsent"
-                  type="checkbox"
-                  checked={smsConsent}
-                  onChange={(e) => setSmsConsent(e.target.checked)}
-                  disabled={isLoading}
-                  className="mt-1 h-4 w-4 rounded border-gray-300"
-                  data-testid="sms-consent-checkbox"
-                />
-                <Label htmlFor="smsConsent" className="text-sm font-normal cursor-pointer">
-                  I agree to receive SMS text message alerts about assignments and deadlines. Standard message
-                  and data rates may apply. Reply STOP to opt out, HELP for support.
-                </Label>
-              </div>
+              <SmsOptInCheckbox
+                checked={smsConsent}
+                onChange={setSmsConsent}
+                disabled={isLoading}
+              />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">

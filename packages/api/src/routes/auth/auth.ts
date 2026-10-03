@@ -15,7 +15,9 @@ import type {
   IRefreshTokenStore,
   IOAuthAccountRepository,
 } from '@scholaracle/database';
-import { StudentRepository, UserRepository } from '@scholaracle/database';
+import { StudentRepository, UserRepository, SmsConsentRepository } from '@scholaracle/database';
+import { normalizePhoneE164 } from '@scholaracle/agents';
+import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
 import type { ISessionRepository } from '@scholaracle/database';
 import { parseUserAgent } from '../../utils/parseUserAgent';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
@@ -146,7 +148,8 @@ async function handleRegister(
   req: Request,
   res: Response,
   authService: AuthService,
-  sessionRepository?: ISessionRepository
+  sessionRepository?: ISessionRepository,
+  consentRepo?: SmsConsentRepository
 ): Promise<void> {
   const { email, password, name, phone, smsConsent, rememberMe } = req.body as {
     email?: string;
@@ -161,11 +164,28 @@ async function handleRegister(
     throw new ValidationError('Missing required fields: email, password, name');
   }
 
+  let normalizedPhone: string | undefined;
+  if (phone?.trim()) {
+    const parsed = normalizePhoneE164(phone);
+    if (!parsed) {
+      throw new ValidationError('Invalid phone number');
+    }
+    normalizedPhone = parsed;
+  }
+  const hasSmsConsent = smsConsent === true;
+  if (hasSmsConsent && !normalizedPhone) {
+    throw new ValidationError('Phone number is required when opting in to SMS');
+  }
+
   const result = await authService.register(email, password, name, {
-    phone: phone || undefined,
-    smsConsent: smsConsent === true,
+    phone: normalizedPhone,
+    smsConsent: hasSmsConsent,
     rememberMe: rememberMe !== false,
   });
+
+  if (result.success && hasSmsConsent && normalizedPhone && consentRepo) {
+    await recordSmsOptInFromRequest(consentRepo, req, normalizedPhone, '/register');
+  }
 
   if (result.success && result.user?.id && result.familyId) {
     await upsertSession(sessionRepository, result.user.id, result.familyId, req);
@@ -562,6 +582,7 @@ async function handleLogout(
  */
 export function authRouter(config: IAuthRouterConfig): Router {
   const router = Router();
+  const consentRepo = new SmsConsentRepository(config.database);
   const authService =
     config.authService ??
     new AuthService(
@@ -584,7 +605,7 @@ export function authRouter(config: IAuthRouterConfig): Router {
   router.post(
     '/register',
     asyncHandler((req: Request, res: Response) =>
-      handleRegister(req, res, authService, config.sessionRepository)
+      handleRegister(req, res, authService, config.sessionRepository, consentRepo)
     )
   );
 

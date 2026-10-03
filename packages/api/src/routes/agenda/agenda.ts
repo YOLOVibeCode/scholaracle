@@ -463,7 +463,7 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
       const timeStr = timeAt ? new Date(timeAt).toLocaleString() : '';
       if (timeStr) parts.push(`Due ${timeStr}`);
       const body = `Reminder: ${parts.join(' — ')}.`;
-      const subject = `Scholaracle: ${displayTitle}`;
+      const subject = `Scholarmancy: ${displayTitle}`;
 
       try {
         const result = await config.notificationService.sendReminder(
