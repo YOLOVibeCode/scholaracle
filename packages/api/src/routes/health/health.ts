@@ -33,9 +33,19 @@ export function readBuiltAt(): string {
  * Returns server status and current timestamp.
  */
 healthRouter.get('/', (_req: Request, res: Response) => {
+  const now = new Date().toISOString();
   res.status(200).json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
+    ok: true,
+    service: 'scholarmancy-api',
+    commit:
+      process.env['RAILWAY_GIT_COMMIT_SHA'] ??
+      process.env['VERCEL_GIT_COMMIT_SHA'] ??
+      process.env['GIT_COMMIT'] ??
+      'unknown',
+    env: process.env['APP_ENV'] ?? process.env['RAILWAY_ENVIRONMENT_NAME'] ?? 'dev',
+    timestamp: now,
+    utc: now,
   });
 });
 
