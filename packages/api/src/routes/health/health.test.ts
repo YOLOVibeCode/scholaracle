@@ -12,6 +12,19 @@ describe('Health Router', () => {
   });
 
   describe('GET /api/health', () => {
+    const savedRailwaySha = process.env['RAILWAY_GIT_COMMIT_SHA'];
+    const savedVercelSha = process.env['VERCEL_GIT_COMMIT_SHA'];
+    const savedGitCommit = process.env['GIT_COMMIT'];
+
+    afterEach(() => {
+      if (savedRailwaySha === undefined) delete process.env['RAILWAY_GIT_COMMIT_SHA'];
+      else process.env['RAILWAY_GIT_COMMIT_SHA'] = savedRailwaySha;
+      if (savedVercelSha === undefined) delete process.env['VERCEL_GIT_COMMIT_SHA'];
+      else process.env['VERCEL_GIT_COMMIT_SHA'] = savedVercelSha;
+      if (savedGitCommit === undefined) delete process.env['GIT_COMMIT'];
+      else process.env['GIT_COMMIT'] = savedGitCommit;
+    });
+
     it('should return 200 with health status', async () => {
       // Act
       const response = await request(app).get('/api/health');
@@ -20,7 +33,12 @@ describe('Health Router', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         status: 'ok',
+        ok: true,
+        service: 'scholarmancy-api',
+        commit: expect.any(String),
+        env: expect.any(String),
         timestamp: expect.any(String),
+        utc: expect.any(String),
       });
     });
 
@@ -31,6 +49,28 @@ describe('Health Router', () => {
       // Assert
       expect(response.body.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
       expect(() => new Date(response.body.timestamp)).not.toThrow();
+      expect(response.body.utc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+      expect(() => new Date(response.body.utc)).not.toThrow();
+    });
+
+    it('should return commit from RAILWAY_GIT_COMMIT_SHA when set', async () => {
+      process.env['RAILWAY_GIT_COMMIT_SHA'] = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+
+      const response = await request(app).get('/api/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.commit).toBe('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    });
+
+    it('should report unknown commit when deploy env vars are absent', async () => {
+      delete process.env['RAILWAY_GIT_COMMIT_SHA'];
+      delete process.env['VERCEL_GIT_COMMIT_SHA'];
+      delete process.env['GIT_COMMIT'];
+
+      const response = await request(app).get('/api/health');
+
+      expect(response.status).toBe(200);
+      expect(response.body.commit).toBe('unknown');
     });
   });
 
