@@ -13,7 +13,10 @@ export default function TermsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Terms of Service</CardTitle>
-            <CardDescription>Last updated: August 27, 2026</CardDescription>
+            <CardDescription>
+              Last updated: October 11, 2026 · Scholarmancy is operated by Noctusoft, Inc.
+              (https://noctusoft.com)
+            </CardDescription>
           </CardHeader>
           <CardContent className="prose prose-gray dark:prose-invert max-w-none space-y-6">
             <section>
@@ -53,7 +56,13 @@ export default function TermsPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 The Scholarmancy SMS program sends grade and assignment alerts and sign-in links to parents who
                 opt in on our registration or account settings pages by checking the SMS consent box and providing
-                a mobile number. Message frequency varies. Message and data rates may apply. Reply STOP to opt
+                a mobile number. A co-parent or guardian added by another parent gets no texts until they open the
+                opt-in link that parent shares, enter their own mobile number, and check the same box. Texts are
+                optional and not required to use the Service. See{' '}
+                <Link href="/sms" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                  scholarmancy.com/sms
+                </Link>
+                . Message frequency varies. Message and data rates may apply. Reply STOP to opt
                 out; reply HELP for help. For support, email{' '}
                 <Link
                   href="mailto:support@scholarmancy.com"

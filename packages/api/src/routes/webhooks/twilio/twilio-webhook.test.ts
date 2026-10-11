@@ -130,14 +130,36 @@ describe('Twilio Webhooks (relay)', () => {
       expect(res.text).toContain('support@scholarmancy.com');
     });
 
-    it('records consent on YES', async () => {
+    it('records consent on YES that answers a confirmation request we sent', async () => {
+      const repo = new SmsConsentRepository(database);
+      await repo.markConfirmationSent('+15005550006', SCHOLARMANCY_SMS_PURPOSE);
       const res = await signedPost(app, '/api/webhooks/twilio/sms', SMS_INBOUND_WEBHOOK_URL, {
         From: '+15005550006',
         Body: 'YES',
       });
       expect(res.status).toBe(200);
-      const repo = new SmsConsentRepository(database);
       expect(await repo.hasActiveConsent('+15005550006', SCHOLARMANCY_SMS_PURPOSE)).toBe(true);
+    });
+
+    it('ignores YES from a number we never asked', async () => {
+      const res = await signedPost(app, '/api/webhooks/twilio/sms', SMS_INBOUND_WEBHOOK_URL, {
+        From: '+15005550016',
+        Body: 'YES',
+      });
+      expect(res.status).toBe(200);
+      const repo = new SmsConsentRepository(database);
+      expect(await repo.hasActiveConsent('+15005550016', SCHOLARMANCY_SMS_PURPOSE)).toBe(false);
+    });
+
+    it('ignores YES from a number that replied STOP', async () => {
+      const repo = new SmsConsentRepository(database);
+      await repo.markConfirmationSent('+15005550017', SCHOLARMANCY_SMS_PURPOSE);
+      await repo.recordOptOut('+15005550017', SCHOLARMANCY_SMS_PURPOSE);
+      await signedPost(app, '/api/webhooks/twilio/sms', SMS_INBOUND_WEBHOOK_URL, {
+        From: '+15005550017',
+        Body: 'YES',
+      });
+      expect(await repo.hasActiveConsent('+15005550017', SCHOLARMANCY_SMS_PURPOSE)).toBe(false);
     });
 
     it('handles OptOutType=STOP', async () => {

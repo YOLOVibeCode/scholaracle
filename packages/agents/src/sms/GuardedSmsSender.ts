@@ -55,28 +55,6 @@ export class GuardedSmsSender {
     return this._sendRelay(phoneE164, body, meta);
   }
 
-  public async sendDoubleOptInConfirmation(
-    to: string,
-    inviterName: string
-  ): Promise<{ messageId: string }> {
-    const phoneE164 = normalizePhoneE164(to);
-    if (!phoneE164) {
-      throw new DeliveryError('Invalid phone number', NotificationChannel.SMS, {
-        errorMessage: 'invalid_phone',
-      });
-    }
-    const who = inviterName.trim() || 'Someone';
-    const body = ensureBrandSmsBody(
-      `${who} added this number for ${this._purpose}. Reply YES to receive these texts. Reply STOP to opt out.`
-    );
-    const result = await this._sendRelay(phoneE164, body, {
-      templateName: 'sms_double_opt_in',
-      triggeredBy: 'system',
-    });
-    await this._consent.markConfirmationSent(phoneE164, this._purpose);
-    return result;
-  }
-
   private async _sendRelay(
     phoneE164: string,
     body: string,

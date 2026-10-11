@@ -40,4 +40,24 @@ describe('App Store legal pages', () => {
     expect(src).toMatch(/privacy@scholarmancy\.com/);
     expect(src).toMatch(/Settings/);
   });
+
+  it('SMS program page is public-facing and describes self opt-in for co-parents', () => {
+    const src = read('sms/page.tsx');
+    expect(src).toMatch(/operated by Noctusoft, Inc\./);
+    expect(src).toMatch(/SCHOLARMANCY_SMS_SUPPORT_EMAIL/);
+    expect(src).toMatch(/We do not share, sell, or provide your mobile phone number or SMS opt-in data/);
+    expect(src).toMatch(/never text a number\s+that someone else entered/);
+    expect(src).toMatch(/buildSmsOptInLabelHtml/);
+  });
+
+  it('co-parent opt-in page requires the box before it calls the API', () => {
+    const src = read('sms/optin/[token]/page.tsx');
+    expect(src).toMatch(/if \(!consent\)/);
+    expect(src).toMatch(/SMS_CONSENT_REQUIRED_MESSAGE/);
+    expect(src).toMatch(/data-testid="sms-optin-submit"/);
+  });
+
+  it('terms SMS section covers co-parent self opt-in', () => {
+    expect(read('terms/page.tsx')).toMatch(/co-parent or guardian added by another parent gets no texts/);
+  });
 });

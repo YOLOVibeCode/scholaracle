@@ -1292,6 +1292,82 @@ describe('Students API Routes', () => {
     });
   });
 
+  describe('co-parent texts (self opt-in)', () => {
+    async function createStudent(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'SMS Student', grade: 9 });
+      return createRes.body.id as string;
+    }
+
+    beforeEach(async () => {
+      await database.collection('sms_contact_optin_invites').deleteMany({});
+      await database.collection('communication_logs').deleteMany({});
+      await database.collection('sms_consents').deleteMany({});
+    });
+
+    it('texts nobody when a parent adds a co-parent with a phone, and returns a link to share', async () => {
+      const studentId = await createStudent();
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({
+          email: 'coparent-sms@example.com',
+          phone: '512-555-0142',
+          alertChannels: ['email', 'sms'],
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.smsOptInUrl).toMatch(/^http:\/\/test\.example\/sms\/optin\/[a-f0-9]{48}$/);
+      expect(res.body.contact.smsStatus).toBe('invited');
+      expect(await database.collection('communication_logs').countDocuments({})).toBe(0);
+      expect(
+        await database.collection('sms_consents').countDocuments({ phoneE164: '+15125550142' })
+      ).toBe(0);
+    });
+
+    it('returns no link for an email-only contact', async () => {
+      const studentId = await createStudent();
+      const res = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'email-only@example.com' });
+      expect(res.status).toBe(201);
+      expect(res.body.smsOptInUrl).toBeUndefined();
+      expect(res.body.contact.smsStatus).toBe('none');
+    });
+
+    it('lists each contact as invited until they opt in', async () => {
+      const studentId = await createStudent();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'listed@example.com', phone: '512-555-0143', alertChannels: ['sms'] });
+      const res = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const listed = (res.body as { email?: string; smsStatus?: string }[]).find(
+        (c) => c.email === 'listed@example.com'
+      );
+      expect(listed?.smsStatus).toBe('invited');
+    });
+
+    it('returns a fresh link when texts are turned on for an existing contact', async () => {
+      const studentId = await createStudent();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'later@example.com' });
+      const res = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('later@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'sms'] });
+      expect(res.status).toBe(200);
+      expect(res.body.smsOptInUrl).toMatch(/\/sms\/optin\/[a-f0-9]{48}$/);
+      expect(await database.collection('communication_logs').countDocuments({})).toBe(0);
+    });
+  });
+
   describe('PUT /api/students/:id/owner-alert-prefs', () => {
     it('should update owner alert prefs and return 200', async () => {
       const createRes = await request(app)

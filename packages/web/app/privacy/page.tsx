@@ -13,7 +13,10 @@ export default function PrivacyPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl">Privacy Policy</CardTitle>
-            <CardDescription>Last updated: August 27, 2026</CardDescription>
+            <CardDescription>
+              Last updated: October 11, 2026 · Scholarmancy is operated by Noctusoft, Inc.
+              (https://noctusoft.com)
+            </CardDescription>
           </CardHeader>
           <CardContent className="prose prose-gray dark:prose-invert max-w-none space-y-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -81,7 +84,9 @@ export default function PrivacyPage() {
               <h2 className="text-lg font-semibold">Text messages</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 If you opt in, Scholarmancy sends text messages about grade and assignment alerts and sign-in
-                links to the mobile number you provide. Message frequency varies. Message and data rates may
+                links to the mobile number you provide. When a parent adds a co-parent or guardian, we do not text
+                the number they enter; that person opts in themselves from a link the parent shares, and we record
+                their consent with the time, IP address, and browser. Message frequency varies. Message and data rates may
                 apply. Reply STOP to opt out or HELP for help. You can also update notification preferences in
                 your account settings.
               </p>

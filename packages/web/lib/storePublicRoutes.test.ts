@@ -11,6 +11,11 @@ describe('middleware public App Store routes', () => {
     }
   );
 
+  it('lets the SMS program page and co-parent opt-in links load without a session', () => {
+    expect(src).toContain(`'/sms'`);
+    expect(src).toContain(`'/sms/optin/'`);
+  });
+
   it('does not send robots.txt or sitemap.xml through the auth matcher', () => {
     expect(src).toMatch(/robots\.txt/);
     expect(src).toMatch(/sitemap\.xml/);
