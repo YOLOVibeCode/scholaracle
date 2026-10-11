@@ -11,6 +11,7 @@ import {
 import { twilioWebhookRouter } from './twilio-webhook.router';
 import { signRelayInboundBody } from '../../../services/sms/verifyRelayInboundSignature';
 import { SmsConsentRepository } from '@scholaracle/database';
+import { isGsm7 } from '@scholaracle/agents';
 
 const RELAY_SECRET = 'test-relay-inbound-secret';
 
@@ -128,6 +129,9 @@ describe('Twilio Webhooks (relay)', () => {
       expect(res.status).toBe(200);
       expect(res.text).toContain('Scholarmancy');
       expect(res.text).toContain('support@scholarmancy.com');
+      const reply = /<Message>(.*)<\/Message>/.exec(res.text)![1]!.replace(/&amp;/g, '&');
+      expect(reply.length).toBeLessThanOrEqual(160);
+      expect(isGsm7(reply)).toBe(true);
     });
 
     it('records consent on YES that answers a confirmation request we sent', async () => {
