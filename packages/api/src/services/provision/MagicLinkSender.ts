@@ -65,7 +65,8 @@ export class MagicLinkSender implements IMagicLinkSender {
       throw new Error('SMS delivery is not configured');
     }
     const { to, loginUrl } = params;
-    const body = `Your sign-in link (expires in 24h): ${loginUrl}`;
+    // Short copy keeps brand + link + STOP in one segment (see ensureBrandSmsBody).
+    const body = `Sign-in link (expires in 24h): ${loginUrl}`;
     await this._guardedSms.sendTransactional(to, body, {
       templateName: 'magic_link',
       triggeredBy: 'system',
