@@ -41,6 +41,7 @@ export * from './repositories/EmailDigestPendingRepository';
 export * from './repositories/AiUsageRepository';
 export * from './repositories/WebhookEventRepository';
 export * from './repositories/SmsConsentRepository';
+export * from './repositories/SmsContactOptInInviteRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';

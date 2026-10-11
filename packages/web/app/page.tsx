@@ -1066,6 +1066,7 @@ function Footer() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link href="/privacy" className="hover:text-foreground">Privacy</Link></li>
               <li><Link href="/terms" className="hover:text-foreground">Terms</Link></li>
+              <li><Link href="/sms" className="hover:text-foreground">Text messages</Link></li>
               <li><Link href="/support" className="hover:text-foreground">Support</Link></li>
               <li><Link href="/delete-account" className="hover:text-foreground">Delete account</Link></li>
             </ul>
