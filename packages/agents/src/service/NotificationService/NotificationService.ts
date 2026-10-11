@@ -507,7 +507,11 @@ export class NotificationService {
     channel: 'email' | 'sms',
     subject: string,
     body: string,
-    options?: { studentId?: string }
+    options?: {
+      studentId?: string;
+      /** Structured reminder (title, studentName, timeAt) for the SMS template. */
+      triggerData?: unknown;
+    }
   ): Promise<DeliveryResult> {
     const notif = new Notification({
       agentType: AgentType.PARENT,
@@ -517,6 +521,7 @@ export class NotificationService {
       body,
       priority: NotificationPriority.MEDIUM,
       triggerType: 'agenda_remind',
+      triggerData: options?.triggerData,
       channels: [channel === 'email' ? NotificationChannel.EMAIL : NotificationChannel.SMS],
     });
     const ch = channel === 'email' ? NotificationChannel.EMAIL : NotificationChannel.SMS;

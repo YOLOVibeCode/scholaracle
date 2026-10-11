@@ -6,12 +6,30 @@ import {
   DeliveryError,
 } from '@scholaracle/contracts';
 import type { GuardedSmsSender } from '../../sms/GuardedSmsSender';
+import { buildAlertSmsBody } from '../../sms/alertSmsTemplates';
+
+export interface ISmsDeliveryOptions {
+  /** Web origin for the details link; defaults to BASE_URL, then https://scholarmancy.com. */
+  readonly webOrigin?: string;
+}
+
+function resolveWebOrigin(): string {
+  return process.env['BASE_URL'] || process.env['WEB_URL'] || 'https://scholarmancy.com';
+}
 
 /**
- * SMS delivery via GuardedSmsSender (Noctusoft relay, consent-gated).
+ * SMS delivery via GuardedSmsSender (Noctusoft relay, consent-gated). Texts use their own
+ * one-segment GSM-7 templates (sms/alertSmsTemplates), never the email body.
  */
 export class SMSDelivery implements INotificationDelivery {
-  constructor(private readonly _guarded: GuardedSmsSender) {}
+  private readonly _webOrigin: string;
+
+  constructor(
+    private readonly _guarded: GuardedSmsSender,
+    options: ISmsDeliveryOptions = {}
+  ) {
+    this._webOrigin = options.webOrigin ?? resolveWebOrigin();
+  }
 
   public supports(channel: NotificationChannel): boolean {
     return channel === NotificationChannel.SMS;
@@ -19,11 +37,18 @@ export class SMSDelivery implements INotificationDelivery {
 
   public async deliver(notification: Notification): Promise<DeliveryResult> {
     try {
-      const smsBody = this._formatSmsBody(notification.subject, notification.body);
+      const smsBody = buildAlertSmsBody(
+        {
+          triggerType: notification.triggerType,
+          triggerData: notification.triggerData,
+          subject: notification.subject,
+        },
+        this._webOrigin
+      );
       const result = await this._guarded.sendTransactional(notification.userId, smsBody, {
         userId: notification.userId,
         subject: notification.subject,
-        templateName: 'notification',
+        templateName: `sms_${notification.triggerType}`,
         triggeredBy: 'system',
       });
       return {
@@ -42,12 +67,5 @@ export class SMSDelivery implements INotificationDelivery {
         { notificationId: notification.id }
       );
     }
-  }
-
-  private _formatSmsBody(subject: string, body: string): string {
-    if (!subject.trim()) {
-      return body;
-    }
-    return `${subject}\n\n${body}`;
   }
 }
