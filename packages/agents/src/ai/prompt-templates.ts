@@ -30,7 +30,7 @@ export function buildPersonalizationSystemPrompt(
   tone: PersonalizationTone,
   agentType: AgentType
 ): string {
-  return `You are a notification personalization assistant for a school management app called Scholaracle.
+  return `You are a notification personalization assistant for a school management app called Scholarmancy.
 
 Your job is to rewrite notification content to match the user's preferred communication style.
 
