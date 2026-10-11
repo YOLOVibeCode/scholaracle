@@ -29,7 +29,7 @@ import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
 import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { createSmsStack } from '@scholaracle/agents';
+import { createSmsStack, buildSmsDigestBody } from '@scholaracle/agents';
 import { PushDelivery, ExpoPushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
@@ -79,7 +79,14 @@ function getSendGridConfig(config: IWorkerConfig): {
 /** Default UTC hour to send daily SMS and email digest (6 PM). */
 const DIGEST_UTC_HOUR = 18;
 
-const MAX_SMS_LENGTH = 1600;
+function smsWebOrigin(): string {
+  return (
+    process.env['BASE_URL'] ||
+    process.env['WEB_URL'] ||
+    process.env['NEXT_PUBLIC_APP_URL'] ||
+    'https://scholarmancy.com'
+  );
+}
 
 /**
  * Flush pending SMS digest: send one combined SMS per user with digest enabled, then clear pending.
@@ -94,11 +101,8 @@ async function flushSmsDigests(database: Db, guardedSender: GuardedSmsSender): P
     const items = await repo.findByUserId(userId);
     if (items.length === 0) continue;
     const phone = items[0]!.phone;
-    const parts = items.map((i) => `${i.subject}\n${i.body}`);
-    let body = `Scholarmancy daily digest (${items.length} alert${items.length === 1 ? '' : 's'}):\n\n${parts.join('\n\n')}`;
-    if (body.length > MAX_SMS_LENGTH) {
-      body = `${body.substring(0, MAX_SMS_LENGTH - 3)}...`;
-    }
+    // One segment: count + details link (joined email bodies ran to 10+ segments).
+    const body = buildSmsDigestBody(items.length, smsWebOrigin());
     const commLogRepo = new CommunicationLogRepository(database);
     try {
       await guardedSender.sendTransactional(phone, body, {

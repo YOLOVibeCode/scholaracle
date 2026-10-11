@@ -1,5 +1,10 @@
 import { AlertType } from '@scholaracle/contracts';
-import { AGENDA_REMINDER_TRIGGER, SMS_SEGMENT_LIMIT, buildAlertSmsBody } from './alertSmsTemplates';
+import {
+  AGENDA_REMINDER_TRIGGER,
+  SMS_SEGMENT_LIMIT,
+  buildAlertSmsBody,
+  buildSmsDigestBody,
+} from './alertSmsTemplates';
 import { isGsm7 } from './gsm7';
 
 const ORIGIN = 'https://scholarmancy.com';
@@ -123,5 +128,19 @@ describe('buildAlertSmsBody: one concise GSM-7 segment per alert type', () => {
       `Scholarmancy: Your student has a missing assignment in a class: an assignment.${TAIL}`
     );
     expectOneGsmSegment(body);
+  });
+});
+
+describe('buildSmsDigestBody', () => {
+  it('summarizes the day in one GSM-7 segment', () => {
+    expect(buildSmsDigestBody(3, ORIGIN)).toBe(
+      `Scholarmancy: Your daily summary: 3 new alerts.${TAIL}`
+    );
+    expect(buildSmsDigestBody(1, ORIGIN)).toBe(
+      `Scholarmancy: Your daily summary: 1 new alert.${TAIL}`
+    );
+    const long = buildSmsDigestBody(250, 'https://web-dev-8552.up.railway.app');
+    expect(long.length).toBeLessThanOrEqual(SMS_SEGMENT_LIMIT);
+    expect(isGsm7(long)).toBe(true);
   });
 });

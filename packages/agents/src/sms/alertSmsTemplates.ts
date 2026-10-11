@@ -221,3 +221,14 @@ export function buildAlertSmsBody(input: IAlertSmsInput, webOrigin: string): str
   const budget = SMS_SEGMENT_LIMIT - PREFIX.length - STOP.length;
   return `${PREFIX}${shortenSmsValue(template.render(Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, f.value]))), budget)}${STOP}`;
 }
+
+/**
+ * Daily SMS digest: one segment with the count and the details link. Batched alerts used to be
+ * joined email bodies of up to 1600 characters (10+ segments).
+ */
+export function buildSmsDigestBody(alertCount: number, webOrigin: string): string {
+  const count = Math.max(1, Math.floor(alertCount));
+  const link = `${webOrigin.replace(/\/+$/, '')}${SMS_ALERTS_PATH}`;
+  const noun = count === 1 ? 'alert' : 'alerts';
+  return `${PREFIX}Your daily summary: ${count} new ${noun}. Details: ${link}${STOP}`;
+}

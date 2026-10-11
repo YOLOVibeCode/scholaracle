@@ -14,7 +14,12 @@ export interface ISmsDeliveryOptions {
 }
 
 function resolveWebOrigin(): string {
-  return process.env['BASE_URL'] || process.env['WEB_URL'] || 'https://scholarmancy.com';
+  return (
+    process.env['BASE_URL'] ||
+    process.env['WEB_URL'] ||
+    process.env['NEXT_PUBLIC_APP_URL'] ||
+    'https://scholarmancy.com'
+  );
 }
 
 /**
