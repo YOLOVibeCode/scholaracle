@@ -470,7 +470,15 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
           recipient,
           channel,
           subject,
-          body
+          body,
+          {
+            triggerData: {
+              title: displayTitle,
+              studentName: studentName ? String(studentName) : undefined,
+              courseName: courseName ? String(courseName) : undefined,
+              timeAt: typeof timeAt === 'string' ? timeAt : undefined,
+            },
+          }
         );
 
         await config.database.collection('communication_logs').insertOne({

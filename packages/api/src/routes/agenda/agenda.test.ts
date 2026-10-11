@@ -323,4 +323,47 @@ describe('Agenda API', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.error).toContain('Reminder service');
   });
+
+  it('passes the reminder as structured data so SMS can use its short template', async () => {
+    const sendReminder = jest.fn().mockResolvedValue({ success: true, messageId: 'm1' });
+    const remindApp = express();
+    remindApp.use(express.json());
+    remindApp.use(
+      '/api/agenda',
+      agendaRouter({
+        database,
+        notificationService: { sendReminder } as unknown as Parameters<
+          typeof agendaRouter
+        >[0]['notificationService'],
+      })
+    );
+    remindApp.use(createErrorHandler());
+    await database.collection('communication_logs').deleteMany({ relatedEntityId: 'item-sms-1' });
+
+    const res = await request(remindApp)
+      .post('/api/agenda/remind')
+      .set('Authorization', `Bearer ${testToken}`)
+      .send({
+        itemId: 'item-sms-1',
+        channel: 'email',
+        title: 'Field trip form',
+        studentName: 'Emma',
+        timeAt: '2026-10-14T17:00:00.000Z',
+      });
+
+    expect(res.status).toBe(200);
+    expect(sendReminder).toHaveBeenCalledWith(
+      'agenda@test.com',
+      'email',
+      'Scholarmancy: Field trip form',
+      expect.any(String),
+      {
+        triggerData: expect.objectContaining({
+          title: 'Field trip form',
+          studentName: 'Emma',
+          timeAt: '2026-10-14T17:00:00.000Z',
+        }),
+      }
+    );
+  });
 });
