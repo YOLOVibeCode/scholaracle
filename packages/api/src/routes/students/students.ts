@@ -56,8 +56,7 @@ import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
-import type { GuardedSmsSender } from '@scholaracle/agents';
-import { normalizePhoneE164 } from '@scholaracle/agents';
+import { createContactSmsOptIn } from '../../services/sms/contactSmsOptIn';
 import { noopSink, registerNudgeRoutes } from './nudge';
 
 export interface IStudentsRouterConfig {
@@ -73,27 +72,6 @@ export interface IStudentsRouterConfig {
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
   /** Optional sender for magic login links (email + SMS). */
   readonly magicLinkSender?: IMagicLinkSender;
-  readonly guardedSmsSender?: GuardedSmsSender | null;
-}
-
-async function sendContactSmsConfirmationIfNeeded(
-  config: IStudentsRouterConfig,
-  inviterName: string,
-  phone?: string,
-  alertChannels?: readonly ('email' | 'sms')[]
-): Promise<void> {
-  if (!phone?.trim() || !alertChannels?.includes('sms') || !config.guardedSmsSender) {
-    return;
-  }
-  const e164 = normalizePhoneE164(phone);
-  if (!e164) {
-    return;
-  }
-  try {
-    await config.guardedSmsSender.sendDoubleOptInConfirmation(e164, inviterName);
-  } catch {
-    // Relay or delivery failure — skip surfacing to client
-  }
 }
 
 // Action-board wire types live in @scholaracle/contracts (types/api/actionBoard.ts).
@@ -359,6 +337,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
     database: config.database,
     baseUrl: config.baseUrl ?? 'http://localhost:2800',
   });
+  const contactSmsOptIn = createContactSmsOptIn(
+    config.database,
+    config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800'
+  );
   registerStudentLoginRoutes(router, {
     studentRepository,
     provisioner: new StudentProvisioner({
@@ -459,6 +441,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const smsStatuses = await Promise.all(
+        student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
+      );
       const contacts = [
         {
           userId: student.userId.toString(),
@@ -470,7 +455,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
           alertTypes: student.ownerAlertPrefs?.alertTypes,
         },
-        ...student.sharedWith.map((sp) => ({
+        ...student.sharedWith.map((sp, i) => ({
           userId: sp.userId,
           email: sp.email,
           name: sp.name,
@@ -484,6 +469,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           receiveAlerts: sp.receiveAlerts !== false,
           alertChannels: sp.alertChannels ?? ['email'],
           alertTypes: sp.alertTypes,
+          smsStatus: smsStatuses[i],
         })),
       ];
       res.status(200).json(contacts);
@@ -540,12 +526,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const newShared: readonly ISharedParent[] = [...student.sharedWith, newContact];
       await studentRepository.update(student._id!, { sharedWith: newShared });
       const inviter = await new UserRepository(config.database).findById(userId);
-      await sendContactSmsConfirmationIfNeeded(
-        config,
-        inviter?.name ?? 'A parent',
-        newContact.phone,
-        newContact.alertChannels
-      );
+      // No text to the contact: they opt in themselves from a link the inviter shares.
+      const smsOptInUrl = await contactSmsOptIn.issueIfTexting({
+        studentId: student._id!.toString(),
+        contactEmail: normalizedEmail,
+        inviterName: inviter?.name ?? 'A parent',
+        phone: newContact.phone,
+        alertChannels: newContact.alertChannels,
+      });
       const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
       try {
         await config.sendInviteEmail?.sendInvite({
@@ -570,7 +558,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           receiveAlerts: true,
           alertChannels: newContact.alertChannels,
           alertTypes: newContact.alertTypes,
+          smsStatus: smsOptInUrl ? 'invited' : 'none',
         },
+        ...(smsOptInUrl ? { smsOptInUrl } : {}),
       });
     })
   );
@@ -708,21 +698,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
       const nextContact = updatedShared[idx]!;
-      const includesSms = nextContact.alertChannels?.includes('sms') ?? false;
-      if (
-        isOwnerOrAdmin &&
-        includesSms &&
-        (body.phone !== undefined || body.alertChannels !== undefined)
-      ) {
-        const inviter = await new UserRepository(config.database).findById(userId);
-        await sendContactSmsConfirmationIfNeeded(
-          config,
-          inviter?.name ?? 'A parent',
-          nextContact.phone,
-          nextContact.alertChannels
-        );
-      }
-      res.status(200).json({ success: true });
+      const smsOptInUrl =
+        isOwnerOrAdmin && (body.phone !== undefined || body.alertChannels !== undefined)
+          ? await contactSmsOptIn.issueIfTexting({
+              studentId: student._id!.toString(),
+              contactEmail: nextContact.email,
+              inviterName: (await userRepository.findById(userId))?.name ?? 'A parent',
+              phone: nextContact.phone,
+              alertChannels: nextContact.alertChannels,
+            })
+          : undefined;
+      res.status(200).json({ success: true, ...(smsOptInUrl ? { smsOptInUrl } : {}) });
     })
   );
 

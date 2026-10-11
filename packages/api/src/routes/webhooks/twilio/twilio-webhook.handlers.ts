@@ -105,7 +105,12 @@ export function handleInboundSms(database: Db): (req: Request, res: Response) =>
       }
 
       if (isYes) {
-        await consentRepo.completeReplyYes(phoneE164, SCHOLARMANCY_SMS_PURPOSE);
+        // YES counts only as the answer to a confirmation request we actually sent
+        // (older co-parent invites). New invites never text; the person opts in on the web.
+        const record = await consentRepo.findByPhoneAndPurpose(phoneE164, SCHOLARMANCY_SMS_PURPOSE);
+        if (record?.confirmationSentAt && !record.revokedAt) {
+          await consentRepo.completeReplyYes(phoneE164, SCHOLARMANCY_SMS_PURPOSE);
+        }
         res.type('text/xml').send('<Response></Response>');
         return;
       }

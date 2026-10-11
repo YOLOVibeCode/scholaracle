@@ -3,3 +3,4 @@ export type {
   ISmsConsentWriter,
   ISmsConsentRepository,
 } from './ISmsConsentRepository';
+export type { ISmsContactOptInInviteRepository } from './ISmsContactOptInInviteRepository';
