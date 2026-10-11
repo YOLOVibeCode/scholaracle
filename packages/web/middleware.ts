@@ -18,10 +18,14 @@ const publicRoutes = [
   '/delete-account',
   '/magic',
   '/get-app',
+  '/sms',
 ];
 
+/** Co-parent SMS opt-in links: /sms/optin/<token>. */
+const publicPrefixes = ['/sms/optin/'];
+
 function isPublicPath(pathname: string): boolean {
-  return publicRoutes.includes(pathname);
+  return publicRoutes.includes(pathname) || publicPrefixes.some((p) => pathname.startsWith(p));
 }
 
 /** If token expires within this many seconds, client may proactively refresh. */

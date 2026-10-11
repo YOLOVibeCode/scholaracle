@@ -66,6 +66,7 @@ import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
+import { smsOptInRouter } from './routes/sms/smsOptIn';
 import { billingRouter } from './routes/billing';
 import { NoctusoftStoreClient, resolveNoctusoftStoreConfig } from './services/noctusoft-store';
 import { seedRouter } from './routes/seed/seed';
@@ -395,9 +396,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         sendInviteEmail: inviteEmailSender,
         syncScheduler,
         magicLinkSender,
-        guardedSmsSender,
       })
     );
+    // Public: a co-parent opts in to texts themselves from a link the inviting parent shares.
+    app.use('/api/sms/optin', smsOptInRouter({ database, guardedSmsSender }));
     app.use(
       '/api/studio',
       authMiddleware(authService),

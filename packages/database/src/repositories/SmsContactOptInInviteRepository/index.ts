@@ -1,0 +1,1 @@
+export { SmsContactOptInInviteRepository } from './SmsContactOptInInviteRepository';
