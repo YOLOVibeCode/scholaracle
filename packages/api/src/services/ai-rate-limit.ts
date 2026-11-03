@@ -40,14 +40,17 @@ export async function checkAiRateLimit(
   const userRepo = new UserRepository(database);
   const usageRepo = new AiUsageRepository(database);
 
-  // Authoritative source: subscriptions collection (updated by store webhooks)
+  // Authoritative source: subscriptions collection (updated by store webhooks).
+  // Only a running subscription counts; cancelled, paused and lapsed ones are free.
   const subscription = await subscriptionRepo.findByUserId(userId);
-  let rawPlan = subscription?.plan as PlanForRateLimit | undefined;
+  let rawPlan = subscription?.effectivePlan() as PlanForRateLimit | undefined;
 
-  // Fallback: user document's embedded subscription (may be stale)
-  if (!rawPlan || !(rawPlan in AI_RATE_LIMITS)) {
+  // Fallback for accounts with no subscription row: the user document, only while active.
+  if (!subscription) {
     const user = await userRepo.findById(userId);
-    rawPlan = user?.subscription?.plan as PlanForRateLimit | undefined;
+    const embedded = user?.subscription;
+    rawPlan =
+      embedded?.status === 'active' ? (embedded.plan as PlanForRateLimit | undefined) : undefined;
   }
 
   const plan = rawPlan && rawPlan in AI_RATE_LIMITS ? rawPlan : ('free' as PlanForRateLimit);

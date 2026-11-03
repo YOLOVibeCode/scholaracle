@@ -1,12 +1,5 @@
 import type { Db } from 'mongodb';
-import { UserRepository } from '@scholaracle/database';
-
-// Plan pricing (matching User model subscription plans)
-const PLAN_PRICING: Record<'free' | 'premium' | 'family', { monthly: number }> = {
-  free: { monthly: 0 },
-  premium: { monthly: 19 },
-  family: { monthly: 29 },
-};
+import { UserRepository, SubscriptionRepository, PLAN_PRICING } from '@scholaracle/database';
 
 export interface IRevenueDataPoint {
   readonly period: string;
@@ -67,17 +60,21 @@ export class AnalyticsService implements IAnalyticsService {
       },
     });
 
+    // Billing cycle lives on the subscription row; an annual plan counts as a twelfth a month.
+    const subscriptions = await new SubscriptionRepository(this._database).findAll({});
+    const cycleByUser = new Map(subscriptions.map((s) => [s.userId, s.billingCycle]));
+
     let mrr = 0;
 
     for (const user of users.data) {
-      const plan = user.subscription.plan;
+      const plan = user.subscription.plan as keyof typeof PLAN_PRICING;
       const pricing = PLAN_PRICING[plan];
-
-      // Assume monthly billing for now (can be enhanced to check billingCycle)
-      mrr += pricing.monthly;
+      if (!pricing) continue;
+      const userId = user._id?.toString() ?? '';
+      mrr += cycleByUser.get(userId) === 'annual' ? pricing.annual / 12 : pricing.monthly;
     }
 
-    return mrr;
+    return Math.round(mrr * 100) / 100;
   }
 
   /**

@@ -847,11 +847,16 @@ describe('Students API Routes', () => {
     });
 
     it('should return 400 when student has no external id', async () => {
+      // POST /api/students now gives every new student an external id, so a legacy
+      // row without one is inserted directly.
       const createRes = await request(app)
         .post('/api/students')
         .set('Authorization', `Bearer ${testToken}`)
         .send({ name: 'No External Id', grade: 9 });
       const studentDbId = createRes.body.id as string;
+      await database
+        .collection('students')
+        .updateOne({ _id: new ObjectId(studentDbId) }, { $unset: { studentId: '' } });
 
       const res = await request(app)
         .delete(`/api/students/${studentDbId}/grade-history?before=2025-07-01`)
@@ -1656,6 +1661,30 @@ describe('Students API Routes', () => {
         .send({ authType: 'login', username: 'parent', password: 'secret' });
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/students plan cap', () => {
+    it('applies the free cap once the paid subscription is cancelled', async () => {
+      const user = await database.collection('users').findOne({ email: 'students@example.com' });
+      await database
+        .collection('subscriptions')
+        .updateOne({ userId: user!._id.toString() }, { $set: { status: 'cancelled' } });
+
+      const first = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Kid One' });
+      const second = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Kid Two' });
+
+      expect(first.status).toBe(201);
+      expect(first.body.studentId).toBe(first.body.id);
+      expect(second.status).toBe(403);
+      expect(second.body.code).toBe('PLAN_LIMIT_REACHED');
+      expect(second.body.currentPlan).toBe('free');
     });
   });
 });

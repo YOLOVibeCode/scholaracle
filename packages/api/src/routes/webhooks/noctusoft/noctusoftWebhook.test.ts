@@ -3,7 +3,7 @@ import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { noctusoftWebhookRouter } from './noctusoftWebhook';
 import { signNoctusoftWebhookBody } from '../../../services/noctusoft-store/verifyNoctusoftWebhookSignature';
-import { WebhookEventRepository } from '@scholaracle/database';
+import { SubscriptionRepository, WebhookEventRepository } from '@scholaracle/database';
 
 describe('Noctusoft store webhook', () => {
   let app: Express;
@@ -118,6 +118,7 @@ describe('Noctusoft store webhook', () => {
     await database.collection('subscriptions').deleteMany({});
     await database.collection('users').deleteMany({});
     await database.collection('webhook_events').deleteMany({});
+    await database.collection('billing_orphans').deleteMany({});
     await database.collection('users').insertMany(
       Object.entries(USERS).map(([name, id]) => ({
         _id: new ObjectId(id),
@@ -351,5 +352,200 @@ describe('Noctusoft store webhook', () => {
     expect(res.status).toBe(200);
     const sub = await database.collection('subscriptions').findOne({ userId: USERS.past });
     expect(sub!['status']).toBe('past_due');
+  });
+
+  describe('environment isolation', () => {
+    function appFor(storeAlias: string, storeMode: 'test' | 'live'): Express {
+      const isolated = express();
+      isolated.use(express.text({ type: 'application/json' }));
+      isolated.use(
+        '/webhook',
+        noctusoftWebhookRouter({ database, webhookSecret, storeAlias, storeMode })
+      );
+      return isolated;
+    }
+
+    function postTo(target: Express, body: string): request.Test {
+      return request(target)
+        .post('/webhook')
+        .set('Content-Type', 'application/json')
+        .set('x-noctusoft-signature', sign(body))
+        .send(body);
+    }
+
+    it('ignores a test-mode event in a live environment and grants nothing', async () => {
+      const body = makeEvent('purchase.paid', { code: 'NOCTU-SCHOLARMANCY-FAMILY-MONTHLY' });
+
+      const res = await postTo(appFor('scholarmancy', 'live'), body);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ignored).toBe('mode');
+      expect(await database.collection('subscriptions').countDocuments({})).toBe(0);
+    });
+
+    it('ignores an event from another store alias', async () => {
+      const body = makeEvent('purchase.paid');
+
+      const res = await postTo(appFor('scholarmancy-uat', 'test'), body);
+
+      expect(res.body.ignored).toBe('store');
+      expect(await database.collection('subscriptions').countDocuments({})).toBe(0);
+    });
+
+    it('applies an event whose store and mode match the environment', async () => {
+      const res = await postTo(appFor('scholarmancy', 'test'), makeEvent('purchase.paid'));
+
+      expect(res.status).toBe(200);
+      expect(await database.collection('subscriptions').countDocuments({})).toBe(1);
+    });
+
+    it('answers a store.ping with 200 and changes nothing', async () => {
+      const body = JSON.stringify({
+        id: 'rel_evt_ping',
+        type: 'store.ping',
+        version: 1,
+        store: 'scholarmancy',
+        mode: 'live',
+      });
+
+      const res = await postTo(appFor('scholarmancy', 'live'), body);
+
+      expect(res.status).toBe(200);
+      expect(res.body.ping).toBe(true);
+      expect(await database.collection('webhook_events').countDocuments({})).toBe(0);
+    });
+  });
+
+  describe('durability and store state', () => {
+    it('processes the relay retry when the first delivery failed', async () => {
+      const body = makeEvent('subscription.renewed', {
+        id: 'evt_retry_after_failure',
+        paymentId: 'pay_retry',
+      });
+      const spy = jest
+        .spyOn(SubscriptionRepository.prototype, 'create')
+        .mockRejectedValueOnce(new Error('transient write failure'));
+
+      const first = await post(body);
+      spy.mockRestore();
+      const retry = await post(body);
+
+      expect(first.status).toBe(500);
+      expect(retry.status).toBe(200);
+      expect(retry.body.deduped).toBeUndefined();
+      const sub = await database.collection('subscriptions').findOne({ userId: USERS.buyer });
+      expect(sub!['plan']).toBe('starter');
+    });
+
+    it('records money for an unknown buyer as an orphan for an admin to settle', async () => {
+      const unknown = new ObjectId().toHexString();
+
+      const res = await post(
+        makeEvent('subscription.renewed', { userId: unknown, paymentId: 'pay_orphan' })
+      );
+
+      expect(res.status).toBe(200);
+      const orphan = await database
+        .collection('billing_orphans')
+        .findOne({ paymentRef: 'pay_orphan' });
+      expect(orphan!['reason']).toBe('buyer is not a Scholarmancy user');
+      expect(orphan!['resolved']).toBe(false);
+    });
+
+    it('grants nothing for an incomplete start, then activates when the store reports it active', async () => {
+      await post(
+        makeEvent('subscription.started', {
+          userId: USERS.family,
+          code: 'NOCTU-SCHOLARMANCY-FAMILY-MONTHLY',
+          subscriptionId: 'sub_incomplete',
+          subscription: { status: 'incomplete' },
+        })
+      );
+      expect(
+        await database.collection('subscriptions').findOne({ userId: USERS.family })
+      ).toBeNull();
+
+      await post(
+        makeEvent('subscription.changed', {
+          userId: USERS.family,
+          code: 'NOCTU-SCHOLARMANCY-FAMILY-MONTHLY',
+          subscriptionId: 'sub_incomplete',
+          subscription: { status: 'active', currentPeriodEnd: '2099-01-01T00:00:00Z' },
+        })
+      );
+      const sub = await database.collection('subscriptions').findOne({ userId: USERS.family });
+      expect(sub!['plan']).toBe('family');
+      expect(sub!['status']).toBe('active');
+    });
+
+    it('never revives a store subscription that was cancelled before its start arrived', async () => {
+      await post(
+        makeEvent('subscription.canceled', {
+          userId: USERS.cancel,
+          subscriptionId: 'sub_out_of_order',
+        })
+      );
+      await post(
+        makeEvent('subscription.started', {
+          userId: USERS.cancel,
+          code: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+          subscriptionId: 'sub_out_of_order',
+          subscription: { status: 'active' },
+        })
+      );
+
+      const sub = await new SubscriptionRepository(database).findByUserId(USERS.cancel);
+      expect(sub!.status).toBe('cancelled');
+      expect(sub!.effectivePlan()).toBe('free');
+    });
+
+    it('stores the trial end the store reports, so the trial actually ends', async () => {
+      await post(
+        makeEvent('subscription.started', {
+          userId: USERS.scheduled,
+          paymentId: null,
+          amountCents: 0,
+          subscription: {
+            status: 'trialing',
+            trialEnd: '2020-01-01T00:00:00Z',
+            currentPeriodEnd: '2020-01-01T00:00:00Z',
+          },
+        })
+      );
+
+      const sub = await new SubscriptionRepository(database).findByUserId(USERS.scheduled);
+      expect(sub!.status).toBe('trialing');
+      expect(sub!.effectivePlan()).toBe('free');
+    });
+
+    it('takes access away on pause and gives it back on resume', async () => {
+      await insertSubscription(USERS.past, 'premium');
+      const repo = new SubscriptionRepository(database);
+
+      await post(makeEvent('subscription.paused', { userId: USERS.past }));
+      expect((await repo.findByUserId(USERS.past))!.effectivePlan()).toBe('free');
+
+      await post(
+        makeEvent('subscription.resumed', {
+          userId: USERS.past,
+          subscription: { status: 'active', currentPeriodEnd: '2099-01-01T00:00:00Z' },
+        })
+      );
+      expect((await repo.findByUserId(USERS.past))!.effectivePlan()).toBe('premium');
+    });
+
+    it('revokes access and flags it when a dispute is lost', async () => {
+      await insertSubscription(USERS.dup, 'family');
+
+      await post(makeEvent('purchase.dispute_lost', { userId: USERS.dup, subscriptionId: null }));
+
+      const sub = await new SubscriptionRepository(database).findByUserId(USERS.dup);
+      expect(sub!.status).toBe('cancelled');
+      expect(
+        await database
+          .collection('billing_orphans')
+          .countDocuments({ reason: 'dispute lost; access revoked' })
+      ).toBe(1);
+    });
   });
 });

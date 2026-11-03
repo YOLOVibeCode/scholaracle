@@ -21,6 +21,11 @@ export interface IWebhookEventWriter {
    * first time the pair has been recorded, false if it has been seen before.
    */
   recordIfNew(provider: string, eventId: string, ttlMs?: number): Promise<boolean>;
+  /**
+   * Remove a recorded pair, so the sender's retry is processed again. Call it
+   * when processing fails after recordIfNew returned true.
+   */
+  forget(provider: string, eventId: string): Promise<void>;
 }
 
 export interface IWebhookEventRepository extends IWebhookEventReader, IWebhookEventWriter {}
@@ -69,6 +74,10 @@ export class WebhookEventRepository implements IWebhookEventRepository {
       }
       throw err;
     }
+  }
+
+  public async forget(provider: string, eventId: string): Promise<void> {
+    await this._collection.deleteOne({ provider, eventId });
   }
 
   public async hasBeenSeen(provider: string, eventId: string): Promise<boolean> {

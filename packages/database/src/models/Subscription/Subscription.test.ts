@@ -354,4 +354,67 @@ describe('Subscription', () => {
       expect(sub.getFeatures()).toEqual(PLAN_FEATURES.enterprise);
     });
   });
+
+  describe('effectivePlan', () => {
+    const now = new Date('2026-11-03T12:00:00Z');
+    const daysFromNow = (days: number): Date => new Date(now.getTime() + days * 86_400_000);
+
+    it('keeps the paid plan while active and inside the paid period', () => {
+      const sub = new Subscription(makeRequiredData({ currentPeriodEnd: daysFromNow(10) }));
+      expect(sub.effectivePlan(now)).toBe('premium');
+    });
+
+    it('keeps the paid plan for the grace days after the period ends, then drops to free', () => {
+      const inGrace = new Subscription(makeRequiredData({ currentPeriodEnd: daysFromNow(-3) }));
+      const lapsed = new Subscription(makeRequiredData({ currentPeriodEnd: daysFromNow(-8) }));
+      expect(inGrace.effectivePlan(now)).toBe('premium');
+      expect(lapsed.effectivePlan(now)).toBe('free');
+    });
+
+    it('treats cancelled, expired and paused subscriptions as free', () => {
+      for (const status of ['cancelled', 'expired', 'paused'] as const) {
+        const sub = new Subscription(
+          makeRequiredData({ status, currentPeriodEnd: daysFromNow(20) })
+        );
+        expect(sub.effectivePlan(now)).toBe('free');
+      }
+    });
+
+    it('keeps a past-due plan only within the grace window', () => {
+      const recent = new Subscription(
+        makeRequiredData({ status: 'past_due', currentPeriodEnd: daysFromNow(-2) })
+      );
+      const old = new Subscription(
+        makeRequiredData({ status: 'past_due', currentPeriodEnd: daysFromNow(-30) })
+      );
+      expect(recent.effectivePlan(now)).toBe('premium');
+      expect(old.effectivePlan(now)).toBe('free');
+    });
+
+    it('ends a trial at trialEnd, with no grace', () => {
+      const running = new Subscription(
+        makeRequiredData({
+          status: 'trialing',
+          trialEnd: daysFromNow(1),
+          currentPeriodEnd: daysFromNow(1),
+        })
+      );
+      const ended = new Subscription(
+        makeRequiredData({
+          status: 'trialing',
+          trialEnd: daysFromNow(-1),
+          currentPeriodEnd: daysFromNow(-1),
+        })
+      );
+      expect(running.effectivePlan(now)).toBe('premium');
+      expect(ended.effectivePlan(now)).toBe('free');
+    });
+
+    it('is free for the free plan whatever the status', () => {
+      const sub = new Subscription(
+        makeRequiredData({ plan: 'free', currentPeriodEnd: daysFromNow(30) })
+      );
+      expect(sub.effectivePlan(now)).toBe('free');
+    });
+  });
 });

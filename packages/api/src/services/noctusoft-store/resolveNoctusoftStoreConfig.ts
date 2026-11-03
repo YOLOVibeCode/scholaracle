@@ -6,12 +6,16 @@ export interface INoctusoftStoreConfig {
   readonly storeMode: 'test' | 'live';
 }
 
-function resolveStoreMode(): 'test' | 'live' {
-  const explicit = process.env['RELAY_STORE_MODE'];
+/**
+ * The store mode this environment trades in: RELAY_STORE_MODE when set,
+ * otherwise live in production and test everywhere else.
+ */
+export function resolveStoreMode(env: NodeJS.ProcessEnv = process.env): 'test' | 'live' {
+  const explicit = env['RELAY_STORE_MODE'];
   if (explicit === 'live' || explicit === 'test') {
     return explicit;
   }
-  return process.env['NODE_ENV'] === 'production' ? 'live' : 'test';
+  return env['NODE_ENV'] === 'production' ? 'live' : 'test';
 }
 
 /** Reads Noctusoft store relay env; throws when required billing keys are missing. */
@@ -30,7 +34,7 @@ export function resolveNoctusoftStoreConfig(
     apiKey,
     webhookSecret,
     storeAlias,
-    storeMode: resolveStoreMode(),
+    storeMode: resolveStoreMode(env),
   };
 }
 
