@@ -117,7 +117,11 @@ export function extractSkywardCourseAssignments(opts: {
   status: 'graded' | 'missing' | 'late' | 'unknown';
 }> {
   const { courseName, coursePeriod } = opts;
-  const dialog = document.querySelector('#gradeInfoDialog');
+  // Read only a grade dialog that has not been read yet (closeSkywardDialogs
+  // marks read ones), so one course's assignments are never filed under the
+  // next course.
+  const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
+  const dialog = dialogs.find((d) => d.querySelector('[data-slc-read]') === null) ?? null;
   if (!dialog) return [];
 
   const results: Array<{
@@ -310,4 +314,69 @@ export function clickSkywardNavLink(text: string): void {
       return;
     }
   }
+}
+
+/**
+ * Click the grade cell (a#showGradeInfo) of one course, choosing the first
+ * period literal in `periods` that the course has a cell for, else the
+ * course's last cell. Skyward then loads #gradeInfoDialog with the course's
+ * assignments. Returns the literal clicked, or null when the course has no
+ * grade cell.
+ */
+export function openSkywardGradeInfo(opts: { cni: string; periods: string[] }): string | null {
+  const cells = Array.from(document.querySelectorAll('a#showGradeInfo')).filter(
+    (a) => a.getAttribute('data-cni') === opts.cni
+  ) as HTMLAnchorElement[];
+  if (cells.length === 0) return null;
+  let target: HTMLAnchorElement | undefined;
+  for (const period of opts.periods) {
+    target = cells.find((a) => a.getAttribute('data-lit') === period);
+    if (target) break;
+  }
+  target = target ?? cells[cells.length - 1]!;
+  target.click();
+  return target.getAttribute('data-lit') ?? '';
+}
+
+/** True once an unread #gradeInfoDialog holds an assignment table. */
+export function isSkywardGradeInfoReady(): boolean {
+  const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
+  return dialogs.some((d) => {
+    if (d.querySelector('[data-slc-read]') !== null) return false;
+    return Array.from(d.querySelectorAll('table')).some((t) => {
+      const header = t.querySelector('tr')?.textContent ?? '';
+      return header.includes('Assignment') && (header.includes('Due') || header.includes('Score'));
+    });
+  });
+}
+
+/**
+ * Close Skyward's overlay dialogs (.sf_DialogWrap close buttons, else Escape)
+ * and mark every #gradeInfoDialog as read, so a later wait only matches the
+ * next course's dialog. Returns how many close buttons were clicked.
+ */
+export function closeSkywardDialogs(): number {
+  let closed = 0;
+  for (const wrap of Array.from(document.querySelectorAll('.sf_DialogWrap'))) {
+    const style = window.getComputedStyle(wrap);
+    if (style.display === 'none' || style.visibility === 'hidden') continue;
+    const button = wrap.querySelector('.sf_DialogClose, a[title="Close"]');
+    if (button) {
+      (button as HTMLElement).click();
+      closed++;
+    }
+  }
+  if (closed === 0) {
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })
+    );
+  }
+  for (const dialog of Array.from(document.querySelectorAll('#gradeInfoDialog'))) {
+    if (dialog.querySelector('[data-slc-read]') !== null) continue;
+    const marker = document.createElement('i');
+    marker.setAttribute('data-slc-read', '1');
+    marker.style.display = 'none';
+    dialog.appendChild(marker);
+  }
+  return closed;
 }
