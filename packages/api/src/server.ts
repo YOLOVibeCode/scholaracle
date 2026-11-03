@@ -631,7 +631,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/analytics', analyticsRouter({ database }));
     app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
-    app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database }));
+    app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
 
     // Webhook ingestion (delivery tracking)
