@@ -10,7 +10,7 @@
  *   - content(): injects a script to return document.documentElement.outerHTML.
  *   - waitForLoad(): waits for the onLoadEnd event.
  *   - waitForUrlIncludes(): polls url() until the pattern matches.
- *   - onNewPage(): Skyward popups are intercepted and continued in the same WebView.
+ *   - onNewPage(): popups continue in the same WebView (see popupBoot.ts).
  *
  * Usage:
  *   const driver = new WebViewPageDriver();
@@ -27,6 +27,7 @@ import {
   type BrowserFn,
 } from '@scholaracle/scraper-core';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
+import { shouldFollowOpenWindow } from './popupBoot';
 
 const EVAL_TIMEOUT_MS = 30_000;
 const EVAL_CHANNEL = '__slc_bridge__';
@@ -74,6 +75,7 @@ export class WebViewPageDriver implements IPageDriver {
   private _loadResolvers: Array<() => void> = [];
   private _newPageHandlers: Array<(page: IPageDriver) => Promise<void>> = [];
   private _evalIdCounter = 0;
+  private _lastPopup: { url: string; at: number } | null = null;
 
   /**
    * Attach the WebView's injectJavaScript function.
@@ -220,11 +222,31 @@ export class WebViewPageDriver implements IPageDriver {
   }
 
   /**
-   * Call when a Skyward-style popup navigation is intercepted.
-   * The handler receives `this` (the same driver, now on the popup URL).
+   * Continue a popup (window.open / target="_blank") in this same WebView.
+   * Called from the WebView's onOpenWindow fallback; most popups never get
+   * here because POPUP_BOOT_JS keeps them in the frame. Returns false when
+   * the request is dropped (not http(s), or a repeat of the one just opened).
    */
+  openInSameFrame(url: string, now: number = Date.now()): boolean {
+    const last = this._lastPopup;
+    if (
+      !shouldFollowOpenWindow({
+        targetUrl: url,
+        lastFollowedUrl: last?.url ?? null,
+        msSinceLastFollow: last ? now - last.at : Number.POSITIVE_INFINITY,
+      })
+    ) {
+      return false;
+    }
+    this._lastPopup = { url, at: now };
+    this._inject(`window.location.assign(${JSON.stringify(url)});`);
+    return true;
+  }
+
+  /** openInSameFrame, then run onNewPage handlers once the popup page loads. */
   async handlePopupNavigation(url: string): Promise<void> {
-    this._inject(`window.location.href = ${JSON.stringify(url)};`);
+    if (!this.openInSameFrame(url)) return;
+    if (this._newPageHandlers.length === 0) return;
     await this.waitForLoad({ timeout: 15000 });
     for (const h of this._newPageHandlers) {
       await h(this);
