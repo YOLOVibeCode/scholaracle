@@ -16,6 +16,7 @@ import {
   extractSkywardCourseAssignments,
   extractSkywardAttendance,
   extractSkywardSchedule,
+  clickSkywardNavLink,
 } from '../extractors/skyward/skyward-extractors';
 
 /** Grade period literals in priority order (most recent school term first). */
@@ -217,15 +218,7 @@ async function navigateSkywardSection(driver: IPageDriver, linkText: string): Pr
   // The driver is expected to navigate to the section; clicking is handled by the recipe
   // by injecting a click on the nav link text.
   try {
-    await driver.evaluate((text: string) => {
-      const links = Array.from(document.querySelectorAll('a'));
-      for (const link of links) {
-        if (link.textContent?.trim() === text) {
-          (link as HTMLAnchorElement).click();
-          return;
-        }
-      }
-    }, linkText);
+    await driver.evaluate(clickSkywardNavLink, linkText);
     await driver.waitForLoad({ timeout: 10000 });
     await driver.sleep(2000);
   } catch {

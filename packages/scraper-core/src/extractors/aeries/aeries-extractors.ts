@@ -346,3 +346,34 @@ export function extractAeriesStudentInfo(): {
     school: schoolMatch?.[1]?.trim() ?? '',
   };
 }
+
+/**
+ * Choose a course in the Gradebook Details dropdown and fire its change event.
+ * Runs in the page; self-contained.
+ */
+export function selectAeriesCourseOption(value: string): void {
+  const dropdown = document.querySelector('select') as HTMLSelectElement | null;
+  if (dropdown) {
+    dropdown.value = value;
+    dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+
+/**
+ * Open the student switcher and click the student whose link text contains `name`.
+ * Returns true when a matching link was clicked. Runs in the page; self-contained.
+ */
+export function switchAeriesStudentByName(name: string): boolean {
+  const dropdown = document.querySelector(
+    '[class*="student-selector"], [class*="StudentDrop"]'
+  ) as HTMLElement | null;
+  if (dropdown) dropdown.click();
+  const links = Array.from(document.querySelectorAll('a'));
+  for (const link of links) {
+    if (link.textContent?.includes(name)) {
+      (link as HTMLAnchorElement).click();
+      return true;
+    }
+  }
+  return false;
+}
