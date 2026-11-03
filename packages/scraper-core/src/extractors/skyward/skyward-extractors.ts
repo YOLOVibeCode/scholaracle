@@ -297,3 +297,17 @@ export function extractSkywardSchedule(): Array<{
   }
   return results;
 }
+
+/**
+ * Click the navigation link whose trimmed text equals `text`. Runs in the page;
+ * self-contained.
+ */
+export function clickSkywardNavLink(text: string): void {
+  const links = Array.from(document.querySelectorAll('a'));
+  for (const link of links) {
+    if (link.textContent?.trim() === text) {
+      (link as HTMLAnchorElement).click();
+      return;
+    }
+  }
+}
