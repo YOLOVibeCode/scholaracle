@@ -522,18 +522,31 @@ export class AuthService implements IAuthService {
   /**
    * Verify JWT token.
    *
+   * Only user session tokens pass. Connector, admin and MFA tokens share the
+   * signing secret but carry a `type` claim, which session tokens never have.
+   *
    * @param token - JWT token
    * @returns Decoded token data or null if invalid
    */
   public async verifyToken(token: string): Promise<IAuthTokenPayload | null> {
     try {
       const decoded = jwt.verify(token, this._jwtSecret) as {
-        userId: string;
-        email: string;
+        userId?: unknown;
+        email?: unknown;
+        type?: unknown;
         fid?: string;
         role?: string;
         studentId?: string;
       };
+
+      if (
+        decoded.type !== undefined ||
+        typeof decoded.userId !== 'string' ||
+        decoded.userId === '' ||
+        typeof decoded.email !== 'string'
+      ) {
+        return null;
+      }
 
       const role: UserRole = decoded.role === 'student' ? 'student' : 'parent';
       return {
