@@ -1,5 +1,7 @@
 import { MongoClient, type Db } from 'mongodb';
+import jwt from 'jsonwebtoken';
 import { AuthService } from './AuthService';
+import { ConnectorTokenService } from '../ConnectorTokenService/ConnectorTokenService';
 import { UserRepository } from '@scholaracle/database';
 
 describe('AuthService', () => {
@@ -197,6 +199,28 @@ describe('AuthService', () => {
       // Verify with original service (different secret)
       const decoded = await authService.verifyToken(result.token!);
       expect(decoded).toBeNull();
+    });
+
+    it('should return null for a connector token signed with the same secret', async () => {
+      const connectorToken = new ConnectorTokenService(TEST_SECRET).createToken(
+        'user-123',
+        'jti-123'
+      );
+      const decoded = await authService.verifyToken(connectorToken);
+      expect(decoded).toBeNull();
+    });
+
+    it('should return null for any token carrying a type claim', async () => {
+      const adminShaped = jwt.sign(
+        { userId: 'user-123', email: 'a@example.com', type: 'admin' },
+        TEST_SECRET
+      );
+      expect(await authService.verifyToken(adminShaped)).toBeNull();
+    });
+
+    it('should return null for a token without a userId', async () => {
+      const noUser = jwt.sign({ email: 'a@example.com' }, TEST_SECRET);
+      expect(await authService.verifyToken(noUser)).toBeNull();
     });
 
     it('should return null for expired token', async () => {

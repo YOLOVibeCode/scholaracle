@@ -4,11 +4,14 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
+import { AdminAuthService } from '@scholaracle/auth';
 import { ValidationError } from '@scholaracle/contracts';
+import { adminAuthMiddleware } from '../../../middleware/adminAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface IDiagnosticsRouterConfig {
   readonly database: Db;
+  readonly jwtSecret?: string;
   readonly sendGridApiKey?: string;
   readonly sendGridFromEmail?: string;
   readonly sendGridFromName?: string;
@@ -108,6 +111,10 @@ async function manualFlushDigests(
  */
 export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Router {
   const router = Router();
+  const adminAuthService = new AdminAuthService(config.database, config.jwtSecret);
+
+  // Apply admin auth middleware to all routes
+  router.use(adminAuthMiddleware(adminAuthService));
 
   /**
    * POST /api/admin/diagnostics/flush-digests

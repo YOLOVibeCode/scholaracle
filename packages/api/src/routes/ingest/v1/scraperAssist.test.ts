@@ -64,4 +64,71 @@ describe('POST /ai/scraper-assist', () => {
     expect(res.status).toBe(200);
     expect(res.body.content).toBe('ok');
   });
+
+  it('rejects requests larger than the input cap', async () => {
+    const res = await request(app)
+      .post('/api/ingest/v1/ai/scraper-assist')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        purpose: 'generate',
+        messages: [{ role: 'user', content: 'x'.repeat(200_001) }],
+      });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+  });
+
+  it('stops a user at the daily limit and keeps other users unaffected', async () => {
+    const limitedApp = express();
+    limitedApp.use(express.json());
+    limitedApp.use(
+      '/api/ingest/v1/ai',
+      createScraperAssistRouter({
+        database,
+        jwtSecret: 'test-jwt-secret-min-32-chars!!',
+        dailyLimit: 2,
+        burstMax: 100,
+      })
+    );
+    const tokenService = new ConnectorTokenService('test-jwt-secret-min-32-chars!!');
+    const capped = tokenService.createToken('user-daily-cap', 'jti-daily-1');
+    const other = tokenService.createToken('user-daily-other', 'jti-daily-2');
+    const call = (token: string) =>
+      request(limitedApp)
+        .post('/api/ingest/v1/ai/scraper-assist')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ purpose: 'generate', messages: [{ role: 'user', content: 'go' }] });
+
+    expect((await call(capped)).status).toBe(200);
+    expect((await call(capped)).status).toBe(200);
+    const blocked = await call(capped);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect((await call(other)).status).toBe(200);
+  });
+
+  it('limits bursts per user', async () => {
+    const burstApp = express();
+    burstApp.use(express.json());
+    burstApp.use(
+      '/api/ingest/v1/ai',
+      createScraperAssistRouter({
+        database,
+        jwtSecret: 'test-jwt-secret-min-32-chars!!',
+        dailyLimit: 100,
+        burstMax: 1,
+      })
+    );
+    const token = new ConnectorTokenService('test-jwt-secret-min-32-chars!!').createToken(
+      'user-burst',
+      'jti-burst-1'
+    );
+    const call = () =>
+      request(burstApp)
+        .post('/api/ingest/v1/ai/scraper-assist')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ purpose: 'troubleshoot', messages: [{ role: 'user', content: 'why' }] });
+
+    expect((await call()).status).toBe(200);
+    expect((await call()).status).toBe(429);
+  });
 });
