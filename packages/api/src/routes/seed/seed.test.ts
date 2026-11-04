@@ -86,7 +86,7 @@ describe('Seed API Routes', () => {
 
           expect(response.status).toBe(403);
           expect(response.body.success).toBe(false);
-          expect(response.body.error).toBe('Seeding is not allowed in production');
+          expect(response.body.error).toBe('Seed routes are not available on this server');
           expect(response.body.code).toBe('FORBIDDEN');
         } finally {
           process.env['NODE_ENV'] = originalEnv;
