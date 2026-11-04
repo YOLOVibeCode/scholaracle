@@ -226,8 +226,14 @@ describe('WebViewAssetHost.processOps', () => {
     const result = await host.processOps([op]);
 
     expect(result[0]?.record?.['url']).toBe('https://api.scholarmancy.com/api/assets/asset-1');
-    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/ingest/v1/assets/upload');
-    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('upload-base64');
+    // JSON + base64: React Native's Blob cannot carry a Uint8Array, so multipart never uploads.
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/ingest/v1/assets/upload-base64');
+    const init = fetchMock.mock.calls[0]?.[1] as { headers: Record<string, string>; body: string };
+    expect(init.headers['Content-Type']).toBe('application/json');
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body['data']).toBe('dGVzdA==');
+    expect(body['contentHash']).toBe('abc123');
+    expect(body['mimeType']).toBe('application/pdf');
   });
 
   it('keeps original op when evaluate returns null (file too large / fetch error)', async () => {

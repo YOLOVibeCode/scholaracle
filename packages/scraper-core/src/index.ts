@@ -36,6 +36,18 @@ export { EXTRACTOR_BUNDLE_HASH, SCRAPER_CORE_PACKAGE_VERSION } from './version';
 export type { ITransformContext, IScraperCoreVersion } from './types';
 export { buildAdapterVersion } from './types';
 
+// Page functions: build-time source table for engines without function source (Hermes)
+export { PAGE_FNS } from './page-fns/registry';
+export { resolvePageFn, PageFnUnregisteredError, PAGE_FN_UNREGISTERED } from './page-fns/resolve';
+export { getDocumentOuterHtml } from './page-fns/common-fns';
+export { fetchAssetInWebView, fetchPageInWebView } from './page-fns/asset-fns';
+export type {
+  IFetchedAsset,
+  IFetchedHtml,
+  IFetchedBinary,
+  IFetchedPage,
+} from './page-fns/asset-fns';
+
 // Canvas
 export * from './extractors/canvas/canvas-extractors';
 export { runCanvasRecipe } from './recipes/canvas-recipe';
