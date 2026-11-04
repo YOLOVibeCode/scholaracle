@@ -2,13 +2,15 @@
  * WebViewPageDriver — IPageDriver implementation for React Native WebView.
  *
  * Bridges between the scraper-core recipe (TypeScript) and the in-app WebView:
- *   - evaluate(): serializes a function to string, injects it via injectJavaScript,
- *     receives the result back via onMessage (postMessage bridge).
+ *   - evaluate(): looks the function's source up in scraper-core's build-time
+ *     page-function table (Hermes cannot give a function's source at run time),
+ *     injects it as code via injectJavaScript (no eval in the page), and receives
+ *     the result back via onMessage (postMessage bridge).
  *   - goto(): calls webviewRef.current.injectJavaScript to navigate.
  *   - content(): injects a script to return document.documentElement.outerHTML.
  *   - waitForLoad(): waits for the onLoadEnd event.
  *   - waitForUrlIncludes(): polls url() until the pattern matches.
- *   - onNewPage(): Skyward popups are intercepted and continued in the same WebView.
+ *   - onNewPage(): popups continue in the same WebView (see popupBoot.ts).
  *
  * Usage:
  *   const driver = new WebViewPageDriver();
@@ -16,8 +18,16 @@
  *   // Call driver methods from the scraper recipe.
  */
 
-import type { IPageDriver, IGotoOptions, IWaitOptions, BrowserFn } from '@scholaracle/scraper-core';
+import {
+  getDocumentOuterHtml,
+  resolvePageFn,
+  type IPageDriver,
+  type IGotoOptions,
+  type IWaitOptions,
+  type BrowserFn,
+} from '@scholaracle/scraper-core';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
+import { shouldFollowOpenWindow } from './popupBoot';
 
 const EVAL_TIMEOUT_MS = 30_000;
 const EVAL_CHANNEL = '__slc_bridge__';
@@ -36,16 +46,17 @@ interface IBridgeMessage {
   readonly message?: string;
 }
 
-/** Injectable shim — injects the postMessage bridge into the page. */
+/**
+ * Injectable shim: the postMessage bridge. It receives the page function itself
+ * (injected as code, never as a string to eval), so it works on Hermes builds and
+ * under a CSP that forbids eval. Safe to inject more than once.
+ */
 const BRIDGE_SHIM = `
 (function() {
-  if (window.__slc_eval_registered__) return;
-  window.__slc_eval_registered__ = true;
-  window.__slc_pending__ = {};
-  window.__slc_eval__ = async function(id, fnStr, argsStr) {
+  if (window.__slc_run__) return;
+  window.__slc_run__ = async function(id, fn, argsStr) {
     try {
       var args = JSON.parse(argsStr);
-      var fn = eval('(' + fnStr + ')');
       var result = await fn.apply(null, Array.isArray(args) ? args : [args]);
       var msg = JSON.stringify({ channel: '${EVAL_CHANNEL}', id: id, type: 'result', value: result });
       window.ReactNativeWebView.postMessage(msg);
@@ -55,7 +66,6 @@ const BRIDGE_SHIM = `
     }
   };
 })();
-true;
 `;
 
 export class WebViewPageDriver implements IPageDriver {
@@ -65,6 +75,7 @@ export class WebViewPageDriver implements IPageDriver {
   private _loadResolvers: Array<() => void> = [];
   private _newPageHandlers: Array<(page: IPageDriver) => Promise<void>> = [];
   private _evalIdCounter = 0;
+  private _lastPopup: { url: string; at: number } | null = null;
 
   /**
    * Attach the WebView's injectJavaScript function.
@@ -148,8 +159,9 @@ export class WebViewPageDriver implements IPageDriver {
   ): Promise<TResult> {
     if (!this._injectFn) throw new Error('WebView not yet attached — call attachInject() first');
 
+    // Throws PAGE_FN_UNREGISTERED for a function missing from the build-time table.
+    const { source } = resolvePageFn(fn);
     const id = String(++this._evalIdCounter);
-    const fnStr = fn.toString();
     const argsStr = JSON.stringify(args.length === 1 ? [args[0]] : args.length === 0 ? [] : args);
 
     return new Promise<TResult>((resolve, reject) => {
@@ -164,15 +176,16 @@ export class WebViewPageDriver implements IPageDriver {
         timeoutId,
       });
 
-      // Inject the evaluation call
-      const escaped = JSON.stringify(fnStr);
+      // The shim is re-sent with each call in case the page navigated since onLoadEnd.
       const escapedArgs = JSON.stringify(argsStr);
-      this._inject(`window.__slc_eval__(${JSON.stringify(id)}, ${escaped}, ${escapedArgs});`);
+      this._inject(
+        `${BRIDGE_SHIM}\nwindow.__slc_run__(${JSON.stringify(id)}, (${source}), ${escapedArgs});`
+      );
     });
   }
 
   async content(): Promise<string> {
-    return this.evaluate(() => document.documentElement.outerHTML);
+    return this.evaluate(getDocumentOuterHtml);
   }
 
   async waitForLoad(options?: IWaitOptions): Promise<void> {
@@ -209,11 +222,31 @@ export class WebViewPageDriver implements IPageDriver {
   }
 
   /**
-   * Call when a Skyward-style popup navigation is intercepted.
-   * The handler receives `this` (the same driver, now on the popup URL).
+   * Continue a popup (window.open / target="_blank") in this same WebView.
+   * Called from the WebView's onOpenWindow fallback; most popups never get
+   * here because POPUP_BOOT_JS keeps them in the frame. Returns false when
+   * the request is dropped (not http(s), or a repeat of the one just opened).
    */
+  openInSameFrame(url: string, now: number = Date.now()): boolean {
+    const last = this._lastPopup;
+    if (
+      !shouldFollowOpenWindow({
+        targetUrl: url,
+        lastFollowedUrl: last?.url ?? null,
+        msSinceLastFollow: last ? now - last.at : Number.POSITIVE_INFINITY,
+      })
+    ) {
+      return false;
+    }
+    this._lastPopup = { url, at: now };
+    this._inject(`window.location.assign(${JSON.stringify(url)});`);
+    return true;
+  }
+
+  /** openInSameFrame, then run onNewPage handlers once the popup page loads. */
   async handlePopupNavigation(url: string): Promise<void> {
-    this._inject(`window.location.href = ${JSON.stringify(url)};`);
+    if (!this.openInSameFrame(url)) return;
+    if (this._newPageHandlers.length === 0) return;
     await this.waitForLoad({ timeout: 15000 });
     for (const h of this._newPageHandlers) {
       await h(this);

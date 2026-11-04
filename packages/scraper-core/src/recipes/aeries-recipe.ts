@@ -18,6 +18,8 @@ import {
   extractAeriesAssignments,
   extractAeriesAttendance,
   extractAeriesStudentInfo,
+  selectAeriesCourseOption,
+  switchAeriesStudentByName,
 } from '../extractors/aeries/aeries-extractors';
 
 const COURSE_ROW_SELECTOR = 'tr[class*="class"], tr[data-*], .ClassSummary tr, table tbody tr';
@@ -158,13 +160,7 @@ async function extractGradebookDetails(
 
     for (const opt of courseOptions) {
       if (opt.text.startsWith('<<')) continue;
-      await driver.evaluate((value: string) => {
-        const dropdown = document.querySelector('select') as HTMLSelectElement | null;
-        if (dropdown) {
-          dropdown.value = value;
-          dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }, opt.value);
+      await driver.evaluate(selectAeriesCourseOption, opt.value);
       await driver.sleep(2000);
       await driver.waitForLoad({ timeout: 10000 }).catch(() => {});
 
@@ -185,20 +181,7 @@ async function extractGradebookDetails(
 
 async function switchToStudentInAeries(driver: IPageDriver, studentName: string): Promise<boolean> {
   try {
-    const switched = await driver.evaluate((name: string): boolean => {
-      const dropdown = document.querySelector(
-        '[class*="student-selector"], [class*="StudentDrop"]'
-      ) as HTMLElement | null;
-      if (dropdown) dropdown.click();
-      const links = Array.from(document.querySelectorAll('a'));
-      for (const link of links) {
-        if (link.textContent?.includes(name)) {
-          (link as HTMLAnchorElement).click();
-          return true;
-        }
-      }
-      return false;
-    }, studentName);
+    const switched = await driver.evaluate(switchAeriesStudentByName, studentName);
     if (switched) {
       await driver.waitForLoad({ timeout: 10000 }).catch(() => {});
       await driver.sleep(2000);

@@ -273,9 +273,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   // needs the raw request body for HMAC signature verification, and a global
   // express.json() would consume the stream before the route-level
   // express.raw() ever sees it (body-parser skips once req._body is set).
+  // The base64 asset upload is excluded too: its route parses JSON itself with a
+  // 30 MB limit (a 20 MB file is about 27 MB as base64), which this 10 MB parser
+  // would otherwise refuse first.
   const jsonParser = express.json({ limit: '10mb' });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/webhooks/noctusoft' || req.path.startsWith('/api/webhooks/twilio')) {
+    if (
+      req.path === '/api/webhooks/noctusoft' ||
+      req.path.startsWith('/api/webhooks/twilio') ||
+      req.path === '/api/ingest/v1/assets/upload-base64'
+    ) {
       next();
       return;
     }
@@ -635,7 +642,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/analytics', analyticsRouter({ database }));
     app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
-    app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database }));
+    app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
 
     // Webhook ingestion (delivery tracking)

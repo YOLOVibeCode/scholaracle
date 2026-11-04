@@ -5,7 +5,6 @@ import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
   AuthenticationError,
-  InternalError,
   NotFoundError,
   ValidationError,
   type ISlcIngestEnvelopeV1,
@@ -38,7 +37,6 @@ import {
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 import type { MongoQueue } from '@scholaracle/agents';
-import { decryptCredentials } from '../../../utils/credentialsCipher';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 import {
   mergeCourses,
@@ -1194,60 +1192,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     })
   );
 
-  router.get(
-    '/sources/:sourceId/credentials',
-    connectorAuth,
-    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
-      const userId = req.connectorUserId ?? '';
-      const sourceId = req.params['sourceId'];
-      if (!sourceId) {
-        throw new ValidationError('Missing sourceId');
-      }
-      const students = await studentRepo.findByUserId(userId);
-      for (const student of students) {
-        const ds = student.dataSources.find((s) => s.id === sourceId);
-        if (!ds?.credentials?.encrypted) continue;
-        const plain = decryptCredentials({
-          encrypted: ds.credentials.encrypted,
-          iv: ds.credentials.iv,
-        });
-        if (!plain) {
-          res.status(503).json({ success: false, error: 'Credentials could not be decrypted' });
-          return;
-        }
-        let credentials: {
-          authType: string;
-          accessToken?: string;
-          username?: string;
-          password?: string;
-          baseUrl?: string;
-        };
-        try {
-          credentials = JSON.parse(plain) as typeof credentials;
-        } catch {
-          throw new InternalError('Invalid credentials payload');
-        }
-        const ingestSource = await sourceRepo.findByUserIdAndSourceId(
-          student.dataUserId(),
-          sourceId
-        );
-        const baseUrl = credentials.baseUrl ?? ingestSource?.portalBaseUrl ?? '';
-        if (credentials.authType === 'api') {
-          res.status(200).json({ baseUrl, accessToken: credentials.accessToken ?? '' });
-          return;
-        }
-        // authType was 'login' — portal passwords are no longer vaulted on the server.
-        // Return 410 so callers know this endpoint will never return a portal password.
-        res.status(410).json({
-          success: false,
-          error:
-            'Portal login credentials are no longer stored on the server. Use the mobile app, browser extension, or local CLI to manage school portal credentials.',
-        });
-        return;
-      }
-      throw new NotFoundError('Source not found or no credentials set');
-    })
-  );
+  // Stored credentials never leave the server; portal logins live on the parent's device.
+  router.get('/sources/:sourceId/credentials', connectorAuth, (_req, res: Response) => {
+    res.status(410).json({
+      success: false,
+      error:
+        'Stored credentials are not returned by the server. Use the mobile app, browser extension, or local CLI to manage school portal credentials.',
+    });
+  });
 
   router.post(
     '/sources',

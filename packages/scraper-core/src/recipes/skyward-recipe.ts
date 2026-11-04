@@ -16,10 +16,17 @@ import {
   extractSkywardCourseAssignments,
   extractSkywardAttendance,
   extractSkywardSchedule,
+  clickSkywardNavLink,
+  openSkywardGradeInfo,
+  isSkywardGradeInfoReady,
+  closeSkywardDialogs,
 } from '../extractors/skyward/skyward-extractors';
 
 /** Grade period literals in priority order (most recent school term first). */
 const GRADE_PERIOD_PRIORITY = ['4TH', 'PR4', '3RD', 'PR3', '2ND', 'PR2', '1ST', 'PR1'];
+/** How long to wait for a course's grade dialog after clicking its grade cell. */
+const GRADE_DIALOG_TIMEOUT_MS = 8000;
+const GRADE_DIALOG_POLL_MS = 400;
 const CLASS_DESC_REGEX_SOURCE = /<table\s+id="classDesc_(\d+_\d+_\d+_\d+)"[^>]*>(.*?)<\/table>/gs
   .source;
 
@@ -57,6 +64,50 @@ function parseCoursesFromHtml(html: string): ISkywardCourseExtract[] {
     });
   }
   return courses;
+}
+
+/**
+ * Read grades straight from the gradebook's grade cells:
+ * `<a id="showGradeInfo" data-cni="…" data-lit="3RD">95</a>`. Keyed by the
+ * course's section id (cni) and the period literal the page itself uses, so
+ * rows never shift between courses and any district's terms come through.
+ * Values keep document order. "X" and empty cells are skipped.
+ */
+export function parseSkywardGradeCells(html: string): Map<string, Record<string, string>> {
+  const byCni = new Map<string, Record<string, string>>();
+  const anchorRe = /<a\b([^>]*\bid="showGradeInfo"[^>]*)>([\s\S]*?)<\/a>/g;
+  let m: RegExpExecArray | null;
+  while ((m = anchorRe.exec(html)) !== null) {
+    const attrs = m[1]!;
+    const cni = /\bdata-cni="([^"]*)"/.exec(attrs)?.[1];
+    const lit = /\bdata-lit="([^"]*)"/.exec(attrs)?.[1];
+    const value = m[2]!
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, '')
+      .replace(/\u00a0/g, '')
+      .trim();
+    if (!cni || !lit || !value || value === 'X') continue;
+    const grades = byCni.get(cni) ?? {};
+    grades[lit] = value;
+    byCni.set(cni, grades);
+  }
+  return byCni;
+}
+
+/**
+ * The most current grade: the first literal in GRADE_PERIOD_PRIORITY that has
+ * a value (4TH before PR4 before 3RD …), else the last term-like column the
+ * page showed (districts with other term names), else "?". Exams, semester
+ * and final columns are never the current grade.
+ */
+export function pickSkywardCurrentGrade(grades: Readonly<Record<string, string>>): string {
+  for (const period of GRADE_PERIOD_PRIORITY) {
+    const value = grades[period];
+    if (value) return value;
+  }
+  const termLike = Object.keys(grades).filter((k) => !/^(EX|SM|FIN)/i.test(k));
+  const last = termLike[termLike.length - 1];
+  return last ? grades[last]! : '?';
 }
 
 /**
@@ -127,12 +178,19 @@ export async function runSkywardRecipe(
       for (let j = 0; j < headers.length; j++) {
         if (row[j] && row[j] !== 'X') grades[headers[j]!] = row[j]!;
       }
-      courses[i] = {
-        ...courses[i]!,
-        grades,
-        currentGrade:
-          grades['3RD'] ?? grades['SM1'] ?? grades['2ND'] ?? grades['PR3'] ?? grades['PR1'] ?? '?',
-      };
+      courses[i] = { ...courses[i]!, grades, currentGrade: pickSkywardCurrentGrade(grades) };
+    }
+  }
+
+  // Prefer the grade cells' own section ids over the row order above.
+  const gradeCells = parseSkywardGradeCells(html);
+  if (gradeCells.size > 0) {
+    for (let i = 0; i < courses.length; i++) {
+      const course = courses[i]!;
+      const grades = course._cni ? gradeCells.get(course._cni) : undefined;
+      courses[i] = grades
+        ? { ...course, grades, currentGrade: pickSkywardCurrentGrade(grades) }
+        : { ...course, grades: {}, currentGrade: '?' };
     }
   }
 
@@ -157,26 +215,26 @@ export async function runSkywardRecipe(
     });
   }
 
-  // Per-course assignment extraction via gradeInfoDialog
+  // Per-course assignments: click the course's grade cell, wait for its
+  // #gradeInfoDialog, read it, close it (closing marks it read).
   const allAssignments: ISkywardFullExtract['assignments'] = [];
+  await closeDialogsQuietly(driver);
   for (const course of courses) {
     if (!course._cni) continue;
     try {
-      // Extract assignments from the gradeInfoDialog if visible after grade cell click
-      for (const period of GRADE_PERIOD_PRIORITY) {
-        void period; // iterate periods until assignments are found
-        const assignments = await driver.evaluate(extractSkywardCourseAssignments, {
-          courseName: course.name,
-          coursePeriod: course.period,
-        });
-        if (assignments.length > 0) {
-          allAssignments.push(...assignments);
-          break;
-        }
-        break;
-      }
+      const periods = [...GRADE_PERIOD_PRIORITY, ...Object.keys(course.grades).reverse()];
+      const opened = await driver.evaluate(openSkywardGradeInfo, { cni: course._cni, periods });
+      if (opened === null) continue;
+      if (!(await waitForGradeDialog(driver))) continue;
+      const assignments = await driver.evaluate(extractSkywardCourseAssignments, {
+        courseName: course.name,
+        coursePeriod: course.period,
+      });
+      allAssignments.push(...assignments);
     } catch {
       // continue to next course
+    } finally {
+      await closeDialogsQuietly(driver);
     }
   }
 
@@ -217,17 +275,27 @@ async function navigateSkywardSection(driver: IPageDriver, linkText: string): Pr
   // The driver is expected to navigate to the section; clicking is handled by the recipe
   // by injecting a click on the nav link text.
   try {
-    await driver.evaluate((text: string) => {
-      const links = Array.from(document.querySelectorAll('a'));
-      for (const link of links) {
-        if (link.textContent?.trim() === text) {
-          (link as HTMLAnchorElement).click();
-          return;
-        }
-      }
-    }, linkText);
+    await driver.evaluate(clickSkywardNavLink, linkText);
     await driver.waitForLoad({ timeout: 10000 });
     await driver.sleep(2000);
+  } catch {
+    // best effort
+  }
+}
+
+async function waitForGradeDialog(driver: IPageDriver): Promise<boolean> {
+  const polls = Math.ceil(GRADE_DIALOG_TIMEOUT_MS / GRADE_DIALOG_POLL_MS);
+  for (let i = 0; i <= polls; i++) {
+    if (await driver.evaluate(isSkywardGradeInfoReady)) return true;
+    if (i < polls) await driver.sleep(GRADE_DIALOG_POLL_MS);
+  }
+  return false;
+}
+
+async function closeDialogsQuietly(driver: IPageDriver): Promise<void> {
+  try {
+    await driver.evaluate(closeSkywardDialogs);
+    await driver.sleep(300);
   } catch {
     // best effort
   }

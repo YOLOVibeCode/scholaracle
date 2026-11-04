@@ -1,4 +1,5 @@
 import { chromium, type FullConfig } from '@playwright/test';
+import { seedHeaders } from './fixtures/test-data';
 
 /**
  * Global setup for E2E tests.
@@ -71,6 +72,7 @@ async function globalSetup(config: FullConfig) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...seedHeaders(),
       },
     });
 

@@ -1,8 +1,8 @@
 /**
- * loginDetect tests — login-success detection and popup-navigation blocking.
+ * loginDetect tests — login-success detection and sync failure wording.
  */
 
-import { shouldTreatAsLoginSuccess, shouldBlockPopupNavigation } from './loginDetect';
+import { shouldTreatAsLoginSuccess, describeSyncFailure } from './loginDetect';
 
 const PORTAL = 'https://school.instructure.com';
 const PORTAL_HOST = 'school.instructure.com';
@@ -39,6 +39,14 @@ describe('shouldTreatAsLoginSuccess', () => {
 
   it('should reject /login URLs', () => {
     expect(shouldTreatAsLoginSuccess(successParams({ url: `${PORTAL}/login/canvas` }))).toBe(false);
+  });
+
+  it('should reject login paths in any case (Aeries LoginParent.aspx)', () => {
+    expect(
+      shouldTreatAsLoginSuccess(
+        successParams({ url: `${PORTAL}/Student/LoginParent.aspx?page=default.aspx` })
+      )
+    ).toBe(false);
   });
 
   it('should reject Google SSO interstitials', () => {
@@ -85,49 +93,57 @@ describe('shouldTreatAsLoginSuccess', () => {
   });
 });
 
-const SKYWARD = 'https://family.skyward.example.com';
-
-function popupParams(
-  overrides: Partial<Parameters<typeof shouldBlockPopupNavigation>[0]> = {}
-): Parameters<typeof shouldBlockPopupNavigation>[0] {
-  return {
-    requestUrl: `${SKYWARD}/popup/grades`,
-    initialUrl: SKYWARD,
-    navigationType: 'other',
-    hasCompletedLoad: true,
-    ...overrides,
-  };
-}
-
-describe('shouldBlockPopupNavigation', () => {
-  it('should block a skyward "other" navigation after the first load', () => {
-    expect(shouldBlockPopupNavigation(popupParams())).toBe(true);
+describe('describeSyncFailure', () => {
+  it('calls it signed out only when the portal shows a sign-in form', () => {
+    const view = describeSyncFailure({
+      phase: 'portal',
+      message: 'WebView eval timed out after 30000ms',
+      provider: 'skyward',
+      loginFormShowing: true,
+    });
+    expect(view.kind).toBe('signed-out');
+    expect(view.title).toBe('Signed out of Skyward');
+    expect(view.canSignInAgain).toBe(true);
   });
 
-  it('should never block before the first load completes', () => {
-    expect(shouldBlockPopupNavigation(popupParams({ hasCompletedLoad: false }))).toBe(false);
-    // Even the exact initial-load request shape is allowed through.
-    expect(
-      shouldBlockPopupNavigation(popupParams({ requestUrl: SKYWARD, hasCompletedLoad: false }))
-    ).toBe(false);
+  it('shows the real reason for other portal failures, never "Session Expired"', () => {
+    const view = describeSyncFailure({
+      phase: 'portal',
+      message: 'Gradebook link not found',
+      provider: 'skyward',
+      loginFormShowing: false,
+    });
+    expect(view.kind).toBe('portal');
+    expect(view.title).toBe('Couldn\u2019t read Skyward');
+    expect(view.message).toBe('Gradebook link not found');
+    expect(JSON.stringify(view)).not.toMatch(/session expired/i);
+    expect(view.canSignInAgain).toBe(true);
   });
 
-  it.each([
-    { name: 'trailing slash variant', requestUrl: `${SKYWARD}/` },
-    { name: 'host casing variant', requestUrl: 'https://Family.Skyward.Example.com' },
-    { name: 'exact initial URL', requestUrl: SKYWARD },
-  ])('should not block the normalized-equal initial URL ($name)', ({ requestUrl }) => {
-    expect(shouldBlockPopupNavigation(popupParams({ requestUrl }))).toBe(false);
+  it('does not send the parent back to the portal for an upload failure', () => {
+    const view = describeSyncFailure({
+      phase: 'upload',
+      message: 'Network request failed.',
+      provider: 'canvas',
+      loginFormShowing: false,
+    });
+    expect(view.kind).toBe('upload');
+    expect(view.canSignInAgain).toBe(false);
+    expect(view.message).toContain('Network request failed.');
   });
 
-  it('should not block non-"other" navigation types', () => {
-    expect(shouldBlockPopupNavigation(popupParams({ navigationType: 'click' }))).toBe(false);
-    expect(shouldBlockPopupNavigation(popupParams({ navigationType: 'formsubmit' }))).toBe(false);
-  });
-
-  it('should not block non-skyward URLs', () => {
-    expect(
-      shouldBlockPopupNavigation(popupParams({ requestUrl: 'https://other.example.com/x' }))
-    ).toBe(false);
+  it('falls back to a generic portal name and reason', () => {
+    const view = describeSyncFailure({
+      phase: undefined,
+      message: '  ',
+      provider: 'other',
+      loginFormShowing: false,
+    });
+    expect(view).toEqual({
+      kind: 'local',
+      title: 'Sync failed',
+      message: 'Unknown error',
+      canSignInAgain: false,
+    });
   });
 });
