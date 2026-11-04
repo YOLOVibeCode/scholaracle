@@ -31,7 +31,7 @@ export function requirePlan(minPlan: SubscriptionPlan, config: ISubscriptionGuar
     }
 
     const subscription = await subscriptionRepo.findByUserId(userId);
-    const userPlan: SubscriptionPlan = subscription?.isActive() ? subscription.plan : 'free';
+    const userPlan: SubscriptionPlan = subscription?.effectivePlan() ?? 'free';
 
     const userTier = PLAN_TIER[userPlan] ?? 0;
     const requiredTier = PLAN_TIER[minPlan] ?? 0;

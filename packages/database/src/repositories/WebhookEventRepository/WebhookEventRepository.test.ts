@@ -107,4 +107,13 @@ describe('WebhookEventRepository', () => {
       expect(typeof ttl!['expireAfterSeconds']).toBe('number');
     });
   });
+
+  describe('forget', () => {
+    it('lets a forgotten event id be recorded again, so a retry is processed', async () => {
+      expect(await repo.recordIfNew('noctusoft', 'evt_retry')).toBe(true);
+      await repo.forget('noctusoft', 'evt_retry');
+      expect(await repo.recordIfNew('noctusoft', 'evt_retry')).toBe(true);
+      expect(await repo.recordIfNew('noctusoft', 'evt_retry')).toBe(false);
+    });
+  });
 });

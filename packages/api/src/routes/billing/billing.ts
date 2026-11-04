@@ -10,7 +10,15 @@ import type { SubscriptionPlan } from '@scholaracle/database';
 export interface IBillingRouterDeps {
   readonly database: Db;
   readonly storeClient: INoctusoftStoreClient;
+  /**
+   * The web app's origin, used for store return URLs when a request carries no
+   * Origin header (native apps, server callers). The store refuses localhost in live mode.
+   */
+  readonly webBaseUrl?: string;
 }
+
+/** Store subscription states in which a second checkout would double-bill the buyer. */
+const RUNNING_STATUSES = new Set(['active', 'trialing', 'past_due', 'paused']);
 
 export function billingRouter(deps: IBillingRouterDeps): Router {
   const router = Router();
@@ -135,7 +143,14 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
     const validCycle: 'monthly' | 'annual' = billingCycle === 'annual' ? 'annual' : 'monthly';
 
-    const origin = req.headers.origin ?? 'http://localhost:2800';
+    const existing = await subscriptionRepo.findByUserId(userId);
+    if (existing?.storeSubscriptionId && RUNNING_STATUSES.has(existing.status)) {
+      throw new ConflictError(
+        'You already have a subscription. Manage it from the billing page instead of buying again.'
+      );
+    }
+
+    const origin = webOrigin(req);
     const checkout = await deps.storeClient.createCheckout({
       userId,
       email,
@@ -155,11 +170,14 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       throw new AuthenticationError('Authentication required');
     }
 
-    const origin = req.headers.origin ?? 'http://localhost:2800';
-    const billingUrl = `${origin}/dashboard/billing`;
+    const billingUrl = `${webOrigin(req)}/dashboard/billing`;
 
+    // Past-due customers need this page most: it is where they fix the card.
     const subscription = await subscriptionRepo.findByUserId(userId);
-    if (subscription?.storeSubscriptionId && subscription.isActive()) {
+    if (
+      subscription?.storeSubscriptionId &&
+      (subscription.isActive() || subscription.status === 'past_due')
+    ) {
       const url = await deps.storeClient.updatePaymentMethod(
         subscription.storeSubscriptionId,
         billingUrl
@@ -218,7 +236,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     if (!subscription) {
       res.json({
         success: true,
-        subscription: { plan: 'free', status: 'active' },
+        subscription: { plan: 'free', status: 'active', effectivePlan: 'free' },
       });
       return;
     }
@@ -228,6 +246,8 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       subscription: {
         plan: subscription.plan,
         status: subscription.status,
+        /** The plan whose limits apply now (free once cancelled, paused or lapsed). */
+        effectivePlan: subscription.effectivePlan(),
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
         billingCycle: subscription.billingCycle,
@@ -264,7 +284,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     }
 
     const existing = await subscriptionRepo.findByUserId(userId);
-    if (existing && existing.isActive()) {
+    if (existing && existing.effectivePlan() !== 'free') {
       throw new ConflictError('You already have an active subscription');
     }
 
@@ -286,6 +306,8 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
         currentPeriodStart: now,
         currentPeriodEnd: trialEnd,
         billingCycle: 'monthly',
+        trialStart: now,
+        trialEnd,
       } as Parameters<typeof subscriptionRepo.update>[1]);
     } else {
       await subscriptionRepo.create({
@@ -337,6 +359,13 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       success: true,
       invoices,
     });
+  }
+
+  /** Origin for store return URLs: the caller's Origin, else the configured web app. */
+  function webOrigin(req: IAuthenticatedRequest): string {
+    const origin = req.headers.origin;
+    if (origin && /^https?:\/\//.test(origin)) return origin.replace(/\/$/, '');
+    return (deps.webBaseUrl ?? 'http://localhost:2800').replace(/\/$/, '');
   }
 
   return router;

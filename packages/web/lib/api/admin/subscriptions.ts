@@ -11,7 +11,7 @@ export interface ISubscription {
   readonly id: string;
   readonly userId: string;
   readonly plan: 'free' | 'starter' | 'premium' | 'family' | 'enterprise';
-  readonly status: 'active' | 'past_due' | 'cancelled' | 'expired' | 'trialing';
+  readonly status: 'active' | 'past_due' | 'cancelled' | 'expired' | 'trialing' | 'paused';
   readonly billingCycle?: 'monthly' | 'annual';
   readonly currentPeriodStart: string;
   readonly currentPeriodEnd: string;

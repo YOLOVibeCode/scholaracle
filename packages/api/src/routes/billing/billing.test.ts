@@ -56,6 +56,7 @@ const paidSubscription = {
   cancelAtPeriodEnd: false,
   storeSubscriptionId: 'ns_sub_1',
   isActive: () => true,
+  effectivePlan: () => 'starter',
 };
 
 describe('Billing Routes', () => {
@@ -219,11 +220,13 @@ describe('Billing Routes', () => {
         currentPeriodEnd: new Date('2025-02-01'),
         billingCycle: 'monthly',
         cancelAtPeriodEnd: false,
+        effectivePlan: () => 'premium',
       });
 
       const res = await request(app).get('/api/billing/subscription').expect(200);
 
       expect(res.body.subscription.plan).toBe('premium');
+      expect(res.body.subscription.effectivePlan).toBe('premium');
       expect(res.body.subscription.status).toBe('active');
     });
   });
@@ -255,6 +258,78 @@ describe('Billing Routes', () => {
       expect(res.body.invoices[0].id).toBe('pay_1');
       expect(res.body.invoices[0].amount).toBe(19);
       expect(res.body.invoices[0].currency).toBe('usd');
+    });
+  });
+
+  describe('subscription state rules', () => {
+    it('refuses a second checkout while a store subscription is running', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+
+      await request(app)
+        .post('/api/billing/checkout')
+        .send({ plan: 'premium', billingCycle: 'monthly' })
+        .expect(409);
+
+      expect(mockStoreClient.createCheckout).not.toHaveBeenCalled();
+    });
+
+    it('allows checkout again after the subscription was cancelled', async () => {
+      mockFindByUserId.mockResolvedValue({ ...paidSubscription, status: 'cancelled' });
+      mockStoreClient.createCheckout.mockResolvedValue({
+        url: 'https://store.example/buy',
+        sessionId: 'buy:2',
+      });
+
+      await request(app)
+        .post('/api/billing/checkout')
+        .send({ plan: 'premium', billingCycle: 'monthly' })
+        .expect(200);
+    });
+
+    it('uses the configured web origin for return URLs when the request has no Origin', async () => {
+      mockFindByUserId.mockResolvedValue(null);
+      mockStoreClient.createCheckout.mockResolvedValue({
+        url: 'https://store.example/buy',
+        sessionId: 'buy:3',
+      });
+      const native = express();
+      native.use(express.json());
+      native.use((req, _res, next) => {
+        (req as unknown as { userId: string; userEmail: string }).userId = 'user-1';
+        (req as unknown as { userId: string; userEmail: string }).userEmail = 'test@example.com';
+        next();
+      });
+      native.use(
+        '/api/billing',
+        billingRouter({
+          database: {} as unknown as import('mongodb').Db,
+          storeClient: mockStoreClient,
+          webBaseUrl: 'https://scholarmancy.com/',
+        })
+      );
+      native.use(createErrorHandler());
+
+      await request(native).post('/api/billing/checkout').send({ plan: 'starter' }).expect(200);
+
+      expect(mockStoreClient.createCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          successUrl: 'https://scholarmancy.com/dashboard/billing?checkout=success',
+        })
+      );
+    });
+
+    it('opens the card page for a past-due customer', async () => {
+      mockFindByUserId.mockResolvedValue({
+        ...paidSubscription,
+        status: 'past_due',
+        isActive: () => false,
+      });
+      mockStoreClient.updatePaymentMethod.mockResolvedValue('https://store.example/card');
+
+      const res = await request(app).post('/api/billing/portal').send({}).expect(200);
+
+      expect(res.body.hasPortal).toBe(true);
+      expect(mockStoreClient.updatePaymentMethod).toHaveBeenCalled();
     });
   });
 });
