@@ -39,7 +39,7 @@ export { buildAdapterVersion } from './types';
 // Page functions: build-time source table for engines without function source (Hermes)
 export { PAGE_FNS } from './page-fns/registry';
 export { resolvePageFn, PageFnUnregisteredError, PAGE_FN_UNREGISTERED } from './page-fns/resolve';
-export { getDocumentOuterHtml } from './page-fns/common-fns';
+export { getDocumentOuterHtml, isLoginFormShowing } from './page-fns/common-fns';
 export { fetchAssetInWebView, fetchPageInWebView } from './page-fns/asset-fns';
 export type {
   IFetchedAsset,
