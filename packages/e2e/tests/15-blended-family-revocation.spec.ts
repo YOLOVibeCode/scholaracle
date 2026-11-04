@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { seedHeaders } from '../fixtures/test-data';
 
 /**
  * BLENDED-FAMILY REVOCATION — RISK-005, COVERAGE_GAPS §4.
@@ -59,6 +60,7 @@ test.describe('@security Blended-family revocation ACL', () => {
     // Use seed/add-parent endpoint to short-circuit invite/accept and mark accepted.
     // ASSUMPTION: seed/add-parent endpoint flips status to 'accepted' (seed.ts:879-953).
     const addAccepted = await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
     expect(addAccepted.ok()).toBeTruthy();
@@ -100,6 +102,7 @@ test.describe('@security Blended-family revocation ACL', () => {
     const student = (await studentRes.json()) as { id: string };
 
     await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
 
@@ -134,6 +137,7 @@ test.describe('@security Blended-family revocation ACL', () => {
     const student = (await studentRes.json()) as { id: string };
 
     await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
 
@@ -165,6 +169,7 @@ test.describe('@security Blended-family revocation ACL', () => {
     const student = (await studentRes.json()) as { id: string };
 
     await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
 
@@ -175,6 +180,7 @@ test.describe('@security Blended-family revocation ACL', () => {
 
     // Re-invite + accept again.
     await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
 
@@ -203,6 +209,7 @@ test.describe('@security Blended-family revocation ACL', () => {
     const student = (await studentRes.json()) as { id: string };
 
     await request.post(`${apiBaseUrl}/api/seed/add-parent`, {
+      headers: seedHeaders(),
       data: { studentId: student.id, email: coEmail, name: 'Co-Parent', role: 'parent' },
     });
     await request.delete(

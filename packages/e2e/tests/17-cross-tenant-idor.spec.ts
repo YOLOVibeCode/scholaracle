@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { seedHeaders } from '../fixtures/test-data';
 
 /**
  * CROSS-TENANT IDOR SWEEP — RISK-002, COVERAGE_GAPS §3.
@@ -100,7 +101,9 @@ test.describe('@security Cross-tenant IDOR sweep', () => {
   test('IDOR-004 negative: alerts-by-id are scoped to owner', async ({ request }) => {
     // Use the seed fixture to get a real alert id for the seeded parent.
     // Then verify a NEW unrelated parent cannot read it.
-    const seedRes = await request.post(`${apiBaseUrl}/api/seed?force=true`);
+    const seedRes = await request.post(`${apiBaseUrl}/api/seed?force=true`, {
+      headers: seedHeaders(),
+    });
     expect(seedRes.ok()).toBeTruthy();
 
     // Login seeded parent.

@@ -141,6 +141,7 @@ jobs:
     needs: wait-for-dev
     if: ${{ !inputs.skip_e2e }}
     uses: ./.github/workflows/e2e.yml
+    secrets: inherit
     with:
       base_url: https://web-dev-8552.up.railway.app
       api_base_url: https://api-dev-c268.up.railway.app/api

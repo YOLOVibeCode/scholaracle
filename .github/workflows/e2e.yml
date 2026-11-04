@@ -93,10 +93,13 @@ jobs:
 
       - name: Seed deployed environment
         if: inputs.base_url != ''
+        env:
+          E2E_SEED_TOKEN: ${{ secrets.E2E_SEED_TOKEN }}
         run: |
           # Seed deployed env so tests have deterministic fixtures.
           curl -fsS -X POST "${{ inputs.api_base_url }}/seed?force=true" \
             -H 'Content-Type: application/json' \
+            -H "X-Seed-Token: ${E2E_SEED_TOKEN}" \
             --max-time 120 \
             || (echo "Seed failed"; exit 1)
 
@@ -106,6 +109,10 @@ jobs:
           CI: 'true'
           BASE_URL: ${{ inputs.base_url || 'http://localhost:2800' }}
           API_BASE_URL: ${{ inputs.api_base_url || 'http://localhost:2801' }}
+          # Deployed runs only: a local API seeds the repo defaults.
+          E2E_SEED_TOKEN: ${{ inputs.base_url && secrets.E2E_SEED_TOKEN || '' }}
+          E2E_ADMIN_PASSWORD: ${{ inputs.base_url && secrets.E2E_ADMIN_PASSWORD || '' }}
+          E2E_MFA_SECRET: ${{ inputs.base_url && secrets.E2E_MFA_SECRET || '' }}
 
       - name: Upload Playwright report
         if: always()
