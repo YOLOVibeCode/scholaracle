@@ -3073,7 +3073,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const subscription = await subscriptionRepository.findByUserId(userId);
-      const currentPlan = subscription?.plan ?? 'free';
+      // Cancelled, paused, lapsed and expired-trial subscriptions get the free cap.
+      const currentPlan = subscription?.effectivePlan() ?? 'free';
       const planFeatures = PLAN_FEATURES[currentPlan];
       const maxStudents = planFeatures.maxStudents;
 
@@ -3099,12 +3100,20 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         studentId,
       });
 
+      // A student created without an external id (the phone app does this) is keyed
+      // by its own id, which is what the phone sends as studentExternalId on sync.
+      let resolvedStudentId = student.studentId;
+      if (!resolvedStudentId && student._id) {
+        resolvedStudentId = student._id.toString();
+        await studentRepository.update(student._id, { studentId: resolvedStudentId });
+      }
+
       res.status(201).json({
         id: student._id?.toString() ?? '',
         userId: student.userId.toString(),
         name: student.name,
         grade: student.grade,
-        studentId: student.studentId,
+        studentId: resolvedStudentId,
         stats: student.stats,
       });
     })

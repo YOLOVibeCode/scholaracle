@@ -8,7 +8,11 @@ export type SubscriptionPlan = 'free' | 'starter' | 'premium' | 'family' | 'ente
 /**
  * Subscription status types.
  */
-export type SubscriptionStatus = 'active' | 'past_due' | 'cancelled' | 'expired' | 'trialing';
+export type SubscriptionStatus =
+  'active' | 'past_due' | 'cancelled' | 'expired' | 'trialing' | 'paused';
+
+/** Days a paid plan keeps working after its period ends, while a renewal or card fix lands. */
+export const PAID_PLAN_GRACE_DAYS = 7;
 
 /**
  * Billing cycle types.
@@ -201,6 +205,33 @@ export class Subscription {
    */
   public isActive(): boolean {
     return this.status === 'active' || this.status === 'trialing';
+  }
+
+  /**
+   * The plan whose limits apply right now. A paid plan counts only while the
+   * subscription is active, trialing or past due, and only until its paid period
+   * (or trial) ends plus PAID_PLAN_GRACE_DAYS. Cancelled, expired and paused
+   * subscriptions, and lapsed periods or trials, fall back to free.
+   */
+  public effectivePlan(now: Date = new Date()): SubscriptionPlan {
+    if (this.plan === 'free') return 'free';
+    const graceMs = PAID_PLAN_GRACE_DAYS * 24 * 60 * 60 * 1000;
+    const notPast = (end: Date | undefined): boolean =>
+      end instanceof Date &&
+      !Number.isNaN(end.getTime()) &&
+      end.getTime() + graceMs > now.getTime();
+    switch (this.status) {
+      case 'trialing':
+        if (this.trialEnd) {
+          return this.trialEnd.getTime() > now.getTime() ? this.plan : 'free';
+        }
+        return notPast(this.currentPeriodEnd) ? this.plan : 'free';
+      case 'active':
+      case 'past_due':
+        return notPast(this.currentPeriodEnd) ? this.plan : 'free';
+      default:
+        return 'free';
+    }
   }
 
   /**

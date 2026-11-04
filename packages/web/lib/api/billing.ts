@@ -3,6 +3,8 @@ import { apiClient } from './client';
 export interface ISubscriptionInfo {
   readonly plan: string;
   readonly status: string;
+  /** The plan whose limits apply now; 'free' once cancelled, paused or lapsed. */
+  readonly effectivePlan?: string;
   readonly currentPeriodStart?: string;
   readonly currentPeriodEnd?: string;
   readonly billingCycle?: string;
