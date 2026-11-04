@@ -42,6 +42,9 @@ export const PAGE_FNS: Readonly<Record<string, AnyPageFn>> = Object.freeze({
   'skyward.extractSkywardAttendance': skyward.extractSkywardAttendance,
   'skyward.extractSkywardSchedule': skyward.extractSkywardSchedule,
   'skyward.clickSkywardNavLink': skyward.clickSkywardNavLink,
+  'skyward.openSkywardGradeInfo': skyward.openSkywardGradeInfo,
+  'skyward.isSkywardGradeInfoReady': skyward.isSkywardGradeInfoReady,
+  'skyward.closeSkywardDialogs': skyward.closeSkywardDialogs,
   // Aeries
   'aeries.extractAeriesStudentList': aeries.extractAeriesStudentList,
   'aeries.extractAeriesDashboardCourses': aeries.extractAeriesDashboardCourses,
