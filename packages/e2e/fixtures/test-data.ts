@@ -6,7 +6,19 @@
  * Known TOTP secret shared between the seed and E2E tests.
  * All seeded admin accounts use this secret for MFA.
  */
-export const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
+export const E2E_MFA_SECRET = process.env['E2E_MFA_SECRET'] || 'JBSWY3DPEHPK3PXP';
+
+/**
+ * Deployed environments seed admins from SEED_ADMIN_PASSWORD / SEED_ADMIN_MFA_SECRET;
+ * CI passes the same values here. Locally the repo defaults apply.
+ */
+const E2E_ADMIN_PASSWORD = process.env['E2E_ADMIN_PASSWORD'];
+
+/** Header that unlocks /api/seed on deployed environments (matches the API's SEED_TOKEN). */
+export function seedHeaders(): Record<string, string> {
+  const token = process.env['E2E_SEED_TOKEN'];
+  return token ? { 'X-Seed-Token': token } : {};
+}
 
 export type UserRole = 'parent' | 'admin' | 'newUser';
 
@@ -33,28 +45,28 @@ export const TEST_USERS = {
   },
   admin: {
     email: 'admin@scholarmancy.com',
-    password: 'Admin123!',
+    password: E2E_ADMIN_PASSWORD || 'Admin123!',
     name: 'Admin User',
     role: 'admin' as const,
   },
   /** Same credentials as admin (API has single admin role); for E2E Support/Billing login tests. */
   support: {
     email: 'admin@scholarmancy.com',
-    password: 'Admin123!',
+    password: E2E_ADMIN_PASSWORD || 'Admin123!',
     name: 'Support',
     role: 'admin' as const,
   },
   /** Same credentials as admin; for E2E Billing login tests. */
   billing: {
     email: 'admin@scholarmancy.com',
-    password: 'Admin123!',
+    password: E2E_ADMIN_PASSWORD || 'Admin123!',
     name: 'Billing',
     role: 'admin' as const,
   },
   /** Dedicated analyst admin (seeded) for E2E and lockout tests. */
   analyst: {
     email: 'analyst@scholarmancy.com',
-    password: 'Admin123!',
+    password: E2E_ADMIN_PASSWORD || 'Admin123!',
     name: 'Analyst',
     role: 'admin' as const,
   },

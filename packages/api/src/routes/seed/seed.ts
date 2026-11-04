@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
@@ -85,6 +86,81 @@ const TEST_USERS = {
     role: 'admin' as AdminRole,
   },
 } as const;
+
+/**
+ * True only on a developer machine or in unit tests. Railway always sets
+ * RAILWAY_ENVIRONMENT_ID, so a deployed dev, UAT or production API is never local.
+ */
+function isLocalDevServer(): boolean {
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDeployed = Boolean(
+    process.env['RAILWAY_ENVIRONMENT_ID'] ?? process.env['RAILWAY_ENVIRONMENT_NAME']
+  );
+  return (nodeEnv === 'development' || nodeEnv === 'test') && !isDeployed;
+}
+
+function hasSeedToken(req: Request): boolean {
+  const expected = process.env['SEED_TOKEN'] ?? '';
+  const given = req.header('x-seed-token') ?? '';
+  if (expected.length < 24 || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
+
+/**
+ * Seed routes write accounts directly. Off a local server they need the
+ * X-Seed-Token header matching SEED_TOKEN (set only where E2E seeds).
+ */
+function requireSeedAccess(req: Request, _res: Response, next: NextFunction): void {
+  if (isLocalDevServer() || hasSeedToken(req)) {
+    next();
+    return;
+  }
+  next(new ForbiddenError('Seed routes are not available on this server'));
+}
+
+/**
+ * Admin seed credentials. The repo's values are public, so they are used only
+ * on a local server; deployed environments must supply their own.
+ */
+function adminSeedSecrets(localPassword: string): { password: string; mfaSecret: string } | null {
+  const password = process.env['SEED_ADMIN_PASSWORD'] ?? '';
+  const mfaSecret = process.env['SEED_ADMIN_MFA_SECRET'] ?? '';
+  if (password.length >= 12 && mfaSecret.length >= 16) return { password, mfaSecret };
+  return isLocalDevServer() ? { password: localPassword, mfaSecret: E2E_MFA_SECRET } : null;
+}
+
+type SeedAdminOutcome =
+  | { readonly kind: 'created' | 'existing'; readonly id: string }
+  | { readonly kind: 'skipped'; readonly reason: string };
+
+async function upsertSeedAdmin(
+  database: Db,
+  adminRepository: AdminUserRepository,
+  userConfig: { email: string; password: string; name: string; role: AdminRole },
+  options: { shouldForce: boolean }
+): Promise<SeedAdminOutcome> {
+  const existing = await adminRepository.findByEmail(userConfig.email);
+  if (existing && !options.shouldForce) {
+    return { kind: 'existing', id: existing._id!.toString() };
+  }
+  const secrets = adminSeedSecrets(userConfig.password);
+  if (!secrets) {
+    return { kind: 'skipped', reason: 'SEED_ADMIN_PASSWORD and SEED_ADMIN_MFA_SECRET not set' };
+  }
+  if (existing) {
+    await database.collection('admin_users').deleteOne({ _id: existing._id! });
+  }
+  const admin = await adminRepository.create({
+    email: userConfig.email,
+    passwordHash: await AdminUserRepository.hashPassword(secrets.password),
+    name: userConfig.name,
+    role: userConfig.role,
+    isActive: true,
+    mfaEnabled: true,
+    mfaSecret: secrets.mfaSecret,
+  });
+  return { kind: 'created', id: admin._id!.toString() };
+}
 
 /**
  * Handle seed request.
@@ -215,93 +291,27 @@ async function handleSeed(req: Request, res: Response, config: ISeedRouterConfig
     }
   }
 
-  // 2. Create admin user
+  // 2. Create admin users (super admin + analyst for E2E and lockout tests)
   let superAdminId: string | null = null;
-
-  // Create admin user
-  // Create admin user
-  try {
-    const userConfig = TEST_USERS.admin;
-    const existingAdmin = await adminRepository.findByEmail(userConfig.email);
-    if (existingAdmin) {
-      if (shouldForce) {
-        const objectId = existingAdmin._id!;
-        await config.database.collection('admin_users').deleteOne({ _id: objectId });
-        const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
-        const admin = await adminRepository.create({
-          email: userConfig.email,
-          passwordHash,
-          name: userConfig.name,
-          role: userConfig.role,
-          isActive: true,
-          mfaEnabled: true,
-          mfaSecret: E2E_MFA_SECRET,
-        });
-        superAdminId = admin._id!.toString();
-        results.admins.created.push(`admin: ${userConfig.email}`);
-      } else {
-        superAdminId = existingAdmin._id!.toString();
-        results.admins.existing.push(`admin: ${userConfig.email}`);
-      }
-    } else {
-      const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
-      const admin = await adminRepository.create({
-        email: userConfig.email,
-        passwordHash,
-        name: userConfig.name,
-        role: userConfig.role,
-        isActive: true,
-        mfaEnabled: true,
-        mfaSecret: E2E_MFA_SECRET,
+  for (const [label, userConfig] of [
+    ['admin', TEST_USERS.admin],
+    ['analyst', TEST_USERS.analyst],
+  ] as const) {
+    try {
+      const outcome = await upsertSeedAdmin(config.database, adminRepository, userConfig, {
+        shouldForce,
       });
-      superAdminId = admin._id!.toString();
-      results.admins.created.push(`admin: ${userConfig.email}`);
-    }
-  } catch (error) {
-    results.admins.errors.push(
-      `admin: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-
-  // Create analyst admin (for E2E and lockout tests)
-  try {
-    const userConfig = TEST_USERS.analyst;
-    const existingAnalyst = await adminRepository.findByEmail(userConfig.email);
-    if (existingAnalyst) {
-      if (shouldForce) {
-        const objectId = existingAnalyst._id!;
-        await config.database.collection('admin_users').deleteOne({ _id: objectId });
-        const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
-        await adminRepository.create({
-          email: userConfig.email,
-          passwordHash,
-          name: userConfig.name,
-          role: userConfig.role,
-          isActive: true,
-          mfaEnabled: true,
-          mfaSecret: E2E_MFA_SECRET,
-        });
-        results.admins.created.push(`admin: ${userConfig.email}`);
-      } else {
-        results.admins.existing.push(`admin: ${userConfig.email}`);
+      if (outcome.kind === 'skipped') {
+        results.admins.errors.push(`${label}: skipped (${outcome.reason})`);
+        continue;
       }
-    } else {
-      const passwordHash = await AdminUserRepository.hashPassword(userConfig.password);
-      await adminRepository.create({
-        email: userConfig.email,
-        passwordHash,
-        name: userConfig.name,
-        role: userConfig.role,
-        isActive: true,
-        mfaEnabled: true,
-        mfaSecret: E2E_MFA_SECRET,
-      });
-      results.admins.created.push(`admin: ${userConfig.email}`);
+      if (label === 'admin') superAdminId = outcome.id;
+      results.admins[outcome.kind].push(`admin: ${userConfig.email}`);
+    } catch (error) {
+      results.admins.errors.push(
+        `${label}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
-  } catch (error) {
-    results.admins.errors.push(
-      `analyst: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
   }
 
   // 3. Create test students for parent user
@@ -911,6 +921,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post(
     '/',
+    requireSeedAccess,
     asyncHandler((req: Request, res: Response) => handleSeed(req, res, config))
   );
 
@@ -929,6 +940,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post(
     '/demo/reset',
+    requireSeedAccess,
     asyncHandler((req: Request, res: Response) => handleDemoReset(req, res, config))
   );
 
@@ -939,6 +951,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post(
     '/set-password',
+    requireSeedAccess,
     asyncHandler(async (req: Request, res: Response) => {
       if (!isDemoAllowed()) {
         throw new ForbiddenError('Not allowed in production');
@@ -969,6 +982,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post(
     '/add-parent',
+    requireSeedAccess,
     asyncHandler(async (req: Request, res: Response) => {
       if (!isDemoAllowed()) {
         throw new ForbiddenError('Not allowed in production');
