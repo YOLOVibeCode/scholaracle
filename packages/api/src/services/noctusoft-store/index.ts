@@ -3,6 +3,7 @@ export { resolveStoreSku } from './planStoreSkus';
 export {
   isNoctusoftBillingEnabled,
   resolveNoctusoftStoreConfig,
+  resolveStoreMode,
   type INoctusoftStoreConfig,
 } from './resolveNoctusoftStoreConfig';
 export {

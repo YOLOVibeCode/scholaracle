@@ -158,7 +158,9 @@ function BillingPageContent() {
     );
   }
 
-  const isFreePlan = subscription?.plan === 'free';
+  // Offer checkout whenever no paid plan is in force: never subscribed, cancelled,
+  // paused, or a lapsed trial or period. (The server reports effectivePlan.)
+  const isFreePlan = (subscription?.effectivePlan ?? subscription?.plan) === 'free';
 
   return (
     <div className="space-y-6" data-testid="billing-page">

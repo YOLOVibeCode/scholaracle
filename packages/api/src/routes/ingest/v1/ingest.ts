@@ -29,8 +29,10 @@ import {
   IngestRunRepository,
   IngestSourceRepository,
   StudentRepository,
+  SubscriptionRepository,
   UserRepository,
   AlertRepository,
+  PLAN_FEATURES,
   getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
@@ -656,12 +658,24 @@ async function autoCreateStudentsFromOps(params: {
   // Build lookup by studentExternalId — handle both new format ("avery-sample")
   // and legacy composite ("institution:student") stored in studentId.
   const studentsByExtId = new Map<string, (typeof students)[0]>();
+  // The phone keys a student it created by that student's own id, since such
+  // students have no external id yet. Match those too, so the first phone sync
+  // fills the child's record instead of creating a duplicate.
+  const studentsById = new Map<string, (typeof students)[0]>();
   for (const s of students) {
+    if (s._id) studentsById.set(s._id.toString(), s);
     if (!s.studentId) continue;
     const parts = s.studentId.split(':', 2);
     const extId = parts.length === 2 ? parts[1]! : s.studentId;
     studentsByExtId.set(extId, s);
   }
+
+  // New students count against the plan's cap, the same as POST /api/students.
+  const subscription = await new SubscriptionRepository(params.database).findByUserId(
+    params.userId
+  );
+  const maxStudents = PLAN_FEATURES[subscription?.effectivePlan() ?? 'free'].maxStudents;
+  let studentCount = students.length;
 
   // Extract student profile names from ops (keyed by studentExternalId)
   const profileNames = new Map<string, string>();
@@ -685,7 +699,13 @@ async function autoCreateStudentsFromOps(params: {
       institutionExternalId: institutionExtId,
     };
 
-    const existing = studentsByExtId.get(studentExtId);
+    const byOwnId = studentsByExtId.has(studentExtId) ? undefined : studentsById.get(studentExtId);
+    if (byOwnId && !byOwnId.studentId) {
+      // Give the student its external id, so read routes (which filter slc_* by
+      // studentId) find the data this sync writes.
+      await studentRepo.update(byOwnId._id!, { studentId: studentExtId });
+    }
+    const existing = studentsByExtId.get(studentExtId) ?? byOwnId;
 
     if (existing) {
       const hasSource = existing.dataSources.some((ds) => ds.id === params.sourceId);
@@ -703,6 +723,14 @@ async function autoCreateStudentsFromOps(params: {
       // with this externalId already exists under a different owner.  resolveDataUserId
       // should have already returned the owner's userId, so params.userId IS the owner.
       // But if we're still seeing "not found" it means this is a brand-new student.
+      if (maxStudents !== -1 && studentCount >= maxStudents) {
+        logger.warn(
+          { userId: params.userId, sourceId: params.sourceId, maxStudents },
+          'Ingest found a student beyond the plan limit; not creating it'
+        );
+        continue;
+      }
+      studentCount += 1;
       const studentName = profileNames.get(studentExtId) ?? studentExtId;
       await studentRepo.create({
         userId: params.userId,

@@ -68,7 +68,11 @@ import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
 import { smsOptInRouter } from './routes/sms/smsOptIn';
 import { billingRouter } from './routes/billing';
-import { NoctusoftStoreClient, resolveNoctusoftStoreConfig } from './services/noctusoft-store';
+import {
+  NoctusoftStoreClient,
+  resolveNoctusoftStoreConfig,
+  resolveStoreMode,
+} from './services/noctusoft-store';
 import { seedRouter } from './routes/seed/seed';
 import { createAccountRouter } from './routes/account/account';
 import { ingestV1Router } from './routes/ingest/v1';
@@ -652,7 +656,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         '/api/billing',
         authMiddleware(authService),
         requireParent,
-        billingRouter({ database, storeClient })
+        billingRouter({ database, storeClient, webBaseUrl: baseUrl })
       );
     }
 
@@ -669,6 +673,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         noctusoftWebhookRouter({
           database,
           webhookSecret,
+          // Events from another store row or in the other mode change nothing here.
+          ...(relayEnv['RELAY_STORE_ALIAS'] ? { storeAlias: relayEnv['RELAY_STORE_ALIAS'] } : {}),
+          storeMode: resolveStoreMode(relayEnv),
         })
       );
     }
