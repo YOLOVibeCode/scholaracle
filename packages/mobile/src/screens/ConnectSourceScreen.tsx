@@ -211,6 +211,7 @@ export function ConnectSourceScreen({
               key={p.id}
               style={styles.providerCard}
               onPress={() => handleSelectProvider(p)}
+              testID={`button-provider-${p.id}`}
             >
               <Text style={styles.providerName}>{p.name}</Text>
               <Text style={styles.chevron}>›</Text>
@@ -234,13 +235,18 @@ export function ConnectSourceScreen({
             keyboardType="url"
             returnKeyType="next"
             onSubmitEditing={handleUrlNext}
+            testID="input-connect-url"
           />
           {urlError && (
             <Text style={styles.urlError} testID="url-error">
               {urlError}
             </Text>
           )}
-          <TouchableOpacity style={styles.button} onPress={handleUrlNext}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleUrlNext}
+            testID="button-connect-url-next"
+          >
             <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.back} onPress={() => setStep('provider')}>
@@ -269,6 +275,7 @@ export function ConnectSourceScreen({
             returnKeyType="next"
             placeholder="your.email@school.edu"
             placeholderTextColor="#999"
+            testID="input-connect-username"
           />
 
           <Text style={styles.label}>Password</Text>
@@ -281,12 +288,14 @@ export function ConnectSourceScreen({
             onSubmitEditing={handleSaveCredentials}
             placeholder="••••••••"
             placeholderTextColor="#999"
+            testID="input-connect-password"
           />
 
           <TouchableOpacity
             style={[styles.button, isSaving && styles.buttonDisabled]}
             onPress={handleSaveCredentials}
             disabled={isSaving}
+            testID="button-connect-save"
           >
             {isSaving ? (
               <ActivityIndicator color="#fff" />
