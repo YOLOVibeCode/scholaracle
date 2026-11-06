@@ -9,6 +9,11 @@ import { getTokenEmail } from '@/lib/jwt';
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 const DEMO_EMAIL = 'demo@scholarmancy.com';
 
+function seedRequestHeaders(): HeadersInit {
+  const token = process.env['NEXT_PUBLIC_SEED_TOKEN'];
+  return token ? { 'X-Seed-Token': token } : {};
+}
+
 export function DemoBanner() {
   const router = useRouter();
   const token = authApi.getToken();
@@ -21,7 +26,10 @@ export function DemoBanner() {
   const handleReset = async () => {
     setResetting(true);
     try {
-      const res = await fetch(`${API_BASE}/seed/demo/reset`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/seed/demo/reset`, {
+        method: 'POST',
+        headers: seedRequestHeaders(),
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setConfirmOpen(false);
