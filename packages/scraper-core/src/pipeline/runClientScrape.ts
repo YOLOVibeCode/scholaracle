@@ -61,7 +61,8 @@ function buildScraperHost(
 
 function buildEnvelopeMeta(
   host: IClientScrapeHost,
-  enrichment?: { source: string; patchCount: number; failed: boolean }
+  enrichment?: { source: string; patchCount: number; failed: boolean },
+  rawExtract?: Record<string, unknown>
 ): Readonly<Record<string, string>> {
   const meta: Record<string, string> = {
     clientType: host.clientType,
@@ -72,6 +73,12 @@ function buildEnvelopeMeta(
     meta['enrichmentSource'] = enrichment.source;
     meta['enrichmentPatchCount'] = String(enrichment.patchCount);
     meta['enrichmentFailed'] = enrichment.failed ? 'true' : 'false';
+  }
+  const snap = rawExtract?.['canvasSnapshotMeta'] as Readonly<Record<string, string>> | undefined;
+  if (snap && typeof snap === 'object') {
+    for (const [k, v] of Object.entries(snap)) {
+      if (typeof v === 'string') meta[k] = v;
+    }
   }
   return meta;
 }
@@ -206,11 +213,15 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     adapterVersion: config.adapterVersion,
     mode: 'delta' as const,
     timezone,
-    meta: buildEnvelopeMeta(host, {
-      source: enrichmentSource,
-      patchCount: enrichment.patchCount,
-      failed: enrichment.failed,
-    }),
+    meta: buildEnvelopeMeta(
+      host,
+      {
+        source: enrichmentSource,
+        patchCount: enrichment.patchCount,
+        failed: enrichment.failed,
+      },
+      raw
+    ),
   };
 
   const draftEnvelope: ISlcIngestEnvelopeV1 = {

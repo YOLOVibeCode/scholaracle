@@ -23,11 +23,11 @@ import {
   type IAssignStudentCredentials,
   type ITestConnectionResult,
 } from '@/lib/api/integrations';
-import { apiClient } from '@/lib/api/client';
 import { useAsyncData } from '@/lib/hooks';
 import { findProviderById } from '@/lib/providers';
 import { ConnectProviderWizard } from '@/components/dashboard/integrations/ConnectProviderWizard';
-import type { IBundleConnection, IBundleConnectionPayload } from '@/components/dashboard/integrations/bundle-types';
+import { ConnectOnPhonePanel } from '@/components/dashboard/integrations/ConnectOnPhonePanel';
+import type { IBundleConnection } from '@/components/dashboard/integrations/bundle-types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,13 +65,10 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   // Service connections accumulated during this wizard session
   const [connections, setConnections] = useState<ServiceConnection[]>([]);
-  // Bundle: platform connections to be downloaded as one script (connection-centric flow)
   const [bundle, setBundle] = useState<IBundleConnection[]>([]);
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
-  // New provider: open ConnectProviderWizard; after download or add-to-bundle we update state
   const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
-  const [bundleDownloading, setBundleDownloading] = useState(false);
   const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
 
   // Created student tracking
@@ -100,6 +97,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setError(null);
     setSubmitting(false);
     setConnections([]);
+    setBundle([]);
     setCurrentIntegration(null);
     resetCredentials();
     setConnectProviderWizardOpen(false);
@@ -231,61 +229,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   };
   const handleRemoveFromBundle = (id: string) => {
     setBundle((b) => b.filter((c) => c.id !== id));
-  };
-
-  const handleDownloadBundle = async () => {
-    if (bundle.length === 0) return;
-    const allReady = bundle.every((c) => c.generationStatus === 'ready');
-    if (!allReady) return;
-
-    const baseUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
-    const token = apiClient.getToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
-    const detectedOS = typeof navigator !== 'undefined' && navigator.userAgent.includes('Win') ? 'windows' : 'mac';
-    const payload: IBundleConnectionPayload[] = bundle.map((c) => ({
-      platformId: c.platformId,
-      platformName: c.platformName,
-      loginUrl: c.loginUrl,
-      scraperId: c.scraperId,
-      credentials: {
-        studentNameHint: c.studentNameHint,
-      },
-    }));
-
-    setBundleDownloading(true);
-    setError(null);
-    try {
-      const response = await fetch(`${baseUrl}/integrations/scraper-download`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ os: detectedOS, connections: payload }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error ?? 'Download failed');
-      }
-      const blob = await response.blob();
-      const ext = detectedOS === 'windows' ? '.bat' : '.command';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `scholaracle-bundle${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setConnections((c) => [
-        ...c,
-        { integrationId: 'bundle', integrationName: 'Downloaded bundle', hasCredentials: true },
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    } finally {
-      setBundleDownloading(false);
-    }
   };
 
   // ---------------------------------------------------------------------------
@@ -431,10 +374,9 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 </span>
               </div>
 
-              {/* Bundle: platforms to download as one script */}
               {bundle.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Platforms in bundle:</p>
+                  <p className="text-xs font-medium text-muted-foreground">Platforms to connect on your phone:</p>
                   {bundle.map((c) => (
                     <div
                       key={c.id}
@@ -456,12 +398,13 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                         size="icon"
                         className="h-8 w-8 shrink-0"
                         onClick={() => handleRemoveFromBundle(c.id)}
-                        aria-label="Remove from bundle"
+                        aria-label="Remove from list"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   ))}
+                  <ConnectOnPhonePanel studentId={createdStudentId ?? undefined} />
                 </div>
               )}
 
@@ -536,21 +479,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 </Button>
               </div>
 
-              {bundle.length > 0 && (
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={
-                    bundleDownloading ||
-                    !bundle.every((c) => c.generationStatus === 'ready')
-                  }
-                  onClick={handleDownloadBundle}
-                  data-testid="wizard-download-bundle"
-                >
-                  {bundleDownloading ? 'Downloading...' : 'Download Bundle'}
-                </Button>
-              )}
-
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="flex gap-2 pt-2">
@@ -584,7 +512,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               </Button>
 
               <p className="text-sm text-muted-foreground">
-                Connect a new school platform. Use the iOS app, browser extension, or the local CLI to run the scraper on your computer — your school login stays on your device.
+                Connect a new school platform. Finish in the Scholarmancy app on your phone — your school login stays on your device.
               </p>
 
               <Button
@@ -675,12 +603,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                     <li>
                       <strong>Browser extension</strong> — connect from the school&apos;s portal page
                     </li>
-                    <li>
-                      <strong>Local CLI</strong> — run{' '}
-                      <code className="bg-amber-100 dark:bg-amber-900 rounded px-1">
-                        npx scholaracle-scraper run
-                      </code>
-                    </li>
                   </ul>
                 </div>
 
@@ -757,6 +679,10 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   )}
                 </CardContent>
               </Card>
+
+              {bundle.length > 0 && (
+                <ConnectOnPhonePanel studentId={createdStudentId ?? undefined} />
+              )}
 
               <div className="space-y-2">
                 <Button

@@ -135,6 +135,54 @@ describe('ScholarmancyApiClient auth', () => {
     });
   });
 
+  describe('loginWithOAuth', () => {
+    it('should include Apple identity token and nonce in POST body', async () => {
+      const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+
+      await client.loginWithOAuth(
+        'apple',
+        'apple-user-local',
+        'a@privaterelay.appleid.com',
+        'Apple Name',
+        'secret',
+        { appleIdentityToken: 'jwt.apple.token', appleNonce: 'raw-nonce-123' }
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/auth/oauth`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            provider: 'apple',
+            providerAccountId: 'apple-user-local',
+            email: 'a@privaterelay.appleid.com',
+            name: 'Apple Name',
+            appleIdentityToken: 'jwt.apple.token',
+            appleNonce: 'raw-nonce-123',
+          }),
+        })
+      );
+    });
+
+    it('should omit Apple fields for Google OAuth', async () => {
+      const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+
+      await client.loginWithOAuth('google', 'sub-googl', 'g@example.com', 'G', 'secret');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/auth/oauth`,
+        expect.objectContaining({
+          body: JSON.stringify({
+            provider: 'google',
+            providerAccountId: 'sub-googl',
+            email: 'g@example.com',
+            name: 'G',
+          }),
+        })
+      );
+    });
+  });
+
   describe('createStudent', () => {
     it('should POST /api/students and return the created row', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');

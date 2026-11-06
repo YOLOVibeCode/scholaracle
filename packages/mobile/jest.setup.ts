@@ -52,6 +52,7 @@ jest.mock('expo-crypto', () => ({
 // react-native ships Flow-typed sources jest can't parse; mock the pieces used.
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (spec: { ios?: unknown }) => spec.ios },
+  Linking: { openURL: jest.fn(async () => true), canOpenURL: jest.fn(async () => true) },
   AppState: {
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
     currentState: 'active',
