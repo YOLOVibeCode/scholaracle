@@ -1,0 +1,28 @@
+[
+  {
+    "id": 100,
+    "name": "Homework 1",
+    "due_at": "2026-09-04T23:59:59Z",
+    "points_possible": 10,
+    "submission": {
+      "workflow_state": "graded",
+      "late": false,
+      "missing": false,
+      "attachments": []
+    },
+    "description": "<p>Read chapter 1</p>"
+  },
+  {
+    "id": 101,
+    "name": "Quiz A",
+    "due_at": "2026-09-10T23:59:59Z",
+    "points_possible": 50,
+    "submission": {
+      "workflow_state": "unsubmitted",
+      "late": false,
+      "missing": true,
+      "attachments": []
+    },
+    "description": ""
+  }
+]
