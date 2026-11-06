@@ -16,14 +16,45 @@ import {
   extractCanvasToDoItems,
   extractCanvasUpcomingEvents,
   fetchCanvasCourses,
+  fetchCanvasObserveeUserIds,
+  fetchCanvasCoursesForUser,
+  fetchCanvasPlannerItems,
+  mergeCanvasApiCourseRows,
+  mergeCanvasPlannerTodos,
+  mergeCanvasPlannerEvents,
+  isCanvasObserverEnrollment,
   fetchCanvasCourseAssignments,
   fetchCanvasCourseTeachers,
   fetchCanvasCourseModules,
   fetchCanvasCourseFiles,
   fetchCanvasAnnouncements,
+  type ICanvasApiCourseRow,
 } from '../extractors/canvas/canvas-extractors';
 
 const DASHBOARD_USER_SELECTOR = '#global_nav_profile_link, [data-testid="global_nav_profile_link"]';
+
+const CANVAS_SNAPSHOT_META: Readonly<Record<string, string>> = {
+  canvasSnapshotEntities: 'todo,event,announcement',
+  canvasSnapshotSemantics: 'replace-visible-for-student',
+};
+
+function courseIdSetFromObserveeCourses(rows: readonly ICanvasApiCourseRow[]): Set<string> {
+  const s = new Set<string>();
+  for (const r of rows) s.add(String(r.id));
+  return s;
+}
+
+function shouldIncludeCanvasCourse(
+  raw: ICanvasApiCourseRow,
+  observeeCourseIds: Set<string>
+): boolean {
+  const enrollments = raw.enrollments ?? [];
+  const hasStudent = enrollments.some((e) => e.type === 'student');
+  const hasObserver = enrollments.some(isCanvasObserverEnrollment);
+  if (hasStudent) return true;
+  if (hasObserver && observeeCourseIds.has(String(raw.id))) return true;
+  return false;
+}
 
 /**
  * Run the Canvas scrape recipe.
@@ -42,19 +73,29 @@ export async function runCanvasRecipe(
   await driver.goto(cleanBaseUrl, { waitUntil: 'networkidle' });
 
   const user = await driver.evaluate(extractCanvasUser, DASHBOARD_USER_SELECTOR);
-  const toDoItems = await driver.evaluate(extractCanvasToDoItems);
-  const upcomingEvents = await driver.evaluate(extractCanvasUpcomingEvents);
+  const domToDoItems = await driver.evaluate(extractCanvasToDoItems);
+  const domUpcomingEvents = await driver.evaluate(extractCanvasUpcomingEvents);
+  const plannerRows = await driver.evaluate(fetchCanvasPlannerItems, cleanBaseUrl);
+  const toDoItems = mergeCanvasPlannerTodos(domToDoItems, plannerRows);
+  const upcomingEvents = mergeCanvasPlannerEvents(domUpcomingEvents, plannerRows);
 
-  // --- Course list via Canvas REST API (session-cookie auth) ---
-  const rawCourses = await driver.evaluate(fetchCanvasCourses, cleanBaseUrl);
+  const rawSelfCourses = await driver.evaluate(fetchCanvasCourses, cleanBaseUrl);
+  const observeeUserIds = await driver.evaluate(fetchCanvasObserveeUserIds);
+  let observeeMerged: ICanvasApiCourseRow[] = [];
+  for (const uid of observeeUserIds) {
+    const rows = await driver.evaluate(fetchCanvasCoursesForUser, uid);
+    observeeMerged = mergeCanvasApiCourseRows(observeeMerged, rows);
+  }
+  const observeeCourseIds = courseIdSetFromObserveeCourses(observeeMerged);
+  const rawCourses = mergeCanvasApiCourseRows(rawSelfCourses, observeeMerged);
 
   const courses: ICanvasBrowserCourse[] = [];
 
   for (const raw of rawCourses) {
-    if (!raw.enrollments?.some((e) => e.type === 'student')) continue;
+    if (!shouldIncludeCanvasCourse(raw, observeeCourseIds)) continue;
     if (raw.term?.name === 'Default Term') continue;
 
-    const enrollment = raw.enrollments.find((e) => e.type === 'student');
+    const enrollment = raw.enrollments?.find((e) => e.type === 'student');
     const score = enrollment?.computed_current_score;
     const letter = enrollment?.computed_current_grade;
     const grade = score != null ? `${score}%${letter ? ` ${letter}` : ''}` : letter || undefined;
@@ -188,9 +229,11 @@ export async function runCanvasRecipe(
   const rawAnnouncements = await driver.evaluate(fetchCanvasAnnouncements, courseIds);
   const announcements = rawAnnouncements
     .map((a) => ({
-      title: (a.title as string) || '',
-      course: ((a.context_code as string) || '').replace('course_', ''),
+      id: a.id != null ? String(a.id) : undefined,
+      title: a.title || '',
+      course: (a.context_code || '').replace('course_', ''),
       date: a.posted_at || undefined,
+      body: a.message || undefined,
     }))
     .filter((a) => a.title);
 
@@ -201,5 +244,6 @@ export async function runCanvasRecipe(
     upcomingEvents,
     announcements,
     timestamp: new Date().toISOString(),
+    canvasSnapshotMeta: CANVAS_SNAPSHOT_META,
   };
 }

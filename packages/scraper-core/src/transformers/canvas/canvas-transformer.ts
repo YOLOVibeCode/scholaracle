@@ -1,4 +1,4 @@
-import type { ISlcDeltaOp } from '@scholaracle/contracts';
+import type { ISlcDeltaOp, ISlcEntityKey } from '@scholaracle/contracts';
 export type {
   ICanvasBrowserExtract,
   ICanvasBrowserCourse,
@@ -10,6 +10,14 @@ export type {
   ICanvasBrowserToDoItem,
   ICanvasBrowserEvent,
   ICanvasBrowserAnnouncement,
+} from '../../extractors/canvas/canvas-extractors';
+import type {
+  ICanvasBrowserExtract,
+  ICanvasBrowserCourse,
+  ICanvasBrowserTeacher,
+  ICanvasBrowserAnnouncement as ICanvasAnn,
+  ICanvasBrowserEvent as ICanvasEv,
+  ICanvasBrowserToDoItem as ICanvasTodo,
 } from '../../extractors/canvas/canvas-extractors';
 
 // ---------------------------------------------------------------------------
@@ -67,12 +75,6 @@ function getCanvasSemesterTerms(
   ];
 }
 
-import type {
-  ICanvasBrowserExtract,
-  ICanvasBrowserCourse,
-  ICanvasBrowserTeacher,
-} from '../../extractors/canvas/canvas-extractors';
-
 // ---------------------------------------------------------------------------
 // Transform: ICanvasBrowserExtract -> ISlcDeltaOp[]
 // ---------------------------------------------------------------------------
@@ -120,6 +122,49 @@ function slugify(s: string): string {
       .replace(/[^a-zA-Z0-9-]/g, '')
       .toLowerCase() || 'unknown'
   );
+}
+
+function djb2Hash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i)!;
+  return (h >>> 0).toString(16).padStart(8, '0').slice(0, 12);
+}
+
+function canvasAnnouncementExternalId(ann: ICanvasAnn): string {
+  if (ann.id?.trim()) return `canvas-announcement-${ann.id}`;
+  const coursePart = ann.course?.trim() ?? '';
+  return `canvas-announcement-h${djb2Hash(`${coursePart}|${ann.date ?? ''}|${ann.title}`)}`;
+}
+
+function canvasEventExternalId(ev: ICanvasEv): string {
+  if (ev.id?.trim()) return `canvas-event-${ev.id}`;
+  return `canvas-event-h${djb2Hash(`${ev.title}|${ev.date}|${ev.course ?? ''}`)}`;
+}
+
+function canvasTodoExternalId(todo: ICanvasTodo): string {
+  if (todo.id?.trim()) return `canvas-todo-${todo.id}`;
+  return `canvas-todo-h${djb2Hash(`${todo.title}|${todo.course}|${todo.dueDate ?? ''}`)}`;
+}
+
+function maybeLegacyAliases(
+  newId: string,
+  legacyIndexId: string
+): Pick<ISlcEntityKey, 'aliasExternalIds'> {
+  return newId === legacyIndexId ? {} : { aliasExternalIds: [legacyIndexId] };
+}
+
+function resolveCanvasCourseExtId(
+  extract: ICanvasBrowserExtract,
+  courseNameOrId: string | undefined,
+  courseIdHint: string | undefined
+): string | undefined {
+  if (courseIdHint?.trim()) {
+    const byHint = extract.courses.find((c) => c.id === courseIdHint);
+    if (byHint) return `canvas-course-${byHint.id}`;
+  }
+  if (!courseNameOrId?.trim()) return undefined;
+  const course = extract.courses.find((c) => c.name === courseNameOrId || c.id === courseNameOrId);
+  return course ? `canvas-course-${course.id}` : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,13 +434,18 @@ export function transformCanvasExtract(
   // Announcements -> messages
   for (let i = 0; i < extract.announcements.length; i++) {
     const ann = extract.announcements[i]!;
-    const course = extract.courses.find((c) => c.name === ann.course || c.id === ann.course);
-    const courseExtId = course ? `canvas-course-${course.id}` : undefined;
+    const legacyId = `canvas-announcement-${i}`;
+    const extId = canvasAnnouncementExternalId(ann);
+    const courseExtId = resolveCanvasCourseExtId(extract, ann.course, undefined);
 
     ops.push({
       op: 'upsert',
       entity: 'message',
-      key: { ...baseKey, externalId: `canvas-announcement-${i}` },
+      key: {
+        ...baseKey,
+        externalId: extId,
+        ...maybeLegacyAliases(extId, legacyId),
+      },
       observedAt: now,
       record: {
         subject: ann.title,
@@ -412,18 +462,26 @@ export function transformCanvasExtract(
   // Upcoming events -> eventSeries (one-off calendar events)
   for (let i = 0; i < extract.upcomingEvents.length; i++) {
     const ev = extract.upcomingEvents[i]!;
-    const course = extract.courses.find((c) => c.name === ev.course || c.id === ev.course);
-    const courseExtId = course ? `canvas-course-${course.id}` : undefined;
+    const legacyId = `canvas-event-${i}`;
+    const extId = canvasEventExternalId(ev);
+    const courseExtId = resolveCanvasCourseExtId(extract, ev.course, ev.courseId);
+    const startAt = ev.date?.trim() ? ev.date : now;
     ops.push({
       op: 'upsert',
       entity: 'eventSeries',
-      key: { ...baseKey, externalId: `canvas-event-${i}` },
+      key: {
+        ...baseKey,
+        externalId: extId,
+        ...maybeLegacyAliases(extId, legacyId),
+      },
       observedAt: now,
       record: {
         title: ev.title,
-        startAt: ev.date || undefined,
+        category: 'other' as const,
+        timezone: 'UTC',
+        startsAt: startAt,
+        recurrence: { rrule: 'FREQ=DAILY;COUNT=1' },
         courseExternalId: courseExtId,
-        type: 'other' as const,
       },
     });
   }
@@ -431,12 +489,18 @@ export function transformCanvasExtract(
   // To-do items -> assignment with status not_started
   for (let i = 0; i < extract.toDoItems.length; i++) {
     const todo = extract.toDoItems[i]!;
-    const course = extract.courses.find((c) => c.name === todo.course || c.id === todo.course);
-    const courseExtId = course ? `canvas-course-${course.id}` : undefined;
+    const legacyId = `canvas-todo-${i}`;
+    const extId = canvasTodoExternalId(todo);
+    const courseExtId = resolveCanvasCourseExtId(extract, todo.course, todo.courseId);
     ops.push({
       op: 'upsert',
       entity: 'assignment',
-      key: { ...baseKey, externalId: `canvas-todo-${i}`, courseExternalId: courseExtId },
+      key: {
+        ...baseKey,
+        externalId: extId,
+        courseExternalId: courseExtId,
+        ...maybeLegacyAliases(extId, legacyId),
+      },
       observedAt: now,
       record: {
         title: todo.title,
