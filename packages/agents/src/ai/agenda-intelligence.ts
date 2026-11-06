@@ -27,6 +27,7 @@ export interface IAgendaItemEnhancement {
 
 export interface IAgendaIntelligenceServiceConfig {
   readonly apiKey?: string;
+  readonly baseUrl?: string;
   readonly model?: string;
   readonly cacheTtlMs?: number;
 }
@@ -50,7 +51,7 @@ export class AgendaIntelligenceService {
   constructor(config: IAgendaIntelligenceServiceConfig = {}) {
     this._enabled = config.apiKey != null && config.apiKey.length > 0;
     this._client = this._enabled
-      ? new LlmClient({ apiKey: config.apiKey!, model: config.model })
+      ? new LlmClient({ apiKey: config.apiKey!, baseUrl: config.baseUrl, model: config.model })
       : undefined;
     this._cache = new ResponseCache<Map<string, IAgendaItemEnhancement>>(
       config.cacheTtlMs ?? 5 * 60 * 1000

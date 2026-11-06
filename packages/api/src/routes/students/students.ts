@@ -15,7 +15,7 @@ import {
   type ISharedParent,
   type IStudentData,
 } from '@scholaracle/database';
-import { GradeRiskService } from '@scholaracle/agents';
+import { GradeRiskService, resolveLlmConfig } from '@scholaracle/agents';
 import {
   AuthenticationError,
   ConflictError,
@@ -1782,8 +1782,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       ).length;
 
       let aiOverview: string | undefined;
+      const gradeRiskLlm = resolveLlmConfig('triage');
       const gradeRiskService = new GradeRiskService({
-        apiKey: process.env['ANTHROPIC_API_KEY'],
+        apiKey: gradeRiskLlm?.apiKey,
+        baseUrl: gradeRiskLlm?.baseUrl,
+        model: gradeRiskLlm?.model,
         cacheTtlMs: 5 * 60 * 1000,
       });
       const ownerUserId = student.userId.toString();

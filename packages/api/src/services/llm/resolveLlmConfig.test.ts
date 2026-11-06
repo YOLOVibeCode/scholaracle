@@ -15,7 +15,7 @@ describe('resolveLlmConfig', () => {
     delete process.env['AI_MODEL_MATCHING'];
     const cfg = resolveLlmConfig();
     expect(cfg?.apiKey).toBe('litellm-key');
-    expect(cfg?.baseUrl).toBe('https://api.noctusoft.com/v1');
+    expect(cfg?.baseUrl).toBe('https://ai.noctusoft.com');
     expect(cfg?.model).toBe(resolveModelForRole('matching'));
   });
 
@@ -27,10 +27,11 @@ describe('resolveLlmConfig', () => {
     expect(resolveLlmConfig()?.apiKey).toBe('anthropic-key');
   });
 
-  it('uses AI_MODEL when set', () => {
+  it('ignores the legacy AI_MODEL and uses AI_MODEL_MATCHING', () => {
     process.env['LITELLM_API_KEY'] = 'litellm-key';
-    process.env['AI_MODEL'] = 'claude-from-railway';
+    process.env['AI_MODEL'] = 'claude-sonnet-legacy';
+    process.env['AI_MODEL_MATCHING'] = 'anthropic/claude-sonnet-5-5';
     const cfg = resolveLlmConfig();
-    expect(cfg?.model).toBe('claude-from-railway');
+    expect(cfg?.model).toBe('anthropic/claude-sonnet-5-5');
   });
 });
