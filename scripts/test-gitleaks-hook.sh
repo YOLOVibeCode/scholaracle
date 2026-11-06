@@ -16,7 +16,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo 'export STRIPE_KEY="sk_live_test1234567890123456789012"' > "$TMP"
+# Write a Stripe-shaped key via printf so this script is not a gitleaks hit itself.
+printf 'export STRIPE_KEY="%s%s%s%s"\n' sk_ live_ test 1234567890123456789012 > "$TMP"
 git add "$TMP"
 
 if ./scripts/block-secrets.sh; then

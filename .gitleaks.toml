@@ -13,4 +13,5 @@ paths = [
   '''^packages/mobile/eas\.json$''',
   '''^TRIGGER_DIGEST_GUIDE\.md$''',
   '''^packages/connector/src/aeries/aeries-adapter\.test\.ts$''',
+  '''^scripts/test-gitleaks-hook\.sh$''',
 ]
