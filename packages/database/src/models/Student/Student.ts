@@ -1,5 +1,5 @@
 import type { ObjectId } from 'mongodb';
-import type { IStudentAlertPreferences } from '@scholaracle/contracts';
+import type { IStudentAlertPreferences, ISourceIngestLastCounts } from '@scholaracle/contracts';
 
 export interface IDataSourceCredentials {
   readonly encrypted: string;
@@ -27,6 +27,10 @@ export interface IDataSource {
   readonly dataTypes?: readonly string[];
   readonly lastScraped?: Date;
   readonly lastSuccess?: Date;
+  /** Canonical successful ingest commit time (ISO-safe when serialized). */
+  readonly lastSuccessAt?: Date;
+  readonly lastRunId?: string;
+  readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
   readonly status?: 'active' | 'error' | 'disabled';
   readonly stats?: {

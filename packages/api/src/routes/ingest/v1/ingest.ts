@@ -57,6 +57,10 @@ import type { IAssetStore } from '../../../services/assets/IAssetStore';
 import { runBatchMaterialMatching } from '../../../services/materialMatching/batchMaterialMatcher';
 import { runVisionDescribeByContentHash } from '../../../services/materialMatching/visionDescribeByHash';
 import { createScraperAssistRouter } from './scraperAssist';
+import {
+  syncStudentDataSourcesAfterIngestFailure,
+  syncStudentDataSourcesAfterIngestSuccess,
+} from './syncStudentDataSourcesFromIngest';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -1388,6 +1392,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       await runRepo.markUploaded(dataUserId, runId, {
         coverage: coverageSnapshot,
         warnings: [...warningLines],
+        opCount: prepared.ops.length,
       });
       res
         .status(200)
@@ -1424,6 +1429,16 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
             ? req.body.error
             : 'Run failed';
         await runRepo.failRun({ userId: runDataUserId, runId, error });
+        const srcId = existingRun.sourceId;
+        if (srcId) {
+          await syncStudentDataSourcesAfterIngestFailure({
+            database: config.database,
+            dataUserId: runDataUserId,
+            sourceId: srcId,
+            runId,
+            error,
+          });
+        }
         res.status(200).json({ success: true, committed: false, failed: true, error });
         return;
       }
@@ -1442,6 +1457,16 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const committedRun = await runRepo.findByUserIdAndRunId(runDataUserId, runId);
       if (committedRun?.sourceId) {
         await sourceRepo.updateLastSyncedAt(runDataUserId, committedRun.sourceId);
+        const committedAt = committedRun.committedAt ?? new Date();
+        await syncStudentDataSourcesAfterIngestSuccess({
+          database: config.database,
+          dataUserId: runDataUserId,
+          sourceId: committedRun.sourceId,
+          runId,
+          committedAt,
+          coverage: committedRun.coverage,
+          opCount: committedRun.opCount,
+        });
       }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({
@@ -1455,7 +1480,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         userId: runDataUserId,
         assetStore: config.assetStore,
       }).catch((err: unknown) => {
-        console.error('[MaterialMatcher] post-ingest intelligence failed:', err);
+        logger.error({ err, runId }, 'MaterialMatcher post-ingest intelligence failed');
       });
       res.status(200).json({
         success: true,
