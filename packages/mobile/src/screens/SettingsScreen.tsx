@@ -177,6 +177,8 @@ export function SettingsScreen({
         >
           <Text style={styles.rowText}>Support</Text>
         </TouchableOpacity>
+
+        <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity
           style={styles.card}
           onPress={handleDeleteAccount}
@@ -184,8 +186,6 @@ export function SettingsScreen({
         >
           <Text style={styles.deleteAccountText}>Delete account</Text>
         </TouchableOpacity>
-
-        <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity
           style={styles.signOutBtn}
           onPress={handleSignOut}
