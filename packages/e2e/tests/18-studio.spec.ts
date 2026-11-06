@@ -1,6 +1,6 @@
 import { devices } from '@playwright/test';
 import { test, expect, login, loginStudent } from '../fixtures/auth';
-import { DEMO_USERS } from '../fixtures/test-data';
+import { DEMO_USERS, seedHeaders } from '../fixtures/test-data';
 import { assertOnDashboard, assertOnStudio } from '../helpers/assertions';
 
 /**
@@ -30,7 +30,9 @@ test.describe('@studio Student studio (phone-width)', () => {
     if (isRemoteApi(API_BASE)) {
       return;
     }
-    const res = await request.post(`${API_BASE}/api/seed/demo`);
+    const res = await request.post(`${API_BASE}/api/seed/demo`, {
+      headers: seedHeaders(),
+    });
     expect(res.status(), await res.text()).toBe(200);
   });
 

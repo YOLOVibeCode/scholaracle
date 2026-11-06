@@ -16,7 +16,12 @@ import {
   type IIngestSourceRegisterResponse,
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
+  type ISlcRunCoverage,
 } from '@scholaracle/contracts';
+import {
+  computeRunCoverage,
+  validateEnvelope as validateEnvelopeFull,
+} from '@scholaracle/scraper-core';
 import { authMiddleware } from '../../../middleware/auth';
 import { requireParent } from '../../../middleware/requireRole';
 import {
@@ -65,6 +70,29 @@ export interface IIngestV1RouterConfig {
    * or `off`. Tests inject this so they do not mutate process.env.
    */
   readonly enrichOpsMode?: EnrichOpsMode;
+}
+
+function warningsFromFullValidation(envelope: ISlcIngestEnvelopeV1): readonly string[] {
+  return validateEnvelopeFull(envelope)
+    .checks.filter((c) => c.severity === 'warning')
+    .map((c) => c.message);
+}
+
+function parseOptionalCoverage(raw: unknown): ISlcRunCoverage | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || !Array.isArray((raw as ISlcRunCoverage)['students'])) {
+    return undefined;
+  }
+  return raw as ISlcRunCoverage;
+}
+
+function parseOptionalStringArray(raw: unknown): readonly string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const x of raw) {
+    if (typeof x === 'string') out.push(x);
+  }
+  return out;
 }
 
 function randomUserCode(): string {
@@ -1355,7 +1383,12 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           });
         }
       }
-      await runRepo.markUploaded(dataUserId, runId);
+      const coverageSnapshot = computeRunCoverage(prepared.ops);
+      const warningLines = warningsFromFullValidation({ ...envelope, ops: prepared.ops });
+      await runRepo.markUploaded(dataUserId, runId, {
+        coverage: coverageSnapshot,
+        warnings: [...warningLines],
+      });
       res
         .status(200)
         .json({ success: true, accepted: true } satisfies IIngestEnvelopeAcceptResponse);
@@ -1396,7 +1429,15 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       }
 
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
-      await runRepo.commitRun({ userId: runDataUserId, runId, newCursor: cursor ?? null });
+      const bodyCoverage = parseOptionalCoverage(req.body?.coverage);
+      const bodyWarnings = parseOptionalStringArray(req.body?.warnings);
+      await runRepo.commitRun({
+        userId: runDataUserId,
+        runId,
+        newCursor: cursor ?? null,
+        ...(bodyCoverage !== undefined ? { coverage: bodyCoverage } : {}),
+        ...(bodyWarnings !== undefined ? { warnings: bodyWarnings } : {}),
+      });
       // Stamp lastSyncedAt on the data source
       const committedRun = await runRepo.findByUserIdAndRunId(runDataUserId, runId);
       if (committedRun?.sourceId) {

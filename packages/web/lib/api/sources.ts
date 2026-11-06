@@ -1,3 +1,4 @@
+import type { ISlcRunCoverage } from '@scholaracle/contracts';
 import { apiClient } from './client';
 
 export interface IDataSource {
@@ -34,11 +35,14 @@ export interface IAddSourceRequest {
 
 export interface IIngestRun {
   readonly runId: string;
+  readonly sourceId?: string;
   readonly status: 'started' | 'uploaded' | 'committed' | 'failed';
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
   readonly error?: string | null;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
 }
 
 /**

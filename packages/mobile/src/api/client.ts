@@ -502,7 +502,11 @@ export class ScholarmancyApiClient {
 
     const completeRes = await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
-      body: JSON.stringify({ status: 'success' }),
+      body: JSON.stringify({
+        status: 'success',
+        ...(envelope.run.coverage !== undefined ? { coverage: envelope.run.coverage } : {}),
+        ...(envelope.run.warnings !== undefined ? { warnings: envelope.run.warnings } : {}),
+      }),
     });
     if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
   }

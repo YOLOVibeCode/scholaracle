@@ -153,6 +153,44 @@ describe('IngestRunRepository', () => {
     expect(cursor).toEqual({ type: 'opaque', value: 'cursor-src1' });
   });
 
+  it('persists coverage and warnings on markUploaded', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-cov',
+      lastCursor: null,
+    });
+    const coverage = {
+      students: [
+        {
+          studentExternalId: 'stu-1',
+          courses: 1,
+          coursesWithGrade: 0,
+          coursesWithAssignments: 0,
+          attendanceRows: 0,
+          teacherEmails: 0,
+          gaps: [{ course: 'Entrepreneurship', kind: 'no_grade_no_assignments' as const }],
+        },
+      ],
+    };
+    const warnings = ['join warning'];
+    await repo.markUploaded('user-1', 'run-cov', { coverage, warnings });
+    const found = await repo.findByUserIdAndRunId('user-1', 'run-cov');
+    expect(found?.coverage).toEqual(coverage);
+    expect(found?.warnings).toEqual(warnings);
+  });
+
+  it('finds run by userId, sourceId, and runId', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-x',
+      runId: 'run-src',
+      lastCursor: null,
+    });
+    const found = await repo.findByUserIdSourceIdAndRunId('user-1', 'src-x', 'run-src');
+    expect(found?.runId).toBe('run-src');
+  });
+
   it('fails a run without requiring an envelope', async () => {
     await repo.startRun({
       userId: 'user-1',

@@ -7,6 +7,8 @@
  * record exists (created via POST /api/ingest/v1/sources).
  */
 
+import type { ISlcRunCoverage } from '../../models/Ingest';
+
 export interface ISourceListItem {
   readonly id: string;
   readonly pluginId: string;
@@ -25,9 +27,14 @@ export interface ISourceListItem {
 
 export interface IRunListItem {
   readonly runId: string;
+  readonly sourceId?: string;
   readonly status: string;
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
   readonly error: string | null;
+  /** Per-student coverage when stored on the run (client-sent on complete). */
+  readonly coverage?: ISlcRunCoverage;
+  /** Validation / join-graph warnings (client-sent). */
+  readonly warnings?: readonly string[];
 }
