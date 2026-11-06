@@ -36,8 +36,8 @@ test.describe('@security Blended-family revocation ACL', () => {
 
   test('BFR-001 golden: revoked co-parent loses access to student detail', async ({ request }) => {
     const ts = Date.now();
-    const ownerEmail = `owner-bfr-${ts}@blended-e2e.test`;
-    const coEmail = `co-bfr-${ts}@blended-e2e.test`;
+    const ownerEmail = `owner-bfr-${ts}@example.com`;
+    const coEmail = `co-bfr-${ts}@example.com`;
 
     const ownerToken = await registerUser(request, ownerEmail, 'Owner');
     const coToken = await registerUser(request, coEmail, 'Co-Parent');
@@ -89,8 +89,8 @@ test.describe('@security Blended-family revocation ACL', () => {
     request,
   }) => {
     const ts = Date.now();
-    const ownerEmail = `owner2-bfr-${ts}@blended-e2e.test`;
-    const coEmail = `co2-bfr-${ts}@blended-e2e.test`;
+    const ownerEmail = `owner2-bfr-${ts}@example.com`;
+    const coEmail = `co2-bfr-${ts}@example.com`;
 
     const ownerToken = await registerUser(request, ownerEmail, 'Owner');
     const coToken = await registerUser(request, coEmail, 'Co-Parent');
@@ -124,8 +124,8 @@ test.describe('@security Blended-family revocation ACL', () => {
     request,
   }) => {
     const ts = Date.now();
-    const ownerEmail = `owner3-bfr-${ts}@blended-e2e.test`;
-    const coEmail = `co3-bfr-${ts}@blended-e2e.test`;
+    const ownerEmail = `owner3-bfr-${ts}@example.com`;
+    const coEmail = `co3-bfr-${ts}@example.com`;
 
     const ownerToken = await registerUser(request, ownerEmail, 'Owner');
     const coToken = await registerUser(request, coEmail, 'Co-Parent');
@@ -156,8 +156,8 @@ test.describe('@security Blended-family revocation ACL', () => {
     request,
   }) => {
     const ts = Date.now();
-    const ownerEmail = `owner4-bfr-${ts}@blended-e2e.test`;
-    const coEmail = `co4-bfr-${ts}@blended-e2e.test`;
+    const ownerEmail = `owner4-bfr-${ts}@example.com`;
+    const coEmail = `co4-bfr-${ts}@example.com`;
 
     const ownerToken = await registerUser(request, ownerEmail, 'Owner');
     const coToken = await registerUser(request, coEmail, 'Co-Parent');
@@ -196,8 +196,8 @@ test.describe('@security Blended-family revocation ACL', () => {
   }) => {
     // Set up data through API, then verify the UI renders the forbidden state with a11y-friendly markup.
     const ts = Date.now();
-    const ownerEmail = `owner5-bfr-${ts}@blended-e2e.test`;
-    const coEmail = `co5-bfr-${ts}@blended-e2e.test`;
+    const ownerEmail = `owner5-bfr-${ts}@example.com`;
+    const coEmail = `co5-bfr-${ts}@example.com`;
 
     const ownerToken = await registerUser(request, ownerEmail, 'Owner');
     await registerUser(request, coEmail, 'Co-Parent');
