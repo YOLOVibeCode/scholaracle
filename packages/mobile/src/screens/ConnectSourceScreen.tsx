@@ -20,13 +20,13 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import {
   ADAPTER_IDS,
   buildCredentialKey,
   connectedSourceStore,
   sourceIdForStudent,
 } from '../sources/ConnectedSourceStore';
+import { saveCredential } from '../credentials/saveCredential';
 import { apiClient } from '../api/client';
 import { extractHostname } from '../utils/urlNormalize';
 import type { ISourceInvitePayload } from '@scholaracle/contracts';
@@ -146,9 +146,7 @@ export function ConnectSourceScreen({
 
       // Store credentials in Keychain — never sent to server
       const key = buildCredentialKey(selectedProvider.id, portalUrl);
-      await SecureStore.setItemAsync(key, JSON.stringify(credential), {
-        keychainAccessible: SecureStore.WHEN_UNLOCKED,
-      });
+      await saveCredential(key, JSON.stringify(credential));
 
       const sourceId = mongoId
         ? sourceIdForStudent(selectedProvider.id, institutionExternalId, mongoId)
