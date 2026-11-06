@@ -5,6 +5,7 @@
 
 import type {
   ISlcIngestEnvelopeV1,
+  ISlcRunCoverage,
   IStudentListItem,
   IStudentCreateRequest,
   IStudentGradesResponse,
@@ -83,6 +84,8 @@ export interface IRunRecorder {
       status: 'success' | 'failed' | 'in_progress';
       opCount?: number;
       errorMessage?: string;
+      coverage?: ISlcRunCoverage;
+      warnings?: readonly string[];
     }
   ): Promise<void>;
 }

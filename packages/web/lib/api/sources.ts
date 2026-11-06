@@ -1,4 +1,4 @@
-import type { ITriggerSyncResponse } from '@scholaracle/contracts';
+import type { ITriggerSyncResponse, ISlcRunCoverage } from '@scholaracle/contracts';
 import { apiClient } from './client';
 
 export interface IDataSource {
@@ -35,12 +35,15 @@ export interface IAddSourceRequest {
 
 export interface IIngestRun {
   readonly runId: string;
+  readonly sourceId?: string;
   readonly status: 'started' | 'uploaded' | 'committed' | 'failed' | 'abandoned';
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
   readonly abandonedAt?: string;
   readonly error?: string | null;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
 }
 
 /**

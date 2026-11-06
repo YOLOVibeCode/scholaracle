@@ -100,6 +100,7 @@ export {
   SyncError,
   runClientScrape,
   buildClientScrapeConfig,
+  computeRunCoverage,
   JoinGapEnricher,
   applyEnrichersFailOpen,
   sanitizeEnrichedOps,

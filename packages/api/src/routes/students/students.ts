@@ -31,6 +31,7 @@ import {
   type ISourceListItem,
   type IRunListItem,
   type ITriggerSyncResponse,
+  type ISlcRunCoverage,
   type IStudentMaterialsResponse,
   type ISlcCourse,
 } from '@scholaracle/contracts';
@@ -3528,6 +3529,54 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   );
 
   /**
+   * GET /api/students/:id/sources/:sourceId/runs/:runId
+   * One ingest run with coverage and warnings (parent JWT).
+   */
+  router.get(
+    '/:id/sources/:sourceId/runs/:runId',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+      const { id: studentId, sourceId, runId } = req.params;
+      if (!studentId || !sourceId || !runId) {
+        throw new ValidationError('Missing student ID, source ID, or run ID');
+      }
+
+      const student = await studentRepository.findById(studentId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Student not found');
+      }
+      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      if (!hasSource) {
+        throw new NotFoundError('Source not found');
+      }
+
+      const run = await ingestRunRepository.findByUserIdSourceIdAndRunId(
+        student.dataUserId(),
+        sourceId,
+        runId
+      );
+      if (!run) {
+        throw new NotFoundError('Run not found');
+      }
+
+      res.status(200).json({
+        runId: run.runId,
+        sourceId: run.sourceId,
+        status: run.status,
+        startedAt: run.startedAt.toISOString(),
+        uploadedAt: run.uploadedAt?.toISOString(),
+        committedAt: run.committedAt?.toISOString(),
+        error: run.error ?? null,
+        coverage: run.coverage ?? undefined,
+        warnings: run.warnings ?? undefined,
+      } satisfies IRunListItem);
+    })
+  );
+
+  /**
    * GET /api/students/:id/sources/:sourceId/runs
    * List ingest runs for a source.
    */
@@ -3561,25 +3610,32 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       );
 
       res.status(200).json(
-        runs.map(
-          (r: {
+        runs.map((r) => {
+          const row = r as unknown as {
             runId: string;
+            sourceId: string;
             status: string;
             startedAt: Date;
             uploadedAt?: Date;
             committedAt?: Date;
             abandonedAt?: Date;
             error?: string | null;
-          }): IRunListItem => ({
-            runId: r.runId,
-            status: r.status,
-            startedAt: r.startedAt.toISOString(),
-            uploadedAt: r.uploadedAt?.toISOString(),
-            committedAt: r.committedAt?.toISOString(),
-            abandonedAt: r.abandonedAt?.toISOString(),
-            error: r.error ?? null,
-          })
-        )
+            coverage?: ISlcRunCoverage | null;
+            warnings?: readonly string[] | null;
+          };
+          return {
+            runId: row.runId,
+            sourceId: row.sourceId,
+            status: row.status,
+            startedAt: row.startedAt.toISOString(),
+            uploadedAt: row.uploadedAt?.toISOString(),
+            committedAt: row.committedAt?.toISOString(),
+            abandonedAt: row.abandonedAt?.toISOString(),
+            error: row.error ?? null,
+            coverage: row.coverage ?? undefined,
+            warnings: row.warnings ?? undefined,
+          } satisfies IRunListItem;
+        })
       );
     })
   );

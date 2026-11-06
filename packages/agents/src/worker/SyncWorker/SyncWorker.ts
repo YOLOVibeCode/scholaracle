@@ -291,13 +291,21 @@ export class SyncWorker {
           const errText = await envRes.text();
           throw new Error(`Ingest envelope submit failed: ${envRes.status} ${errText}`);
         }
+        const completePayload: Record<string, unknown> = {};
+        if (patchedEnvelope.run.coverage !== undefined) {
+          completePayload['coverage'] = patchedEnvelope.run.coverage;
+        }
+        if (patchedEnvelope.run.warnings !== undefined) {
+          completePayload['warnings'] = patchedEnvelope.run.warnings;
+        }
+
         const completeRes = await fetch(`${base}/api/ingest/v1/runs/${runId}/complete`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify(completePayload),
         });
         if (!completeRes.ok) {
           const errText = await completeRes.text();

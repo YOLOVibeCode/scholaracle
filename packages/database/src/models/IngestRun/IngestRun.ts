@@ -1,4 +1,5 @@
 import type { ObjectId } from 'mongodb';
+import type { ISlcRunCoverage } from '@scholaracle/contracts';
 
 export type IngestRunStatus = 'started' | 'uploaded' | 'committed' | 'failed' | 'abandoned';
 
@@ -24,6 +25,8 @@ export interface IIngestRunData {
   readonly error?: string | null;
   /** Client identity stamp (app/extension/CLI + versions). */
   readonly clientMeta?: Readonly<Record<string, string>> | null;
+  readonly coverage?: ISlcRunCoverage | null;
+  readonly warnings?: readonly string[] | null;
 }
 
 export class IngestRun {
@@ -43,6 +46,8 @@ export class IngestRun {
   public readonly abandonedAt?: Date;
   public readonly error?: string | null;
   public readonly clientMeta?: Readonly<Record<string, string>> | null;
+  public readonly coverage?: ISlcRunCoverage | null;
+  public readonly warnings?: readonly string[] | null;
 
   constructor(data: IIngestRunData, id?: ObjectId) {
     this._id = id;
@@ -61,5 +66,7 @@ export class IngestRun {
     this.abandonedAt = data.abandonedAt;
     this.error = data.error ?? null;
     this.clientMeta = data.clientMeta ?? null;
+    this.coverage = data.coverage ?? null;
+    this.warnings = data.warnings ?? null;
   }
 }

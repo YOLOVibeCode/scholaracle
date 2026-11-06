@@ -96,6 +96,30 @@ function makeHost(
 }
 
 describe('runClientScrape enrichment', () => {
+  it('throws SyncError ZERO_ROWS when transform yields no ops', async () => {
+    const emptyMod: IScraperModule = {
+      metadata: {
+        id: 'skyward',
+        name: 'Skyward',
+        adapterId: 'com.skyward.grade',
+        version: '0.1.0',
+        hosts: ['*.skyward.com'],
+        entities: [],
+        entry: 'builtin:skyward',
+        publisher: 'scholaracle',
+      },
+      scrape: async () => ({ student: 'Emma', courses: [], timestamp: NOW }),
+      transform: () => [],
+    };
+    const emptyResolver: IScraperResolver = {
+      async resolve() {
+        return { module: emptyMod, canRun: true, checkErrors: [] };
+      },
+    };
+    const { host } = makeHost([], { resolver: emptyResolver });
+    await expect(runClientScrape(host)).rejects.toThrow('ZERO_ROWS');
+  });
+
   it('applies JoinGapEnricher by default so mobile needs no extra argument', async () => {
     const { host, uploaded } = makeHost([COURSE, ATTENDANCE_GAP]);
     const envelope = await runClientScrape(host);
