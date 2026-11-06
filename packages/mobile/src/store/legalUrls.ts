@@ -5,4 +5,6 @@ export const STORE_LEGAL_URLS = {
   support: 'https://scholarmancy.com/support',
   deleteAccount: 'https://scholarmancy.com/delete-account',
   marketing: 'https://scholarmancy.com',
+  /** Web-only plans (no IAP in app). */
+  pricing: 'https://scholarmancy.com/pricing',
 } as const;
