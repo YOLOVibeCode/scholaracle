@@ -14,6 +14,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireParent, requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER, DEMO_STUDENT_USER_EMMA, DEMO_STUDENT_USER_LIAM } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { authRouter } from '../auth/auth';
 import { studentsRouter } from './students';
 import { studioRouter } from '../studio/studio';
@@ -34,8 +35,15 @@ describe('student login provision API', () => {
   let liamId: string;
   let noraId: string;
   let parentUserId: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -77,7 +85,7 @@ describe('student login provision API', () => {
     );
     app.use(createErrorHandler());
 
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     const parent = await authService.login(DEMO_USER.email, DEMO_USER.password);
@@ -126,6 +134,8 @@ describe('student login provision API', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('GET returns Emma’s seeded login without a password', async () => {

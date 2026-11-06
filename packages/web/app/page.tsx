@@ -32,6 +32,11 @@ const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/ap
 const DEMO_EMAIL = 'demo@scholarmancy.com';
 const DEMO_PASSWORD = 'DemoPass123!';
 
+function seedRequestHeaders(): HeadersInit {
+  const token = process.env['NEXT_PUBLIC_SEED_TOKEN'];
+  return token ? { 'X-Seed-Token': token } : {};
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [demoLoading, setDemoLoading] = useState(false);
@@ -41,7 +46,10 @@ export default function HomePage() {
     setDemoLoading(true);
     setDemoError('');
     try {
-      const seedRes = await fetch(`${API_BASE}/seed/demo`, { method: 'POST' });
+      const seedRes = await fetch(`${API_BASE}/seed/demo`, {
+        method: 'POST',
+        headers: seedRequestHeaders(),
+      });
       const seedData = await seedRes.json().catch(() => ({}));
       if (!seedRes.ok) {
         setDemoError(seedData?.error ?? 'Failed to load demo');

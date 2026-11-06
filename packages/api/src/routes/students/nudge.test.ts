@@ -13,6 +13,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireParent, requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER, DEMO_STUDENT_USER_EMMA } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { studentsRouter } from './students';
 import { studioRouter } from '../studio/studio';
 import type { INotificationSink } from '@scholaracle/interfaces';
@@ -29,6 +30,12 @@ describe('parent nudge API', () => {
   let parentToken: string;
   let emmaToken: string;
   let emmaId: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
+
   const sink: INotificationSink & { sent: Array<{ audience: string }> } = {
     sent: [],
     async send(input) {
@@ -37,6 +44,8 @@ describe('parent nudge API', () => {
   };
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -69,7 +78,7 @@ describe('parent nudge API', () => {
     );
     app.use(createErrorHandler());
 
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     const parent = await authService.login(DEMO_USER.email, DEMO_USER.password);
@@ -99,6 +108,8 @@ describe('parent nudge API', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('nudges Emma’s Cell Division and surfaces lastNudgedAt on the action board', async () => {
