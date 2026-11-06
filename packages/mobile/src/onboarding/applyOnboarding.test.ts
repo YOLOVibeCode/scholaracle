@@ -56,6 +56,9 @@ describe('applyOnboarding', () => {
     expect(sources.map((s) => s.studentId).sort()).toEqual(['mongo-c', 'mongo-g']);
 
     expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(expect.any(String), expect.any(String), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
     const payload = JSON.parse(
       (SecureStore.setItemAsync as jest.Mock).mock.calls[0][1] as string
     ) as {
