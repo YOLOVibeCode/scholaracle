@@ -4,7 +4,6 @@
  * leave the device.
  */
 
-import * as SecureStore from 'expo-secure-store';
 import type {
   IIngestSourceRegisterRequest,
   IStudentCreateRequest,
@@ -17,6 +16,7 @@ import {
   sourceIdForStudent,
   type IConnectedSourceStore,
 } from '../sources/ConnectedSourceStore';
+import { saveCredential } from '../credentials/saveCredential';
 import { extractHostname } from '../utils/urlNormalize';
 import {
   namedChildDrafts,
@@ -67,7 +67,7 @@ export async function applyOnboarding(
   }
 
   const credentialKey = buildCredentialKey(provider, portalUrl);
-  await SecureStore.setItemAsync(
+  await saveCredential(
     credentialKey,
     JSON.stringify({
       username: state.username.trim(),
@@ -75,8 +75,7 @@ export async function applyOnboarding(
       baseUrl: portalUrl,
       provider,
       loginMethod: 'direct',
-    }),
-    { keychainAccessible: SecureStore.WHEN_UNLOCKED }
+    })
   );
 
   const adapterId = ADAPTER_IDS[provider] ?? `com.${provider}`;
