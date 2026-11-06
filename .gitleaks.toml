@@ -1,0 +1,16 @@
+# Extends the built-in rules (Stripe, etc.) and allowlists known public-demo noise.
+# Run: gitleaks detect --source . --config .gitleaks.toml
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Committed public demo accounts and doc placeholders (not production secrets)"
+paths = [
+  '''^packages/mobile/store-metadata/testflight\.json$''',
+  '''^packages/mobile/src/demo/demoLogin\.ts$''',
+  '''^packages/api/src/services/provision/StudentProvisioner\.ts$''',
+  '''^packages/mobile/eas\.json$''',
+  '''^TRIGGER_DIGEST_GUIDE\.md$''',
+  '''^packages/connector/src/aeries/aeries-adapter\.test\.ts$''',
+]

@@ -53,4 +53,17 @@ if [ ${#blocked[@]} -gt 0 ] || [ -n "$CONTENT_HITS" ]; then
   exit 1
 fi
 
+# Optional: gitleaks on staged diff when the CLI is installed (matches hook vs CI).
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+GITLEAKS_CONFIG="$REPO_ROOT/.gitleaks.toml"
+if command -v gitleaks >/dev/null 2>&1 && [ -f "$GITLEAKS_CONFIG" ]; then
+  if ! gitleaks git --pre-commit --staged --config "$GITLEAKS_CONFIG" --no-banner --redact; then
+    echo ""
+    echo "ERROR: Commit blocked — gitleaks reported possible secrets in staged changes."
+    echo "See .gitleaks.toml; install gitleaks locally for the same check CI runs."
+    echo ""
+    exit 1
+  fi
+fi
+
 exit 0
