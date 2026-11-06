@@ -13,6 +13,7 @@ import {
 
 export interface IPersonalizationServiceConfig {
   readonly apiKey?: string;
+  readonly baseUrl?: string;
   readonly model?: string;
   readonly enabled?: boolean;
   readonly cacheTtlMs?: number;
@@ -33,6 +34,7 @@ export class PersonalizationService implements IPersonalizationService {
     if (this._enabled && config.apiKey) {
       this._client = new LlmClient({
         apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
         model: config.model,
       });
     }

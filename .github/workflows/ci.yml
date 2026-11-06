@@ -96,6 +96,9 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      - name: Scraper page-fns generated file check
+        run: pnpm --filter @scholaracle/scraper-core page-fns:check
+
   test:
     name: Test (${{ matrix.package }})
     needs: build
@@ -113,6 +116,9 @@ jobs:
           - web
           - workers
           - mobile
+          - scraper-core
+          - studio-core
+          - browser-extension
     steps:
       - name: Checkout
         uses: actions/checkout@v4

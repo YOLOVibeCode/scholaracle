@@ -16,6 +16,10 @@ import {
   extractSkywardCourseAssignments,
   isSkywardGradeInfoReady,
 } from '../extractors/skyward/skyward-extractors';
+import {
+  FAKE_PORTAL_SKYWARD_ASSIGNMENTS,
+  buildM402SkywardGradebookHtml,
+} from '../fixtures/fakePortalM402';
 
 class DomPageDriver implements IPageDriver {
   readonly evaluated: string[] = [];
@@ -36,25 +40,9 @@ class DomPageDriver implements IPageDriver {
   async waitForLoad(): Promise<void> {}
   async waitForUrlIncludes(): Promise<void> {}
   async sleep(): Promise<void> {
-    // Let the page's async dialog load run.
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   onNewPage(): void {}
-}
-
-const ASSIGNMENTS: Record<string, string> = {
-  '111':
-    '<tr><td>09/02/2026</td><td>Quiz 1</td><td>95</td><td>95.00</td><td>19 out of 20</td><td></td></tr>',
-  '222':
-    '<tr><td>Major weighted at 60.00%</td></tr>' +
-    '<tr><td>09/03/2026</td><td>Lab 1</td><td>91</td><td>91.00</td><td>91 out of 100</td><td></td></tr>',
-};
-
-function courseTable(sectionId: string, name: string, period: string): string {
-  return (
-    `<table id="classDesc_${sectionId}"><tr><td class="bld classDesc"><a href="#">${name}</a></td></tr>` +
-    `<tr><td><label>Period</label> ${period} (8:00 AM - 8:50 AM)</td></tr></table>`
-  );
 }
 
 /**
@@ -63,24 +51,7 @@ function courseTable(sectionId: string, name: string, period: string): string {
  * tick, as Skyward's AJAX dialog does. `silentCni` never loads a dialog.
  */
 function mountGradebook(opts: { silentCni?: string; extraCourse?: boolean } = {}): void {
-  document.body.innerHTML =
-    `<nav><a href="#">Gradebook</a><a href="#">Attendance</a><a href="#">Schedule</a></nav>${courseTable(
-      '1_111_0_0',
-      'Algebra I',
-      '1'
-    )}${courseTable('1_222_0_0', 'Biology', '2')}${
-      opts.extraCourse ? courseTable('1_333_0_0', 'Art', '3') : ''
-    }<table id="grid_stuGradesGrid">` +
-    '<tr><td><a id="showGradeInfo" data-cni="222" data-lit="1ST" href="#">88</a></td>' +
-    '<td><a id="showGradeInfo" data-lit="PR2" data-cni="222" href="#"><span>91</span></a></td></tr>' +
-    '<tr><td><a id="showGradeInfo" data-cni="111" data-lit="1ST" href="#">95</a></td>' +
-    `<td><a id="showGradeInfo" data-cni="111" data-lit="PR2" href="#">X</a></td></tr>${
-      opts.extraCourse
-        ? '<tr><td><a id="showGradeInfo" data-cni="333" data-lit="1ST" href="#">100</a></td></tr>'
-        : ''
-    }</table>` +
-    '<div class="sf_DialogWrap" style="display:none"><a class="sf_DialogClose" href="#">x</a>' +
-    '<div id="gradeInfoDialog"></div></div>';
+  document.body.innerHTML = buildM402SkywardGradebookHtml({ extraCourse: opts.extraCourse });
 
   const wrap = document.querySelector('.sf_DialogWrap') as HTMLElement;
   wrap.querySelector('.sf_DialogClose')!.addEventListener('click', () => {
@@ -93,7 +64,7 @@ function mountGradebook(opts: { silentCni?: string; extraCourse?: boolean } = {}
       setTimeout(() => {
         document.querySelector('#gradeInfoDialog')!.innerHTML =
           '<table><tr><th>Due</th><th>Assignment</th><th>Grade</th><th>Score(%)</th>' +
-          `<th>Points Score</th><th>Missing</th></tr>${ASSIGNMENTS[cni] ?? ''}</table>`;
+          `<th>Points Score</th><th>Missing</th></tr>${FAKE_PORTAL_SKYWARD_ASSIGNMENTS[cni] ?? ''}</table>`;
         wrap.style.display = 'block';
       }, 0);
     });
@@ -148,7 +119,7 @@ describe('grade dialog page functions', () => {
   it('a closed dialog is marked read: not ready and not extracted again', () => {
     document.body.innerHTML =
       '<div class="sf_DialogWrap"><a title="Close" href="#">x</a><div id="gradeInfoDialog">' +
-      `<table><tr><th>Due</th><th>Assignment</th></tr>${ASSIGNMENTS['111']}</table></div></div>`;
+      `<table><tr><th>Due</th><th>Assignment</th></tr>${FAKE_PORTAL_SKYWARD_ASSIGNMENTS['111']}</table></div></div>`;
     expect(isSkywardGradeInfoReady()).toBe(true);
     expect(extractSkywardCourseAssignments({ courseName: 'A', coursePeriod: '1' })).toHaveLength(1);
     expect(closeSkywardDialogs()).toBe(1);
