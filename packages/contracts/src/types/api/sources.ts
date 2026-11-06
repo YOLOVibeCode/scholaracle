@@ -32,9 +32,19 @@ export interface IRunListItem {
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
+  readonly abandonedAt?: string;
   readonly error: string | null;
   /** Per-student coverage when stored on the run (client-sent on complete). */
   readonly coverage?: ISlcRunCoverage;
   /** Validation / join-graph warnings (client-sent). */
   readonly warnings?: readonly string[];
+}
+
+/** POST /api/students/:id/sources/:sourceId/runs/trigger — client-led sync (device ingests). */
+export interface ITriggerSyncResponse {
+  readonly message: string;
+  readonly syncRequestId: string;
+  readonly studentId: string;
+  readonly sourceId: string;
+  readonly createdAt: string;
 }

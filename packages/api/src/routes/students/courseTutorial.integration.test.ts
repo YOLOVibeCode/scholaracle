@@ -4,7 +4,7 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import { studentsRouter } from './students';
 import { ingestV1Router } from '../ingest/v1/ingest';
@@ -150,8 +150,13 @@ describe('Course tutorial override (integration)', () => {
     const dueSoon = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
     const courseExternalId = 'skyward-course-alg';
+    const studentDoc = await database
+      .collection('students')
+      .findOne({ _id: new ObjectId(studentId) });
+    const slcTenantUserId =
+      studentDoc != null ? (studentDoc['userId'] as ObjectId).toString() : userId;
     await database.collection('slc_courses').insertOne({
-      userId,
+      userId: slcTenantUserId,
       externalId: courseExternalId,
       provider: 'skyward',
       sourceId: 'src-1',
@@ -168,7 +173,7 @@ describe('Course tutorial override (integration)', () => {
     });
 
     await database.collection('slc_grade_snapshots').insertOne({
-      userId,
+      userId: slcTenantUserId,
       studentId,
       studentExternalId: 'stu-ext-1',
       courseExternalId,
@@ -183,7 +188,7 @@ describe('Course tutorial override (integration)', () => {
     });
 
     await database.collection('slc_assignments').insertOne({
-      userId,
+      userId: slcTenantUserId,
       studentId,
       studentExternalId: 'stu-ext-1',
       courseExternalId,

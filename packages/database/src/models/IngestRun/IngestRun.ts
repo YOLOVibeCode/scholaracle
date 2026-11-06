@@ -1,7 +1,7 @@
 import type { ObjectId } from 'mongodb';
 import type { ISlcRunCoverage } from '@scholaracle/contracts';
 
-export type IngestRunStatus = 'started' | 'uploaded' | 'committed' | 'failed';
+export type IngestRunStatus = 'started' | 'uploaded' | 'committed' | 'failed' | 'abandoned';
 
 export interface IIngestRunData {
   /** Owner userId — the slc_* tenant partition for this run's data. */
@@ -21,6 +21,7 @@ export interface IIngestRunData {
   readonly uploadedAt?: Date;
   readonly committedAt?: Date;
   readonly failedAt?: Date;
+  readonly abandonedAt?: Date;
   readonly error?: string | null;
   /** Client identity stamp (app/extension/CLI + versions). */
   readonly clientMeta?: Readonly<Record<string, string>> | null;
@@ -42,6 +43,7 @@ export class IngestRun {
   public readonly uploadedAt?: Date;
   public readonly committedAt?: Date;
   public readonly failedAt?: Date;
+  public readonly abandonedAt?: Date;
   public readonly error?: string | null;
   public readonly clientMeta?: Readonly<Record<string, string>> | null;
   public readonly coverage?: ISlcRunCoverage | null;
@@ -61,6 +63,7 @@ export class IngestRun {
     this.uploadedAt = data.uploadedAt;
     this.committedAt = data.committedAt;
     this.failedAt = data.failedAt;
+    this.abandonedAt = data.abandonedAt;
     this.error = data.error ?? null;
     this.clientMeta = data.clientMeta ?? null;
     this.coverage = data.coverage ?? null;

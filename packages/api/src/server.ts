@@ -375,16 +375,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/auth/cli', cliAuthRouter({ database, authService, baseUrl }));
     app.use('/api/sessions', sessionsRouter({ database, authService }));
 
-    // Create SyncScheduler once (if available) to be shared by students and sync routes
-    let syncScheduler: import('@scholaracle/agents').SyncScheduler | undefined;
-    try {
-      const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
-      const syncQueue = new MongoQueue(database);
-      syncScheduler = new SyncScheduler(syncQueue, database);
-    } catch {
-      // Agents package not available — sync routes will be skipped
-    }
-
     const {
       emailTransport: magicEmailTransport,
       fromEmail: magicFromEmail,
@@ -406,7 +396,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl: baseUrl ?? '',
         jwtSecret,
         sendInviteEmail: inviteEmailSender,
-        syncScheduler,
         magicLinkSender,
       })
     );
@@ -453,21 +442,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         authService,
       })
     );
-
-    // Sync API — trigger and monitor data-source sync jobs (uses syncScheduler created above)
-    if (syncScheduler) {
-      try {
-        const { createSyncRouter } = require('./routes/sync/sync');
-        app.use(
-          '/api/sync',
-          authMiddleware(authService),
-          requireParent,
-          createSyncRouter({ database, syncScheduler })
-        );
-      } catch {
-        // Sync route not available — skip /api/sync
-      }
-    }
 
     // Legacy alerts route (for notification creation) - POST /api/alerts.
     // Auth + ownership-checked per DEF-003.

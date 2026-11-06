@@ -77,7 +77,12 @@ async function createIndexes(): Promise<void> {
 
   // SLC runs
   await db.collection('slc_runs').createIndex({ sourceId: 1, createdAt: -1 });
-  console.log('  slc_runs.sourceId+createdAt');
+  await db.collection('slc_runs').createIndex({ status: 1, startedAt: 1 });
+  console.log('  slc_runs.sourceId+createdAt, status+startedAt');
+
+  await db.collection('sync_requests').createIndex({ syncRequestId: 1 }, { unique: true });
+  await db.collection('sync_requests').createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
+  console.log('  sync_requests.syncRequestId (unique), studentId+sourceId+createdAt');
 
   // Agenda overrides
   await db.collection('agenda_overrides').createIndex({ userId: 1 });
