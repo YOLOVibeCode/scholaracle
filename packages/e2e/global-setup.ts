@@ -24,6 +24,10 @@ function isProductionOrStagingApi(apiBaseUrl: string): boolean {
 }
 
 async function globalSetup(config: FullConfig) {
+  if (process.env.E2E_SKIP_GLOBAL_SETUP === '1') {
+    console.log('E2E global setup skipped (E2E_SKIP_GLOBAL_SETUP=1).');
+    return;
+  }
   // Support both 2801 (Docker) and 3002 (manual) ports
   const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:2801';
   const skipSeed = isProductionOrStagingApi(apiBaseUrl);
