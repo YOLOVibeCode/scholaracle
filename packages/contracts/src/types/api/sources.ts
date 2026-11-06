@@ -29,5 +29,15 @@ export interface IRunListItem {
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
+  readonly abandonedAt?: string;
   readonly error: string | null;
+}
+
+/** POST /api/students/:id/sources/:sourceId/runs/trigger — client-led sync (device ingests). */
+export interface ITriggerSyncResponse {
+  readonly message: string;
+  readonly syncRequestId: string;
+  readonly studentId: string;
+  readonly sourceId: string;
+  readonly createdAt: string;
 }

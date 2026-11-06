@@ -30,6 +30,7 @@ import {
   type IStudentGradesResponse,
   type ISourceListItem,
   type IRunListItem,
+  type ITriggerSyncResponse,
   type IStudentMaterialsResponse,
   type ISlcCourse,
 } from '@scholaracle/contracts';
@@ -66,8 +67,6 @@ export interface IStudentsRouterConfig {
   readonly jwtSecret?: string;
   /** Optional sender for contact-invitation emails. */
   readonly sendInviteEmail?: IInviteEmailSender;
-  /** Optional sync scheduler for enqueuing sync jobs when triggers are called. */
-  readonly syncScheduler?: import('@scholaracle/agents').SyncScheduler;
   /** Optional sink for parent nudges (student-only). Defaults to no-op. */
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
   /** Optional sender for magic login links (email + SMS). */
@@ -1686,7 +1685,18 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
         const scheduleView = mergedScheduleById.get(courseExternalId);
         const manualOverride = tutorialOverrideByMerged.get(courseExternalId);
-        const scrapedTutorial = scheduleView?.scrapedTutorialWindow;
+        const mergedSources = mergedIdToSources.get(courseExternalId);
+        let scrapedTutorial = scheduleView?.scrapedTutorialWindow;
+        if (scrapedTutorial == null && mergedSources) {
+          for (const src of mergedSources) {
+            const rec = courseRecordsByExternalId.get(src.externalId);
+            const tw = rec?.tutorialWindow;
+            if (tw) {
+              scrapedTutorial = tw;
+              break;
+            }
+          }
+        }
         const effectiveTutorial = manualOverride?.tutorialWindow ?? scrapedTutorial;
 
         courseGrades.push({
@@ -3530,6 +3540,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             startedAt: Date;
             uploadedAt?: Date;
             committedAt?: Date;
+            abandonedAt?: Date;
             error?: string | null;
           }): IRunListItem => ({
             runId: r.runId,
@@ -3537,6 +3548,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
             startedAt: r.startedAt.toISOString(),
             uploadedAt: r.uploadedAt?.toISOString(),
             committedAt: r.committedAt?.toISOString(),
+            abandonedAt: r.abandonedAt?.toISOString(),
             error: r.error ?? null,
           })
         )
@@ -3585,7 +3597,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
   /**
    * POST /api/students/:id/sources/:sourceId/runs/trigger
-   * Trigger a manual sync (creates a new ingest run).
+   * Request client-led sync — parent opens mobile app to complete ingest.
    */
   router.post(
     '/:id/sources/:sourceId/runs/trigger',
@@ -3608,47 +3620,26 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Source not found');
       }
 
-      const lastCursor = await ingestRunRepository.findLastCommittedCursor(
-        student.dataUserId(),
-        sourceId
-      );
-      const runId = randomUUID();
-      const run = await ingestRunRepository.startRun({
-        userId: student.dataUserId(),
-        actorUserId: userId,
+      const syncRequestId = randomUUID();
+      const createdAt = new Date();
+      await config.database.collection('sync_requests').insertOne({
+        syncRequestId,
+        studentId,
         sourceId,
-        runId,
-        lastCursor,
+        dataUserId: student.dataUserId(),
+        requestedByUserId: userId,
+        reason: 'parent_web_trigger',
+        createdAt,
       });
 
-      // Also enqueue a sync job if syncScheduler is available (for internal adapters)
-      if (config.syncScheduler) {
-        const dsIndex = student.dataSources.findIndex((ds) => ds.id === sourceId);
-        if (dsIndex >= 0) {
-          const ds = student.dataSources[dsIndex];
-          if (ds) {
-            const provider = ds.pluginId.split('::')[0] ?? ds.pluginId;
-            await config.syncScheduler.triggerNow({
-              studentId,
-              dataSourceIndex: dsIndex,
-              provider,
-              adapterId: ds.pluginId,
-              baseUrl: ds.config?.institutionUrl ?? ds.baseUrl ?? '',
-              userId: student.dataUserId(),
-              triggeredByUserId: userId,
-            });
-          }
-        }
-      }
-
-      res.status(201).json({
-        runId: run.runId,
-        status: run.status,
-        startedAt: run.startedAt.toISOString(),
-        uploadedAt: run.uploadedAt?.toISOString(),
-        committedAt: run.committedAt?.toISOString(),
-        error: run.error ?? null,
-      });
+      const body: ITriggerSyncResponse = {
+        message: 'Open Scholarmancy on your phone to sync',
+        syncRequestId,
+        studentId,
+        sourceId,
+        createdAt: createdAt.toISOString(),
+      };
+      res.status(202).json(body);
     })
   );
 

@@ -27,6 +27,7 @@ export function SyncHistorySheet({
   const [runs, setRuns] = useState<readonly IIngestRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
     setLoading(true);
@@ -42,10 +43,11 @@ export function SyncHistorySheet({
 
   const handleTriggerSync = async () => {
     setTriggering(true);
-    const run = await sourcesApi.triggerSync(studentId, sourceId);
+    setSyncMessage(null);
+    const result = await sourcesApi.triggerSync(studentId, sourceId);
     setTriggering(false);
-    if (run) {
-      void loadRuns();
+    if (result) {
+      setSyncMessage(result.message);
       onSyncDone?.();
     }
   };
@@ -56,7 +58,9 @@ export function SyncHistorySheet({
       ? new Date(run.committedAt).getTime()
       : run.uploadedAt
         ? new Date(run.uploadedAt).getTime()
-        : start;
+        : run.abandonedAt
+          ? new Date(run.abandonedAt).getTime()
+          : start;
     const sec = Math.round((end - start) / 1000);
     return `${sec}s`;
   };
@@ -93,7 +97,11 @@ export function SyncHistorySheet({
                   </div>
                   <Badge
                     variant={
-                      run.status === 'committed' ? 'default' : run.status === 'failed' ? 'destructive' : 'secondary'
+                      run.status === 'committed'
+                        ? 'default'
+                        : run.status === 'failed' || run.status === 'abandoned'
+                          ? 'destructive'
+                          : 'secondary'
                     }
                   >
                     {run.status}
@@ -103,6 +111,11 @@ export function SyncHistorySheet({
               ))}
             </div>
           )}
+          {syncMessage && (
+            <p className="text-sm text-muted-foreground" data-testid="sync-request-message" role="status">
+              {syncMessage}
+            </p>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -110,7 +123,7 @@ export function SyncHistorySheet({
             disabled={triggering}
             data-testid="button-trigger-sync"
           >
-            {triggering ? 'Starting...' : 'Trigger Manual Sync'}
+            {triggering ? 'Starting...' : 'Sync now (open app)'}
           </Button>
         </div>
       </SheetContent>
