@@ -1,0 +1,108 @@
+<div id="sf_HeaderWrap">
+  <div class="sf_headerName">Alex Sample</div>
+</div>
+<div id="schoolNameRow"><span id="schoolNameField">Sample Unified High School</span></div>
+<nav>
+  <a href="#">Gradebook</a>
+  <a href="#">Attendance</a>
+  <a href="#">Schedule</a>
+</nav>
+<table id="classDesc_1_111_0_0">
+  <tr>
+    <td class="bld classDesc"><a href="#">Spanish 2</a></td>
+  </tr>
+  <tr>
+    <td><label>Period</label> 1 (8:00 AM - 8:50 AM)</td>
+  </tr>
+</table>
+<table id="classDesc_1_222_0_0">
+  <tr>
+    <td class="bld classDesc"><a href="#">Biology</a></td>
+  </tr>
+  <tr>
+    <td><label>Period</label> 2 (9:00 AM - 9:50 AM)</td>
+  </tr>
+</table>
+<table id="grid_stuGradesGrid">
+  <tr>
+    <td>
+      <a id="showGradeInfo" data-cni="111" data-lit="1ST" href="#">88</a>
+    </td>
+    <td>
+      <a id="showGradeInfo" data-cni="222" data-lit="1ST" href="#"><span>91</span></a>
+    </td>
+  </tr>
+</table>
+<div class="sf_DialogWrap" style="display: none">
+  <a class="sf_DialogClose" href="#">x</a>
+  <div id="gradeInfoDialog"></div>
+</div>
+<div>Missing Assignments</div>
+<div>
+  Due: 10/01/2026 <a href="#">Lab 0</a
+  ><a href="#">Biology</a>&nbsp;<span>(Period&nbsp;<b>2</b>)</span>&nbsp;<a href="#">Lee, T</a>
+</div>
+<div>Class Grades</div>
+<table>
+  <tr>
+    <th>Attendance</th>
+    <th>Period</th>
+  </tr>
+  <tr>
+    <td>Fri Oct 02 2026</td>
+    <td></td>
+    <td>P</td>
+    <td>Biology</td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <th>Term 2025</th>
+  </tr>
+  <tr>
+    <td>
+      Period 1<br />
+      (8:00 AM - 8:55 AM)
+    </td>
+    <td style="background: #eee">
+      Spanish 2<br />
+      Rivera<br />
+      Room S101
+    </td>
+  </tr>
+  <tr>
+    <td>
+      Period 2<br />
+      (9:00 AM - 9:55 AM)
+    </td>
+    <td style="background: #eee">
+      Biology<br />
+      Lee<br />
+      Room B204
+    </td>
+  </tr>
+</table>
+<script>
+  (function () {
+    var ASSIGN = {
+      111: '<tr><td>09/02/2026</td><td>Quiz 1</td><td>95</td><td>95.00</td><td>19 out of 20</td><td></td></tr>',
+      222: '<tr><td>Major weighted at 60.00%</td></tr><tr><td>09/03/2026</td><td>Lab 1</td><td>91</td><td>91.00</td><td>91 out of 100</td><td></td></tr>',
+    };
+    var wrap = document.querySelector('.sf_DialogWrap');
+    if (!wrap) return;
+    wrap.querySelector('.sf_DialogClose').addEventListener('click', function () {
+      wrap.style.display = 'none';
+    });
+    document.querySelectorAll('a#showGradeInfo').forEach(function (cell) {
+      cell.addEventListener('click', function () {
+        var cni = cell.getAttribute('data-cni');
+        setTimeout(function () {
+          document.querySelector('#gradeInfoDialog').innerHTML =
+            '<table><tr><th>Due</th><th>Assignment</th><th>Grade</th><th>Score(%)</th><th>Points Score</th><th>Missing</th></tr>' +
+            (ASSIGN[cni] || '');
+          wrap.style.display = 'block';
+        }, 0);
+      });
+    });
+  })();
+</script>
