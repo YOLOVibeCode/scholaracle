@@ -117,11 +117,16 @@ export function extractSkywardCourseAssignments(opts: {
   status: 'graded' | 'missing' | 'late' | 'unknown';
 }> {
   const { courseName, coursePeriod } = opts;
-  // Read only a grade dialog that has not been read yet (closeSkywardDialogs
-  // marks read ones), so one course's assignments are never filed under the
-  // next course.
+  // Read only a grade dialog whose content has not been handed out yet
+  // (closeSkywardDialogs records a fingerprint of what it closed; Skyward
+  // refills the same element for the next course), so one course's
+  // assignments are never filed under the next course.
+  const fingerprint = (d: Element): string => {
+    const text = (d.textContent ?? '').replace(/\s+/g, ' ').trim();
+    return `${text.length}:${text.slice(0, 300)}`;
+  };
   const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
-  const dialog = dialogs.find((d) => d.querySelector('[data-slc-read]') === null) ?? null;
+  const dialog = dialogs.find((d) => d.getAttribute('data-slc-seen') !== fingerprint(d)) ?? null;
   if (!dialog) return [];
 
   const results: Array<{
@@ -339,14 +344,26 @@ export function openSkywardGradeInfo(opts: { cni: string; periods: string[] }): 
 }
 
 /** True once an unread #gradeInfoDialog holds an assignment table. */
+/**
+ * Skyward reuses ONE #gradeInfoDialog element for every course and refills it,
+ * so "already read" cannot be a marker on the element. closeSkywardDialogs
+ * records a fingerprint of the content it has handed out (data-slc-seen); the
+ * dialog is ready again once it shows an assignment table whose fingerprint
+ * differs from the recorded one.
+ */
 export function isSkywardGradeInfoReady(): boolean {
+  const fingerprint = (d: Element): string => {
+    const text = (d.textContent ?? '').replace(/\s+/g, ' ').trim();
+    return `${text.length}:${text.slice(0, 300)}`;
+  };
   const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
   return dialogs.some((d) => {
-    if (d.querySelector('[data-slc-read]') !== null) return false;
-    return Array.from(d.querySelectorAll('table')).some((t) => {
+    const hasTable = Array.from(d.querySelectorAll('table')).some((t) => {
       const header = t.querySelector('tr')?.textContent ?? '';
       return header.includes('Assignment') && (header.includes('Due') || header.includes('Score'));
     });
+    if (!hasTable) return false;
+    return d.getAttribute('data-slc-seen') !== fingerprint(d);
   });
 }
 
@@ -372,11 +389,8 @@ export function closeSkywardDialogs(): number {
     );
   }
   for (const dialog of Array.from(document.querySelectorAll('#gradeInfoDialog'))) {
-    if (dialog.querySelector('[data-slc-read]') !== null) continue;
-    const marker = document.createElement('i');
-    marker.setAttribute('data-slc-read', '1');
-    marker.style.display = 'none';
-    dialog.appendChild(marker);
+    const text = (dialog.textContent ?? '').replace(/\s+/g, ' ').trim();
+    dialog.setAttribute('data-slc-seen', `${text.length}:${text.slice(0, 300)}`);
   }
   return closed;
 }
