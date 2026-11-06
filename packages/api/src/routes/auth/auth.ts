@@ -22,6 +22,7 @@ import type { ISessionRepository } from '@scholaracle/database';
 import { parseUserAgent } from '../../utils/parseUserAgent';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
+import { verifyAppleIdentityToken } from './appleIdentityToken';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -480,6 +481,8 @@ function validateOAuthPayload(body: unknown):
       providerAccountId: string;
       email: string;
       name: string;
+      appleIdentityToken?: string;
+      appleNonce?: string;
     }
   | { ok: false; error: string } {
   const b = body as {
@@ -487,8 +490,10 @@ function validateOAuthPayload(body: unknown):
     providerAccountId?: string;
     email?: string;
     name?: string;
+    appleIdentityToken?: string;
+    appleNonce?: string;
   };
-  const { provider, providerAccountId, email, name } = b;
+  const { provider, providerAccountId, email, name, appleIdentityToken, appleNonce } = b;
   if (!provider || !providerAccountId || !email || !name) {
     return {
       ok: false,
@@ -499,13 +504,56 @@ function validateOAuthPayload(body: unknown):
   if (!validProviders.includes(provider)) {
     return { ok: false, error: 'Invalid provider' };
   }
+  if (provider === 'apple' && !appleIdentityToken?.trim()) {
+    return {
+      ok: false,
+      error: 'Missing required field for Apple: appleIdentityToken',
+    };
+  }
   return {
     ok: true,
     provider: provider as 'google' | 'apple' | 'microsoft',
     providerAccountId,
     email,
     name,
+    appleIdentityToken: appleIdentityToken?.trim(),
+    appleNonce: appleNonce?.trim(),
   };
+}
+
+type ValidatedOAuthPayload = Exclude<ReturnType<typeof validateOAuthPayload>, { ok: false }>;
+
+async function resolveOAuthAccount(
+  payload: ValidatedOAuthPayload
+): Promise<{ providerAccountId: string; email: string }> {
+  if (payload.provider !== 'apple') {
+    return { providerAccountId: payload.providerAccountId, email: payload.email };
+  }
+  const token = payload.appleIdentityToken;
+  if (token === undefined || token === '') {
+    throw new ValidationError('Missing required field for Apple: appleIdentityToken');
+  }
+  const rawNonce = payload.appleNonce ?? '';
+  try {
+    const verified = await verifyAppleIdentityToken({
+      identityToken: token,
+      rawNonce: rawNonce === '' ? undefined : rawNonce,
+      audiences: appleOAuthAudiences(),
+    });
+    const email =
+      verified.email !== undefined && verified.email !== '' ? verified.email : payload.email;
+    return { providerAccountId: verified.sub, email };
+  } catch {
+    throw new AuthenticationError('Invalid Apple identity token');
+  }
+}
+
+function appleOAuthAudiences(): string[] {
+  const raw = process.env['APPLE_OAUTH_AUDIENCE'] ?? 'com.scholarmancy.app';
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 /**
@@ -525,10 +573,11 @@ async function handleOAuth(
   if (!payload.ok) {
     throw new ValidationError(payload.error);
   }
+  const { providerAccountId, email } = await resolveOAuthAccount(payload);
   const result = await authService.loginOrRegisterOAuth(
     payload.provider,
-    payload.providerAccountId,
-    payload.email,
+    providerAccountId,
+    email,
     payload.name
   );
   if (result.success && result.user?.id && result.familyId) {
@@ -665,7 +714,8 @@ export function authRouter(config: IAuthRouterConfig): Router {
 
   /**
    * POST /api/auth/oauth
-   * Internal: called by Next.js after OAuth callback to issue JWT tokens.
+   * Internal: called by Next.js or mobile after OAuth to issue JWT tokens.
+   * Apple requires `appleIdentityToken` in the JSON body; sub and email come from the verified JWT.
    * Requires x-internal-api-secret or Authorization: Bearer <INTERNAL_API_SECRET>.
    */
   router.post(
