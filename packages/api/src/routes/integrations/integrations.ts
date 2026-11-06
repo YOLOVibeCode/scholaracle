@@ -20,23 +20,6 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import {
-  packageSingleFile,
-  packageMultiStudent,
-  packageBundle,
-  type TargetOS,
-} from '../../services/scraper-generator/packager';
-import { resolveScraperCode } from '../../services/scraper-generator/scraper-code-resolver';
-import {
-  processScraperGenerationJob,
-  isKnownPlatform,
-} from '../../services/scraper-generator/job-processor';
-import {
-  getReferenceScraper,
-  normalizeToReferencePlatform,
-} from '../../services/scraper-generator/reference-scrapers';
-import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
-import { createHash } from 'node:crypto';
-import {
   createIntegrationSchema,
   updateIntegrationSchema,
   assignStudentSchema,
@@ -231,64 +214,6 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
-
-  type PlatformEntry = {
-    studentId: string;
-    studentName: string;
-    platform: string;
-    loginUrl: string;
-    credentials: { studentName: string; username: string; password: string };
-  };
-  async function buildPlatformEntry(
-    uid: string,
-    student: { _id?: unknown; name: string },
-    ds: { id: string; credentials?: { encrypted?: string; iv?: string } }
-  ): Promise<PlatformEntry | null> {
-    const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(uid, ds.id);
-    if (!ingestSource?.portalBaseUrl) return null;
-    // Portal passwords are no longer stored or returned by the server.
-    // Credentials are held by client devices only.
-    return {
-      studentId: (student._id as { toString?: () => string })?.toString?.() ?? '',
-      studentName: student.name,
-      platform: ingestSource.provider,
-      loginUrl: ingestSource.portalBaseUrl,
-      credentials: { studentName: student.name, username: '', password: '' },
-    };
-  }
-  async function getPlatformsForStudent(
-    uid: string,
-    student: {
-      _id?: unknown;
-      name: string;
-      dataSources: ReadonlyArray<{ id: string; credentials?: { encrypted?: string; iv?: string } }>;
-    }
-  ): Promise<PlatformEntry[]> {
-    const platforms: PlatformEntry[] = [];
-    for (const ds of student.dataSources) {
-      const entry = await buildPlatformEntry(uid, student, ds);
-      if (entry) platforms.push(entry);
-    }
-    return platforms;
-  }
-  async function buildStudentsForMultiFromDb(
-    uid: string
-  ): Promise<Array<{ studentId: string; studentName: string; platforms: PlatformEntry[] }>> {
-    const students = await studentRepository.findByUserId(uid);
-    const result: Array<{ studentId: string; studentName: string; platforms: PlatformEntry[] }> =
-      [];
-    for (const student of students) {
-      const platforms = await getPlatformsForStudent(uid, student);
-      if (platforms.length > 0) {
-        result.push({
-          studentId: student._id?.toString() ?? '',
-          studentName: student.name,
-          platforms,
-        });
-      }
-    }
-    return result;
-  }
 
   /**
    * GET /api/integrations
@@ -544,121 +469,31 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   );
 
   // -------------------------------------------------------------------------
-  // Server-Side Scraper Generation (registered before /:id so /generate-status is matched)
+  // Desktop scraper generation / downloads (retired — registered before /:id)
   // -------------------------------------------------------------------------
 
-  const generatedScrapersCollection = config.database.collection('generated_scrapers');
   const scraperGenerationJobsCollection = config.database.collection('scraper_generation_jobs');
 
-  const defaultSteps = [
-    { name: 'connect', status: 'pending' as const, details: null },
-    { name: 'crawl', status: 'pending' as const, details: null },
-    { name: 'authenticate_check', status: 'pending' as const, details: null },
-    { name: 'generate', status: 'pending' as const, details: null },
-    { name: 'validate', status: 'pending' as const, details: null },
-  ];
+  const DESKTOP_SCRAPER_RETIRED =
+    'Desktop scraper downloads are retired. Connect from the Scholarmancy mobile app on your phone.';
 
   /**
    * POST /api/integrations/generate-scraper
-   * Queue a generation job for unknown platforms; return cached/reference for known/cached.
+   * Retired: does not enqueue jobs or consume AI quota.
    */
   router.post(
     '/generate-scraper',
     asyncHandler(async (req: Request, res: Response) => {
-      const userId = requireUserId(req);
+      requireUserId(req);
 
       const { platformName, loginUrl, loginMethod } = req.body ?? {};
       if (!platformName || !loginUrl || !loginMethod) {
         throw new ValidationError('Missing required fields: platformName, loginUrl, loginMethod');
       }
 
-      const cacheKey = createHash('sha256').update(`${platformName}|${loginUrl}`).digest('hex');
-
-      if (isKnownPlatform(platformName)) {
-        res.status(200).json({
-          success: true,
-          scraperId: null,
-          jobId: null,
-          platformName,
-          fromCache: true,
-          knownPlatform: true,
-          code: {
-            scraper: `// Reference scraper for ${platformName}`,
-            transformer: `// Reference transformer for ${platformName}`,
-            metadata: JSON.stringify(
-              { id: `${platformName}-browser`, name: platformName, version: '1.0.0' },
-              null,
-              2
-            ),
-          },
-        });
-        return;
-      }
-
-      const cached = await generatedScrapersCollection.findOne({
-        cacheKey,
-        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60_000) },
-      });
-
-      if (cached) {
-        res.status(200).json({
-          success: true,
-          scraperId: cached['_id'].toString(),
-          jobId: null,
-          platformName,
-          fromCache: true,
-          code: {
-            scraper: cached['scraperCode'],
-            transformer: cached['transformerCode'],
-            metadata: cached['metadata'],
-          },
-        });
-        return;
-      }
-
-      const rateLimit = await checkAiRateLimit(config.database, userId, 'scraper_generation');
-      if (!rateLimit.allowed) {
-        res.status(429).json({
-          success: false,
-          error: 'AI scraper generation limit reached for your plan',
-          limit: rateLimit.limit,
-          used: rateLimit.used,
-        });
-        return;
-      }
-
-      const jobId = randomUUID();
-      const now = new Date();
-      await scraperGenerationJobsCollection.insertOne({
-        jobId,
-        userId,
-        platformName,
-        loginUrl,
-        cacheKey,
-        status: 'queued',
-        createdAt: now,
-        updatedAt: now,
-        steps: defaultSteps,
-        result: null,
-        error: null,
-        retryCount: 0,
-      });
-
-      await recordAiUsage(config.database, userId, 'scraper_generation', now);
-
-      setImmediate(() => {
-        processScraperGenerationJob(config.database, jobId).catch((err) => {
-          console.error('[scraper-generation] job failed:', jobId, err);
-        });
-      });
-
-      res.status(200).json({
-        success: true,
-        scraperId: null,
-        jobId,
-        platformName,
-        fromCache: false,
-        status: 'queued',
+      res.status(410).json({
+        success: false,
+        error: DESKTOP_SCRAPER_RETIRED,
       });
     })
   );
@@ -829,338 +664,31 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
 
   /**
    * GET /api/integrations/scraper-script
-   * Download a personalized setup script with the user's token baked in.
+   * Retired.
    */
   router.get(
     '/scraper-script',
     asyncHandler(async (req: Request, res: Response) => {
-      const userId = requireUserId(req);
-
-      // Generate a fresh token for the script
-      const jti = randomUUID();
-      const token = connectorTokenService.createToken(userId, jti);
-
-      // Revoke previous + record new
-      await revokedTokensCollection.updateMany(
-        { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } }
-      );
-      await revokedTokensCollection.insertOne({
-        userId,
-        jti,
-        tokenPurpose: 'scraper',
-        createdAt: new Date(),
-        revokedAt: null,
+      requireUserId(req);
+      res.status(410).json({
+        success: false,
+        error: DESKTOP_SCRAPER_RETIRED,
       });
-
-      const apiBaseUrl = process.env['API_BASE_URL'] ?? 'https://api.scholarmancy.com';
-
-      const script = `#!/bin/bash
-# Scholaracle Scraper Setup Script
-# Generated for your account — do not share this file.
-# Token expires in 365 days.
-
-set -e
-
-echo ""
-echo "  Scholaracle Scraper Setup"
-echo "  ─────────────────────────"
-echo ""
-
-# Check Node.js
-if ! command -v node &> /dev/null; then
-  echo "  ✗ Node.js is not installed."
-  echo "  Install it from https://nodejs.org/ (v18 or later)"
-  exit 1
-fi
-echo "  ✓ Node.js $(node -v) detected"
-
-# Install scholaracle-scraper
-echo "  Installing scholaracle-scraper..."
-npm install -g scholaracle-scraper 2>/dev/null || npm install scholaracle-scraper
-echo "  ✓ Installed"
-
-# Write config
-CONFIG_DIR="$HOME/.scholaracle-scraper"
-mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_DIR/config.json" << 'CONFIGEOF'
-{
-  "apiBaseUrl": "${apiBaseUrl}",
-  "connectorToken": "${token}"
-}
-CONFIGEOF
-echo "  ✓ Configuration saved to $CONFIG_DIR/config.json"
-
-echo ""
-echo "  You're all set! Next steps:"
-echo "    npx scholaracle-scraper run         → Run a scraper"
-echo "    npx scholaracle-scraper generate    → Create a custom scraper with AI"
-echo "    npx scholaracle-scraper schedule    → Set up automatic runs"
-echo ""
-`;
-
-      res.setHeader('Content-Type', 'application/x-sh');
-      res.setHeader('Content-Disposition', 'attachment; filename="scholaracle-setup.sh"');
-      res.status(200).send(script);
     })
   );
 
   /**
    * POST /api/integrations/scraper-download
-   * Download a single-file scraper (.command for Mac, .bat for Windows).
-   * Body: { os, scraperId?, platform?, url?, credentials? } for single-platform.
-   * Body: { os, students?: [{ studentId, studentName, platforms: [{ platform, loginUrl, scraperId?, credentials }] }] } for multi.
-   * If students is omitted, server builds from all user's students and their dataSources (self-hosted).
+   * Retired.
    */
   router.post(
     '/scraper-download',
-    /* eslint-disable-next-line max-lines-per-function, complexity -- download route; refactor in follow-up */
     asyncHandler(async (req: Request, res: Response) => {
-      const userId = requireUserId(req);
-
-      const body = req.body ?? {};
-      const os = body.os === 'windows' ? 'windows' : ('mac' as TargetOS);
-      const apiBaseUrl = process.env['API_BASE_URL'] ?? 'https://api.scholarmancy.com';
-
-      const jti = randomUUID();
-      const token = connectorTokenService.createToken(userId, jti);
-
-      // Bundle: body.connections array (connection-centric, one script for multiple platforms)
-      const bodyConnections = body.connections as
-        | Array<{
-            platformId: string;
-            platformName: string;
-            loginUrl: string;
-            scraperId?: string | null;
-            credentials: { username?: string; password?: string; studentNameHint?: string };
-          }>
-        | undefined;
-      if (Array.isArray(bodyConnections) && bodyConnections.length > 0) {
-        // Revoke only previous bundle-download tokens for this user (not single-platform scraper tokens)
-        await revokedTokensCollection.updateMany(
-          { userId, tokenPurpose: 'scraper-bundle' },
-          { $set: { revokedAt: new Date() } }
-        );
-        await revokedTokensCollection.insertOne({
-          userId,
-          jti,
-          tokenPurpose: 'scraper-bundle',
-          createdAt: new Date(),
-          revokedAt: null,
-        });
-
-        const generatedScrapersCollection = config.database.collection('generated_scrapers');
-        const resolvedConnections = await Promise.all(
-          bodyConnections.map(async (c) => {
-            const platformId =
-              c.platformId ?? c.platformName?.toLowerCase().replace(/[^a-z0-9]+/g, '-') ?? 'custom';
-            const platformName = c.platformName ?? 'Custom';
-            const loginUrl = c.loginUrl ?? '';
-            const scraper = await resolveScraperCode(generatedScrapersCollection, {
-              scraperId: c.scraperId ?? null,
-              platformName,
-              loginUrl,
-            });
-            return {
-              platformId,
-              platformName,
-              loginUrl,
-              credentials: {
-                username: c.credentials?.username ?? '',
-                password: c.credentials?.password ?? '',
-                studentNameHint: c.credentials?.studentNameHint,
-              },
-              scraper,
-            };
-          })
-        );
-        const script = packageBundle({
-          connectorToken: token,
-          apiBaseUrl,
-          os,
-          connections: resolvedConnections,
-        });
-        const ext = os === 'windows' ? '.bat' : '.command';
-        res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
-        res.setHeader('Content-Disposition', `attachment; filename="scholaracle-bundle${ext}"`);
-        res.status(200).send(script);
-        return;
-      }
-
-      // Single-platform and multi-student: revoke previous scraper tokens
-      await revokedTokensCollection.updateMany(
-        { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } }
-      );
-      await revokedTokensCollection.insertOne({
-        userId,
-        jti,
-        tokenPurpose: 'scraper',
-        createdAt: new Date(),
-        revokedAt: null,
+      requireUserId(req);
+      res.status(410).json({
+        success: false,
+        error: DESKTOP_SCRAPER_RETIRED,
       });
-
-      // Multi-student: body.students array or build from DB (useAllStudents / no platform)
-      const bodyStudents = body.students as
-        | Array<{
-            studentId: string;
-            studentName: string;
-            platforms: Array<{
-              platform: string;
-              loginUrl: string;
-              scraperId?: string;
-              credentials: { studentName?: string; username?: string; password?: string };
-            }>;
-          }>
-        | undefined;
-      const useAllStudents = body.useAllStudents === true;
-
-      if (useAllStudents || (Array.isArray(bodyStudents) && bodyStudents.length > 0)) {
-        let studentsForMulti: Array<{
-          studentId: string;
-          studentName: string;
-          platforms: Array<{
-            studentId: string;
-            studentName: string;
-            platform: string;
-            loginUrl: string;
-            credentials: { studentName: string; username: string; password: string };
-          }>;
-        }>;
-
-        const toPlatformEntry = (
-          p: {
-            platform: string;
-            loginUrl: string;
-            credentials?: { studentName?: string; username?: string; password?: string };
-          },
-          s: { studentId: string; studentName: string }
-        ): PlatformEntry => ({
-          studentId: s.studentId,
-          studentName: s.studentName,
-          platform: p.platform,
-          loginUrl: p.loginUrl,
-          credentials: {
-            studentName: p.credentials?.studentName ?? s.studentName,
-            username: p.credentials?.username ?? '',
-            password: p.credentials?.password ?? '',
-          },
-        });
-
-        if (Array.isArray(bodyStudents) && bodyStudents.length > 0) {
-          studentsForMulti = bodyStudents.map((s) => ({
-            studentId: s.studentId,
-            studentName: s.studentName,
-            platforms: s.platforms.map((p) => toPlatformEntry(p, s)),
-          }));
-        } else {
-          studentsForMulti = await buildStudentsForMultiFromDb(userId);
-        }
-
-        if (studentsForMulti.length === 0) {
-          throw new ValidationError(
-            'No students or platforms configured. Add data sources on student pages first.'
-          );
-        }
-
-        const script = packageMultiStudent({
-          connectorToken: token,
-          apiBaseUrl,
-          os,
-          students: studentsForMulti,
-        });
-        const ext = os === 'windows' ? '.bat' : '.command';
-        res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
-        res.setHeader('Content-Disposition', `attachment; filename="scholaracle-sync${ext}"`);
-        res.status(200).send(script);
-        return;
-      }
-
-      // Single-platform (existing flow)
-      const platformName = body.platform as string | undefined;
-      const scraperId = body.scraperId as string | undefined;
-      const credentials = body.credentials as
-        { studentName?: string; username?: string; password?: string } | undefined;
-
-      let scraperCode: {
-        scraperCode: string;
-        transformerCode: string;
-        metadata: string;
-        baseScraperCode?: string;
-        typesCode?: string;
-      } | null = null;
-      let resolvedPlatformName = platformName ?? 'custom';
-      let resolvedLoginUrl = '';
-
-      if (scraperId) {
-        // eslint-disable-next-line @typescript-eslint/naming-convention -- MongoDB class name
-        const { ObjectId } = await import('mongodb');
-        const doc = await generatedScrapersCollection.findOne({ _id: new ObjectId(scraperId) });
-        if (!doc) {
-          throw new NotFoundError('Scraper not found');
-        }
-        scraperCode = {
-          scraperCode: doc['scraperCode'] as string,
-          transformerCode: doc['transformerCode'] as string,
-          metadata: doc['metadata'] as string,
-        };
-        resolvedPlatformName = doc['platformName'] as string;
-        resolvedLoginUrl = doc['loginUrl'] as string;
-      } else if (platformName) {
-        resolvedLoginUrl = (req.query['url'] as string) ?? (body.url as string) ?? '';
-        const refId = normalizeToReferencePlatform(platformName);
-        const refBundle = refId ? getReferenceScraper(refId) : null;
-        if (refBundle) {
-          scraperCode = {
-            scraperCode: refBundle.scraperCode,
-            transformerCode: refBundle.transformerCode,
-            metadata: refBundle.metadata,
-            baseScraperCode: refBundle.baseScraperCode,
-            typesCode: refBundle.typesCode,
-          };
-        } else {
-          scraperCode = {
-            scraperCode: `// Reference scraper for ${platformName}\n// Set SCHOLARACLE_SCRAPERS_SRC or install scholaracle-scraper for real code.`,
-            transformerCode: `// Reference transformer for ${platformName}`,
-            metadata: JSON.stringify(
-              {
-                id: `${platformName.toLowerCase()}-browser`,
-                name: platformName,
-                version: '1.0.0',
-                description: `Scrapes student data from ${platformName}`,
-              },
-              null,
-              2
-            ),
-          };
-        }
-      }
-
-      if (!scraperCode) {
-        throw new ValidationError('Either scraperId, platformName, or students array is required');
-      }
-
-      const script = packageSingleFile({
-        connectorToken: token,
-        apiBaseUrl,
-        platformName: resolvedPlatformName,
-        loginUrl: resolvedLoginUrl || '',
-        scraper: scraperCode,
-        os,
-        credentials: credentials
-          ? {
-              studentName: credentials.studentName ?? '',
-              username: credentials.username ?? '',
-              password: credentials.password ?? '',
-            }
-          : undefined,
-      });
-
-      const ext = os === 'windows' ? '.bat' : '.command';
-      const fileName = `scholaracle-${resolvedPlatformName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}${ext}`;
-      res.setHeader('Content-Type', os === 'windows' ? 'application/x-bat' : 'application/x-sh');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      res.status(200).send(script);
     })
   );
 
