@@ -7,7 +7,7 @@
 
 import { MongoClient } from 'mongodb';
 import { SendGridTransport, SmtpTransport, type IEmailTransport } from '@scholaracle/agents';
-import { DigestInsightService, LlmClient } from '@scholaracle/agents';
+import { DigestInsightService, LlmClient, resolveLlmConfig } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
@@ -85,9 +85,9 @@ async function main(): Promise<void> {
   const transport = getEmailTransport();
   const digestRepo = new EmailDigestPendingRepository(database);
   const commLogRepo = new CommunicationLogRepository(database);
-  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
-  const insightService = anthropicApiKey
-    ? new DigestInsightService({ llmClient: new LlmClient({ apiKey: anthropicApiKey }) })
+  const insightsLlm = resolveLlmConfig('insights');
+  const insightService = insightsLlm
+    ? new DigestInsightService({ llmClient: new LlmClient(insightsLlm!) })
     : undefined;
 
   const digestSender = new DigestSender(
