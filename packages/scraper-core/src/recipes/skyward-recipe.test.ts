@@ -20,6 +20,7 @@ import {
   FAKE_PORTAL_SKYWARD_ASSIGNMENTS,
   buildM402SkywardGradebookHtml,
 } from '../fixtures/fakePortalM402';
+import { SKYWARD_SELECTORS_V1 } from '../selectors/skywardV1';
 
 class DomPageDriver implements IPageDriver {
   readonly evaluated: string[] = [];
@@ -120,11 +121,23 @@ describe('grade dialog page functions', () => {
     document.body.innerHTML =
       '<div class="sf_DialogWrap"><a title="Close" href="#">x</a><div id="gradeInfoDialog">' +
       `<table><tr><th>Due</th><th>Assignment</th></tr>${FAKE_PORTAL_SKYWARD_ASSIGNMENTS['111']}</table></div></div>`;
-    expect(isSkywardGradeInfoReady()).toBe(true);
-    expect(extractSkywardCourseAssignments({ courseName: 'A', coursePeriod: '1' })).toHaveLength(1);
-    expect(closeSkywardDialogs()).toBe(1);
-    expect(isSkywardGradeInfoReady()).toBe(false);
-    expect(extractSkywardCourseAssignments({ courseName: 'B', coursePeriod: '2' })).toEqual([]);
+    expect(isSkywardGradeInfoReady(SKYWARD_SELECTORS_V1)).toBe(true);
+    expect(
+      extractSkywardCourseAssignments({
+        selectors: SKYWARD_SELECTORS_V1,
+        courseName: 'A',
+        coursePeriod: '1',
+      })
+    ).toHaveLength(1);
+    expect(closeSkywardDialogs(SKYWARD_SELECTORS_V1)).toBe(1);
+    expect(isSkywardGradeInfoReady(SKYWARD_SELECTORS_V1)).toBe(false);
+    expect(
+      extractSkywardCourseAssignments({
+        selectors: SKYWARD_SELECTORS_V1,
+        courseName: 'B',
+        coursePeriod: '2',
+      })
+    ).toEqual([]);
   });
 });
 

@@ -1,4 +1,8 @@
-import { extractSkywardStudentName, PAGE_FN_UNREGISTERED } from '@scholaracle/scraper-core';
+import {
+  extractSkywardStudentName,
+  PAGE_FN_UNREGISTERED,
+  SKYWARD_SELECTORS_V1,
+} from '@scholaracle/scraper-core';
 import { WebViewPageDriver } from './WebViewPageDriver';
 
 /**
@@ -39,16 +43,18 @@ describe('WebViewPageDriver (Hermes-safe evaluate)', () => {
   it('injects the build-time source of a registered page function, with no eval and no bytecode', async () => {
     const { driver, injected } = setup();
 
-    const pending = driver.evaluate(extractSkywardStudentName);
+    const pending = driver.evaluate(extractSkywardStudentName, SKYWARD_SELECTORS_V1);
     reply(driver, '1', 'Ava Lewis');
 
     await expect(pending).resolves.toBe('Ava Lewis');
     expect(injected).toHaveLength(1);
     const script = injected[0]!;
-    expect(script).toContain('function extractSkywardStudentName()');
+    expect(script).toContain('function extractSkywardStudentName(selectors)');
     expect(script).not.toContain('[bytecode]');
     expect(script).not.toMatch(/\beval\s*\(/);
-    expect(script).toContain('window.__slc_run__("1", (function extractSkywardStudentName()');
+    expect(script).toContain(
+      'window.__slc_run__("1", (function extractSkywardStudentName(selectors)'
+    );
   });
 
   it('passes arguments as JSON', async () => {
