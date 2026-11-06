@@ -63,6 +63,7 @@ describe('Twilio Webhooks (relay)', () => {
   beforeEach(async () => {
     await database.collection('communication_logs').deleteMany({});
     await database.collection('sms_consents').deleteMany({});
+    await database.collection('webhook_events').deleteMany({});
   });
 
   describe('signature', () => {
@@ -92,6 +93,36 @@ describe('Twilio Webhooks (relay)', () => {
         .set('x-relay-signature', sig)
         .send(`${rawBody}&tampered=1`);
       expect(res.status).toBe(401);
+    });
+
+    it('rejects replay after max age window with 401', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      const baseMs = new Date('2020-06-01T12:00:00.000Z').getTime();
+      jest.setSystemTime(baseMs);
+      const tsSec = String(Math.floor(baseMs / 1000));
+      const fields: Record<string, string> = {
+        From: '+15005550006',
+        Body: 'STOP',
+        Timestamp: tsSec,
+      };
+      const rawBody = querystring.stringify(fields);
+      const sig = signRelayInboundBody(SMS_INBOUND_WEBHOOK_URL, rawBody, RELAY_SECRET);
+      const resFresh = await request(app)
+        .post('/api/webhooks/twilio/sms')
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('x-relay-signature', sig)
+        .send(rawBody);
+      expect(resFresh.status).toBe(200);
+
+      jest.setSystemTime(baseMs + 6 * 60 * 1000);
+      const resStale = await request(app)
+        .post('/api/webhooks/twilio/sms')
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('x-relay-signature', sig)
+        .send(rawBody);
+      expect(resStale.status).toBe(401);
+
+      jest.useRealTimers();
     });
   });
 
@@ -226,6 +257,55 @@ describe('Twilio Webhooks (relay)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+
+    it('does not apply side effects twice for duplicate MessageSid and MessageStatus', async () => {
+      await database.collection('communication_logs').insertOne({
+        userId: 'u1',
+        channel: 'sms',
+        type: 'notification',
+        subject: 'Test',
+        content: 'Hello',
+        recipientPhone: '+15005550001',
+        status: 'sent',
+        providerId: 'SM_DEDUP_1',
+        triggeredBy: 'system',
+        createdAt: new Date(),
+      });
+
+      const fields = {
+        MessageSid: 'SM_DEDUP_1',
+        MessageStatus: 'delivered',
+      };
+      const first = await signedPost(
+        app,
+        '/api/webhooks/twilio/status',
+        SMS_STATUS_WEBHOOK_URL,
+        fields
+      );
+      expect(first.status).toBe(200);
+      expect(first.body.success).toBe(true);
+      expect(first.body.deduped).toBeUndefined();
+
+      const logAfterFirst = await database
+        .collection('communication_logs')
+        .findOne({ providerId: 'SM_DEDUP_1' });
+      const deliveredAtFirst = logAfterFirst?.['deliveredAt'];
+
+      const second = await signedPost(
+        app,
+        '/api/webhooks/twilio/status',
+        SMS_STATUS_WEBHOOK_URL,
+        fields
+      );
+      expect(second.status).toBe(200);
+      expect(second.body.success).toBe(true);
+      expect(second.body.deduped).toBe(true);
+
+      const logAfterSecond = await database
+        .collection('communication_logs')
+        .findOne({ providerId: 'SM_DEDUP_1' });
+      expect(logAfterSecond?.['deliveredAt']).toEqual(deliveredAtFirst);
     });
 
     it('records opt-out when ErrorCode is 21610', async () => {
