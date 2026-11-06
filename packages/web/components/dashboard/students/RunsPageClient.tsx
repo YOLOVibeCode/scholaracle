@@ -5,7 +5,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import type { ISlcRunCoverage } from '@scholaracle/contracts';
 import { apiClient } from '@/lib/api/client';
+import { RunGapList } from './RunGapList';
 
 interface IRunRow {
   readonly runId: string;
@@ -15,6 +17,7 @@ interface IRunRow {
   readonly clientType?: string;
   readonly coreVersion?: string;
   readonly error?: string | null;
+  readonly coverage?: ISlcRunCoverage;
 }
 
 export function RunsPageClient({ studentId }: { readonly studentId: string }): React.ReactElement {
@@ -36,22 +39,24 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
             const rows = await apiClient.get<
               Array<{
                 runId: string;
-                sourceId: string;
+                sourceId?: string;
                 status: string;
                 startedAt: string;
                 error?: string | null;
                 clientMeta?: Record<string, string>;
+                coverage?: ISlcRunCoverage;
               }>
             >(`/students/${studentId}/sources/${sid}/runs`);
             for (const r of rows) {
               all.push({
                 runId: r.runId,
-                sourceId: r.sourceId,
+                sourceId: r.sourceId ?? sid,
                 status: r.status,
                 startedAt: r.startedAt,
                 error: r.error,
                 clientType: r.clientMeta?.['clientType'],
                 coreVersion: r.clientMeta?.['coreVersion'],
+                coverage: r.coverage,
               });
             }
           } catch {
@@ -92,6 +97,7 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
               {r.coreVersion && <span>core: {r.coreVersion}</span>}
             </div>
             {r.error && <p className="text-xs text-red-600">{r.error}</p>}
+            {r.coverage && <RunGapList runId={r.runId} coverage={r.coverage} />}
           </li>
         ))}
       </ul>

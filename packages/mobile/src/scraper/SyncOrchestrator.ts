@@ -90,7 +90,13 @@ function buildMobileRecorder(mobileRecorder: IMobileRunRecorder): IRunRecorder {
       await mobileRecorder.addPhase(runId, phase);
     },
     async completeRun(runId: string, result: IRunResult): Promise<void> {
-      await mobileRecorder.completeRun(runId, result);
+      await mobileRecorder.completeRun(runId, {
+        status: result.status,
+        opCount: result.opCount,
+        errorMessage: result.errorMessage,
+        ...(result.coverage !== undefined ? { coverage: result.coverage } : {}),
+        ...(result.warnings !== undefined ? { warnings: result.warnings } : {}),
+      });
     },
   };
 }

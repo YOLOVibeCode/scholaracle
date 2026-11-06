@@ -1,8 +1,14 @@
 import type { Collection, Db, ObjectId } from 'mongodb';
+import type { ISlcRunCoverage } from '@scholaracle/contracts';
 import { IngestRun, type IIngestRunData, type IngestRunStatus } from '../../models/IngestRun';
 
 export interface IIngestRunReader {
   findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null>;
+  findByUserIdSourceIdAndRunId(
+    userId: ObjectId | string,
+    sourceId: string,
+    runId: string
+  ): Promise<IngestRun | null>;
   findByRunId(runId: string): Promise<IngestRun | null>;
   findLastCommittedCursor(
     userId: ObjectId | string,
@@ -24,11 +30,20 @@ export interface IIngestRunWriter {
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
     readonly clientMeta?: Readonly<Record<string, string>> | null;
   }): Promise<IngestRun>;
-  markUploaded(userId: ObjectId | string, runId: string): Promise<void>;
+  markUploaded(
+    userId: ObjectId | string,
+    runId: string,
+    extras?: {
+      readonly coverage?: ISlcRunCoverage | null;
+      readonly warnings?: readonly string[] | null;
+    }
+  ): Promise<void>;
   commitRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+    readonly coverage?: ISlcRunCoverage | null;
+    readonly warnings?: readonly string[] | null;
   }): Promise<void>;
   failRun(params: {
     readonly userId: ObjectId | string;
@@ -70,18 +85,43 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     return new IngestRun(stored ?? doc);
   }
 
-  async markUploaded(userId: ObjectId | string, runId: string): Promise<void> {
-    await this._collection.updateOne(
-      { userId, runId },
-      { $set: { status: 'uploaded' satisfies IngestRunStatus, uploadedAt: new Date() } }
-    );
+  async markUploaded(
+    userId: ObjectId | string,
+    runId: string,
+    extras?: {
+      readonly coverage?: ISlcRunCoverage | null;
+      readonly warnings?: readonly string[] | null;
+    }
+  ): Promise<void> {
+    const setDoc: Record<string, unknown> = {
+      status: 'uploaded' satisfies IngestRunStatus,
+      uploadedAt: new Date(),
+    };
+    if (extras?.coverage !== undefined) {
+      setDoc['coverage'] = extras.coverage;
+    }
+    if (extras?.warnings !== undefined) {
+      setDoc['warnings'] = extras.warnings;
+    }
+    await this._collection.updateOne({ userId, runId }, { $set: setDoc });
   }
 
   async commitRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
+    readonly coverage?: ISlcRunCoverage | null;
+    readonly warnings?: readonly string[] | null;
   }): Promise<void> {
+    const existing = await this._collection.findOne({
+      userId: params.userId,
+      runId: params.runId,
+    });
+    const coverageToSet =
+      params.coverage !== undefined ? params.coverage : (existing?.coverage ?? null);
+    const warningsToSet =
+      params.warnings !== undefined ? params.warnings : (existing?.warnings ?? null);
+
     await this._collection.updateOne(
       { userId: params.userId, runId: params.runId },
       {
@@ -89,6 +129,8 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
           status: 'committed' satisfies IngestRunStatus,
           committedAt: new Date(),
           newCursor: params.newCursor ?? null,
+          coverage: coverageToSet,
+          warnings: warningsToSet,
         },
       }
     );
@@ -113,6 +155,16 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
 
   async findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null> {
     const doc = await this._collection.findOne({ userId, runId });
+    if (!doc) return null;
+    return new IngestRun(doc, doc._id as unknown as ObjectId);
+  }
+
+  async findByUserIdSourceIdAndRunId(
+    userId: ObjectId | string,
+    sourceId: string,
+    runId: string
+  ): Promise<IngestRun | null> {
+    const doc = await this._collection.findOne({ userId, sourceId, runId });
     if (!doc) return null;
     return new IngestRun(doc, doc._id as unknown as ObjectId);
   }
