@@ -3,191 +3,223 @@
  *
  * Orchestrates navigation and extraction using IPageDriver.
  * Auth (login) is NOT here — it is runtime-specific.
+ *
+ * Flow per student (see aeries-extractors.ts for page anatomy):
+ *   Dashboard.aspx      -> student list, class cards (mark, missing, gradebook link)
+ *   Classes.aspx        -> period, course id, section, teacher email per class
+ *   GradebookDetails    -> teacher, assignments (one page per class, via the card link)
+ *   Attendance.aspx     -> day and period codes
+ * Then switch to the next student through the header switcher and repeat.
+ *
+ * Page loads wait for `load`, never `networkidle`: the portal keeps analytics
+ * connections open, so network-idle never arrives and the old recipe timed out.
  */
 
 import type { IPageDriver } from '../driver/IPageDriver';
 import type {
   IAeriesFullExtract,
   IAeriesStudentExtract,
+  IAeriesCourseExtract,
+  IAeriesScheduleRow,
+  IAeriesStudentListItem,
 } from '../extractors/aeries/aeries-extractors';
 import {
   extractAeriesStudentList,
   extractAeriesDashboardCourses,
+  extractAeriesSchedule,
   extractAeriesCourseDropdownOptions,
-  extractAeriesTeacherEmail,
+  extractAeriesTeacher,
   extractAeriesAssignments,
   extractAeriesAttendance,
   extractAeriesStudentInfo,
-  selectAeriesCourseOption,
-  switchAeriesStudentByName,
+  isAeriesDashboardReady,
+  isAeriesAttendanceReady,
 } from '../extractors/aeries/aeries-extractors';
 
-const COURSE_ROW_SELECTOR = 'tr[class*="class"], tr[data-*], .ClassSummary tr, table tbody tr';
+const PAGE_TIMEOUT_MS = 45_000;
+const DASHBOARD_READY_MS = 30_000;
+const ATTENDANCE_READY_MS = 20_000;
 
 /**
  * Run the Aeries scrape recipe.
  *
  * @param driver - Runtime-specific page driver
- * @param baseUrl - The Aeries parent portal base URL
+ * @param baseUrl - The Aeries portal URL, e.g. `https://district.aeries.net/student/`
  * @returns IAeriesFullExtract ready for transformation
  */
 export async function runAeriesRecipe(
   driver: IPageDriver,
   baseUrl: string
 ): Promise<IAeriesFullExtract> {
-  const portalBase = baseUrl.replace(/\/$/, '').replace(/\/student\/.*/, '');
-  const dashboardUrl = `${portalBase}/student/Dashboard.aspx`;
+  const portalBase = aeriesPortalBase(baseUrl);
+  const studentRoot = `${portalBase}/student/`;
+  const dashboardUrl = `${studentRoot}Dashboard.aspx`;
 
-  await driver.goto(dashboardUrl, { waitUntil: 'networkidle' });
-  await driver.sleep(2000);
-
+  await openDashboard(driver, dashboardUrl);
   const studentList = await driver.evaluate(extractAeriesStudentList);
-  const dashboardCourses = await driver.evaluate(
-    extractAeriesDashboardCourses,
-    COURSE_ROW_SELECTOR
-  );
-  const studentInfo = await driver.evaluate(extractAeriesStudentInfo);
 
-  // Enrich courses with gradebook details
-  const gradebookData = await extractGradebookDetails(driver, portalBase);
+  const allStudents: IAeriesStudentExtract[] = [];
+  const current = studentList.find((s) => s.isCurrent) ?? studentList[0];
+  allStudents.push(await scrapeCurrentStudent(driver, studentRoot, current));
 
-  const enrichedCourses = dashboardCourses.map((c) => {
-    const detail = gradebookData.get(c.name) ?? gradebookData.get(c.name.replace(/\s+b$/, ''));
-    let bestMatch:
-      | {
-          teacherEmail: string;
-          assignments: IAeriesFullExtract['students'][0]['courses'][0]['assignments'];
-        }
-      | undefined;
-    if (!detail) {
-      for (const [key, value] of gradebookData.entries()) {
-        if (
-          key.includes(c.name.split(' ').slice(0, 2).join(' ')) ||
-          c.name.includes(key.split(' ').slice(0, 2).join(' '))
-        ) {
-          bestMatch = value;
-          break;
-        }
-      }
-    }
-    const matched = detail ?? bestMatch;
-    return {
-      ...c,
-      teacherEmail: matched?.teacherEmail ?? c.teacherEmail,
-      assignments: matched?.assignments ?? [],
-    };
-  });
-
-  let attendance: IAeriesStudentExtract['attendance'] = [];
-  try {
-    await driver.goto(`${portalBase}/student/Attendance.aspx`, { waitUntil: 'networkidle' });
-    await driver.sleep(3000);
-    attendance = await driver.evaluate(extractAeriesAttendance);
-  } catch {
-    // continue
-  }
-
-  const primaryStudent: IAeriesStudentExtract = {
-    name: (studentInfo.name || studentList[0]?.name) ?? 'Unknown',
-    studentId: studentInfo.studentId,
-    grade: (studentInfo.grade || studentList[0]?.grade) ?? '',
-    school: (studentInfo.school || studentList[0]?.school) ?? '',
-    courses: enrichedCourses,
-    attendance,
-  };
-
-  const allStudents: IAeriesStudentExtract[] = [primaryStudent];
-
-  // Multi-student: additional students in same account
-  for (let i = 1; i < studentList.length; i++) {
-    const studentName = studentList[i]!.name;
-    await driver.goto(dashboardUrl, { waitUntil: 'networkidle' });
-    await driver.sleep(2000);
-
-    const switched = await switchToStudentInAeries(driver, studentName);
-    if (!switched) continue;
-
-    const nextCourses = await driver.evaluate(extractAeriesDashboardCourses, COURSE_ROW_SELECTOR);
-    const nextGradebook = await extractGradebookDetails(driver, portalBase);
-    const nextStudentInfo = await driver.evaluate(extractAeriesStudentInfo);
-    let nextAttendance: IAeriesStudentExtract['attendance'] = [];
+  for (const other of studentList) {
+    if (other.isCurrent || !other.switchHref) continue;
+    if (allStudents.some((s) => s.name === other.name)) continue;
     try {
-      await driver.goto(`${portalBase}/student/Attendance.aspx`, { waitUntil: 'networkidle' });
-      await driver.sleep(3000);
-      nextAttendance = await driver.evaluate(extractAeriesAttendance);
+      await driver.goto(resolveAeriesUrl(studentRoot, other.switchHref), {
+        waitUntil: 'load',
+        timeout: PAGE_TIMEOUT_MS,
+      });
+      await openDashboard(driver, dashboardUrl);
+      allStudents.push(await scrapeCurrentStudent(driver, studentRoot, other));
     } catch {
-      // continue
+      // Keep what we have; the next student is independent.
     }
-
-    allStudents.push({
-      name: nextStudentInfo.name || studentName,
-      studentId: nextStudentInfo.studentId,
-      grade: (nextStudentInfo.grade || studentList[i]?.grade) ?? '',
-      school: (nextStudentInfo.school || studentList[i]?.school) ?? '',
-      courses: nextCourses.map((c) => {
-        const detail = nextGradebook.get(c.name);
-        return {
-          ...c,
-          teacherEmail: detail?.teacherEmail ?? c.teacherEmail,
-          assignments: detail?.assignments ?? [],
-        };
-      }),
-      attendance: nextAttendance,
-    });
   }
 
   return { students: allStudents, timestamp: new Date().toISOString() };
 }
 
-async function extractGradebookDetails(
-  driver: IPageDriver,
-  portalBase: string
-): Promise<
-  Map<
-    string,
-    { teacherEmail: string; assignments: IAeriesStudentExtract['courses'][0]['assignments'] }
-  >
-> {
-  const results = new Map<
-    string,
-    { teacherEmail: string; assignments: IAeriesStudentExtract['courses'][0]['assignments'] }
-  >();
-  try {
-    await driver.goto(`${portalBase}/student/GradebookDetails.aspx`, { waitUntil: 'networkidle' });
-    await driver.sleep(3000);
-
-    const courseOptions = await driver.evaluate(extractAeriesCourseDropdownOptions);
-
-    for (const opt of courseOptions) {
-      if (opt.text.startsWith('<<')) continue;
-      await driver.evaluate(selectAeriesCourseOption, opt.value);
-      await driver.sleep(2000);
-      await driver.waitForLoad({ timeout: 10000 }).catch(() => {});
-
-      const teacherEmail = await driver.evaluate(extractAeriesTeacherEmail);
-      const assignments = await driver.evaluate(extractAeriesAssignments);
-
-      const courseNameMatch = opt.text.match(
-        /^\d+-\s*(.+?)-\s*(Quarter \d+|Semester \d+|[^1-9]+)\s/
-      );
-      const courseName = courseNameMatch?.[1]?.trim() ?? opt.text;
-      results.set(courseName, { teacherEmail, assignments });
-    }
-  } catch {
-    // return partial results
-  }
-  return results;
+/** `https://x.aeries.net/student/` or `https://x.aeries.net/student/LoginParent.aspx` -> `https://x.aeries.net` */
+export function aeriesPortalBase(baseUrl: string): string {
+  return baseUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/student(\/.*)?$/i, '')
+    .replace(/\/[^/]*\.aspx$/i, '');
 }
 
-async function switchToStudentInAeries(driver: IPageDriver, studentName: string): Promise<boolean> {
-  try {
-    const switched = await driver.evaluate(switchAeriesStudentByName, studentName);
-    if (switched) {
-      await driver.waitForLoad({ timeout: 10000 }).catch(() => {});
-      await driver.sleep(2000);
-    }
-    return switched;
-  } catch {
-    return false;
+/** Resolve a portal-relative href (`ChangeStudent.aspx?..`, `Widgets/..`, `/student/..`) against the student root. */
+export function resolveAeriesUrl(studentRoot: string, href: string): string {
+  if (/^https?:\/\//i.test(href)) return href;
+  if (href.startsWith('/')) {
+    const origin = studentRoot.replace(/^(https?:\/\/[^/]+).*$/i, '$1');
+    return origin + href;
   }
+  return studentRoot + href.replace(/^\.?\//, '');
+}
+
+async function openDashboard(driver: IPageDriver, dashboardUrl: string): Promise<void> {
+  await driver.goto(dashboardUrl, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
+  // The class widget renders after the page load.
+  const started = Date.now();
+  while (!(await driver.evaluate(isAeriesDashboardReady))) {
+    if (Date.now() - started > DASHBOARD_READY_MS) break;
+    await driver.sleep(500);
+  }
+}
+
+async function openAttendance(driver: IPageDriver, studentRoot: string): Promise<void> {
+  await driver.goto(`${studentRoot}Attendance.aspx`, {
+    waitUntil: 'load',
+    timeout: PAGE_TIMEOUT_MS,
+  });
+  // The attendance grid renders after the page load.
+  const started = Date.now();
+  while (!(await driver.evaluate(isAeriesAttendanceReady))) {
+    if (Date.now() - started > ATTENDANCE_READY_MS) break;
+    await driver.sleep(500);
+  }
+}
+
+async function scrapeCurrentStudent(
+  driver: IPageDriver,
+  studentRoot: string,
+  listEntry: IAeriesStudentListItem | undefined
+): Promise<IAeriesStudentExtract> {
+  const dashboardInfo = await driver.evaluate(extractAeriesStudentInfo);
+  const cards = await driver.evaluate(extractAeriesDashboardCourses);
+
+  let schedule: IAeriesScheduleRow[] = [];
+  try {
+    await driver.goto(`${studentRoot}Classes.aspx`, {
+      waitUntil: 'load',
+      timeout: PAGE_TIMEOUT_MS,
+    });
+    schedule = await driver.evaluate(extractAeriesSchedule);
+  } catch {
+    // Period and email then come from the gradebook pages only.
+  }
+
+  let studentId = dashboardInfo.studentId;
+  const courses: IAeriesCourseExtract[] = [];
+  for (const card of cards) {
+    let period = '';
+    let teacher = card.teacher;
+    let teacherEmail = '';
+    let assignments: IAeriesCourseExtract['assignments'] = [];
+    if (card.gradebookHref) {
+      try {
+        await driver.goto(resolveAeriesUrl(studentRoot, card.gradebookHref), {
+          waitUntil: 'load',
+          timeout: PAGE_TIMEOUT_MS,
+        });
+        const options = await driver.evaluate(extractAeriesCourseDropdownOptions);
+        const selected = options.find((o) => o.selected);
+        period = selected?.text.match(/^(\d+)\s*-/)?.[1] ?? '';
+        const t = await driver.evaluate(extractAeriesTeacher);
+        if (t.name) teacher = t.name;
+        teacherEmail = t.email;
+        assignments = await driver.evaluate(extractAeriesAssignments);
+        if (!studentId) {
+          const info = await driver.evaluate(extractAeriesStudentInfo);
+          studentId = info.studentId;
+        }
+      } catch {
+        // Card data still stands on its own.
+      }
+    }
+    const row = matchScheduleRow(schedule, card.name, period);
+    courses.push({
+      period: period || row?.period || '',
+      name: card.name,
+      term: card.term,
+      teacher: teacher || row?.teacher || '',
+      teacherEmail: teacherEmail || row?.teacherEmail || '',
+      room: card.room || row?.room || '',
+      currentGrade: card.currentGrade,
+      currentPercent: card.currentPercent,
+      missingCount: card.missingCount,
+      assignments,
+      gradebookHref: card.gradebookHref,
+      courseId: row?.courseId,
+      section: row?.section,
+      lastUpdated: card.lastUpdated,
+    });
+  }
+
+  let attendance: IAeriesStudentExtract['attendance'] = [];
+  try {
+    await openAttendance(driver, studentRoot);
+    attendance = await driver.evaluate(extractAeriesAttendance);
+    if (!studentId) {
+      const info = await driver.evaluate(extractAeriesStudentInfo);
+      studentId = info.studentId;
+    }
+  } catch {
+    // continue
+  }
+
+  return {
+    name: dashboardInfo.name || listEntry?.name || 'Unknown',
+    studentId,
+    grade: dashboardInfo.grade || listEntry?.grade || '',
+    school: dashboardInfo.school || listEntry?.school || '',
+    courses,
+    attendance,
+  };
+}
+
+/** Find the schedule row for a dashboard card: same name, else same name without the a/b suffix, preferring the card's period. */
+export function matchScheduleRow(
+  schedule: IAeriesScheduleRow[],
+  cardName: string,
+  period: string
+): IAeriesScheduleRow | undefined {
+  const norm = (s: string): string => s.replace(/\s+/g, ' ').trim().toLowerCase();
+  const base = (s: string): string => norm(s).replace(/\s+[ab]$/, '');
+  const exact = schedule.filter((r) => norm(r.name) === norm(cardName));
+  const loose = exact.length > 0 ? exact : schedule.filter((r) => base(r.name) === base(cardName));
+  if (loose.length === 0) return undefined;
+  return (period && loose.find((r) => r.period === period)) || loose[0];
 }
