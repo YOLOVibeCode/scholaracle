@@ -48,13 +48,17 @@ export const PAGE_FNS: Readonly<Record<string, AnyPageFn>> = Object.freeze({
   // Aeries
   'aeries.extractAeriesStudentList': aeries.extractAeriesStudentList,
   'aeries.extractAeriesDashboardCourses': aeries.extractAeriesDashboardCourses,
+  'aeries.extractAeriesSchedule': aeries.extractAeriesSchedule,
   'aeries.extractAeriesCourseDropdownOptions': aeries.extractAeriesCourseDropdownOptions,
+  'aeries.extractAeriesTeacher': aeries.extractAeriesTeacher,
   'aeries.extractAeriesTeacherEmail': aeries.extractAeriesTeacherEmail,
   'aeries.extractAeriesAssignments': aeries.extractAeriesAssignments,
   'aeries.extractAeriesAttendance': aeries.extractAeriesAttendance,
   'aeries.extractAeriesStudentInfo': aeries.extractAeriesStudentInfo,
   'aeries.selectAeriesCourseOption': aeries.selectAeriesCourseOption,
   'aeries.switchAeriesStudentByName': aeries.switchAeriesStudentByName,
+  'aeries.isAeriesDashboardReady': aeries.isAeriesDashboardReady,
+  'aeries.isAeriesAttendanceReady': aeries.isAeriesAttendanceReady,
   // Assets and common
   'assets.fetchAssetInWebView': fetchAssetInWebView,
   'assets.fetchPageInWebView': fetchPageInWebView,
