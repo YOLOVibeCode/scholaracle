@@ -1,3 +1,5 @@
+import { resolveModelForRole } from './models';
+
 export interface ILlmMessage {
   readonly role: 'user' | 'assistant';
   readonly content: string;
@@ -24,7 +26,6 @@ export interface ILlmClientConfig {
   readonly baseUrl?: string;
 }
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 
 /**
@@ -38,7 +39,7 @@ export class LlmClient {
 
   constructor(config: ILlmClientConfig) {
     this._apiKey = config.apiKey;
-    this._model = config.model ?? DEFAULT_MODEL;
+    this._model = config.model ?? resolveModelForRole('matching');
     this._baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
   }
 

@@ -12,6 +12,7 @@ jest.mock('@scholaracle/agents', () => ({
       usage: { inputTokens: 1, outputTokens: 1 },
     }),
   })),
+  resolveModelForRole: jest.fn().mockReturnValue('test-model'),
 }));
 
 describe('POST /ai/scraper-assist', () => {

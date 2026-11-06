@@ -9,6 +9,15 @@ export interface IAiClient {
 
 const PARSE_HTML_MAX_CHARS = 50_000;
 
+/** Matches `packages/agents/src/ai/models.ts` matching default (connector avoids agents dep). */
+function resolveAnthropicMatchingModel(): string {
+  const fromEnv = process.env['AI_MODEL_MATCHING']?.trim();
+  if (fromEnv && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  return 'claude-sonnet-5-5';
+}
+
 function getParseHtmlPrompt(schema: string): string {
   return `You are a precise HTML parser. Extract structured data from the provided HTML snippet.
 
@@ -87,7 +96,7 @@ async function chat(
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const anthropic = new Anthropic({ apiKey });
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: resolveAnthropicMatchingModel(),
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
