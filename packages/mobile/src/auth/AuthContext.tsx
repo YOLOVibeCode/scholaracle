@@ -32,7 +32,8 @@ interface IAuthActions {
     provider: 'google' | 'apple' | 'microsoft',
     providerAccountId: string,
     email: string,
-    name: string
+    name: string,
+    oauthExtra?: { appleIdentityToken?: string; appleNonce?: string }
   ): Promise<void>;
   logout(): Promise<void>;
 }
@@ -141,7 +142,8 @@ export function AuthProvider({
       provider: 'google' | 'apple' | 'microsoft',
       providerAccountId: string,
       email: string,
-      name: string
+      name: string,
+      oauthExtra?: { appleIdentityToken?: string; appleNonce?: string }
     ) => {
       setState((s) => ({ ...s, isAuthenticating: true, error: null }));
       try {
@@ -151,7 +153,13 @@ export function AuthProvider({
           providerAccountId,
           email,
           name,
-          internalSecret
+          internalSecret,
+          provider === 'apple'
+            ? {
+                appleIdentityToken: oauthExtra?.appleIdentityToken,
+                appleNonce: oauthExtra?.appleNonce,
+              }
+            : undefined
         );
         setState((s) => ({
           ...s,
