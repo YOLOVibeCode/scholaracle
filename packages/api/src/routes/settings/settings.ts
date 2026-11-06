@@ -6,15 +6,13 @@ import {
   CommunicationLogRepository,
   SmsConsentRepository,
 } from '@scholaracle/database';
-import { normalizePhoneE164 } from '@scholaracle/agents';
+import { LlmClient, normalizePhoneE164, resolveLlmConfig } from '@scholaracle/agents';
 import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IUserPreferences } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
-import { LlmClient } from '@scholaracle/agents';
-
 export interface ISettingsRouterConfig {
   readonly database: Db;
   readonly authService?: IAuthService;
@@ -765,11 +763,11 @@ async function handleSuggestHolidays(req: Request, res: Response, database: Db):
 
   const { inHoliday, nextBreak, termSummary } = await getHolidayState(database, userId);
 
-  const apiKey = process.env['ANTHROPIC_API_KEY'];
+  const llmConfig = resolveLlmConfig('triage');
   let suggestion: string;
-  if (apiKey && termSummary !== 'No academic terms on file.') {
+  if (llmConfig && termSummary !== 'No academic terms on file.') {
     try {
-      const llm = new LlmClient({ apiKey });
+      const llm = new LlmClient(llmConfig);
       const prompt = inHoliday
         ? `The user's academic terms: ${termSummary}. Today is during a break (${nextBreak?.name ?? 'holiday'}). Suggest in 1-2 sentences whether they should pause digest emails during this break.`
         : nextBreak

@@ -12,6 +12,15 @@ jest.mock('@scholaracle/agents', () => ({
       usage: { inputTokens: 1, outputTokens: 1 },
     }),
   })),
+  resolveLlmConfig: jest.fn().mockImplementation(() =>
+    process.env['LITELLM_API_KEY']
+      ? {
+          apiKey: process.env['LITELLM_API_KEY'],
+          baseUrl: 'https://relay.test',
+          model: 'test-model',
+        }
+      : null
+  ),
 }));
 
 describe('POST /ai/scraper-assist', () => {

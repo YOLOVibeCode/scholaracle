@@ -21,6 +21,7 @@ import {
   DEMO_LAB_SAFETY_HASH,
   DEMO_LAB_SAFETY_STORAGE_KEY,
 } from './demo-data';
+import { API_TEST_SEED_TOKEN } from './seed-test-token';
 
 function makeMemoryStore(): IAssetStore & { files: Map<string, Buffer> } {
   const files = new Map<string, Buffer>();
@@ -59,8 +60,15 @@ describe('Demo seed — asset bytes', () => {
   let client: MongoClient;
   let authService: AuthService;
   let store: ReturnType<typeof makeMemoryStore>;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -87,10 +95,12 @@ describe('Demo seed — asset bytes', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('GET /api/assets/:id after seed returns 200, PDF bytes, and ETag matching contentHash', async () => {
-    const seedRes = await request(app).post('/api/seed/demo');
+    const seedRes = await postDemoSeed();
     expect(seedRes.status).toBe(200);
     expect(store.files.get(DEMO_LAB_SAFETY_STORAGE_KEY)).toEqual(DEMO_MINIMAL_PDF);
 
@@ -144,7 +154,7 @@ describe('Demo seed — asset bytes', () => {
       lastAccessedAt: new Date('2026-08-11T15:11:02.501Z'),
     });
 
-    const seedRes = await request(app).post('/api/seed/demo');
+    const seedRes = await postDemoSeed();
     expect(seedRes.status).toBe(200);
 
     const login = await authService.login(DEMO_USER.email, DEMO_USER.password);

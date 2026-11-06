@@ -13,6 +13,7 @@ import {
   DigestInsightService,
   GlanceInsightService,
   LlmClient,
+  resolveLlmConfig,
   createMongoGuidanceProcessor,
   ReminderNotificationSink,
 } from '@scholaracle/agents';
@@ -462,14 +463,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const dashboardBaseUrl =
     process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? process.env['NEXT_PUBLIC_APP_URL'] ?? '';
 
-  const litellmKey = process.env['LITELLM_API_KEY']?.trim();
-  const anthropicApiKey = process.env['ANTHROPIC_API_KEY']?.trim();
-  const llmApiKey = litellmKey ?? anthropicApiKey;
-  const llmBaseUrl = litellmKey ? 'https://api.noctusoft.com/v1' : undefined;
-  const digestInsightService = llmApiKey
-    ? new DigestInsightService({
-        llmClient: new LlmClient({ apiKey: llmApiKey, baseUrl: llmBaseUrl }),
-      })
+  const insightsLlm = resolveLlmConfig('insights');
+  const digestInsightService = insightsLlm
+    ? new DigestInsightService({ llmClient: new LlmClient(insightsLlm) })
     : undefined;
 
   // Scheduled digest flush (runs every 60 seconds)
@@ -488,10 +484,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   );
 
   // Scheduled glance email flush (runs every 60 seconds)
-  const glanceInsightService = llmApiKey
-    ? new GlanceInsightService({
-        llmClient: new LlmClient({ apiKey: llmApiKey, baseUrl: llmBaseUrl }),
-      })
+  const glanceInsightService = insightsLlm
+    ? new GlanceInsightService({ llmClient: new LlmClient(insightsLlm) })
     : undefined;
   safeInterval(
     'glance-email',

@@ -8,6 +8,8 @@ describe('Seed API Routes', () => {
   let app: Express;
   let database: Db;
   let mongoClient: MongoClient;
+  let savedSeedAdminPassword: string | undefined;
+  let savedSeedAdminMfaSecret: string | undefined;
 
   beforeAll(async () => {
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -17,6 +19,11 @@ describe('Seed API Routes', () => {
       mongoClient = new MongoClient(mongodbUri);
       await mongoClient.connect();
       database = mongoClient.db(dbName);
+      savedSeedAdminPassword = process.env['SEED_ADMIN_PASSWORD'];
+      savedSeedAdminMfaSecret = process.env['SEED_ADMIN_MFA_SECRET'];
+      process.env['SEED_ADMIN_PASSWORD'] = savedSeedAdminPassword ?? 'seed-test-admin-password-12';
+      process.env['SEED_ADMIN_MFA_SECRET'] =
+        savedSeedAdminMfaSecret ?? 'SEEDTESTMFASECRETBASE32XXX';
     } catch (error) {
       // eslint-disable-next-line no-console
       console.warn('MongoDB not available, skipping integration tests');
@@ -32,6 +39,12 @@ describe('Seed API Routes', () => {
   afterAll(async () => {
     if (mongoClient) {
       await mongoClient.close();
+    }
+    if (database) {
+      if (savedSeedAdminPassword === undefined) delete process.env['SEED_ADMIN_PASSWORD'];
+      else process.env['SEED_ADMIN_PASSWORD'] = savedSeedAdminPassword;
+      if (savedSeedAdminMfaSecret === undefined) delete process.env['SEED_ADMIN_MFA_SECRET'];
+      else process.env['SEED_ADMIN_MFA_SECRET'] = savedSeedAdminMfaSecret;
     }
   });
 

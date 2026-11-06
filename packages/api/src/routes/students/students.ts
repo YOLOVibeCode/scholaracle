@@ -15,7 +15,7 @@ import {
   type ISharedParent,
   type IStudentData,
 } from '@scholaracle/database';
-import { GradeRiskService } from '@scholaracle/agents';
+import { GradeRiskService, resolveLlmConfig } from '@scholaracle/agents';
 import {
   AuthenticationError,
   ConflictError,
@@ -929,8 +929,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   router.post(
     '/:id/contacts/transfer-confirm',
     asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
+        throw new NotFoundError('Student not found');
+      }
+      if (!student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
 
@@ -1429,6 +1437,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       >();
 
+      for (const rawCourseId of courseIds) {
+        const mergedCourseId = extIdToMergedId.get(rawCourseId) ?? rawCourseId;
+        if (courseData.has(mergedCourseId)) continue;
+        courseData.set(mergedCourseId, {
+          totalPointsPossible: 0,
+          totalPointsEarned: 0,
+          gradedCount: 0,
+          missingCount: 0,
+          lateCount: 0,
+          assignments: [],
+          recentPointsPossible: 0,
+          recentPointsEarned: 0,
+          olderPointsPossible: 0,
+          olderPointsEarned: 0,
+        });
+      }
+
       // Track per-course: latest assignment date (epoch ms) and associated termExternalIds
       const courseLatestAssignment = new Map<string, number>();
       const courseTermIds = new Map<string, Set<string>>();
@@ -1775,8 +1800,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       ).length;
 
       let aiOverview: string | undefined;
+      const gradeRiskLlm = resolveLlmConfig('triage');
       const gradeRiskService = new GradeRiskService({
-        apiKey: process.env['ANTHROPIC_API_KEY'],
+        apiKey: gradeRiskLlm?.apiKey,
+        baseUrl: gradeRiskLlm?.baseUrl,
+        model: gradeRiskLlm?.model,
         cacheTtlMs: 5 * 60 * 1000,
       });
       const ownerUserId = student.userId.toString();
