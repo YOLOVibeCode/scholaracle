@@ -12,6 +12,7 @@ paths = [
   '''^TRIGGER_DIGEST_GUIDE\.md$''',
   '''^packages/connector/src/aeries/aeries-adapter\.test\.ts$''',
   '''^scripts/test-gitleaks-hook\.sh$''',
+  '''^packages/api/src/routes/seed/seed-test-token\.ts$''',
 ]
 
 [[allowlists]]
