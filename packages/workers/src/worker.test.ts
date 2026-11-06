@@ -107,6 +107,8 @@ describe('Worker', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockMongoClient.connect).toHaveBeenCalled();
+      const collectionNames = mockDb.collection.mock.calls.map((c) => c[0] as string);
+      expect(collectionNames.some((name) => name === 'ingestSources')).toBe(false);
 
       await triggerShutdown();
     });

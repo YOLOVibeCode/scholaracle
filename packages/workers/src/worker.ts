@@ -26,8 +26,6 @@ import {
 } from '@scholaracle/database';
 import { flushEmailDigests } from './digest/digest-flush';
 import { flushGlanceEmails } from './glance/glance-flush';
-import { SyncWorker, SyncScheduler } from '@scholaracle/agents';
-import type { AdapterRunnerFn } from '@scholaracle/agents';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
 import { createSmsStack, buildSmsDigestBody } from '@scholaracle/agents';
@@ -37,14 +35,12 @@ import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
 import type { GuardedSmsSender } from '@scholaracle/agents';
-import { ConnectorTokenService } from '@scholaracle/auth';
-import { randomUUID } from 'crypto';
-import { createAdapterRunner } from './adapter-runner';
 import { SyncStalenessMonitor } from './sync-staleness-monitor';
 import { logger } from './logger';
 import { initSentry } from './sentry';
 import { safeInterval } from './utils/safeInterval';
 import { installProcessHandlers } from './utils/processHandlers';
+import { abandonStaleStartedRuns } from './abandonStaleIngestRuns';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -450,38 +446,6 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Start notification worker
   notificationWorker.start();
 
-  // -----------------------------------------------------------------------
-  // Sync worker + scheduler (runs adapters server-side)
-  // -----------------------------------------------------------------------
-  const adapterRunner: AdapterRunnerFn = createAdapterRunner();
-
-  const apiBaseUrl = process.env['API_BASE_URL'] ?? process.env['BASE_URL'] ?? '';
-  const jwtSecret = process.env['JWT_SECRET'] ?? process.env['CONNECTOR_JWT_SECRET'] ?? '';
-  const connectorTokenService = jwtSecret ? new ConnectorTokenService(jwtSecret, '1h') : undefined;
-  const createConnectorToken =
-    connectorTokenService && apiBaseUrl
-      ? (userId: string): string => connectorTokenService.createToken(userId, randomUUID())
-      : undefined;
-
-  const syncWorker = new SyncWorker(mongoQueue, database, {
-    pollIntervalMs: Number(process.env['SYNC_POLL_INTERVAL_MS'] ?? 5000),
-    concurrency: Number(process.env['SYNC_CONCURRENCY'] ?? 2),
-    decryptCredentials: (encrypted: { encrypted: string; iv: string }): string => {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { decryptCredentials } = require('./credentials-cipher');
-      return decryptCredentials(encrypted);
-    },
-    runAdapter: adapterRunner,
-    apiBaseUrl: apiBaseUrl || undefined,
-    createConnectorToken,
-  });
-  syncWorker.start();
-
-  const syncScheduler = new SyncScheduler(mongoQueue, database, {
-    tickIntervalMs: 60_000,
-  });
-  syncScheduler.start();
-
   const digestSmsStack = createSmsStack(database);
   if (digestSmsStack) {
     safeInterval(
@@ -552,12 +516,18 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     5_000
   );
 
-  logger.info('sync worker + scheduler started');
+  const staleRunReaperInterval = safeInterval(
+    'ingest-stale-run-reaper',
+    () => abandonStaleStartedRuns(database),
+    60_000
+  );
+
+  logger.info('notification stack started (legacy server sync disabled)');
 
   // -----------------------------------------------------------------------
   // Worker heartbeat — report capacity + resource usage to MongoDB
   // -----------------------------------------------------------------------
-  const syncConcurrency = Number(process.env['SYNC_CONCURRENCY'] ?? 2);
+  const syncConcurrency = 0;
   const workerId = `worker-${process.pid}-${Date.now()}`;
   const heartbeats = database.collection('worker_heartbeats');
 
@@ -575,7 +545,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
           workerId,
           pid: process.pid,
           syncConcurrency,
-          activeSyncJobs: syncWorker.activeJobs,
+          activeSyncJobs: 0,
           memoryMB: {
             rss: Math.round(mem.rss / 1_048_576),
             heapUsed: Math.round(mem.heapUsed / 1_048_576),
@@ -626,7 +596,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
               status: 'ok',
               workerId,
               syncConcurrency,
-              activeSyncJobs: syncWorker.activeJobs,
+              activeSyncJobs: 0,
               memoryMB: Math.round(mem.rss / 1_048_576),
             })
           );
@@ -640,7 +610,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
               reason: 'mongodb_unreachable',
               workerId,
               syncConcurrency,
-              activeSyncJobs: syncWorker.activeJobs,
+              activeSyncJobs: 0,
               memoryMB: Math.round(mem.rss / 1_048_576),
             })
           );
@@ -661,10 +631,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   const shutdown = async (): Promise<void> => {
     logger.info('shutting down worker');
     clearInterval(heartbeatInterval);
+    clearInterval(staleRunReaperInterval);
     stalenessMonitor.stop();
     healthServer.close();
-    await syncScheduler.stop();
-    await syncWorker.stop();
     await notificationWorker.stop();
     // Remove heartbeat record so capacity is recalculated immediately
     await heartbeats.deleteOne({ workerId }).catch(() => {

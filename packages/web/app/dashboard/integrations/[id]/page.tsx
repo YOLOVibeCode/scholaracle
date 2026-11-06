@@ -25,6 +25,7 @@ export default function IntegrationDetailPage() {
   const [credentialsStudentId, setCredentialsStudentId] = useState<string | null>(null);
   const [runsStudentId, setRunsStudentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [syncHint, setSyncHint] = useState<string | null>(null);
 
   const fetchIntegration = useCallback(() => integrationsApi.get(integrationId), [integrationId]);
   const { data: integration, isLoading, error, retry, refresh } = useAsyncData(fetchIntegration, {
@@ -69,8 +70,10 @@ export default function IntegrationDetailPage() {
   const handleTriggerSync = useCallback(async (studentId: string) => {
     if (!integrationId) return;
     setActionError(null);
+    setSyncHint(null);
     try {
-      await sourcesApi.triggerSync(studentId, integrationId);
+      const result = await sourcesApi.triggerSync(studentId, integrationId);
+      if (result) setSyncHint(result.message);
       refreshStudents();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to trigger sync');
@@ -191,6 +194,11 @@ export default function IntegrationDetailPage() {
   return (
     <div className="space-y-6" data-testid="integration-detail-page">
       {actionError && <ErrorDisplay error={actionError} title="Action failed" />}
+      {syncHint && (
+        <p className="text-sm text-muted-foreground" data-testid="integration-sync-hint" role="status">
+          {syncHint}
+        </p>
+      )}
       <div className="flex items-center gap-4">
         <Button asChild variant="ghost" size="icon">
           <Link href="/dashboard/integrations" aria-label="Back to Integrations">

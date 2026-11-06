@@ -96,6 +96,11 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcRuns.createIndex({ userId: 1, runId: 1 }, { unique: true });
   await slcRuns.createIndex({ userId: 1, sourceId: 1, committedAt: -1 });
   await slcRuns.createIndex({ runId: 1 });
+  await slcRuns.createIndex({ status: 1, startedAt: 1 });
+
+  const syncRequests = database.collection('sync_requests');
+  await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
+  await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
