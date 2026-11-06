@@ -23,6 +23,7 @@ import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { registerForPushNotifications, addResponseListener } from './src/notifications/pushSetup';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
+import { resavePortalCredentialsThisDeviceOnlyOnce } from './src/credentials/resavePortalCredentialsThisDeviceOnlyOnce';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
 import { type IStudentListItem } from './src/api/client';
 import { isDemoDeepLink, DEMO_EMAIL, DEMO_PASSWORD } from './src/demo/demoLogin';
@@ -185,7 +186,10 @@ function AppContent(): React.ReactElement {
       void registerForPushNotifications();
     }
     if (mayStorePortalCredentials(role) && studentCount != null && studentCount > 0) {
-      void seedSecureStoreFromDevEnv();
+      void (async (): Promise<void> => {
+        await resavePortalCredentialsThisDeviceOnlyOnce();
+        await seedSecureStoreFromDevEnv();
+      })();
     }
   }, [isLoggedIn, studentMode, studentCount, role]);
 
