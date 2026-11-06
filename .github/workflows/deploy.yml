@@ -148,9 +148,9 @@ jobs:
 
   # ─── OTA update → TestFlight preview channel ─────────────────────────
   # Runs after E2E (or wait-for-dev if E2E is skipped).
-  # Fingerprint guard: if the native binary fingerprint changed (new plugin,
-  # entitlement, native dependency) the OTA cannot load on the TestFlight
-  # build — skip it and surface a clear warning instead of a silent failure.
+  # Compares HEAD @expo/fingerprint output to the latest finished EAS preview
+  # build per platform (iOS + Android). On mismatch or missing hash/token,
+  # the job fails with a "binary required" summary — no warn-and-continue.
   # Production channel is intentionally NOT automated here — keep it manual
   # so the binary under App Review never shifts mid-review.
   ota-preview:
@@ -176,46 +176,74 @@ jobs:
       - name: Install mobile dependencies
         run: pnpm install --frozen-lockfile
         working-directory: .
-      - name: Check EXPO_TOKEN is configured
-        id: token-check
+      - name: Require EXPO_TOKEN
         run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::EXPO_TOKEN secret is not configured — OTA skipped. Add it at expo.dev → Account settings → Access tokens, then: gh secret set EXPO_TOKEN"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            {
+              echo "## binary required"
+              echo ""
+              echo "**EXPO_TOKEN** is not configured. Add it in the repo secrets, then re-run."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-      - name: Check native fingerprint
-        id: fingerprint
-        if: steps.token-check.outputs.configured == 'true'
+      - name: Check native fingerprints vs preview builds
         run: |
-          # Generate the current project fingerprint.
-          CURRENT_FP=$(npx @expo/fingerprint@latest . --platform ios 2>/dev/null | jq -r '.hash // empty')
-          # Fetch the fingerprint from the latest finished preview build on EAS.
-          LATEST_FP=$(npx eas-cli build:list \
+          set -euo pipefail
+          fail_summary() {
+            local reason=$1
+            {
+              echo "## binary required"
+              echo ""
+              echo "$reason"
+              echo ""
+              echo "| | iOS | Android |"
+              echo "| --- | --- | --- |"
+              echo "| HEAD (\`fingerprint:generate\`) | \`${CURRENT_IOS:-}\` | \`${CURRENT_ANDROID:-}\` |"
+              echo "| Latest EAS (\`preview\` profile, finished) | \`${LATEST_IOS:-}\` | \`${LATEST_ANDROID:-}\` |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          CURRENT_IOS=$(npx @expo/fingerprint fingerprint:generate --platform ios | jq -r '.hash // empty')
+          CURRENT_ANDROID=$(npx @expo/fingerprint fingerprint:generate --platform android | jq -r '.hash // empty')
+          LATEST_IOS=$(npx eas-cli build:list \
             --platform ios \
-            --channel preview \
+            --profile preview \
             --status finished \
             --limit 1 \
             --non-interactive \
-            --json 2>/dev/null | jq -r '.[0].fingerprintHash // empty')
-          echo "Current fingerprint : ${CURRENT_FP}"
-          echo "Latest build fingerprint: ${LATEST_FP}"
-          if [ -z "$CURRENT_FP" ] || [ -z "$LATEST_FP" ]; then
-            echo "match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Could not determine fingerprints (no finished preview build or fingerprint package error). OTA skipped."
-          elif [ "$CURRENT_FP" = "$LATEST_FP" ]; then
-            echo "match=true" >> "$GITHUB_OUTPUT"
-            echo "Fingerprint matches latest preview build — OTA is safe."
-          else
-            echo "match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Native fingerprint changed (${CURRENT_FP} ≠ ${LATEST_FP}). OTA skipped — a new TestFlight binary is required. Run: cd packages/mobile && pnpm build:ios:preview"
+            --json | jq -r 'if (type == "array" and length > 0) then (.[0].fingerprint.hash // empty) else empty end')
+          LATEST_ANDROID=$(npx eas-cli build:list \
+            --platform android \
+            --profile preview \
+            --status finished \
+            --limit 1 \
+            --non-interactive \
+            --json | jq -r 'if (type == "array" and length > 0) then (.[0].fingerprint.hash // empty) else empty end')
+          if [ -z "$CURRENT_IOS" ] || [ -z "$CURRENT_ANDROID" ]; then
+            fail_summary "Could not compute HEAD fingerprint (iOS and/or Android)."
           fi
+          if [ -z "$LATEST_IOS" ] || [ -z "$LATEST_ANDROID" ]; then
+            fail_summary "Missing fingerprint on latest finished preview build — ensure EAS **preview** profile builds exist for both platforms."
+          fi
+          if [ "$CURRENT_IOS" != "$LATEST_IOS" ] || [ "$CURRENT_ANDROID" != "$LATEST_ANDROID" ]; then
+            fail_summary "HEAD fingerprint does not match the latest finished preview build — ship a new native binary before OTA."
+          fi
+          {
+            echo "## Fingerprint check passed"
+            echo ""
+            echo "HEAD matches latest finished **preview** builds (iOS and Android)."
+            echo ""
+            echo "| | iOS | Android |"
+            echo "| --- | --- | --- |"
+            echo "| HEAD | \`$CURRENT_IOS\` | \`$CURRENT_ANDROID\` |"
+            echo "| Latest EAS preview | \`$LATEST_IOS\` | \`$LATEST_ANDROID\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Publish OTA to preview channel
-        if: steps.token-check.outputs.configured == 'true' && steps.fingerprint.outputs.match == 'true'
+        env:
+          OTA_UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
         run: |
           npx eas-cli update \
             --channel preview \
             --environment preview \
-            --message "${{ github.event.head_commit.message || github.sha }}" \
+            --message "$OTA_UPDATE_MESSAGE" \
             --non-interactive
