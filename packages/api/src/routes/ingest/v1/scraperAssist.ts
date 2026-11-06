@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { ValidationError } from '@scholaracle/contracts';
-import { LlmClient } from '@scholaracle/agents';
+import { LlmClient, resolveModelForRole } from '@scholaracle/agents';
 import {
   connectorAuthMiddleware,
   type IConnectorAuthenticatedRequest,
@@ -111,7 +111,7 @@ export function createScraperAssistRouter(params: {
       const llm = new LlmClient({
         apiKey: cfg.apiKey,
         baseUrl: cfg.baseUrl,
-        model: cfg.model,
+        model: process.env['AI_MODEL']?.trim() || resolveModelForRole('triage'),
       });
       const response = await llm.complete(parsed.data.messages, {
         maxTokens: parsed.data.maxTokens ?? 4096,

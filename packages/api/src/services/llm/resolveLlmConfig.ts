@@ -1,7 +1,9 @@
+import { resolveModelForRole } from '@scholaracle/agents';
+
 export interface IResolvedLlmConfig {
   readonly apiKey: string;
   readonly baseUrl: string;
-  readonly model?: string;
+  readonly model: string;
 }
 
 const DEFAULT_LITELLM_BASE = 'https://api.noctusoft.com/v1';
@@ -14,7 +16,7 @@ export function resolveLlmConfig(): IResolvedLlmConfig | null {
     return {
       apiKey: litellmKey,
       baseUrl: process.env['LITELLM_BASE_URL']?.trim() || DEFAULT_LITELLM_BASE,
-      model: process.env['AI_MODEL']?.trim(),
+      model: process.env['AI_MODEL']?.trim() || resolveModelForRole('matching'),
     };
   }
   const anthropicKey =
@@ -23,7 +25,7 @@ export function resolveLlmConfig(): IResolvedLlmConfig | null {
     return {
       apiKey: anthropicKey,
       baseUrl: DEFAULT_ANTHROPIC_BASE,
-      model: process.env['AI_MODEL']?.trim(),
+      model: process.env['AI_MODEL']?.trim() || resolveModelForRole('matching'),
     };
   }
   return null;

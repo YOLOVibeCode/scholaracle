@@ -6,15 +6,13 @@ import {
   CommunicationLogRepository,
   SmsConsentRepository,
 } from '@scholaracle/database';
-import { normalizePhoneE164 } from '@scholaracle/agents';
+import { LlmClient, normalizePhoneE164, resolveModelForRole } from '@scholaracle/agents';
 import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IUserPreferences } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
-import { LlmClient } from '@scholaracle/agents';
-
 export interface ISettingsRouterConfig {
   readonly database: Db;
   readonly authService?: IAuthService;
@@ -769,7 +767,7 @@ async function handleSuggestHolidays(req: Request, res: Response, database: Db):
   let suggestion: string;
   if (apiKey && termSummary !== 'No academic terms on file.') {
     try {
-      const llm = new LlmClient({ apiKey });
+      const llm = new LlmClient({ apiKey, model: resolveModelForRole('triage') });
       const prompt = inHoliday
         ? `The user's academic terms: ${termSummary}. Today is during a break (${nextBreak?.name ?? 'holiday'}). Suggest in 1-2 sentences whether they should pause digest emails during this break.`
         : nextBreak
