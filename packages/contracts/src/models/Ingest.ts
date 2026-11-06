@@ -52,6 +52,8 @@ export interface ISlcEntityKey {
   readonly provider: string;
   readonly adapterId: string;
   readonly externalId: string;
+  /** Prior externalIds for the same row (e.g. legacy index-based Canvas keys). */
+  readonly aliasExternalIds?: readonly string[];
   readonly studentExternalId?: string;
   readonly institutionExternalId?: string;
   readonly courseExternalId?: string;
