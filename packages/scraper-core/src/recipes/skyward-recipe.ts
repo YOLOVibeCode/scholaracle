@@ -293,7 +293,7 @@ async function navigateSkywardSection(
   // The driver is expected to navigate to the section; clicking is handled by the recipe
   // by injecting a click on the nav link text.
   try {
-    await driver.evaluate(clickSkywardNavLink, selectors, linkText);
+    await driver.evaluate(clickSkywardNavLink, { selectors, text: linkText });
     await driver.waitForLoad({ timeout: 10000 });
     await driver.sleep(2000);
   } catch {
@@ -301,7 +301,10 @@ async function navigateSkywardSection(
   }
 }
 
-async function waitForGradeDialog(driver: IPageDriver, selectors: ISkywardSelectorsV1): Promise<boolean> {
+async function waitForGradeDialog(
+  driver: IPageDriver,
+  selectors: ISkywardSelectorsV1
+): Promise<boolean> {
   const polls = Math.ceil(GRADE_DIALOG_TIMEOUT_MS / GRADE_DIALOG_POLL_MS);
   for (let i = 0; i <= polls; i++) {
     if (await driver.evaluate(isSkywardGradeInfoReady, selectors)) return true;
@@ -310,7 +313,10 @@ async function waitForGradeDialog(driver: IPageDriver, selectors: ISkywardSelect
   return false;
 }
 
-async function closeDialogsQuietly(driver: IPageDriver, selectors: ISkywardSelectorsV1): Promise<void> {
+async function closeDialogsQuietly(
+  driver: IPageDriver,
+  selectors: ISkywardSelectorsV1
+): Promise<void> {
   try {
     await driver.evaluate(closeSkywardDialogs, selectors);
     await driver.sleep(300);

@@ -24,8 +24,9 @@ export class SkywardNavReplayDriver extends JsdomFixtureReplayDriver {
   ): Promise<TResult> {
     const first = fn(...args);
     const result = first instanceof Promise ? await first : first;
-    if (fn.name === 'clickSkywardNavLink' && typeof args[0] === 'string') {
-      const url = this._sectionUrls[args[0]!];
+    if (fn.name === 'clickSkywardNavLink') {
+      const text = (args[0] as { text?: string } | undefined)?.text ?? '';
+      const url = this._sectionUrls[text];
       if (url) await this.goto(url);
     }
     return result as TResult;

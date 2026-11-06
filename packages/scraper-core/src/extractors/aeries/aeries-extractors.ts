@@ -168,7 +168,8 @@ export function extractAeriesStudentList(selectors: IAeriesSelectorsV1): IAeries
       const text = clean(card.textContent);
       const grade = text.match(/Grade:?\s*(\d+)/)?.[1] ?? '';
       const school = clean(text.split(/Grade:?\s*\d+/)[1]);
-      const link = card.querySelector(selectors.studentList_change_student_link)?.getAttribute('href') ?? '';
+      const link =
+        card.querySelector(selectors.studentList_change_student_link)?.getAttribute('href') ?? '';
       if (name) results.push({ name, grade, school, switchHref: link, isCurrent: false });
     }
   }
@@ -236,9 +237,9 @@ export function extractAeriesDashboardCourses(selectors: IAeriesSelectorsV1): Ar
     const missingText = clean(
       card.querySelector(selectors.dashboard_card_missing_footer)?.textContent
     );
-    const missingFallback = clean(card.querySelector(selectors.dashboard_card_footer)?.textContent).match(
-      /Missing Assignments\s*(\d+)/
-    );
+    const missingFallback = clean(
+      card.querySelector(selectors.dashboard_card_footer)?.textContent
+    ).match(/Missing Assignments\s*(\d+)/);
     const href = titleEl?.getAttribute('href') ?? '';
     out.push({
       period: '',
@@ -313,7 +314,9 @@ export function extractAeriesCourseDropdownOptions(selectors: IAeriesSelectorsV1
   text: string;
   selected: boolean;
 }> {
-  const select = document.querySelector(selectors.gradebook_course_dropdown) as HTMLSelectElement | null;
+  const select = document.querySelector(
+    selectors.gradebook_course_dropdown
+  ) as HTMLSelectElement | null;
   if (!select) return [];
   return Array.from(select.options).map((o: HTMLOptionElement) => ({
     value: o.value,
@@ -323,9 +326,10 @@ export function extractAeriesCourseDropdownOptions(selectors: IAeriesSelectorsV1
 }
 
 /** Extracts teacher name and email from the current GradebookDetails page. */
-export function extractAeriesTeacher(
-  selectors: IAeriesSelectorsV1
-): { name: string; email: string } {
+export function extractAeriesTeacher(selectors: IAeriesSelectorsV1): {
+  name: string;
+  email: string;
+} {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const scope = document.querySelector(selectors.gradebook_scope_table) ?? document.body;
   const name = clean(document.querySelector(selectors.gradebook_teacher_name)?.textContent);
@@ -343,7 +347,9 @@ export function extractAeriesTeacherEmail(selectors: IAeriesSelectorsV1): string
 }
 
 /** Extracts assignment rows from the current GradebookDetails page (table view rows). */
-export function extractAeriesAssignments(selectors: IAeriesSelectorsV1): IAeriesAssignmentExtract[] {
+export function extractAeriesAssignments(
+  selectors: IAeriesSelectorsV1
+): IAeriesAssignmentExtract[] {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const num = (s: string): number | null => {
     const m = s.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
@@ -429,7 +435,10 @@ export function extractAeriesAttendance(selectors: IAeriesSelectorsV1): IAeriesA
     if (row.classList.contains(selectors.attendance_inline_header)) {
       columns = Array.from(row.children).map((td) => ({
         period: clean(td.querySelector(selectors.attendance_header_period)?.textContent),
-        course: clean(td.querySelector(selectors.attendance_header_course)?.textContent).replace(/^\(\d+\)\s*/, ''),
+        course: clean(td.querySelector(selectors.attendance_header_course)?.textContent).replace(
+          /^\(\d+\)\s*/,
+          ''
+        ),
       }));
       continue;
     }
@@ -449,7 +458,9 @@ export function extractAeriesAttendance(selectors: IAeriesSelectorsV1): IAeriesA
       if (!code || code === '-') continue;
       const meta = columns[i] ?? { period: String(i - 1), course: '' };
       const title =
-        cell.getAttribute('title') ?? cell.querySelector(selectors.attendance_title_attr)?.getAttribute('title') ?? '';
+        cell.getAttribute('title') ??
+        cell.querySelector(selectors.attendance_title_attr)?.getAttribute('title') ??
+        '';
       results.push({
         date,
         period: meta.period,
@@ -473,7 +484,9 @@ export function extractAeriesStudentInfo(selectors: IAeriesSelectorsV1): {
   const idEl = document.querySelector(selectors.student_info_id);
   let studentId = clean(idEl?.textContent).match(/\d{4,}/)?.[0] ?? '';
   if (!studentId) {
-    const hidden = document.querySelector(selectors.student_info_hidden_id) as HTMLInputElement | null;
+    const hidden = document.querySelector(
+      selectors.student_info_hidden_id
+    ) as HTMLInputElement | null;
     if (hidden?.value && /^\d{4,}$/.test(hidden.value)) studentId = hidden.value;
   }
   if (!studentId) {
@@ -481,7 +494,9 @@ export function extractAeriesStudentInfo(selectors: IAeriesSelectorsV1): {
     studentId = m?.[1] ?? '';
   }
   let name = clean(document.querySelector(selectors.student_info_full_name)?.textContent);
-  let grade = clean(document.querySelector(selectors.student_info_grade)?.textContent).match(/\d+/)?.[0] ?? '';
+  let grade =
+    clean(document.querySelector(selectors.student_info_grade)?.textContent).match(/\d+/)?.[0] ??
+    '';
   let school = '';
   const header = document.querySelector(selectors.studentNameDropDown);
   if (header) {
@@ -511,7 +526,11 @@ export function extractAeriesStudentInfo(selectors: IAeriesSelectorsV1): {
 }
 
 /** Clicks the student switcher entry whose text contains `name`. */
-export function switchAeriesStudentByName(selectors: IAeriesSelectorsV1, name: string): boolean {
+export function switchAeriesStudentByName(opts: {
+  selectors: IAeriesSelectorsV1;
+  name: string;
+}): boolean {
+  const { selectors, name } = opts;
   const toggle = document.querySelector(selectors.studentNameDropDown) as HTMLElement | null;
   if (toggle) toggle.click();
   const links = Array.from(document.querySelectorAll(selectors.student_switch_links));
@@ -525,8 +544,14 @@ export function switchAeriesStudentByName(selectors: IAeriesSelectorsV1, name: s
 }
 
 /** Choose a course in the Gradebook Details dropdown and fire its change event (postback). */
-export function selectAeriesCourseOption(selectors: IAeriesSelectorsV1, value: string): void {
-  const dropdown = document.querySelector(selectors.gradebook_course_dropdown) as HTMLSelectElement | null;
+export function selectAeriesCourseOption(opts: {
+  selectors: IAeriesSelectorsV1;
+  value: string;
+}): void {
+  const { selectors, value } = opts;
+  const dropdown = document.querySelector(
+    selectors.gradebook_course_dropdown
+  ) as HTMLSelectElement | null;
   if (dropdown) {
     dropdown.value = value;
     dropdown.dispatchEvent(new Event('change', { bubbles: true }));

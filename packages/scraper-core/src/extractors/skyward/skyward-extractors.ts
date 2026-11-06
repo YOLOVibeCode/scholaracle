@@ -310,24 +310,21 @@ export function extractSkywardSchedule(selectors: ISkywardSelectorsV1): Array<{
   return results;
 }
 
-function skywardNormalizeNavLabel(s: string | null | undefined): string {
-  return (s ?? '').replace(/\s+/g, ' ').trim();
-}
-
 /**
  * Clicks the first nav link whose visible text matches `text` after normalizing
  * whitespace (nested spans / line breaks on real portals).
  */
-export function clickSkywardNavLink(selectors: ISkywardSelectorsV1, text: string): void {
-  const want = skywardNormalizeNavLabel(text).toLowerCase();
+export function clickSkywardNavLink(opts: { selectors: ISkywardSelectorsV1; text: string }): void {
+  const { selectors, text } = opts;
+  // Self-contained on purpose: page functions run inside the portal page and cannot
+  // reach module helpers (a helper call threw there and silently stopped navigation).
+  const norm = (s: string | null | undefined): string =>
+    (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const want = norm(text);
   const links = Array.from(document.querySelectorAll(selectors.nav_links));
-  for (const link of links) {
-    const got = skywardNormalizeNavLabel(link.textContent).toLowerCase();
-    if (got === want || got.includes(want)) {
-      (link as HTMLAnchorElement).click();
-      return;
-    }
-  }
+  const exact = links.find((l) => norm(l.textContent) === want);
+  const target = exact ?? links.find((l) => norm(l.textContent).includes(want));
+  if (target) (target as HTMLAnchorElement).click();
 }
 
 /**
