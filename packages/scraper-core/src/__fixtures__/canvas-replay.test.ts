@@ -54,6 +54,12 @@ describe('canvas fixture replay (counts)', () => {
       if (pathname === '/api/v1/courses' && search.includes('enrollment_state')) {
         return jsonResponse(map['/api/v1/courses']);
       }
+      if (pathname === '/api/v1/planner/items') {
+        return jsonResponse(apiJson('planner-items.json'));
+      }
+      if (pathname === '/api/v1/users/self/observees') {
+        return jsonResponse(apiJson('observees.json'));
+      }
       if (pathname === '/api/v1/announcements') {
         return jsonResponse(apiJson('announcements.json'));
       }
@@ -101,5 +107,64 @@ describe('canvas fixture replay (counts)', () => {
       expect(countCanvasExtract(extract)).toEqual(EXPECTED);
     }).toThrow();
     expect(countCanvasExtract(extract).assignmentCount).toBe(0);
+  });
+});
+
+describe('canvas fixture replay (observer parent)', () => {
+  let previousFetch: typeof fetch;
+
+  beforeEach(() => {
+    previousFetch = global.fetch;
+    global.fetch = (async (input: RequestInfo | URL) => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const { pathname, search } = new URL(u, BASE);
+      const map: Record<string, unknown> = {
+        '/api/v1/courses': apiJson('courses-self-empty.json'),
+        '/api/v1/courses/10/assignments': apiJson('course-10-assignments.json'),
+        '/api/v1/courses/10/users': apiJson('course-10-users.json'),
+        '/api/v1/courses/10/modules': apiJson('course-10-modules.json'),
+        '/api/v1/courses/10/files': apiJson('course-10-files.json'),
+        '/api/v1/users/42/courses': apiJson('courses-observee-student.json'),
+      };
+      if (pathname === '/api/v1/courses' && search.includes('enrollment_state')) {
+        return jsonResponse(map['/api/v1/courses']);
+      }
+      if (pathname === '/api/v1/planner/items') {
+        return jsonResponse(apiJson('planner-items.json'));
+      }
+      if (pathname === '/api/v1/users/self/observees') {
+        return jsonResponse(apiJson('observees-one.json'));
+      }
+      if (pathname === '/api/v1/announcements') {
+        return jsonResponse(apiJson('announcements.json'));
+      }
+      const body = map[pathname];
+      if (body === undefined) {
+        return {
+          ok: false,
+          async json(): Promise<unknown> {
+            return [];
+          },
+        };
+      }
+      return jsonResponse(body);
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = previousFetch;
+  });
+
+  it('includes observee student courses when self list is empty', async () => {
+    const driver = new CanvasReplayDriver({
+      fixtures: {
+        [BASE]: loadFixture('canvas/dashboard.html'),
+        [COURSE_API]: '<html><body><main>course</main></body></html>',
+      },
+      initialUrl: BASE,
+    });
+    const extract = await runCanvasRecipe(driver, BASE);
+    expect(extract.courses.length).toBeGreaterThan(0);
+    expect(countCanvasExtract(extract)).toEqual(EXPECTED);
   });
 });
