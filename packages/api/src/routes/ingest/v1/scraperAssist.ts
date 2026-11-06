@@ -3,14 +3,13 @@ import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { ValidationError } from '@scholaracle/contracts';
-import { LlmClient, resolveModelForRole } from '@scholaracle/agents';
+import { LlmClient, resolveLlmConfig } from '@scholaracle/agents';
 import {
   connectorAuthMiddleware,
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../../middleware/rateLimit';
-import { resolveLlmConfig } from '../../../services/llm/resolveLlmConfig';
 
 const DEFAULT_DAILY_LIMIT = 40;
 const BURST_WINDOW_MS = 60_000;
@@ -95,7 +94,7 @@ export function createScraperAssistRouter(params: {
       if (!parsed.success) {
         throw new ValidationError(parsed.error.message);
       }
-      const cfg = resolveLlmConfig();
+      const cfg = resolveLlmConfig('triage');
       if (!cfg) {
         throw new ValidationError('LLM is not configured on the server');
       }
@@ -108,11 +107,7 @@ export function createScraperAssistRouter(params: {
         });
         return;
       }
-      const llm = new LlmClient({
-        apiKey: cfg.apiKey,
-        baseUrl: cfg.baseUrl,
-        model: process.env['AI_MODEL']?.trim() || resolveModelForRole('triage'),
-      });
+      const llm = new LlmClient(cfg);
       const response = await llm.complete(parsed.data.messages, {
         maxTokens: parsed.data.maxTokens ?? 4096,
         system: parsed.data.system,

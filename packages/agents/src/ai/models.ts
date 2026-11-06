@@ -1,12 +1,13 @@
 /** Model id for a server-side LLM use case; env override `AI_MODEL_<ROLE>`. */
 
-export type AiRole = 'matching' | 'triage' | 'patch' | 'escalate';
+export type AiRole = 'matching' | 'triage' | 'patch' | 'escalate' | 'insights';
 
 const DEFAULT_BY_ROLE: Readonly<Record<AiRole, string>> = {
   matching: 'claude-sonnet-5-5',
   triage: 'claude-haiku-5-5',
   patch: 'claude-sonnet-5-5',
   escalate: 'claude-opus-5-5',
+  insights: 'claude-sonnet-5-5',
 };
 
 const ENV_KEY_BY_ROLE: Readonly<Record<AiRole, string>> = {
@@ -14,6 +15,7 @@ const ENV_KEY_BY_ROLE: Readonly<Record<AiRole, string>> = {
   triage: 'AI_MODEL_TRIAGE',
   patch: 'AI_MODEL_PATCH',
   escalate: 'AI_MODEL_ESCALATE',
+  insights: 'AI_MODEL_INSIGHTS',
 };
 
 export function resolveModelForRole(role: AiRole): string {
