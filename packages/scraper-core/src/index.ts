@@ -66,6 +66,9 @@ export * from './extractors/aeries/aeries-extractors';
 export { runAeriesRecipe } from './recipes/aeries-recipe';
 export { transformAeriesExtract } from './transformers/aeries/aeries-transformer';
 
+// Test harness: M4-02 fake portal HTML (Playwright / Express)
+export * from './fixtures/fakePortalM402';
+
 // Validator
 export { validateEnvelope, validateOp } from './validator/validator';
 export type {
