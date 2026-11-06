@@ -66,6 +66,32 @@ export interface ISlcCursorOpaque {
 
 export type ISlcCursor = ISlcCursorOpaque;
 
+/** One per-course hole detected when summarizing an envelope (client-computed). */
+export type SlcSyncGapKind =
+  'no_grade' | 'no_assignments' | 'no_grade_no_assignments' | 'missing_course_title';
+
+export interface ISlcSyncCoverageGap {
+  readonly course: string;
+  readonly kind: SlcSyncGapKind;
+}
+
+/** Per-student counts and gaps for what the sync returned vs did not. */
+export interface ISlcStudentSyncCoverage {
+  readonly studentExternalId: string;
+  readonly courses: number;
+  readonly coursesWithGrade: number;
+  readonly coursesWithAssignments: number;
+  readonly attendanceRows: number;
+  /** Distinct teacher emails present on course/teacher records (0 when none). */
+  readonly teacherEmails: number;
+  readonly gaps: readonly ISlcSyncCoverageGap[];
+}
+
+/** Snapshot attached to `run` for parent-facing sync diagnostics. */
+export interface ISlcRunCoverage {
+  readonly students: readonly ISlcStudentSyncCoverage[];
+}
+
 export interface ISlcRunMeta {
   readonly runId: string;
   readonly startedAt: string; // ISO timestamp
@@ -80,6 +106,10 @@ export interface ISlcRunMeta {
    * e.g. { clientType: 'mobile', coreVersion: '0.1.0', extractorBundleHash: 'abc' }
    */
   readonly meta?: Readonly<Record<string, string>>;
+  /** Per-student coverage + gaps (scraper-core / client fills before upload). */
+  readonly coverage?: ISlcRunCoverage;
+  /** Validator warnings (join-graph, zero-op, etc.) as human-readable strings. */
+  readonly warnings?: readonly string[];
 }
 
 export interface ISlcSourceMeta {

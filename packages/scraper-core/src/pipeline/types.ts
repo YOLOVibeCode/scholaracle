@@ -5,7 +5,11 @@
  * browser-extension (content-script), and CLI (BaseScraper adapters).
  */
 
-import type { ISlcIngestEnvelopeV1, ISlcDeltaOp } from '@scholaracle/contracts';
+import type {
+  ISlcIngestEnvelopeV1,
+  ISlcDeltaOp,
+  ISlcRunCoverage,
+} from '@scholaracle/contracts';
 import type { IPageDriver } from '../driver/IPageDriver';
 import type { IScraperResolver } from '../registry/module';
 
@@ -145,6 +149,8 @@ export interface IRunResult {
   readonly status: 'success' | 'failed';
   readonly opCount?: number;
   readonly errorMessage?: string;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
 }
 
 export interface IRunRecorder {

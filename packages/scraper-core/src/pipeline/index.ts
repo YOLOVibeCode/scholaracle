@@ -1,5 +1,6 @@
 export * from './types';
 export { runClientScrape, buildClientScrapeConfig } from './runClientScrape';
+export { computeRunCoverage } from './computeRunCoverage';
 export {
   JoinGapEnricher,
   applyEnrichersFailOpen,
