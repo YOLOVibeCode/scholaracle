@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.test.ts'],
   setupFiles: ['<rootDir>/src/test/chrome-mock.ts'],
   moduleNameMapper: {
     '^@scholaracle/contracts$': '<rootDir>/../contracts/src/index.ts',
