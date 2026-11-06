@@ -189,37 +189,59 @@ export default defineConfig({
       },
       timeout: 90 * 1000,
     },
+    // Fake Aeries/Skyward portal + scraper recipes (no app stack; needs e2e-fake-portal on 2855)
+    {
+      name: 'fake-portal',
+      testMatch: /fake-portal-recipes\.spec\.ts/,
+      dependencies: [],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 120 * 1000,
+    },
   ],
 
   // Web server configuration
   // Only start servers if BASE_URL is localhost (not production/staging)
   webServer:
-    process.env.BASE_URL?.includes('localhost') || !process.env.BASE_URL
+    process.env.PLAYWRIGHT_FAKE_PORTAL_ONLY === '1'
       ? [
-          // API server (FIXED port 2801)
           {
-            // Use in-memory MongoDB for fully self-contained E2E (no external Mongo daemon required).
             command:
-              'PORT=2801 API_BASE_URL=http://localhost:2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test pnpm --filter @scholaracle/api dev',
-            url: 'http://localhost:2801/api/health',
-            reuseExistingServer: !process.env.CI,
-            timeout: 120 * 1000,
-            stdout: 'pipe',
-            stderr: 'pipe',
-          },
-          // Web app (FIXED port 2800)
-          {
-            // Disable Next.js dev tools overlay which can intercept pointer events and cause Playwright flakiness.
-            command:
-              'PORT=2800 AUTH_SECRET=e2e-test-secret NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
-            url: 'http://localhost:2800',
+              'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
+            url: 'http://127.0.0.1:2855/',
             reuseExistingServer: !process.env.CI,
             timeout: 120 * 1000,
             stdout: 'pipe',
             stderr: 'pipe',
           },
         ]
-      : undefined,
+      : process.env.BASE_URL?.includes('localhost') || !process.env.BASE_URL
+        ? [
+            // API server (FIXED port 2801)
+            {
+              // Use in-memory MongoDB for fully self-contained E2E (no external Mongo daemon required).
+              command:
+                'PORT=2801 API_BASE_URL=http://localhost:2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test pnpm --filter @scholaracle/api dev',
+              url: 'http://localhost:2801/api/health',
+              reuseExistingServer: !process.env.CI,
+              timeout: 120 * 1000,
+              stdout: 'pipe',
+              stderr: 'pipe',
+            },
+            // Web app (FIXED port 2800)
+            {
+              // Disable Next.js dev tools overlay which can intercept pointer events and cause Playwright flakiness.
+              command:
+                'PORT=2800 AUTH_SECRET=e2e-test-secret NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
+              url: 'http://localhost:2800',
+              reuseExistingServer: !process.env.CI,
+              timeout: 120 * 1000,
+              stdout: 'pipe',
+              stderr: 'pipe',
+            },
+          ]
+        : undefined,
 
   // Note:
   // - Local: API server should be running separately on port 2801 (FIXED PORT)
