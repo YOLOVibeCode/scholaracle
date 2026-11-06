@@ -16,6 +16,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER, DEMO_STUDENT_USER_EMMA, DEMO_STUDENT_USER_LIAM } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { studioRouter } from './studio';
 
 const JWT_SECRET = 'offline-pack-test-secret';
@@ -32,8 +33,15 @@ describe('GET /api/studio/courses/:courseExternalId/offline-pack', () => {
   let liamToken: string;
   let parentToken: string;
   let emmaCourseExternalId: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -52,7 +60,7 @@ describe('GET /api/studio/courses/:courseExternalId/offline-pack', () => {
     app.use(createErrorHandler());
 
     // Seed demo data
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     // Emma login
@@ -87,6 +95,8 @@ describe('GET /api/studio/courses/:courseExternalId/offline-pack', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   describe('happy path', () => {
