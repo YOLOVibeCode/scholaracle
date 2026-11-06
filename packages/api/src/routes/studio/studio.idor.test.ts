@@ -22,6 +22,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireParent, requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER, DEMO_STUDENT_USER_EMMA } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { signAssetUrl } from '../../services/assets/signedUrl';
 import { studioRouter } from './studio';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
@@ -58,8 +59,15 @@ describe('student JWT — IDOR / COPPA leftovers', () => {
   let emmaMongoId: string;
   let liamMongoId: string;
   let parentToken: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -101,7 +109,7 @@ describe('student JWT — IDOR / COPPA leftovers', () => {
     );
     app.use(createErrorHandler());
 
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     const emma = await authService.login(
@@ -214,6 +222,8 @@ describe('student JWT — IDOR / COPPA leftovers', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('Emma Today uses the owner partition and never includes a decoy keyed by her login userId', async () => {
