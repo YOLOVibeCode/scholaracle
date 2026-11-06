@@ -149,8 +149,10 @@ jobs:
   # ─── OTA update → TestFlight preview channel ─────────────────────────
   # Runs after E2E (or wait-for-dev if E2E is skipped).
   # Compares HEAD @expo/fingerprint output to the latest finished EAS preview
-  # build per platform (iOS + Android). On mismatch or missing hash/token,
-  # the job fails with a "binary required" summary — no warn-and-continue.
+  # build per platform (iOS + Android). A missing token or hash fails the job;
+  # a fingerprint mismatch (expected after native changes) skips the OTA with a
+  # "binary required" summary but does not fail the Deploy run, which Railway's
+  # production gate waits on.
   # Production channel is intentionally NOT automated here — keep it manual
   # so the binary under App Review never shifts mid-review.
   ota-preview:
@@ -187,6 +189,7 @@ jobs:
             exit 1
           fi
       - name: Check native fingerprints vs preview builds
+        id: fingerprint
         run: |
           set -euo pipefail
           fail_summary() {
@@ -226,8 +229,24 @@ jobs:
             fail_summary "Missing fingerprint on latest finished preview build — ensure EAS **preview** profile builds exist for both platforms."
           fi
           if [ "$CURRENT_IOS" != "$LATEST_IOS" ] || [ "$CURRENT_ANDROID" != "$LATEST_ANDROID" ]; then
-            fail_summary "HEAD fingerprint does not match the latest finished preview build — ship a new native binary before OTA."
+            # Expected after any native change. Do NOT fail: this job is part of the
+            # Deploy run that Railway's production gate waits on, so failing here would
+            # block backend production deploys until a new binary ships.
+            {
+              echo "## binary required"
+              echo ""
+              echo "HEAD fingerprint does not match the latest finished preview build. OTA skipped; build a new preview binary (\`pnpm build:ios:preview\`, \`pnpm build:android:preview\`)."
+              echo ""
+              echo "| | iOS | Android |"
+              echo "| --- | --- | --- |"
+              echo "| HEAD | \`$CURRENT_IOS\` | \`$CURRENT_ANDROID\` |"
+              echo "| Latest EAS preview | \`$LATEST_IOS\` | \`$LATEST_ANDROID\` |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=binary required::Native fingerprint changed; OTA skipped until a new preview binary is built."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "match=true" >> "$GITHUB_OUTPUT"
           {
             echo "## Fingerprint check passed"
             echo ""
@@ -239,6 +258,7 @@ jobs:
             echo "| Latest EAS preview | \`$LATEST_IOS\` | \`$LATEST_ANDROID\` |"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Publish OTA to preview channel
+        if: steps.fingerprint.outputs.match == 'true'
         env:
           OTA_UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
         run: |
