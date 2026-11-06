@@ -31,18 +31,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = (user.email ?? token.email) as string;
         const name = (user.name ?? token.name ?? email) as string;
         try {
+          const idToken =
+            account !== undefined && typeof account === 'object' && 'id_token' in account
+              ? (account as { id_token?: string }).id_token
+              : undefined;
+          const body: Record<string, string> = {
+            provider: provider === 'azure-ad' ? 'microsoft' : provider,
+            providerAccountId,
+            email,
+            name,
+          };
+          if (provider === 'apple' && idToken !== undefined && idToken !== '') {
+            body['appleIdentityToken'] = idToken;
+          }
           const res = await fetch(`${apiBase}/auth/oauth`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'x-internal-api-secret': internalSecret,
             },
-            body: JSON.stringify({
-              provider: provider === 'azure-ad' ? 'microsoft' : provider,
-              providerAccountId,
-              email,
-              name,
-            }),
+            body: JSON.stringify(body),
           });
           const data = (await res.json()) as {
             success?: boolean;
