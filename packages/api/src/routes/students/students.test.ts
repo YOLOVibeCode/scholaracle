@@ -927,6 +927,14 @@ describe('Students API Routes', () => {
   });
 
   describe('GET /api/students/:id/grades', () => {
+    beforeEach(async () => {
+      if (database) {
+        await database.collection('slc_assignments').deleteMany({});
+        await database.collection('slc_courses').deleteMany({});
+        await database.collection('slc_grade_snapshots').deleteMany({});
+      }
+    });
+
     it('should return 401 without token', async () => {
       const createRes = await request(app)
         .post('/api/students')
@@ -963,6 +971,60 @@ describe('Students API Routes', () => {
       expect(res.body.courseGrades).toHaveLength(0);
       expect(typeof res.body.overallGPA).toBe('number');
       expect(res.body.atRiskCourses).toBe(0);
+    });
+
+    it('should include a course from grade snapshot when there are no assignments', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Snapshot Only Grades Student', grade: 10 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      const courseExternalId = 'm0-08-snap-only-course';
+      const todayYMD = new Date().toISOString().slice(0, 10);
+      const expectedPercent = 88;
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'test',
+        adapterId: 'com.test',
+        externalId: courseExternalId,
+        deletedAt: null,
+        record: { name: 'History', title: 'History' },
+      });
+
+      await database.collection('slc_grade_snapshots').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        provider: 'skyward',
+        deletedAt: null,
+        record: {
+          courseExternalId,
+          percentGrade: expectedPercent,
+          asOfDate: todayYMD,
+          sourceType: 'sis',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/grades`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courseGrades).toHaveLength(1);
+      const row = res.body.courseGrades[0] as {
+        totalAssignments: number;
+        officialGrade: number;
+        gradeSource: string;
+      };
+      expect(row.totalAssignments).toBe(0);
+      expect(row.officialGrade).toBe(expectedPercent);
+      expect(row.gradeSource).toBe('sis');
     });
   });
 
