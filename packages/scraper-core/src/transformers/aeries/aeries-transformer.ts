@@ -88,8 +88,10 @@ export function transformAeriesExtract(
 
   // Academic terms — one per distinct, non-empty course.term value
   const seenTerms = new Set<string>();
+  // The validator requires start and end dates, so a term is emitted only when
+  // the recipe captured them (from the Gradebook Details course option).
   for (const course of student.courses) {
-    if (!course.term) continue;
+    if (!course.term || !course.termStart || !course.termEnd) continue;
     const termExtId = `aeries-term-${slugify(course.term)}`;
     if (!seenTerms.has(termExtId)) {
       seenTerms.add(termExtId);
@@ -101,6 +103,8 @@ export function transformAeriesExtract(
         record: {
           title: course.term,
           type: 'grading_period',
+          startDate: course.termStart,
+          endDate: course.termEnd,
         },
       });
     }
@@ -120,7 +124,9 @@ export function transformAeriesExtract(
   for (let ci = 0; ci < student.courses.length; ci++) {
     const course = student.courses[ci]!;
     const courseExtId = courseExtIds[ci]!;
-    const termExtId = course.term ? `aeries-term-${slugify(course.term)}` : undefined;
+    const termExtIdCandidate = course.term ? `aeries-term-${slugify(course.term)}` : undefined;
+    const termExtId =
+      termExtIdCandidate && seenTerms.has(termExtIdCandidate) ? termExtIdCandidate : undefined;
 
     ops.push({
       op: 'upsert',

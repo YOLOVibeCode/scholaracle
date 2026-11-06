@@ -60,9 +60,7 @@ describe('tutorialWindow — Aeries', () => {
     const extract = makeExtract({
       students: [
         makeStudent({
-          courses: [
-            makeCourse({ tutorialWindow: 'Tutorial Tue/Thu 7:15–7:45 AM' }),
-          ],
+          courses: [makeCourse({ tutorialWindow: 'Tutorial Tue/Thu 7:15–7:45 AM' })],
         }),
       ],
     });
@@ -177,9 +175,26 @@ describe('academicTerm — Aeries', () => {
       students: [
         makeStudent({
           courses: [
-            makeCourse({ period: '1', term: 'Quarter 3' }),
-            makeCourse({ period: '2', name: 'Math', term: 'Quarter 3' }),
-            makeCourse({ period: '3', name: 'History', term: 'Semester 2' }),
+            makeCourse({
+              period: '1',
+              term: 'Quarter 3',
+              termStart: '2027-01-06',
+              termEnd: '2027-03-11',
+            }),
+            makeCourse({
+              period: '2',
+              name: 'Math',
+              term: 'Quarter 3',
+              termStart: '2027-01-06',
+              termEnd: '2027-03-11',
+            }),
+            makeCourse({
+              period: '3',
+              name: 'History',
+              term: 'Semester 2',
+              termStart: '2027-01-06',
+              termEnd: '2027-05-26',
+            }),
           ],
         }),
       ],
@@ -191,6 +206,21 @@ describe('academicTerm — Aeries', () => {
     expect(externalIds).toContain('aeries-term-semester-2');
     // Deduplicated — no duplicates
     expect(new Set(externalIds).size).toBe(externalIds.length);
+    // Dates ride along (the validator requires them)
+    const q3 = termOps.find((o) => o.key.externalId === 'aeries-term-quarter-3');
+    expect(q3?.record).toMatchObject({ startDate: '2027-01-06', endDate: '2027-03-11' });
+    const courseOps = ops.filter((o) => o.entity === 'course');
+    expect(courseOps[0]?.record).toMatchObject({ termExternalId: 'aeries-term-quarter-3' });
+  });
+
+  it('emits no academicTerm, and no term reference on the course, when the term has no dates', () => {
+    const extract = makeExtract({
+      students: [makeStudent({ courses: [makeCourse({ period: '1', term: 'Quarter 3' })] })],
+    });
+    const ops = transformAeriesExtract(extract, ctx);
+    expect(ops.filter((o) => o.entity === 'academicTerm')).toHaveLength(0);
+    const course = ops.find((o) => o.entity === 'course');
+    expect((course?.record as { termExternalId?: string }).termExternalId).toBeUndefined();
   });
 
   it('does not emit academicTerm when term is blank', () => {
