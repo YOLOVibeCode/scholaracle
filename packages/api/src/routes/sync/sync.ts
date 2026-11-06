@@ -16,6 +16,8 @@ import {
   NotFoundError,
   ValidationError,
 } from '@scholaracle/contracts';
+import { StudentRepository } from '@scholaracle/database';
+import type { ISyncJobData } from '@scholaracle/agents';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { MongoQueue } from '@scholaracle/agents';
@@ -40,6 +42,8 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
   const { database, syncScheduler } = config;
   const students = database.collection('students');
   const syncRuns = database.collection('sync_runs');
+  const jobs = database.collection('jobs');
+  const studentRepository = new StudentRepository(database);
   const queue = new MongoQueue(database);
   const heartbeats = database.collection('worker_heartbeats');
 
@@ -204,10 +208,18 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
         throw new ValidationError('Invalid student ID');
       }
 
+      const student = await studentRepository.findById(studentId!);
+      if (!student || !student.hasAccess(userId)) {
+        throw new ForbiddenError('Access denied');
+      }
+
       const limit = Math.min(parseInt(req.query['limit'] as string, 10) || 20, 100);
 
       const runs = await syncRuns
-        .find({ studentId, userId })
+        .find({
+          studentId,
+          $or: [{ userId }, { triggeredByUserId: userId }],
+        })
         .sort({ createdAt: -1 })
         .limit(limit)
         .toArray();
@@ -229,8 +241,14 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
         throw new ValidationError('Invalid run ID');
       }
 
-      const run = await syncRuns.findOne({ _id: new ObjectId(runId), userId });
+      const run = await syncRuns.findOne({ _id: new ObjectId(runId) });
       if (!run) throw new NotFoundError('Sync run not found');
+
+      const runStudentId = (run['studentId'] as string) ?? '';
+      const student = await studentRepository.findById(runStudentId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Sync run not found');
+      }
 
       res.json({ run });
     })
@@ -298,11 +316,25 @@ export function createSyncRouter(config: ISyncRouterConfig): Router {
   router.get(
     '/jobs/:jobId/position',
     asyncHandler(async (req: Request, res: Response) => {
-      requireUserId(req);
+      const userId = requireUserId(req);
 
       const { jobId } = req.params;
       if (!ObjectId.isValid(jobId!)) {
         throw new ValidationError('Invalid job ID');
+      }
+
+      const jobDoc = await jobs.findOne({ _id: new ObjectId(jobId!) });
+      if (!jobDoc || jobDoc['type'] !== 'sync') {
+        throw new NotFoundError('Job not found');
+      }
+      const data = jobDoc['data'] as ISyncJobData | undefined;
+      const runStudentId = data?.studentId;
+      if (!runStudentId) {
+        throw new NotFoundError('Job not found');
+      }
+      const student = await studentRepository.findById(runStudentId);
+      if (!student || !student.hasAccess(userId)) {
+        throw new NotFoundError('Job not found');
       }
 
       const position = await queue.getJobPosition(jobId!);

@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1,
+    "name": "Week 1",
+    "position": 1,
+    "items": [
+      { "title": "Syllabus", "type": "Page", "content_id": "1", "position": 1 },
+      { "title": "Intro", "type": "Assignment", "content_id": "100", "position": 2 }
+    ]
+  }
+]
