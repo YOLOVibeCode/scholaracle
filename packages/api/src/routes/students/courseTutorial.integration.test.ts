@@ -145,6 +145,10 @@ describe('Course tutorial override (integration)', () => {
     expect(createRes.status).toBe(201);
     const studentId = createRes.body.id as string;
 
+    const now = new Date();
+    const todayYMD = now.toISOString().slice(0, 10);
+    const dueSoon = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+
     const courseExternalId = 'skyward-course-alg';
     await database.collection('slc_courses').insertOne({
       userId,
@@ -173,7 +177,7 @@ describe('Course tutorial override (integration)', () => {
       record: {
         courseExternalId,
         percentGrade: 92,
-        asOfDate: '2026-09-20',
+        asOfDate: todayYMD,
         sourceType: 'sis',
       },
     });
@@ -188,7 +192,7 @@ describe('Course tutorial override (integration)', () => {
       deletedAt: null,
       record: {
         title: 'HW 1',
-        dueAt: '2026-09-22T12:00:00.000Z',
+        dueAt: dueSoon,
         status: 'graded',
         pointsPossible: 100,
         pointsEarned: 95,
@@ -196,7 +200,7 @@ describe('Course tutorial override (integration)', () => {
     });
 
     const gradesBefore = await request(app)
-      .get(`/api/students/${studentId}/grades`)
+      .get(`/api/students/${studentId}/grades?currentOnly=false`)
       .set('Authorization', `Bearer ${token}`);
     expect(gradesBefore.status).toBe(200);
     const mergedCourseId = gradesBefore.body.courseGrades[0]?.courseExternalId as string;
@@ -211,7 +215,7 @@ describe('Course tutorial override (integration)', () => {
     await ingestCourseTutorialUpsert('Fri 7:00 AM (new scrape)');
 
     const gradesManual = await request(app)
-      .get(`/api/students/${studentId}/grades`)
+      .get(`/api/students/${studentId}/grades?currentOnly=false`)
       .set('Authorization', `Bearer ${token}`);
     expect(gradesManual.body.courseGrades[0]?.tutorialWindow).toBe('Mon/Wed 8:00 AM (manual)');
     expect(gradesManual.body.courseGrades[0]?.isTutorialManual).toBe(true);
@@ -222,7 +226,7 @@ describe('Course tutorial override (integration)', () => {
     expect(deleteRes.status).toBe(200);
 
     const gradesAfterReset = await request(app)
-      .get(`/api/students/${studentId}/grades`)
+      .get(`/api/students/${studentId}/grades?currentOnly=false`)
       .set('Authorization', `Bearer ${token}`);
     expect(gradesAfterReset.body.courseGrades[0]?.tutorialWindow).toBe('Fri 7:00 AM (new scrape)');
     expect(gradesAfterReset.body.courseGrades[0]?.isTutorialManual).toBe(false);

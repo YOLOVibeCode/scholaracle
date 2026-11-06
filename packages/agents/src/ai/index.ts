@@ -1,3 +1,4 @@
+export { resolveModelForRole, type AiRole } from './models';
 export {
   LlmClient,
   type ILlmClientConfig,
