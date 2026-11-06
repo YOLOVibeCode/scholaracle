@@ -20,6 +20,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import { useAuth } from './AuthContext';
+import { nativeOAuthButtonFlags } from './nativeOAuthButtonFlags';
 
 type OAuthProvider = 'apple' | 'google' | 'microsoft';
 
@@ -45,10 +46,8 @@ export function NativeOAuthButtons({
     if (busy) return;
     setSigningIn('apple');
     try {
-      const nonce = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        Math.random().toString(36)
-      );
+      const rawNonce = Math.random().toString(36);
+      const nonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -56,11 +55,18 @@ export function NativeOAuthButtons({
         ],
         nonce,
       });
+      if (credential.identityToken === null || credential.identityToken === '') {
+        onError?.('Apple did not return an identity token');
+        return;
+      }
       const email = credential.email ?? `${credential.user}@privaterelay.appleid.com`;
       const given = credential.fullName?.givenName ?? '';
       const family = credential.fullName?.familyName ?? '';
       const name = [given, family].filter(Boolean).join(' ') || email;
-      await loginWithOAuth('apple', credential.user, email, name);
+      await loginWithOAuth('apple', credential.user, email, name, {
+        appleIdentityToken: credential.identityToken,
+        appleNonce: rawNonce,
+      });
     } catch (err: unknown) {
       if (
         err &&
@@ -158,11 +164,10 @@ export function NativeOAuthButtons({
     }
   }, [busy, loginWithOAuth, onError]);
 
-  const appleAvailable = Platform.OS === 'ios';
-  const googleAvailable = Boolean(GOOGLE_CLIENT_ID);
-  const microsoftAvailable = Boolean(MICROSOFT_CLIENT_ID);
+  const flags = nativeOAuthButtonFlags(Platform.OS);
+  const { apple: appleAvailable, google: googleAvailable, microsoft: microsoftAvailable } = flags;
 
-  if (!appleAvailable && !googleAvailable && !microsoftAvailable) {
+  if (!flags.anyProvider) {
     return null;
   }
 
