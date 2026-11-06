@@ -49,6 +49,9 @@ export interface IAeriesCourseExtract {
   readonly section?: string;
   /** Dashboard "Last Updated" text, e.g. `Nov 04`. */
   readonly lastUpdated?: string;
+  /** Term start/end (YYYY-MM-DD) from the Gradebook Details course option, e.g. `Quarter 2 10/19/2026 - 12/18/2026`. */
+  readonly termStart?: string;
+  readonly termEnd?: string;
 }
 
 export interface IAeriesAssignmentExtract {

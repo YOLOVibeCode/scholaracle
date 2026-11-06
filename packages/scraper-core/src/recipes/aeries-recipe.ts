@@ -147,6 +147,8 @@ async function scrapeCurrentStudent(
     let period = '';
     let teacher = card.teacher;
     let teacherEmail = '';
+    let termStart = '';
+    let termEnd = '';
     let assignments: IAeriesCourseExtract['assignments'] = [];
     if (card.gradebookHref) {
       try {
@@ -157,6 +159,9 @@ async function scrapeCurrentStudent(
         const options = await driver.evaluate(extractAeriesCourseDropdownOptions);
         const selected = options.find((o) => o.selected);
         period = selected?.text.match(/^(\d+)\s*-/)?.[1] ?? '';
+        const dates = parseAeriesTermDates(selected?.text ?? '');
+        termStart = dates?.start ?? '';
+        termEnd = dates?.end ?? '';
         const t = await driver.evaluate(extractAeriesTeacher);
         if (t.name) teacher = t.name;
         teacherEmail = t.email;
@@ -185,6 +190,7 @@ async function scrapeCurrentStudent(
       courseId: row?.courseId,
       section: row?.section,
       lastUpdated: card.lastUpdated,
+      ...(termStart && termEnd ? { termStart, termEnd } : {}),
     });
   }
 
@@ -222,4 +228,15 @@ export function matchScheduleRow(
   const loose = exact.length > 0 ? exact : schedule.filter((r) => base(r.name) === base(cardName));
   if (loose.length === 0) return undefined;
   return (period && loose.find((r) => r.period === period)) || loose[0];
+}
+
+/** `1- Spanish 2 a- Quarter 2 10/19/2026 - 12/18/2026` -> { start: '2026-10-19', end: '2026-12-18' } */
+export function parseAeriesTermDates(
+  optionText: string
+): { start: string; end: string } | undefined {
+  const m = optionText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*-\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return undefined;
+  const iso = (mm: string, dd: string, yyyy: string): string =>
+    `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  return { start: iso(m[1]!, m[2]!, m[3]!), end: iso(m[4]!, m[5]!, m[6]!) };
 }
