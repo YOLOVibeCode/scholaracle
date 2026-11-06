@@ -4,6 +4,7 @@ import {
   CommunicationLogRepository,
   SmsConsentRepository,
   type CommunicationStatus,
+  type IWebhookEventWriter,
 } from '@scholaracle/database';
 import {
   SCHOLARMANCY_SMS_HELP_LINE,
@@ -25,8 +26,11 @@ const OPT_OUT_KEYWORDS = new Set([
 const OPT_IN_KEYWORDS = new Set(['start', 'unstop']);
 const HELP_KEYWORDS = new Set(['help', 'info']);
 
+const TWILIO_WEBHOOK_PROVIDER = 'twilio';
+
 interface ITwilioSmsBody {
   readonly MessageSid?: string;
+  readonly MessageStatus?: string;
   readonly From?: string;
   readonly To?: string;
   readonly Body?: string;
@@ -40,6 +44,10 @@ interface ITwilioStatusBody {
   readonly From?: string;
   readonly ErrorCode?: string;
   readonly ErrorMessage?: string;
+}
+
+interface ITwilioWebhookHandlerDeps {
+  readonly webhookEvents?: IWebhookEventWriter;
 }
 
 const TWILIO_STATUS_MAP: Record<string, CommunicationStatus> = {
@@ -59,6 +67,16 @@ function normalizeFromPhone(from: string): string {
   }
 }
 
+function buildTwilioDedupeEventId(messageSid: string, messageStatusKey: string): string {
+  return `${messageSid}\u001f${messageStatusKey}`;
+}
+
+function normalizeMessageStatusKey(body: ITwilioSmsBody | ITwilioStatusBody): string {
+  const raw = 'MessageStatus' in body && body.MessageStatus !== undefined ? body.MessageStatus : '';
+  const trimmed = raw.trim();
+  return trimmed || 'inbound';
+}
+
 function buildHelpTwiml(): string {
   const text =
     `${SCHOLARMANCY_SMS_HELP_LINE} Help: ${SCHOLARMANCY_SMS_SUPPORT_EMAIL}. ` +
@@ -70,12 +88,28 @@ function buildHelpTwiml(): string {
 /**
  * Handle inbound SMS from the relay (STOP/START/HELP/YES).
  */
-export function handleInboundSms(database: Db): (req: Request, res: Response) => Promise<void> {
+export function handleInboundSms(
+  database: Db,
+  deps?: ITwilioWebhookHandlerDeps
+): (req: Request, res: Response) => Promise<void> {
   const consentRepo = new SmsConsentRepository(database);
+  const webhookEvents = deps?.webhookEvents;
 
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const body = req.body as ITwilioSmsBody;
+      const messageSid = (body.MessageSid ?? '').trim();
+      const statusKey = normalizeMessageStatusKey(body);
+
+      if (messageSid && webhookEvents) {
+        const eventId = buildTwilioDedupeEventId(messageSid, statusKey);
+        const isNew = await webhookEvents.recordIfNew(TWILIO_WEBHOOK_PROVIDER, eventId);
+        if (!isNew) {
+          res.type('text/xml').send('<Response></Response>');
+          return;
+        }
+      }
+
       const fromRaw = body.From ?? '';
       const phoneE164 = normalizeFromPhone(fromRaw);
       const messageBody = (body.Body ?? '').trim();
@@ -105,8 +139,6 @@ export function handleInboundSms(database: Db): (req: Request, res: Response) =>
       }
 
       if (isYes) {
-        // YES counts only as the answer to a confirmation request we actually sent
-        // (older co-parent invites). New invites never text; the person opts in on the web.
         const record = await consentRepo.findByPhoneAndPurpose(phoneE164, SCHOLARMANCY_SMS_PURPOSE);
         if (record?.confirmationSentAt && !record.revokedAt) {
           await consentRepo.completeReplyYes(phoneE164, SCHOLARMANCY_SMS_PURPOSE);
@@ -125,19 +157,32 @@ export function handleInboundSms(database: Db): (req: Request, res: Response) =>
 /**
  * Handle delivery status callbacks; map status and record 21610 opt-outs.
  */
-export function handleStatusCallback(database: Db): (req: Request, res: Response) => Promise<void> {
+export function handleStatusCallback(
+  database: Db,
+  deps?: ITwilioWebhookHandlerDeps
+): (req: Request, res: Response) => Promise<void> {
   const commLogRepo = new CommunicationLogRepository(database);
   const consentRepo = new SmsConsentRepository(database);
+  const webhookEvents = deps?.webhookEvents;
 
   return async (req: Request, res: Response): Promise<void> => {
     try {
       const body = req.body as ITwilioStatusBody;
-      const messageSid = body.MessageSid ?? '';
-      const twilioStatus = body.MessageStatus ?? '';
+      const messageSid = (body.MessageSid ?? '').trim();
+      const twilioStatus = (body.MessageStatus ?? '').trim();
 
       if (!messageSid || !twilioStatus) {
         res.status(400).json({ error: 'MessageSid and MessageStatus are required' });
         return;
+      }
+
+      if (webhookEvents) {
+        const eventId = buildTwilioDedupeEventId(messageSid, twilioStatus);
+        const isNew = await webhookEvents.recordIfNew(TWILIO_WEBHOOK_PROVIDER, eventId);
+        if (!isNew) {
+          res.status(200).json({ success: true, deduped: true });
+          return;
+        }
       }
 
       const internalStatus = TWILIO_STATUS_MAP[twilioStatus];
