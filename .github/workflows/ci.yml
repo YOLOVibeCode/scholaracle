@@ -13,6 +13,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
+  GITLEAKS_VERSION: '8.30.1'
 
 jobs:
   install:
@@ -44,6 +45,26 @@ jobs:
             node_modules
             packages/*/node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+  gitleaks:
+    name: Gitleaks
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          v="${{ env.GITLEAKS_VERSION }}"
+          curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Run gitleaks
+        run: gitleaks detect --source . --config .gitleaks.toml --no-banner --redact
 
   quality:
     name: Quality Gate (Lint & Format)
