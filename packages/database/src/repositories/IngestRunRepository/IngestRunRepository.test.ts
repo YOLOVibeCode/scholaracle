@@ -30,11 +30,15 @@ describe('IngestRunRepository', () => {
       lastCursor: null,
     });
 
+    await repo.markUploaded('user-1', 'run-1', { opCount: 5 });
     await repo.commitRun({
       userId: 'user-1',
       runId: 'run-1',
       newCursor: { type: 'opaque', value: 'c1' },
     });
+
+    const committed = await repo.findByUserIdAndRunId('user-1', 'run-1');
+    expect(committed!.opCount).toBe(5);
 
     const cursor = await repo.findLastCommittedCursor('user-1', 'src-1');
     expect(cursor?.value).toBe('c1');
@@ -48,12 +52,13 @@ describe('IngestRunRepository', () => {
       lastCursor: null,
     });
 
-    await repo.markUploaded('user-1', 'run-upload');
+    await repo.markUploaded('user-1', 'run-upload', { opCount: 3 });
 
     const run = await repo.findByUserIdAndRunId('user-1', 'run-upload');
     expect(run).not.toBeNull();
     expect(run!.status).toBe('uploaded');
     expect(run!.uploadedAt).toBeInstanceOf(Date);
+    expect(run!.opCount).toBe(3);
   });
 
   it('finds run by userId and runId', async () => {
