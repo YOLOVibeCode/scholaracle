@@ -9,9 +9,15 @@ description = "Committed public demo accounts and doc placeholders (not producti
 paths = [
   '''^packages/mobile/store-metadata/testflight\.json$''',
   '''^packages/mobile/src/demo/demoLogin\.ts$''',
-  '''^packages/api/src/services/provision/StudentProvisioner\.ts$''',
-  '''^packages/mobile/eas\.json$''',
   '''^TRIGGER_DIGEST_GUIDE\.md$''',
   '''^packages/connector/src/aeries/aeries-adapter\.test\.ts$''',
   '''^scripts/test-gitleaks-hook\.sh$''',
+]
+
+[[allowlists]]
+description = "Known non-secret lines: the temp-password alphabet and Apple's public App Store Connect issuer id"
+regexTarget = "line"
+regexes = [
+  '''TEMP_PASSWORD_ALPHABET\s*=''',
+  '''"ascApiKeyIssuerId"\s*:''',
 ]
