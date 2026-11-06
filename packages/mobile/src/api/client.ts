@@ -151,11 +151,26 @@ export class ScholarmancyApiClient {
     providerAccountId: string,
     email: string,
     name: string,
-    internalSecret: string
+    internalSecret: string,
+    options?: { appleIdentityToken?: string; appleNonce?: string }
   ): Promise<IAuthLoginResponse> {
+    const body: Record<string, unknown> = {
+      provider,
+      providerAccountId,
+      email,
+      name,
+    };
+    if (provider === 'apple') {
+      if (options?.appleIdentityToken !== undefined) {
+        body['appleIdentityToken'] = options.appleIdentityToken;
+      }
+      if (options?.appleNonce !== undefined) {
+        body['appleNonce'] = options.appleNonce;
+      }
+    }
     const res = await this._postWithHeaders<IAuthLoginResponse>(
       '/api/auth/oauth',
-      { provider, providerAccountId, email, name },
+      body,
       { 'x-internal-api-secret': internalSecret },
       false
     );

@@ -25,8 +25,17 @@ describe('Noctusoft webhook raw body through createApp', () => {
   });
 
   afterAll(async () => {
-    await database.dropDatabase();
-    await client.close();
+    try {
+      await database.dropDatabase();
+    } catch {
+      // ignore teardown races when the worker is tearing down
+    }
+    try {
+      await client.close();
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name !== 'MongoClientClosedError') throw err;
+    }
     await mongoServer.stop();
   });
 
