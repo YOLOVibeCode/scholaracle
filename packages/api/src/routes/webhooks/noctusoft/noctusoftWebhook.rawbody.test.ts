@@ -1,17 +1,25 @@
+/**
+ * Uses mongodb-memory-server instead of the Jest global URI so teardown cannot kill the server
+ * before this file's afterAll runs (localhost fallback is fragile under forceExit).
+ */
 import request from 'supertest';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { createApp } from '../../../server';
 import { signNoctusoftWebhookBody } from '../../../services/noctusoft-store/verifyNoctusoftWebhookSignature';
 
 describe('Noctusoft webhook raw body through createApp', () => {
+  jest.setTimeout(60_000);
+
   const webhookSecret = 'test-webhook-secret';
 
+  let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let database: Db;
 
   beforeAll(async () => {
-    const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
-    client = new MongoClient(uri);
+    mongoServer = await MongoMemoryServer.create();
+    client = new MongoClient(mongoServer.getUri());
     await client.connect();
     database = client.db('scholaracle_test_noctusoft_rawbody');
   });
@@ -19,6 +27,7 @@ describe('Noctusoft webhook raw body through createApp', () => {
   afterAll(async () => {
     await database.dropDatabase();
     await client.close();
+    await mongoServer.stop();
   });
 
   function buildApp() {
