@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
+import { computeRunCoverage } from './computeRunCoverage';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -195,23 +196,26 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   await emit('validating', 'Validating envelope...');
 
   const endedAt = new Date().toISOString();
-  const envelope: ISlcIngestEnvelopeV1 = {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const runBase = {
+    runId,
+    startedAt,
+    endedAt,
+    provider: config.provider,
+    adapterId: config.adapterId,
+    adapterVersion: config.adapterVersion,
+    mode: 'delta' as const,
+    timezone,
+    meta: buildEnvelopeMeta(host, {
+      source: enrichmentSource,
+      patchCount: enrichment.patchCount,
+      failed: enrichment.failed,
+    }),
+  };
+
+  const draftEnvelope: ISlcIngestEnvelopeV1 = {
     schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
-    run: {
-      runId,
-      startedAt,
-      endedAt,
-      provider: config.provider,
-      adapterId: config.adapterId,
-      adapterVersion: config.adapterVersion,
-      mode: 'delta',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      meta: buildEnvelopeMeta(host, {
-        source: enrichmentSource,
-        patchCount: enrichment.patchCount,
-        failed: enrichment.failed,
-      }),
-    },
+    run: runBase,
     source: {
       sourceId: config.sourceId,
       displayName: `${config.provider} (${host.clientType})`,
@@ -220,7 +224,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     ops,
   };
 
-  const report = validateEnvelope(envelope);
+  const report = validateEnvelope(draftEnvelope);
   if (!report.passed) {
     const msg = `Envelope validation failed: ${report.errorCount} errors`;
     if (recorder) {
@@ -231,6 +235,31 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     await uploader.reportFailure?.(runId, config.sourceId, msg).catch(() => undefined);
     throw new SyncError(msg, 'local');
   }
+
+  if (ops.length === 0) {
+    const msg = 'ZERO_ROWS';
+    if (recorder) {
+      await recorder
+        .completeRun(runId, { status: 'failed', opCount: 0, errorMessage: msg })
+        .catch(() => undefined);
+    }
+    await uploader.reportFailure?.(runId, config.sourceId, msg).catch(() => undefined);
+    throw new SyncError(msg, 'local');
+  }
+
+  const validationWarnings = report.checks
+    .filter((c) => c.severity === 'warning')
+    .map((c) => c.message);
+  const coverage = computeRunCoverage(ops);
+
+  const envelope: ISlcIngestEnvelopeV1 = {
+    ...draftEnvelope,
+    run: {
+      ...runBase,
+      coverage,
+      warnings: validationWarnings,
+    },
+  };
 
   // 6. Upload
   await emit('uploading', 'Uploading to Scholaracle...');
@@ -254,7 +283,12 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   // 7. Record success
   if (recorder) {
     await recorder
-      .completeRun(runId, { status: 'success', opCount: ops.length })
+      .completeRun(runId, {
+        status: 'success',
+        opCount: ops.length,
+        coverage,
+        warnings: validationWarnings,
+      })
       .catch(() => undefined);
   }
   await emit('complete', `Sync complete — ${ops.length} ops`, { opCount: ops.length });
