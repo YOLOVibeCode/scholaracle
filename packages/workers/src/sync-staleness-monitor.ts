@@ -31,6 +31,7 @@ interface IStudentDataSource {
   readonly enabled?: boolean;
   readonly lastScraped?: Date;
   readonly lastSuccess?: Date;
+  readonly lastSuccessAt?: Date;
 }
 
 /** Minimal student document shape. */
@@ -43,6 +44,18 @@ interface IStudentRecord {
 
 const DEFAULT_CHECK_INTERVAL_MS = 60 * 60_000; // 1 hour
 const DEFAULT_STALE_THRESHOLD_MS = 48 * 60 * 60_000; // 48 hours
+
+/** Prefer phone/CLI ingest `lastSuccessAt`, then legacy fields. Exported for tests. */
+export function latestSyncDate(ds: IStudentDataSource): Date | null {
+  const raw = ds.lastSuccessAt ?? ds.lastSuccess ?? ds.lastScraped;
+  if (!raw) return null;
+  return new Date(raw as unknown as string);
+}
+
+export function isDataSourceStale(ds: IStudentDataSource, staleThreshold: Date): boolean {
+  const lastSynced = latestSyncDate(ds);
+  return !lastSynced || lastSynced < staleThreshold;
+}
 
 export class SyncStalenessMonitor {
   private readonly _db: Db;
@@ -110,7 +123,7 @@ export class SyncStalenessMonitor {
       string,
       {
         ownerUserId: string;
-        staleSources: { studentName: string; sourceName: string; lastScraped: Date | null }[];
+        staleSources: { studentName: string; sourceName: string; lastSynced: Date | null }[];
       }
     >();
 
@@ -119,8 +132,7 @@ export class SyncStalenessMonitor {
       for (const ds of sources) {
         if (ds.enabled === false) continue;
 
-        const lastScraped = ds.lastScraped ? new Date(ds.lastScraped as unknown as string) : null;
-        const isStale = !lastScraped || lastScraped < staleThreshold;
+        const isStale = isDataSourceStale(ds, staleThreshold);
 
         if (isStale) {
           const ownerKey = String(student.userId);
@@ -130,7 +142,7 @@ export class SyncStalenessMonitor {
           staleByOwner.get(ownerKey)!.staleSources.push({
             studentName: student.name ?? 'Unknown Student',
             sourceName: ds.displayName ?? ds.pluginId ?? 'Unknown Source',
-            lastScraped,
+            lastSynced: latestSyncDate(ds),
           });
         }
       }
@@ -184,13 +196,13 @@ export class SyncStalenessMonitor {
   private async _sendStaleAlert(
     toEmail: string,
     ownerName: string,
-    staleSources: { studentName: string; sourceName: string; lastScraped: Date | null }[],
+    staleSources: { studentName: string; sourceName: string; lastSynced: Date | null }[],
     thresholdHours: number
   ): Promise<void> {
     const sourceLines = staleSources
       .map((s) => {
-        const lastStr = s.lastScraped
-          ? s.lastScraped.toLocaleDateString('en-US', {
+        const lastStr = s.lastSynced
+          ? s.lastSynced.toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
@@ -202,8 +214,8 @@ export class SyncStalenessMonitor {
 
     const sourceHtmlLines = staleSources
       .map((s) => {
-        const lastStr = s.lastScraped
-          ? s.lastScraped.toLocaleDateString('en-US', {
+        const lastStr = s.lastSynced
+          ? s.lastSynced.toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
               year: 'numeric',

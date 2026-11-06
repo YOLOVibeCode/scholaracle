@@ -5,7 +5,7 @@ export const addSourceSchema = z.object({
   adapterId: z.string().min(1, 'adapterId is required'),
   displayName: z.string().min(1, 'displayName is required'),
   portalBaseUrl: z.string().optional(),
-  schedule: z.enum(['hourly', 'every_6h', 'daily', 'manual']).default('every_6h'),
+  schedule: z.enum(['hourly', 'every_6h', 'daily', 'manual']).default('manual'),
   dataTypes: z.array(z.string()).min(1, 'at least one data type required'),
 });
 
