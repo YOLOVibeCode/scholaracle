@@ -97,6 +97,7 @@ import type { IEmailTransport } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import { createSmsStack } from './services/sms/createSmsStack';
+import { maybeBootstrapFirstAdmin } from './bootstrap/maybeBootstrapAdmin';
 
 export interface IServerConfig {
   readonly port?: number;
@@ -698,6 +699,7 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   installProcessHandlers(logger);
 
   const database = await initializeDatabase(config);
+  await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
 
