@@ -930,8 +930,16 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   router.post(
     '/:id/contacts/transfer-confirm',
     asyncHandler(async (req: Request, res: Response) => {
+      const userId = getUserId(req);
+      if (!userId) {
+        throw new AuthenticationError('Unauthorized');
+      }
+
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
+        throw new NotFoundError('Student not found');
+      }
+      if (!student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
 

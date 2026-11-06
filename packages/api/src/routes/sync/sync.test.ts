@@ -418,6 +418,11 @@ describe('Sync API Routes', () => {
 
     it('should return 200 with runs list for owner', async () => {
       const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: new ObjectId(testUserId),
+        name: 'Sync Runs Student',
+      });
       const runId = new ObjectId();
       await database.collection('sync_runs').insertOne({
         _id: runId,
@@ -437,6 +442,11 @@ describe('Sync API Routes', () => {
 
     it('should respect limit query param', async () => {
       const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: new ObjectId(testUserId),
+        name: 'Sync Runs Limit Student',
+      });
       await database.collection('sync_runs').insertMany([
         {
           studentId: studentId.toString(),
@@ -489,10 +499,16 @@ describe('Sync API Routes', () => {
     });
 
     it('should return 200 with run for owner', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: new ObjectId(testUserId),
+        name: 'Sync Run Owner Student',
+      });
       const runId = new ObjectId();
       await database.collection('sync_runs').insertOne({
         _id: runId,
-        studentId: new ObjectId().toString(),
+        studentId: studentId.toString(),
         userId: testUserId,
         createdAt: new Date(),
         status: 'running',
@@ -507,10 +523,16 @@ describe('Sync API Routes', () => {
     });
 
     it('should return 404 when run belongs to another user', async () => {
+      const studentId = new ObjectId();
+      await database.collection('students').insertOne({
+        _id: studentId,
+        userId: new ObjectId(otherUserId),
+        name: 'Other User Student',
+      });
       const runId = new ObjectId();
       await database.collection('sync_runs').insertOne({
         _id: runId,
-        studentId: new ObjectId().toString(),
+        studentId: studentId.toString(),
         userId: otherUserId,
         createdAt: new Date(),
         status: 'completed',
@@ -571,13 +593,12 @@ describe('Sync API Routes', () => {
       expect(response.status).toBe(400);
     });
 
-    it('should return position -1 for non-existent job', async () => {
+    it('should return 404 for non-existent job', async () => {
       const jobId = new ObjectId();
       const response = await request(app)
         .get(`/api/sync/jobs/${jobId}/position`)
         .set('Authorization', `Bearer ${testToken}`);
-      expect(response.status).toBe(200);
-      expect(response.body.position).toBe(-1);
+      expect(response.status).toBe(404);
     });
   });
 });
