@@ -1430,6 +1430,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
       >();
 
+      for (const rawCourseId of courseIds) {
+        const mergedCourseId = extIdToMergedId.get(rawCourseId) ?? rawCourseId;
+        if (courseData.has(mergedCourseId)) continue;
+        courseData.set(mergedCourseId, {
+          totalPointsPossible: 0,
+          totalPointsEarned: 0,
+          gradedCount: 0,
+          missingCount: 0,
+          lateCount: 0,
+          assignments: [],
+          recentPointsPossible: 0,
+          recentPointsEarned: 0,
+          olderPointsPossible: 0,
+          olderPointsEarned: 0,
+        });
+      }
+
       // Track per-course: latest assignment date (epoch ms) and associated termExternalIds
       const courseLatestAssignment = new Map<string, number>();
       const courseTermIds = new Map<string, Set<string>>();

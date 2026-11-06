@@ -1,4 +1,4 @@
-import { LlmClient } from '@scholaracle/agents';
+import { LlmClient, resolveModelForRole } from '@scholaracle/agents';
 import { getScraperSystemPrompt, getScraperGeneratePrompt } from './prompts';
 import type { IPageAnalysis } from './crawler';
 import { resolveLlmConfig } from '../llm/resolveLlmConfig';
@@ -33,7 +33,7 @@ export async function generateScraperWithAI(request: IGenerateRequest): Promise<
   const llm = new LlmClient({
     apiKey: cfg.apiKey,
     baseUrl: cfg.baseUrl,
-    model: cfg.model ?? 'claude-sonnet-4-20250514',
+    model: cfg.model ?? resolveModelForRole('patch'),
   });
 
   const systemPrompt = getScraperSystemPrompt();
