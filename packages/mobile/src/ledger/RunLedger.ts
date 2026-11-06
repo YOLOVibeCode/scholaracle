@@ -6,6 +6,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { ISlcRunCoverage } from '@scholaracle/contracts';
 
 const LEDGER_KEY = 'slc_run_ledger';
 const MAX_ENTRIES = 50;
@@ -32,6 +33,8 @@ export interface IRunEntry {
   readonly errorMessage?: string;
   readonly adapterVersion?: string;
   readonly coreVersion?: string;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
 }
 
 export class RunLedger {
@@ -92,7 +95,13 @@ export class RunLedger {
 
   async completeRun(
     runId: string,
-    result: { status: RunStatus; opCount?: number; errorMessage?: string }
+    result: {
+      status: RunStatus;
+      opCount?: number;
+      errorMessage?: string;
+      coverage?: ISlcRunCoverage;
+      warnings?: readonly string[];
+    }
   ): Promise<void> {
     return this._enqueue(async () => {
       const entries = await this._load();
@@ -107,6 +116,8 @@ export class RunLedger {
         elapsedMs: now - start,
         opCount: result.opCount,
         errorMessage: result.errorMessage,
+        ...(result.coverage !== undefined ? { coverage: result.coverage } : {}),
+        ...(result.warnings !== undefined ? { warnings: result.warnings } : {}),
       };
       entries[idx] = updated;
       await this._save(entries);
