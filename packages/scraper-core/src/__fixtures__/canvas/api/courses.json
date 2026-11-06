@@ -1,0 +1,16 @@
+[
+  {
+    "id": 10,
+    "name": "Spanish 2",
+    "course_code": "SPAN-1 p1 - A",
+    "enrollments": [
+      {
+        "type": "student",
+        "computed_current_score": 92,
+        "computed_current_grade": "A-"
+      }
+    ],
+    "term": { "name": "Fall 2026" },
+    "teachers": [{ "id": "50", "display_name": "Rivera, M", "pronouns": "" }]
+  }
+]
