@@ -20,6 +20,7 @@ import {
   DEMO_STUDENT_USER_LIAM,
   DEMO_LAB_SAFETY_HASH,
 } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { studioRouter } from './studio';
 
 const CELL_DIVISION_ID = 'demo-emma-ap-bio-a5';
@@ -36,8 +37,15 @@ describe('GET /api/studio — student session', () => {
   let emmaToken: string;
   let liamToken: string;
   let parentToken: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -59,7 +67,7 @@ describe('GET /api/studio — student session', () => {
     );
     app.use(createErrorHandler());
 
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     const emma = await authService.login(
@@ -90,6 +98,8 @@ describe('GET /api/studio — student session', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('returns Today for Emma without grades; Cell Division is in the list', async () => {
@@ -252,6 +262,6 @@ describe('GET /api/studio — student session', () => {
       .get('/api/studio/today')
       .set('Authorization', `Bearer ${emmaToken}`);
     expect(res.status).toBe(403);
-    await request(app).post('/api/seed/demo');
+    await postDemoSeed();
   });
 });
