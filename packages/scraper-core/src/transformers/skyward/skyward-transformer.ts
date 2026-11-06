@@ -6,119 +6,11 @@ import type {
 import { parseTutorialWindow } from '../parseTutorialWindow';
 
 // ---------------------------------------------------------------------------
-// EXAMPLEISD 2025-2026 grading periods (Texas 6-weeks; used for termExternalId and expiration)
-// ---------------------------------------------------------------------------
-
-const SKYWARD_TERM_DEFS: ReadonlyArray<{
-  readonly code: string;
-  readonly title: string;
-  readonly startDate: string;
-  readonly endDate: string;
-  readonly type: 'grading_period' | 'semester';
-}> = [
-  {
-    code: 'PR1',
-    title: 'Progress 1',
-    startDate: '2025-08-18',
-    endDate: '2025-09-26',
-    type: 'grading_period',
-  },
-  {
-    code: '1ST',
-    title: '1st Six Weeks',
-    startDate: '2025-08-18',
-    endDate: '2025-09-26',
-    type: 'grading_period',
-  },
-  {
-    code: 'PR2',
-    title: 'Progress 2',
-    startDate: '2025-09-29',
-    endDate: '2025-11-07',
-    type: 'grading_period',
-  },
-  {
-    code: '2ND',
-    title: '2nd Six Weeks',
-    startDate: '2025-09-29',
-    endDate: '2025-11-07',
-    type: 'grading_period',
-  },
-  {
-    code: 'EX1',
-    title: 'Exam 1',
-    startDate: '2025-11-10',
-    endDate: '2025-12-19',
-    type: 'grading_period',
-  },
-  {
-    code: 'SM1',
-    title: 'Semester 1',
-    startDate: '2025-08-18',
-    endDate: '2025-12-19',
-    type: 'semester',
-  },
-  {
-    code: 'PR3',
-    title: 'Progress 3',
-    startDate: '2026-01-06',
-    endDate: '2026-02-13',
-    type: 'grading_period',
-  },
-  {
-    code: '3RD',
-    title: '3rd Six Weeks',
-    startDate: '2026-01-06',
-    endDate: '2026-02-13',
-    type: 'grading_period',
-  },
-  {
-    code: 'PR4',
-    title: 'Progress 4',
-    startDate: '2026-02-16',
-    endDate: '2026-04-03',
-    type: 'grading_period',
-  },
-  {
-    code: '4TH',
-    title: '4th Six Weeks',
-    startDate: '2026-02-16',
-    endDate: '2026-04-03',
-    type: 'grading_period',
-  },
-  {
-    code: 'EX2',
-    title: 'Exam 2',
-    startDate: '2026-04-06',
-    endDate: '2026-05-22',
-    type: 'grading_period',
-  },
-  {
-    code: 'SM2',
-    title: 'Semester 2',
-    startDate: '2026-01-06',
-    endDate: '2026-05-22',
-    type: 'semester',
-  },
-  {
-    code: 'FIN',
-    title: 'Final',
-    startDate: '2026-04-06',
-    endDate: '2026-05-22',
-    type: 'grading_period',
-  },
-];
+// Skyward exposes no grading-period dates on the gradebook page, so no academicTerm
+// ops are emitted and nothing carries a termExternalId. (A hard-coded district
+// calendar used to live here; it went stale after one school year and hid courses.)
 
 /** Returns term externalId for the grading period that contains the given date (YYYY-MM-DD). */
-function getTermExternalIdForDate(dateStr: string | undefined): string | undefined {
-  if (!dateStr || dateStr.length < 10) return undefined;
-  const d = dateStr.slice(0, 10);
-  for (let i = SKYWARD_TERM_DEFS.length - 1; i >= 0; i--) {
-    const t = SKYWARD_TERM_DEFS[i]!;
-    if (d >= t.startDate && d <= t.endDate) return `skyward-term-${t.code}`;
-  }
-  return undefined;
-}
 
 // Types imported from extractors module (single source of truth)
 
@@ -198,10 +90,11 @@ function parseDate(dateStr: string): string {
     const day = m[3]!.padStart(2, '0');
     return `${m[4]}-${mon}-${day}`;
   }
-  // "02/15/2026" -> "2026-02-15"
-  const m2 = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  // "02/15/2026" or "02/15/26" -> "2026-02-15"
+  const m2 = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})\b/);
   if (m2) {
-    return `${m2[3]}-${m2[1]!.padStart(2, '0')}-${m2[2]!.padStart(2, '0')}`;
+    const year = m2[3]!.length === 2 ? `20${m2[3]}` : m2[3]!;
+    return `${year}-${m2[1]!.padStart(2, '0')}-${m2[2]!.padStart(2, '0')}`;
   }
   return dateStr;
 }
@@ -231,20 +124,6 @@ export function transformSkywardExtract(
   };
 
   // Academic terms (grading periods + semesters) for missing-assignment expiration
-  for (const t of SKYWARD_TERM_DEFS) {
-    ops.push({
-      op: 'upsert',
-      entity: 'academicTerm',
-      key: { ...baseKey, externalId: `skyward-term-${t.code}` },
-      observedAt: now,
-      record: {
-        title: t.title,
-        startDate: t.startDate,
-        endDate: t.endDate,
-        type: t.type,
-      },
-    });
-  }
 
   // Student profile (student + school)
   if (extract.student && extract.student !== 'Unknown') {
@@ -381,7 +260,6 @@ export function transformSkywardExtract(
       ? courseExtIdFor(course.period, course.name, course._cni)
       : `skyward-course-${ma.period}-${slugify(ma.course)}`;
     const dueDateIso = ma.dueDate ? parseDate(ma.dueDate) : undefined;
-    const termExternalId = getTermExternalIdForDate(dueDateIso);
 
     ops.push({
       op: 'upsert',
@@ -397,7 +275,6 @@ export function transformSkywardExtract(
         dueAt: dueDateIso,
         status: 'missing' as const,
         courseExternalId: courseExtId,
-        termExternalId,
       },
     });
   }
@@ -412,7 +289,6 @@ export function transformSkywardExtract(
       ? courseExtIdFor(course.period, course.name, course._cni)
       : `skyward-course-${a.period}-${slugify(a.course)}`;
     const dueDateIso = a.dueDate ? parseDate(a.dueDate) : undefined;
-    const termExtId = getTermExternalIdForDate(dueDateIso ?? undefined);
 
     ops.push({
       op: 'upsert',
@@ -431,7 +307,6 @@ export function transformSkywardExtract(
         pointsPossible: a.pointsPossible ? parseFloat(a.pointsPossible) : undefined,
         category: a.category || undefined,
         courseExternalId: courseExtId,
-        termExternalId: termExtId,
       },
     });
   }
