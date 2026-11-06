@@ -7,7 +7,7 @@
  * record exists (created via POST /api/ingest/v1/sources).
  */
 
-import type { ISlcRunCoverage } from '../../models/Ingest';
+import type { ISlcRunCoverage, ISourceIngestLastCounts } from '../../models/Ingest';
 
 export interface ISourceListItem {
   readonly id: string;
@@ -22,6 +22,9 @@ export interface ISourceListItem {
   readonly hasCredentials?: boolean;
   readonly lastScraped?: string;
   readonly lastSuccess?: string;
+  readonly lastSuccessAt?: string;
+  readonly lastRunId?: string;
+  readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
 }
 

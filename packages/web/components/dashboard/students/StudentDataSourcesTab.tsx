@@ -90,9 +90,13 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">{source.displayName}</CardTitle>
-                    <CardDescription>
+                    <CardDescription data-testid={`source-desc-${source.id}`}>
                       {source.provider} · {source.schedule.replace('_', ' ')} ·{' '}
-                      {source.lastSuccess ? `Last sync: ${new Date(source.lastSuccess).toLocaleString()}` : 'No sync yet'}
+                      {source.lastSuccessAt || source.lastSuccess
+                        ? `Last sync: ${new Date(
+                            source.lastSuccessAt ?? source.lastSuccess!
+                          ).toLocaleString()}`
+                        : 'No sync yet'}
                     </CardDescription>
                   </div>
                   <span

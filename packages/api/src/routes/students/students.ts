@@ -3263,12 +3263,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           displayName: ingestSource.displayName,
           portalBaseUrl: ingestSource.portalBaseUrl,
           enabled: ds.enabled,
-          schedule: ds.schedule ?? 'every_6h',
+          schedule: ds.schedule ?? 'manual',
           dataTypes: ds.dataTypes ? [...ds.dataTypes] : [],
           status: ds.status ?? 'active',
           hasCredentials: Boolean(ds.credentials?.encrypted),
           lastScraped: ds.lastScraped?.toISOString(),
           lastSuccess: ds.lastSuccess?.toISOString(),
+          lastSuccessAt: ds.lastSuccessAt?.toISOString(),
+          lastRunId: ds.lastRunId,
+          lastCounts: ds.lastCounts,
           lastError: ds.lastError ?? null,
         });
       }

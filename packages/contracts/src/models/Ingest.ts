@@ -94,6 +94,12 @@ export interface ISlcRunCoverage {
   readonly students: readonly ISlcStudentSyncCoverage[];
 }
 
+/** Denormalized onto `Student.dataSources[]` after ingest completes. */
+export interface ISourceIngestLastCounts {
+  readonly opsTotal: number;
+  readonly coverage: ISlcRunCoverage;
+}
+
 export interface ISlcRunMeta {
   readonly runId: string;
   readonly startedAt: string; // ISO timestamp
