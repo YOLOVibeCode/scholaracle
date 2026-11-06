@@ -14,7 +14,6 @@
     "grade_cell_anchor": "a#showGradeInfo",
     "dialog_wrap": ".sf_DialogWrap",
     "dialog_close": ".sf_DialogClose, a[title=\"Close\"]",
-    "missing_cell_img": "img",
-    "schedule_header_year_marker": "2025"
+    "missing_cell_img": "img"
   }
 }

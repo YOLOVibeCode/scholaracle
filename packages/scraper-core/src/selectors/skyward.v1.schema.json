@@ -24,8 +24,7 @@
         "grade_cell_anchor",
         "dialog_wrap",
         "dialog_close",
-        "missing_cell_img",
-        "schedule_header_year_marker"
+        "missing_cell_img"
       ],
       "additionalProperties": { "type": "string", "minLength": 1 }
     }

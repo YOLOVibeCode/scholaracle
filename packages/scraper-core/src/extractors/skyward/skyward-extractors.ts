@@ -266,8 +266,7 @@ export function extractSkywardSchedule(selectors: ISkywardSelectorsV1): Array<{
   for (const table of tables) {
     const headerRow = table.querySelector(selectors.tr);
     const headerText = headerRow?.textContent ?? '';
-    if (!headerText.includes('Term') && !headerText.includes(selectors.schedule_header_year_marker))
-      continue;
+    if (!headerText.includes('Term')) continue;
 
     const rows = table.querySelectorAll(selectors.tr);
     for (let i = 1; i < rows.length; i++) {
@@ -311,14 +310,20 @@ export function extractSkywardSchedule(selectors: ISkywardSelectorsV1): Array<{
   return results;
 }
 
+function skywardNormalizeNavLabel(s: string | null | undefined): string {
+  return (s ?? '').replace(/\s+/g, ' ').trim();
+}
+
 /**
- * Click the navigation link whose trimmed text equals `text`. Runs in the page;
- * self-contained.
+ * Clicks the first nav link whose visible text matches `text` after normalizing
+ * whitespace (nested spans / line breaks on real portals).
  */
 export function clickSkywardNavLink(selectors: ISkywardSelectorsV1, text: string): void {
+  const want = skywardNormalizeNavLabel(text).toLowerCase();
   const links = Array.from(document.querySelectorAll(selectors.nav_links));
   for (const link of links) {
-    if (link.textContent?.trim() === text) {
+    const got = skywardNormalizeNavLabel(link.textContent).toLowerCase();
+    if (got === want || got.includes(want)) {
       (link as HTMLAnchorElement).click();
       return;
     }

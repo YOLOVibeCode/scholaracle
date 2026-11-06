@@ -19,6 +19,7 @@ import {
 import {
   FAKE_PORTAL_SKYWARD_ASSIGNMENTS,
   buildM402SkywardGradebookHtml,
+  buildM402SkywardHomeHtml,
 } from '../fixtures/fakePortalM402';
 import { SKYWARD_SELECTORS_V1 } from '../selectors/skywardV1';
 
@@ -43,6 +44,70 @@ class DomPageDriver implements IPageDriver {
   async sleep(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+  onNewPage(): void {}
+}
+
+/**
+ * Starts on Skyward home (sfhome01); first Gradebook nav click loads gradebook markup.
+ */
+class HomeThenGradebookDriver implements IPageDriver {
+  private _url = 'https://skyward.example.test/scripts/wsisa.dll/WService=x/sfhome01.w';
+
+  readonly navigatedToGradebook: { value: boolean } = { value: false };
+
+  async goto(url: string): Promise<void> {
+    this._url = url;
+  }
+
+  url(): string {
+    return this._url;
+  }
+
+  private attachGradebookDialogHooks(): void {
+    const wrap = document.querySelector('.sf_DialogWrap') as HTMLElement;
+    wrap.querySelector('.sf_DialogClose')!.addEventListener('click', () => {
+      wrap.style.display = 'none';
+    });
+    for (const cell of Array.from(document.querySelectorAll('a#showGradeInfo'))) {
+      cell.addEventListener('click', () => {
+        const cni = cell.getAttribute('data-cni')!;
+        setTimeout(() => {
+          document.querySelector('#gradeInfoDialog')!.innerHTML =
+            '<table><tr><th>Due</th><th>Assignment</th><th>Grade</th><th>Score(%)</th>' +
+            `<th>Points Score</th><th>Missing</th></tr>${FAKE_PORTAL_SKYWARD_ASSIGNMENTS[cni] ?? ''}</table>`;
+          wrap.style.display = 'block';
+        }, 0);
+      });
+    }
+  }
+
+  async evaluate<TArgs extends unknown[], TResult>(
+    fn: (...args: TArgs) => TResult | Promise<TResult>,
+    ...args: TArgs
+  ): Promise<TResult> {
+    const out = fn(...args);
+    const result = out instanceof Promise ? await out : out;
+    if (fn.name === 'clickSkywardNavLink' && /sfhome\d*\.w/i.test(this._url)) {
+      this._url = 'https://skyward.example.test/scripts/wsisa.dll/WService=x/sfgradebook001.w';
+      document.body.innerHTML = buildM402SkywardGradebookHtml();
+      this.attachGradebookDialogHooks();
+      this.navigatedToGradebook.value = true;
+    }
+    return result;
+  }
+
+  async content(): Promise<string> {
+    return document.documentElement.outerHTML;
+  }
+
+  async waitForLoad(): Promise<void> {}
+
+  async waitForUrlIncludes(): Promise<void> {}
+
+  async sleep(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
   onNewPage(): void {}
 }
 
@@ -109,6 +174,16 @@ describe('runSkywardRecipe (gradebook)', () => {
     expect(extract.assignments.map((a) => a.course)).toEqual(['Algebra I', 'Biology']);
     const art = extract.courses.find((c) => c.name === 'Art');
     expect(art?.grades).toEqual({ '1ST': '100' });
+  });
+
+  it('loads gradebook from home by clicking the Gradebook nav link (nested label)', async () => {
+    document.body.innerHTML = buildM402SkywardHomeHtml();
+    const driver = new HomeThenGradebookDriver();
+    const extract = await runSkywardRecipe(driver, 'https://skyward.example.test');
+    expect(driver.navigatedToGradebook.value).toBe(true);
+    expect(driver.url()).toContain('sfgradebook');
+    expect(extract.courses).toHaveLength(2);
+    expect(extract.assignments.length).toBeGreaterThan(0);
   });
 });
 
