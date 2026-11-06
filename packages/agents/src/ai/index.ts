@@ -1,3 +1,4 @@
+export { resolveModelForRole, type AiRole } from './models';
 export {
   LlmClient,
   type ILlmClientConfig,
@@ -40,3 +41,4 @@ export {
   type IGlanceInsightServiceConfig,
   type IGlanceInsightInput,
 } from './glance-insight-service';
+export { resolveLlmConfig, DEFAULT_RELAY_BASE_URL, type ILlmConfig } from './llm-config';

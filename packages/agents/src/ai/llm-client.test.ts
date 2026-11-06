@@ -1,6 +1,8 @@
 import { LlmClient } from './llm-client';
+import { resolveModelForRole } from './models';
 
 const originalFetch = globalThis.fetch;
+const env = process.env;
 
 function mockFetch(response: { status: number; body: unknown; ok?: boolean }) {
   const isOk = response.ok ?? (response.status >= 200 && response.status < 300);
@@ -14,6 +16,7 @@ function mockFetch(response: { status: number; body: unknown; ok?: boolean }) {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  process.env = { ...env };
 });
 
 describe('LlmClient', () => {
@@ -122,8 +125,15 @@ describe('LlmClient', () => {
     });
 
     it('should use default model when not specified', () => {
+      delete process.env['AI_MODEL_MATCHING'];
       const defaultClient = new LlmClient({ apiKey: 'key' });
-      expect(defaultClient.model).toBe('claude-sonnet-4-20250514');
+      expect(defaultClient.model).toBe(resolveModelForRole('matching'));
+    });
+
+    it('should use AI_MODEL_MATCHING when set', () => {
+      process.env['AI_MODEL_MATCHING'] = 'claude-custom-match';
+      const defaultClient = new LlmClient({ apiKey: 'key' });
+      expect(defaultClient.model).toBe('claude-custom-match');
     });
   });
 });
