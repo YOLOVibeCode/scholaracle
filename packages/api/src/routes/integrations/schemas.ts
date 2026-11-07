@@ -33,18 +33,3 @@ export const assignStudentSchema = z.object({
 });
 
 export type IAssignStudentBody = z.infer<typeof assignStudentSchema>;
-
-export const testConnectionSchema = z.object({
-  provider: z.string().min(1, 'provider is required'),
-  adapterId: z.string().min(1, 'adapterId is required'),
-  baseUrl: z.string().optional(),
-  credentials: z.object({
-    authType: z.enum(['api', 'oauth2', 'api-key']),
-    accessToken: z.string().optional(),
-    clientId: z.string().optional(),
-    clientSecret: z.string().optional(),
-    apiKey: z.string().optional(),
-  }),
-});
-
-export type ITestConnectionBody = z.infer<typeof testConnectionSchema>;

@@ -19,12 +19,7 @@ import {
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials } from '../../utils/credentialsCipher';
-import {
-  createIntegrationSchema,
-  updateIntegrationSchema,
-  assignStudentSchema,
-  testConnectionSchema,
-} from './schemas';
+import { createIntegrationSchema, updateIntegrationSchema, assignStudentSchema } from './schemas';
 
 export interface IIntegrationsRouterConfig {
   readonly database: import('mongodb').Db;
@@ -38,171 +33,6 @@ function requireUserId(req: Request): string {
   const userId = getUserId(req);
   if (!userId) throw new AuthenticationError('Unauthorized');
   return userId;
-}
-
-interface ITestResult {
-  success: boolean;
-  message: string;
-  durationMs: number;
-  details?: Record<string, unknown>;
-}
-
-/**
- * Lightweight connection test — makes a single API call to verify credentials.
- * Implemented inline (no dependency on @scholaracle/connector) to keep the API server lean.
- */
-/* eslint-disable-next-line complexity -- provider branching is inherently complex */
-async function testConnectionForProvider(
-  provider: string,
-  baseUrl: string,
-  credentials: {
-    accessToken?: string;
-    clientId?: string;
-    clientSecret?: string;
-    apiKey?: string;
-  }
-): Promise<ITestResult> {
-  const start = Date.now();
-
-  try {
-    switch (provider) {
-      case 'canvas': {
-        if (!credentials.accessToken) {
-          return {
-            success: false,
-            message: 'Canvas requires an access token',
-            durationMs: Date.now() - start,
-          };
-        }
-        const res = await fetch(`${baseUrl}/api/v1/users/self`, {
-          headers: { authorization: `Bearer ${credentials.accessToken}` },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          return {
-            success: false,
-            message: `Canvas returned HTTP ${res.status}: ${text}`,
-            durationMs: Date.now() - start,
-          };
-        }
-        const user = (await res.json()) as { id: number; name: string };
-        const coursesRes = await fetch(
-          `${baseUrl}/api/v1/courses?enrollment_state=active&per_page=5`,
-          {
-            headers: { authorization: `Bearer ${credentials.accessToken}` },
-          }
-        );
-        const courses = coursesRes.ok ? ((await coursesRes.json()) as unknown[]) : [];
-        return {
-          success: true,
-          message: `Connected as ${user.name} — found ${courses.length}${courses.length === 5 ? '+' : ''} courses`,
-          durationMs: Date.now() - start,
-          details: { userName: user.name, courseCount: courses.length },
-        };
-      }
-
-      case 'google-classroom': {
-        if (!credentials.accessToken) {
-          return {
-            success: false,
-            message: 'Google Classroom requires an OAuth access token',
-            durationMs: Date.now() - start,
-          };
-        }
-        const res = await fetch(
-          'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=5',
-          {
-            headers: { authorization: `Bearer ${credentials.accessToken}` },
-          }
-        );
-        if (!res.ok) {
-          const text = await res.text();
-          return {
-            success: false,
-            message: `Google Classroom returned HTTP ${res.status}: ${text}`,
-            durationMs: Date.now() - start,
-          };
-        }
-        const data = (await res.json()) as { courses?: unknown[] };
-        const count = data.courses?.length ?? 0;
-        return {
-          success: true,
-          message: `Connected — found ${count} course${count !== 1 ? 's' : ''}`,
-          durationMs: Date.now() - start,
-          details: { courseCount: count },
-        };
-      }
-
-      case 'oneroster': {
-        if (!credentials.accessToken && !(credentials.clientId && credentials.clientSecret)) {
-          return {
-            success: false,
-            message: 'OneRoster requires an access token or client credentials',
-            durationMs: Date.now() - start,
-          };
-        }
-        let token = credentials.accessToken;
-        if (!token && credentials.clientId && credentials.clientSecret) {
-          const tokenRes = await fetch(`${baseUrl}/token`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-              grant_type: 'client_credentials',
-              client_id: credentials.clientId,
-              client_secret: credentials.clientSecret,
-            }).toString(),
-          });
-          if (!tokenRes.ok) {
-            return {
-              success: false,
-              message: `OAuth token exchange failed: HTTP ${tokenRes.status}`,
-              durationMs: Date.now() - start,
-            };
-          }
-          const tokenData = (await tokenRes.json()) as { access_token: string };
-          token = tokenData.access_token;
-        }
-        const res = await fetch(`${baseUrl}/orgs?limit=1`, {
-          headers: { authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          return {
-            success: false,
-            message: `OneRoster returned HTTP ${res.status}: ${text}`,
-            durationMs: Date.now() - start,
-          };
-        }
-        const data = (await res.json()) as { orgs?: Array<{ name?: string }> };
-        const orgName = data.orgs?.[0]?.name;
-        return {
-          success: true,
-          message: `Connected${orgName ? ` to ${orgName}` : ''}`,
-          durationMs: Date.now() - start,
-          details: { institutionName: orgName },
-        };
-      }
-
-      case 'skyward': {
-        return {
-          success: false,
-          message:
-            'Skyward uses browser-based extraction on the client device. Use the mobile app, browser extension, or local CLI to connect Skyward.',
-          durationMs: Date.now() - start,
-        };
-      }
-
-      default:
-        return {
-          success: false,
-          message: `Test connection not supported for provider "${provider}" yet`,
-          durationMs: Date.now() - start,
-        };
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, message: `Connection failed: ${msg}`, durationMs: Date.now() - start };
-  }
 }
 
 /**
@@ -247,28 +77,6 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
       });
 
       res.status(200).json(list);
-    })
-  );
-
-  /**
-   * POST /api/integrations/test-connection
-   * Test credentials against an LMS without persisting anything.
-   * Returns success/failure with a human-readable message.
-   */
-  router.post(
-    '/test-connection',
-    asyncHandler(async (req: Request, res: Response) => {
-      requireUserId(req);
-
-      const parsed = testConnectionSchema.safeParse(req.body);
-      if (!parsed.success) {
-        throw ValidationError.fromZod(parsed.error);
-      }
-      const { provider, baseUrl, credentials } = parsed.data;
-
-      const testResult = await testConnectionForProvider(provider, baseUrl ?? '', credentials);
-
-      res.status(200).json(testResult);
     })
   );
 
