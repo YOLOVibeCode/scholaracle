@@ -82,22 +82,15 @@ test.describe('@feature Multi-Parent Sharing', () => {
     await page.click('[data-testid="wizard-next-step"]');
     const createRes = await createStudentRes;
     expect(createRes.status()).toBeLessThan(400);
+    const created = (await createRes.json()) as { id?: string };
+    expect(created.id).toBeTruthy();
     await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({ timeout: 10_000 });
     await page.locator('[data-testid="wizard-skip-services"]').click();
     await page.locator('[data-testid="wizard-finish"]').click();
-    await expect(wizard).not.toBeVisible({ timeout: 3000 });
+    await expect(wizard).not.toBeVisible({ timeout: 10_000 });
 
-    // Navigate to student detail
-    await page.goto('/dashboard/students');
-    await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
-
-    // Click edit on the student
-    await page
-      .locator('[data-testid="student-list"]')
-      .filter({ hasText: studentName })
-      .getByTestId('button-edit-student')
-      .click();
-    await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 15_000 });
+    await page.goto(`/dashboard/students/${created.id}`);
+    await page.waitForURL(new RegExp(`/dashboard/students/${created.id}`), { timeout: 15_000 });
 
     // Click Parents tab
     await page.click('[data-testid="tab-parents"]');

@@ -101,6 +101,13 @@ describe('Admin Communications Routes', () => {
     expect(Array.isArray(listRes.body.data)).toBe(true);
     expect(listRes.body.data.length).toBe(1);
     expect(listRes.body.data[0].subject).toBe('Test Communication');
+
+    const byEmailRes = await request(app)
+      .get('/api/admin/communications/logs?recipientEmail=test.parent@example.com')
+      .set('Authorization', `Bearer ${supportToken}`);
+    expect(byEmailRes.status).toBe(200);
+    expect(byEmailRes.body.data.length).toBe(1);
+    expect(byEmailRes.body.data[0].subject).toBe('Test Communication');
   });
 
   it('should allow super_admin to list logs', async () => {
