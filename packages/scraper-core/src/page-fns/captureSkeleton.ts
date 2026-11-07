@@ -15,69 +15,17 @@ export interface ICaptureSkeletonResult {
   readonly truncated?: boolean;
 }
 
-export async function captureSkeleton(opts: { step: string }): Promise<ICaptureSkeletonResult> {
-  const STRUCTURAL_CLASS = new Set([
-    'active',
-    'assignment',
-    'body',
-    'btn',
-    'button',
-    'card',
-    'checkbox',
-    'col',
-    'container',
-    'content',
-    'course',
-    'dialog',
-    'disabled',
-    'footer',
-    'form',
-    'gradebook',
-    'header',
-    'hidden',
-    'html',
-    'icon',
-    'info',
-    'input',
-    'item',
-    'label',
-    'lg',
-    'light',
-    'link',
-    'list',
-    'login',
-    'main',
-    'md',
-    'menu',
-    'modal',
-    'nav',
-    'navbar',
-    'option',
-    'panel',
-    'password',
-    'primary',
-    'radio',
-    'readonly',
-    'row',
-    'secondary',
-    'select',
-    'selected',
-    'sm',
-    'student',
-    'submit',
-    'success',
-    'table',
-    'tbody',
-    'td',
-    'th',
-    'thead',
-    'title',
-    'tr',
-    'warning',
-    'wrapper',
-    'xl',
-  ]);
-
+/**
+ * Ids, class names and the id-referencing attributes (`name`, `for`, `aria-controls`,
+ * `aria-labelledby`, `aria-describedby`) are kept, because the repair model needs real
+ * selectors. Inside them, digit runs become `<d>`, email-shaped values become `<w>`, and
+ * every word of `redact` (the household's student and parent names, known on the device)
+ * becomes `<n>`. All other attribute values and all text are reduced to shape tokens.
+ */
+export async function captureSkeleton(opts: {
+  step: string;
+  redact?: readonly string[];
+}): Promise<ICaptureSkeletonResult> {
   const SKIP_TAGS = new Set(['script', 'style', 'noscript']);
 
   function isAttrAllowlisted(name: string): boolean {
@@ -104,20 +52,41 @@ export async function captureSkeleton(opts: { step: string }): Promise<ICaptureS
     return '<w>';
   }
 
+  const REDACT_WORDS = Array.from(
+    new Set(
+      (opts.redact ?? [])
+        .flatMap((term) => term.toLowerCase().split(/[^a-z0-9]+/))
+        .filter((w) => w.length >= 3)
+    )
+  ).sort((a, b) => b.length - a.length);
+  const IDENT_ATTRS = new Set([
+    'name',
+    'for',
+    'aria-controls',
+    'aria-labelledby',
+    'aria-describedby',
+  ]);
+  function sanitizeIdent(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(trimmed)) return '<w>';
+    // Digit runs become <d>; mixed letter+digit runs of 6+ chars (opaque ids) become <h>.
+    let out = trimmed.replace(/[A-Za-z0-9]+/g, (seg) => {
+      if (!/\d/.test(seg)) return seg;
+      if (/^\d+$/.test(seg)) return '<d>';
+      return seg.length >= 6 ? '<h>' : seg.replace(/\d+/g, '<d>');
+    });
+    for (const word of REDACT_WORDS) {
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      out = out.replace(new RegExp(escaped, 'gi'), '<n>');
+    }
+    return out;
+  }
   function tokenizeClassList(raw: string): string[] {
-    const parts = raw.split(/\s+/).filter(Boolean);
     const out: string[] = [];
-    for (const part of parts) {
-      const lower = part.toLowerCase();
-      if (STRUCTURAL_CLASS.has(lower)) {
-        if (!out.includes(lower)) out.push(lower);
-        continue;
-      }
-      const segs = lower.split(/[-_]+/).filter(Boolean);
-      for (const seg of segs) {
-        const tok = STRUCTURAL_CLASS.has(seg) ? seg : tokenizeShape(seg);
-        if (tok && !out.includes(tok)) out.push(tok);
-      }
+    for (const part of raw.split(/\s+/).filter(Boolean)) {
+      const tok = sanitizeIdent(part);
+      if (tok && !out.includes(tok)) out.push(tok);
     }
     return out;
   }
@@ -144,7 +113,7 @@ export async function captureSkeleton(opts: { step: string }): Promise<ICaptureS
     if (!tag || SKIP_TAGS.has(tag)) return null;
     const node: ISkeletonNode = { t: tag };
     const id = el.getAttribute('id');
-    if (id) node.i = tokenizeShape(id);
+    if (id) node.i = sanitizeIdent(id);
     const cls = el.getAttribute('class');
     if (cls) {
       const c = tokenizeClassList(cls);
@@ -154,7 +123,10 @@ export async function captureSkeleton(opts: { step: string }): Promise<ICaptureS
     for (const attr of Array.from(el.attributes)) {
       if (!isAttrAllowlisted(attr.name)) continue;
       if (attr.name === 'class' || attr.name === 'id') continue;
-      attrs[attr.name] = tokenizeShape(attr.value);
+      const attrName = attr.name.toLowerCase();
+      attrs[attr.name] = IDENT_ATTRS.has(attrName)
+        ? sanitizeIdent(attr.value)
+        : tokenizeShape(attr.value);
     }
     if (Object.keys(attrs).length > 0) node.a = attrs;
 
