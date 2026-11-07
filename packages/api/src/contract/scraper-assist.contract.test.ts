@@ -9,6 +9,7 @@ import { ConnectorTokenService } from '@scholaracle/auth';
 import { createScraperAssistRouter } from '../routes/ingest/v1/scraperAssist';
 import { createErrorHandler } from '../middleware/errorHandler';
 import { assertKeys } from './assertExactKeys';
+import { seedActiveConnectorJti } from '../testHelpers/connectorDeviceTestSeed';
 
 jest.mock('@scholaracle/agents', () => ({
   LlmClient: jest.fn().mockImplementation(() => ({
@@ -41,7 +42,17 @@ describe('scraper-assist API contract (CLI client)', () => {
     app.use('/api/ingest/v1/ai', createScraperAssistRouter({ database, jwtSecret }));
     app.use(createErrorHandler());
     const tokenService = new ConnectorTokenService(jwtSecret);
-    connectorToken = tokenService.createToken('contract-cli-user', 'jti-cli-contract');
+    connectorToken = tokenService.createToken(
+      'contract-cli-user',
+      'jti-cli-contract',
+      'device-cli-contract'
+    );
+    await seedActiveConnectorJti(
+      database,
+      'contract-cli-user',
+      'device-cli-contract',
+      'jti-cli-contract'
+    );
   });
 
   afterAll(async () => {
