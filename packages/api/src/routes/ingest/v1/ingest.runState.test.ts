@@ -31,7 +31,8 @@ describe('Ingest v1 run state machine', () => {
 
     const authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('run-state-user@test.com', 'password123', 'Run State');
-    if (!reg.success || !reg.token || !reg.user?.id) throw new Error('Failed to register test user');
+    if (!reg.success || !reg.token || !reg.user?.id)
+      throw new Error('Failed to register test user');
     userToken = reg.token;
     ownerUserId = reg.user.id;
 
