@@ -147,5 +147,10 @@ export {
   skywardBuiltinModule,
   aeriesBuiltinModule,
   BUILTIN_ALIAS_TO_ADAPTER,
+  BUILTIN_ADAPTER_ID_ALIASES,
   BUILTIN_MODULES_BY_ADAPTER,
+  CANONICAL_BUILTIN_ADAPTER_IDS,
+  resolveCanonicalAdapterId,
+  isLegacyBuiltinAdapterId,
+  LEGACY_BUILTIN_ADAPTER_IDS,
 } from './registry';

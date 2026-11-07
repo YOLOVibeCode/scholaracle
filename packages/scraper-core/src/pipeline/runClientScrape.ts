@@ -15,6 +15,7 @@
 import { randomUUID } from './uuid';
 import { SLC_INGEST_SCHEMA_VERSION_V1, type ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 import { validateEnvelope } from '../validator/validator';
+import { resolveCanonicalAdapterId } from '../registry/adapter-aliases';
 import { BuiltinScraperResolver } from '../registry/resolvers';
 import type { IScraperHost } from '../registry/module';
 import { SCRAPER_CORE_PACKAGE_VERSION } from '../version';
@@ -85,7 +86,11 @@ function buildEnvelopeMeta(
 }
 
 export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcIngestEnvelopeV1> {
-  const { config, uploader, recorder, assets, onProgress } = host;
+  const { config: rawConfig, uploader, recorder, assets, onProgress } = host;
+  const config: IClientScrapeConfig = {
+    ...rawConfig,
+    adapterId: resolveCanonicalAdapterId(rawConfig.adapterId),
+  };
   const resolver = host.resolver ?? defaultResolver;
   const runId = randomUUID();
   const coreVersion = config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION;
@@ -338,6 +343,7 @@ export function buildClientScrapeConfig(
 ): IClientScrapeConfig {
   return {
     ...params,
+    adapterId: resolveCanonicalAdapterId(params.adapterId),
     coreVersion: params.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
   };
 }
