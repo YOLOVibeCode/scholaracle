@@ -37,8 +37,11 @@ describe('App Store legal pages', () => {
 
   it('delete-account page is a public deletion request path', () => {
     const src = read('delete-account/page.tsx');
+    const formSrc = read('delete-account/DeleteAccountForm.tsx');
     expect(src).toMatch(/privacy@scholarmancy\.com/);
     expect(src).toMatch(/Settings/);
+    expect(formSrc).toMatch(/data-testid="form-delete-account"/);
+    expect(formSrc).toMatch(/data-testid="btn-delete-account"/);
   });
 
   it('SMS program page is public-facing and describes self opt-in for co-parents', () => {

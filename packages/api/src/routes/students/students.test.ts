@@ -1,53 +1,44 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, ObjectId, type Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
-import { createErrorHandler } from '../../middleware/errorHandler';
+import { closeTestApp, createTestApp } from '../../test-utils/createTestApp';
 
 describe('Students API Routes', () => {
   let app: Express;
   let database: Db;
-  let mongoClient: MongoClient;
   let authService: AuthService;
   let testToken: string;
+  let testHarness: Awaited<ReturnType<typeof createTestApp>>;
 
   beforeAll(async () => {
-    // Connect to test database
-    const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
-    const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle_test';
-
-    try {
-      mongoClient = new MongoClient(mongodbUri);
-      await mongoClient.connect();
-      database = mongoClient.db(dbName);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('MongoDB not available, skipping integration tests');
+    testHarness = await createTestApp({
+      skipOnConnectFailure: true,
+      configure: ({ app: testApp, database: db }) => {
+        database = db;
+        app = testApp;
+        authService = new AuthService(db);
+        const baseUrl = 'http://test.example';
+        testApp.use(
+          '/api/students',
+          authMiddleware(authService),
+          requireParent,
+          studentsRouter({ database: db, baseUrl })
+        );
+      },
+    });
+    if (!testHarness) {
       return;
     }
-
-    authService = new AuthService(database);
-
-    // Setup Express app with routes
-    app = express();
-    app.use(express.json());
-    const baseUrl = 'http://test.example';
-    app.use(
-      '/api/students',
-      authMiddleware(authService),
-      requireParent,
-      studentsRouter({ database, baseUrl })
-    );
-    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
-    if (mongoClient) {
-      await mongoClient.close();
+    if (testHarness) {
+      await closeTestApp(testHarness);
     }
   });
 

@@ -57,7 +57,7 @@ export interface IProviderCredentialHelp {
 export const PROVIDERS: readonly IProviderDescriptor[] = [
   {
     id: 'canvas',
-    adapterId: 'com.instructure.canvas',
+    adapterId: 'canvas',
     name: 'Canvas LMS',
     description: 'By Instructure — used by many schools and universities',
     available: true,
@@ -78,7 +78,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
   },
   {
     id: 'aeries',
-    adapterId: 'com.aeries',
+    adapterId: 'aeries',
     name: 'Aeries',
     description: 'Student information system — used by many California districts',
     available: true,
@@ -98,7 +98,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
   },
   {
     id: 'skyward',
-    adapterId: 'com.skyward',
+    adapterId: 'skyward',
     name: 'Skyward',
     description: 'Family Access / Student portal — used by many districts',
     available: true,
