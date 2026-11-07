@@ -102,6 +102,10 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcRuns.createIndex({ runId: 1 });
   await slcRuns.createIndex({ status: 1, startedAt: 1 });
 
+  const slcRunSkeletons = database.collection('slc_run_skeletons');
+  await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
+  await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });

@@ -89,6 +89,7 @@ describe('runSyncPipeline', () => {
         if (failUpload) throw new Error('Upload failed');
       }),
       reportRunFailure: jest.fn(async () => undefined),
+      uploadRunSkeleton: jest.fn(async () => undefined),
     };
   }
 
@@ -159,6 +160,15 @@ describe('runSyncPipeline', () => {
       );
     }
 
+    it('does not upload a skeleton when scrape succeeds', async () => {
+      const uploader = makeUploader();
+      const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+      await runSyncPipeline(driver, config, uploader, 'token', makeRecorder(), undefined, {
+        resolver: stubResolver({}),
+      });
+      expect(uploader.uploadRunSkeleton).not.toHaveBeenCalled();
+    });
+
     it('should tag scrape failures as phase "portal" and preserve the cause', async () => {
       const underlying = new Error('portal timed out');
       const err = await captureError(
@@ -225,6 +235,7 @@ describe('runSyncPipeline', () => {
           throw underlying;
         }),
         reportRunFailure: jest.fn(async () => undefined),
+        uploadRunSkeleton: jest.fn(async () => undefined),
       };
       const err = await captureError(uploader, makeRecorder(), stubResolver({}));
       expect(err).toBeInstanceOf(SyncError);
@@ -317,6 +328,7 @@ describe('runSyncPipeline', () => {
         events.push('uploadEnvelope');
       }),
       reportRunFailure: jest.fn(async () => undefined),
+      uploadRunSkeleton: jest.fn(async () => undefined),
     };
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
     await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {

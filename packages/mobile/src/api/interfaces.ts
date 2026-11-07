@@ -4,6 +4,7 @@
  */
 
 import type {
+  ISanitizedPageSkeletonCapture,
   ISlcIngestEnvelopeV1,
   ISlcRunCoverage,
   IStudentListItem,
@@ -58,6 +59,12 @@ export interface IEnvelopeUploader {
     readonly connectorToken: string;
     readonly error: string;
     readonly clientMeta?: Readonly<Record<string, string>>;
+  }): Promise<void>;
+  uploadRunSkeleton(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly connectorToken: string;
+    readonly payload: ISanitizedPageSkeletonCapture;
   }): Promise<void>;
 }
 
