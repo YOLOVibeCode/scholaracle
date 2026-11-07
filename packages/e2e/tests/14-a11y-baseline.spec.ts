@@ -65,6 +65,18 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
+  test('A11Y-006b: /dashboard/billing has no serious/critical axe violations', async ({
+    page,
+  }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
+    await page.waitForURL(/\/dashboard/);
+    await page.goto('/dashboard/billing');
+    await expect(page.getByTestId('billing-page')).toBeVisible();
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
+  });
+
   test('A11Y-007 (boundary): error state on /login retains accessible role="alert"', async ({
     page,
   }) => {

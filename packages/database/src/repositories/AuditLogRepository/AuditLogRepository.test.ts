@@ -43,6 +43,34 @@ describe('AuditLogRepository', () => {
       expect(log._id).toBeDefined();
     });
 
+    it('should mask admin email and PII metadata at write time', async () => {
+      const log = await repository.create({
+        adminUserId: '507f1f77bcf86cd799439011',
+        adminEmail: 'audit-admin@example.com',
+        action: 'customer:view',
+        entityType: 'customer',
+        entityId: 'cust-1',
+        ipAddress: '127.0.0.1',
+        userAgent: 'test-agent',
+        metadata: {
+          customerEmail: 'parent@example.com',
+          phone: '+18887776666',
+          cardNumber: '4111111111111111',
+        },
+      });
+
+      expect(log.adminEmail).toBe('a***@example.com');
+      expect(log.metadata['customerEmail']).toBe('p***@example.com');
+      expect(log.metadata['phone']).toBe('+1***6666');
+      expect(log.metadata['cardNumber']).toBe('•••• 1111');
+
+      const stored = await database.collection('audit_logs').findOne({ _id: log._id });
+      const raw = JSON.stringify(stored);
+      expect(raw).not.toContain('audit-admin@example.com');
+      expect(raw).not.toContain('parent@example.com');
+      expect(raw).not.toContain('4111111111111111');
+    });
+
     it('should set default severity based on action', async () => {
       const logData: IAuditLogData = {
         adminUserId: '507f1f77bcf86cd799439011',

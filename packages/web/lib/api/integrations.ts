@@ -52,30 +52,6 @@ export interface IAssignStudentRequest {
   readonly credentials?: IAssignStudentCredentials;
 }
 
-export interface ITestConnectionRequest {
-  readonly provider: string;
-  readonly adapterId: string;
-  readonly baseUrl?: string;
-  readonly credentials: {
-    readonly authType: 'api' | 'oauth2' | 'api-key';
-    readonly accessToken?: string;
-    readonly clientId?: string;
-    readonly clientSecret?: string;
-    readonly apiKey?: string;
-  };
-}
-
-export interface ITestConnectionResult {
-  readonly success: boolean;
-  readonly message: string;
-  readonly durationMs: number;
-  readonly details?: {
-    readonly courseCount?: number;
-    readonly userName?: string;
-    readonly institutionName?: string;
-  };
-}
-
 export interface IPendingReconciliation {
   readonly id: string;
   readonly sourceId: string;
@@ -127,15 +103,6 @@ export const integrationsApi = {
       integrationId: string;
       hasCredentials: boolean;
     }>(`/integrations/${integrationId}/students/${studentId}`, body ?? {});
-  },
-
-  async testConnection(body: ITestConnectionRequest): Promise<ITestConnectionResult> {
-    try {
-      return await apiClient.post<ITestConnectionResult>('/integrations/test-connection', body);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, message: `Test failed: ${msg}`, durationMs: 0 };
-    }
   },
 
   async unlinkStudent(integrationId: string, studentId: string): Promise<boolean> {
