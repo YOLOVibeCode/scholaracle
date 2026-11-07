@@ -73,7 +73,7 @@ export function connectorAuthMiddleware(
             { error: err instanceof Error ? err.message : String(err) },
             'Connector token revocation check failed'
           );
-          res.status(401).json({ success: false, error: 'Token verification unavailable' });
+          res.status(503).json({ success: false, error: 'Token verification unavailable' });
         });
       return;
     }

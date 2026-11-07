@@ -143,7 +143,7 @@ describe('connectorAuthMiddleware', () => {
     await new Promise((r) => setImmediate(r));
 
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith({
       success: false,
       error: 'Token verification unavailable',
