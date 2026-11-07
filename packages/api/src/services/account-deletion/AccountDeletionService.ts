@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db } from 'mongodb';
+import type { Db, UpdateFilter } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import {
   ACCOUNT_DELETION_AUDIT_COLLECTION,
@@ -66,12 +66,12 @@ async function removeFromOtherFamiliesShares(
 ): Promise<void> {
   const match: Record<string, unknown>[] = [{ userId }];
   if (email) match.push({ email: email.toLowerCase() }, { email });
-  await db.collection('students').updateMany(
-    { sharedWith: { $elemMatch: { $or: match } } },
-    {
-      $pull: { sharedWith: { $or: match } },
-    }
-  );
+  const pullUpdate = { $pull: { sharedWith: { $or: match } } } as unknown as UpdateFilter<
+    Record<string, unknown>
+  >;
+  await db
+    .collection('students')
+    .updateMany({ sharedWith: { $elemMatch: { $or: match } } }, pullUpdate);
 }
 
 export class AccountDeletionService {
