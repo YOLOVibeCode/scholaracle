@@ -10,6 +10,8 @@ tags: [launch]
           clearState: true
           permissions:
             all: deny
+            # Granted so Android 13+ does not raise its notification prompt over the app.
+            notifications: allow
       - extendedWaitUntil:
           visible:
             id: input-email
