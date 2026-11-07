@@ -6,11 +6,7 @@
  * models/Ingest.ts.
  */
 
-import type {
-  ISlcIngestRunStats,
-  ISlcIngestRunStep,
-  ISlcRunCoverage,
-} from '../../models/Ingest';
+import type { ISlcIngestRunStats, ISlcIngestRunStep, ISlcRunCoverage } from '../../models/Ingest';
 
 /** Request body of POST /api/ingest/v1/runs/:runId/complete (success path). */
 export interface IIngestRunCompleteRequest {

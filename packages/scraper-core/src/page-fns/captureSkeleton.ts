@@ -3,8 +3,6 @@
  * All helpers are nested so Hermes can inject this file's source without imports.
  */
 
-const SKELETON_MAX_BYTES = 200 * 1024;
-
 export interface ICaptureSkeletonResult {
   readonly step: string;
   readonly capturedAt: string;
@@ -22,10 +20,10 @@ export interface ICaptureSkeletonResult {
  * every word of `redact` (the household's student and parent names, known on the device)
  * becomes `<n>`. All other attribute values and all text are reduced to shape tokens.
  */
-export async function captureSkeleton(opts: {
-  step: string;
-  redact?: readonly string[];
-}): Promise<ICaptureSkeletonResult> {
+export async function captureSkeleton(
+  opts: { step: string; redact?: readonly string[] } = { step: 'unknown' }
+): Promise<ICaptureSkeletonResult> {
+  const SKELETON_MAX_BYTES = 200 * 1024;
   const SKIP_TAGS = new Set(['script', 'style', 'noscript']);
 
   function isAttrAllowlisted(name: string): boolean {
@@ -92,7 +90,8 @@ export async function captureSkeleton(opts: {
   }
 
   function tokenizePagePath(): string {
-    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const loc = typeof window !== 'undefined' ? window.location : undefined;
+    const path = typeof loc?.pathname === 'string' ? loc.pathname : '';
     if (!path) return '';
     return path
       .split('/')

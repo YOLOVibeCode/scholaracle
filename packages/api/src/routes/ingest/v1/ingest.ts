@@ -42,7 +42,6 @@ import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTo
 import {
   IngestDeviceAuthRepository,
   IngestRunRepository,
-  type IngestRun,
   IngestSourceRepository,
   StudentRepository,
   SubscriptionRepository,
