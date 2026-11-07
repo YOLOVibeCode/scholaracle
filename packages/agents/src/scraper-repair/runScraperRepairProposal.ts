@@ -1,5 +1,5 @@
 import type { Db } from 'mongodb';
-import type { ISlcRepairCandidateKey } from '@scholaracle/contracts';
+import { AiBudgetError, type ISlcRepairCandidateKey } from '@scholaracle/contracts';
 import { repairCandidateId } from '@scholaracle/contracts';
 import {
   AiUsageRepository,
@@ -30,7 +30,8 @@ export interface IRunScraperRepairProposalParams {
 }
 
 export interface IRunScraperRepairProposalResult {
-  readonly status: 'proposed' | 'skipped_not_real' | 'skipped_weekly_cap' | 'quota_exceeded';
+  readonly status:
+    'proposed' | 'skipped_not_real' | 'skipped_weekly_cap' | 'quota_exceeded' | 'budget_exceeded';
   readonly patch?: ReturnType<typeof parsePatchJson>;
 }
 
@@ -100,54 +101,61 @@ export async function runScraperRepairProposal(
     gapKind: params.key.gapKind,
     skeleton: params.skeleton.slice(0, 8000),
   });
-  const triageRes = await triage.complete([{ role: 'user', content: triageUser }], {
-    maxTokens: 256,
-    system: TRIAGE_SYSTEM,
-  });
-  await recordCallCost(
-    params.database,
-    params.billingUserId,
-    triage.model,
-    triageRes.usage,
-    candidateId
-  );
+  try {
+    const triageRes = await triage.complete([{ role: 'user', content: triageUser }], {
+      maxTokens: 256,
+      system: TRIAGE_SYSTEM,
+    });
+    await recordCallCost(
+      params.database,
+      params.billingUserId,
+      triage.model,
+      triageRes.usage,
+      candidateId
+    );
 
-  const triageParsed = parseTriageJson(triageRes.content);
-  if (!triageParsed.real) {
-    return { status: 'skipped_not_real' };
+    const triageParsed = parseTriageJson(triageRes.content);
+    if (!triageParsed.real) {
+      return { status: 'skipped_not_real' };
+    }
+
+    const systemPrefix = buildRepairPromptPrefix({
+      recipeId: params.key.recipeId,
+      step: params.key.step,
+      selectorTableJson: params.selectorTableJson,
+    });
+    const patchUser = JSON.stringify({
+      step: params.key.step,
+      portalHost: params.key.portalHost,
+      skeleton: params.skeleton,
+      triageStep: triageParsed.step,
+    });
+    const patchRes = await patch.complete([{ role: 'user', content: patchUser }], {
+      maxTokens: 2048,
+      system: systemPrefix,
+      cacheSystemPrefix: true,
+    });
+    await recordCallCost(
+      params.database,
+      params.billingUserId,
+      patch.model,
+      patchRes.usage,
+      candidateId
+    );
+
+    const patchParsed = parsePatchJson(patchRes.content);
+    await proposalRepo.insertProposal(params.key, {
+      selectors: patchParsed.selectors,
+      confidence: patchParsed.confidence,
+      ...(patchParsed.notes ? { notes: patchParsed.notes } : {}),
+      model: patch.model,
+    });
+
+    return { status: 'proposed', patch: patchParsed };
+  } catch (err: unknown) {
+    if (err instanceof AiBudgetError) {
+      return { status: 'budget_exceeded' };
+    }
+    throw err;
   }
-
-  const systemPrefix = buildRepairPromptPrefix({
-    recipeId: params.key.recipeId,
-    step: params.key.step,
-    selectorTableJson: params.selectorTableJson,
-  });
-  const patchUser = JSON.stringify({
-    step: params.key.step,
-    portalHost: params.key.portalHost,
-    skeleton: params.skeleton,
-    triageStep: triageParsed.step,
-  });
-  const patchRes = await patch.complete([{ role: 'user', content: patchUser }], {
-    maxTokens: 2048,
-    system: systemPrefix,
-    cacheSystemPrefix: true,
-  });
-  await recordCallCost(
-    params.database,
-    params.billingUserId,
-    patch.model,
-    patchRes.usage,
-    candidateId
-  );
-
-  const patchParsed = parsePatchJson(patchRes.content);
-  await proposalRepo.insertProposal(params.key, {
-    selectors: patchParsed.selectors,
-    confidence: patchParsed.confidence,
-    ...(patchParsed.notes ? { notes: patchParsed.notes } : {}),
-    model: patch.model,
-  });
-
-  return { status: 'proposed', patch: patchParsed };
 }

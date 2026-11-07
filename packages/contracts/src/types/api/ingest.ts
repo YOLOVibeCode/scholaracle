@@ -57,6 +57,8 @@ export interface IIngestRunCompleteResponse {
   readonly committed: boolean;
   readonly newCursor: { readonly type: 'opaque'; readonly value: string } | null;
   readonly derivedAlertsQueued: boolean;
+  /** Present when post-ingest LLM work hit the relay budget cap; sync still committed. */
+  readonly codes?: readonly string[];
 }
 
 /** Response of POST /api/ingest/v1/runs/:id/complete (failed path). */
