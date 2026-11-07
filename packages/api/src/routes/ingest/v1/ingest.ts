@@ -54,8 +54,7 @@ import { logger } from '../../../logger';
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
-import { runBatchMaterialMatching } from '../../../services/materialMatching/batchMaterialMatcher';
-import { runVisionDescribeByContentHash } from '../../../services/materialMatching/visionDescribeByHash';
+import { runPostIngestIntelligence } from '../../../services/materialMatching/postIngestIntelligence';
 import { createScraperAssistRouter } from './scraperAssist';
 import {
   syncStudentDataSourcesAfterIngestFailure,
@@ -577,25 +576,6 @@ async function generateAlertsFromIngestedAssignments(params: {
       }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Post-ingest intelligence (batched LLM matching + vision dedupe)
-// ---------------------------------------------------------------------------
-
-async function runPostIngestIntelligence(params: {
-  readonly database: Db;
-  readonly userId: string;
-  readonly assetStore?: IAssetStore;
-}): Promise<void> {
-  if (params.assetStore) {
-    await runVisionDescribeByContentHash({
-      database: params.database,
-      userId: params.userId,
-      assetStore: params.assetStore,
-    });
-  }
-  await runBatchMaterialMatching({ database: params.database, userId: params.userId });
 }
 
 /** Maps entity type to MongoDB collection name. */

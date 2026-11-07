@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
+import { consentsApi } from '@/lib/api/consents';
+import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
@@ -29,6 +31,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('');
   const [smsConsent, setSmsConsent] = useState(false);
 
+  const [serverAiEnabled, setServerAiEnabled] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
@@ -82,7 +85,11 @@ export default function SettingsPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const s = (await settingsApi.get()) as IUserSettingsResponse;
+        const [s, consents] = await Promise.all([
+          settingsApi.get() as Promise<IUserSettingsResponse>,
+          consentsApi.get(),
+        ]);
+        setServerAiEnabled(consents.serverAi);
         if (s.profile) {
           setName(s.profile.name ?? '');
           setEmail(s.profile.email ?? '');
@@ -145,7 +152,8 @@ export default function SettingsPage() {
     setIsSaving(true);
     setToast(null);
 
-    const ok = await settingsApi.update({
+    const [settingsOk, consentsResult] = await Promise.all([
+      settingsApi.update({
       timezone,
       profile: {
         phone,
@@ -186,8 +194,11 @@ export default function SettingsPage() {
         celebrateWins,
         enabledTypes: Object.keys(enabledTypes).length > 0 ? enabledTypes : undefined,
       },
-    });
+    }),
+      consentsApi.setServerAi(serverAiEnabled).catch(() => null),
+    ]);
 
+    const ok = settingsOk && consentsResult != null;
     setIsSaving(false);
     setToast(ok ? 'Saved' : 'Failed to save');
   };
@@ -326,6 +337,31 @@ export default function SettingsPage() {
               disabled={isSaving || !isLoaded}
               id="settings-sms-consent"
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Server-side analysis</CardTitle>
+            <CardDescription>
+              Optional AI processing of synced materials (off by default). See our privacy policy.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="server-ai">Analyze course files on Scholarmancy servers</Label>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{SERVER_AI_CONSENT_LABEL}</p>
+              </div>
+              <Switch
+                id="server-ai"
+                checked={serverAiEnabled}
+                onCheckedChange={setServerAiEnabled}
+                disabled={isSaving || !isLoaded}
+                data-testid="switch-server-ai"
+                aria-label="Enable server-side analysis of course materials"
+              />
+            </div>
           </CardContent>
         </Card>
 
