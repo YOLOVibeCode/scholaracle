@@ -20,6 +20,7 @@ import {
 } from '@scholaracle/contracts';
 import {
   computeRunCoverage,
+  resolveCanonicalAdapterId,
   validateEnvelope as validateEnvelopeFull,
 } from '@scholaracle/scraper-core';
 import { authMiddleware } from '../../../middleware/auth';
@@ -42,6 +43,11 @@ import {
   getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import {
+  INGEST_PLAN_LIMIT_CODE,
+  IngestStudentPlanLimitError,
+  assertIngestWithinStudentPlanLimit,
+} from '../../../services/billing/studentPlanLimit';
 import type { MongoQueue } from '@scholaracle/agents';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 import {
@@ -106,6 +112,24 @@ function randomUserCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const pick = (): string => alphabet[Math.floor(Math.random() * alphabet.length)] ?? 'A';
   return `${pick()}${pick()}${pick()}${pick()}-${pick()}${pick()}${pick()}${pick()}`;
+}
+
+function normalizeEnvelopeAdapterIds(envelope: ISlcIngestEnvelopeV1): ISlcIngestEnvelopeV1 {
+  const ops = envelope.ops.map((op) => ({
+    ...op,
+    key: {
+      ...op.key,
+      adapterId: resolveCanonicalAdapterId(op.key.adapterId),
+    },
+  }));
+  return {
+    ...envelope,
+    run: {
+      ...envelope.run,
+      adapterId: resolveCanonicalAdapterId(envelope.run.adapterId),
+    },
+    ops,
+  };
 }
 
 function validateEnvelope(envelope: ISlcIngestEnvelopeV1): { valid: boolean; error?: string } {
@@ -758,11 +782,11 @@ async function autoCreateStudentsFromOps(params: {
       // should have already returned the owner's userId, so params.userId IS the owner.
       // But if we're still seeing "not found" it means this is a brand-new student.
       if (maxStudents !== -1 && studentCount >= maxStudents) {
-        logger.warn(
-          { userId: params.userId, sourceId: params.sourceId, maxStudents },
-          'Ingest found a student beyond the plan limit; not creating it'
-        );
-        continue;
+        throw new IngestStudentPlanLimitError({
+          currentPlan: subscription?.effectivePlan() ?? 'free',
+          maxStudents,
+          currentCount: studentCount,
+        });
       }
       studentCount += 1;
       const studentName = profileNames.get(studentExtId) ?? studentExtId;
@@ -1316,7 +1340,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (!runId) {
         throw new ValidationError('Missing runId');
       }
-      const envelope = req.body as ISlcIngestEnvelopeV1;
+      const envelope = normalizeEnvelopeAdapterIds(req.body as ISlcIngestEnvelopeV1);
 
       const v = validateEnvelope(envelope);
       if (!v.valid) {
@@ -1336,6 +1360,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         envelope.source?.sourceId,
         firstStudentExtId
       );
+
+      try {
+        await assertIngestWithinStudentPlanLimit(config.database, dataUserId, envelope.ops);
+      } catch (err) {
+        if (err instanceof IngestStudentPlanLimitError) {
+          res.status(403).json({
+            success: false,
+            error: err.message,
+            code: INGEST_PLAN_LIMIT_CODE,
+            currentPlan: err.currentPlan,
+            maxStudents: err.maxStudents,
+            currentCount: err.currentCount,
+          });
+          return;
+        }
+        throw err;
+      }
 
       const prepared = await prepareIngestOps({
         ops: envelope.ops,

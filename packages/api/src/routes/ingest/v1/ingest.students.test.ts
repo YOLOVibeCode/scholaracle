@@ -70,10 +70,24 @@ describe('Ingest v1: student matching and plan cap', () => {
     return { userId: reg.user.id, connectorToken: poll.body.connectorToken as string };
   }
 
-  async function syncAssignments(
-    connectorToken: string,
-    studentExternalIds: readonly string[]
-  ): Promise<void> {
+  function buildAssignmentOps(studentExternalIds: readonly string[], now: string) {
+    return studentExternalIds.map((studentExternalId, i) => ({
+      op: 'upsert' as const,
+      entity: 'assignment' as const,
+      key: {
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        externalId: `a-${i}-${studentExternalId}`,
+        studentExternalId,
+        institutionExternalId: 'inst-1',
+        courseExternalId: 'course-1',
+      },
+      observedAt: now,
+      record: { title: `HW ${i}`, dueAt: now, status: 'missing', pointsPossible: 10 },
+    }));
+  }
+
+  async function startIngestRun(connectorToken: string): Promise<string> {
     await request(app)
       .post('/api/ingest/v1/sources')
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -89,7 +103,14 @@ describe('Ingest v1: student matching and plan cap', () => {
       .set('Authorization', `Bearer ${connectorToken}`)
       .send({ sourceId: 'src-phone' })
       .expect(200);
-    const runId = run.body.runId as string;
+    return run.body.runId as string;
+  }
+
+  async function syncAssignments(
+    connectorToken: string,
+    studentExternalIds: readonly string[]
+  ): Promise<void> {
+    const runId = await startIngestRun(connectorToken);
     const now = new Date().toISOString();
     await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
@@ -106,20 +127,7 @@ describe('Ingest v1: student matching and plan cap', () => {
           timezone: 'America/Chicago',
         },
         source: { sourceId: 'src-phone', displayName: 'Canvas' },
-        ops: studentExternalIds.map((studentExternalId, i) => ({
-          op: 'upsert',
-          entity: 'assignment',
-          key: {
-            provider: 'canvas',
-            adapterId: 'com.instructure.canvas',
-            externalId: `a-${i}`,
-            studentExternalId,
-            institutionExternalId: 'inst-1',
-            courseExternalId: 'course-1',
-          },
-          observedAt: now,
-          record: { title: `HW ${i}`, dueAt: now, status: 'missing', pointsPossible: 10 },
-        })),
+        ops: buildAssignmentOps(studentExternalIds, now),
       })
       .expect(200);
     await request(app)
@@ -127,6 +135,31 @@ describe('Ingest v1: student matching and plan cap', () => {
       .set('Authorization', `Bearer ${connectorToken}`)
       .send({})
       .expect(200);
+  }
+
+  async function syncAssignmentsExpectingPlanLimit(
+    connectorToken: string,
+    studentExternalIds: readonly string[]
+  ): Promise<request.Response> {
+    const runId = await startIngestRun(connectorToken);
+    const now = new Date().toISOString();
+    return request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        schemaVersion: 'slc.ingest.v1',
+        run: {
+          runId,
+          startedAt: now,
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          adapterVersion: '1.0.0',
+          mode: 'delta',
+          timezone: 'America/Chicago',
+        },
+        source: { sourceId: 'src-phone', displayName: 'Canvas' },
+        ops: buildAssignmentOps(studentExternalIds, now),
+      });
   }
 
   it('fills a phone-created student keyed by its own id instead of creating a duplicate', async () => {
@@ -154,15 +187,41 @@ describe('Ingest v1: student matching and plan cap', () => {
     expect(ds.lastSuccessAt).toBeInstanceOf(Date);
   });
 
-  it('does not create students beyond the plan cap on a free account', async () => {
+  it('returns PLAN_LIMIT when a free account would gain a second student', async () => {
     const { userId, connectorToken } = await connect('free-parent@test.com');
 
-    await syncAssignments(connectorToken, ['kid-a', 'kid-b', 'kid-c', 'kid-d']);
+    await syncAssignments(connectorToken, ['kid-a']);
 
+    const countAfterFirst = await database
+      .collection('students')
+      .countDocuments({ userId: new ObjectId(userId) });
+    expect(countAfterFirst).toBe(1);
+
+    const blocked = await syncAssignmentsExpectingPlanLimit(connectorToken, ['kid-b']);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe('PLAN_LIMIT');
+    expect(blocked.body.currentCount).toBe(1);
+
+    const countAfterBlocked = await database
+      .collection('students')
+      .countDocuments({ userId: new ObjectId(userId) });
+    expect(countAfterBlocked).toBe(1);
+  });
+
+  it('rejects a single envelope that would add multiple students over the free cap', async () => {
+    const { userId, connectorToken } = await connect('free-multi@test.com');
+    const blocked = await syncAssignmentsExpectingPlanLimit(connectorToken, [
+      'kid-a',
+      'kid-b',
+      'kid-c',
+    ]);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe('PLAN_LIMIT');
+    expect(blocked.body.currentCount).toBe(0);
     const count = await database
       .collection('students')
       .countDocuments({ userId: new ObjectId(userId) });
-    expect(count).toBe(1);
+    expect(count).toBe(0);
   });
 
   it('creates students up to a paid plan cap', async () => {
@@ -180,7 +239,11 @@ describe('Ingest v1: student matching and plan cap', () => {
       updatedAt: now,
     });
 
-    await syncAssignments(connectorToken, ['kid-a', 'kid-b', 'kid-c']);
+    await syncAssignments(connectorToken, ['kid-a']);
+    await syncAssignments(connectorToken, ['kid-b']);
+    const blocked = await syncAssignmentsExpectingPlanLimit(connectorToken, ['kid-c']);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe('PLAN_LIMIT');
 
     const count = await database
       .collection('students')

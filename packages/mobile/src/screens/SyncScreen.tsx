@@ -51,6 +51,7 @@ interface ISyncConfig {
   readonly studentExternalId: string;
   readonly institutionExternalId: string;
   readonly sourceId: string;
+  readonly studentNameHint?: string;
 }
 
 interface ISyncScreenProps {
@@ -63,9 +64,9 @@ interface ISyncScreenProps {
 type SyncState = 'loading-creds' | 'login' | 'syncing' | 'done' | 'error';
 
 const ADAPTER_IDS: Record<string, string> = {
-  canvas: 'com.instructure.canvas',
-  skyward: 'com.skyward.iscorp',
-  aeries: 'com.aeries.portal',
+  canvas: 'canvas',
+  skyward: 'skyward',
+  aeries: 'aeries',
 };
 
 const ADAPTER_VERSION = '0.1.0';
@@ -172,6 +173,7 @@ export function SyncScreen({
           institutionExternalId: config.institutionExternalId,
           sourceId: config.sourceId,
           adapterVersion: ADAPTER_VERSION,
+          studentNameHint: config.studentNameHint,
         },
         apiClient,
         connectorToken,

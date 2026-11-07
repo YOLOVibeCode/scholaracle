@@ -25,7 +25,7 @@ import {
 export class CanvasAdapter implements ILmsAdapterWithTest {
   public readonly meta: ILmsAdapterMeta = {
     provider: 'canvas',
-    adapterId: 'com.instructure.canvas',
+    adapterId: 'canvas',
     adapterVersion: '0.1.0',
     displayName: 'Canvas LMS',
   };

@@ -224,6 +224,9 @@ export async function createIndexes(database: Db): Promise<void> {
     consumedAt: 1,
   });
 
+  const slcExternalIdAliases = database.collection('slc_external_id_aliases');
+  await slcExternalIdAliases.createIndex({ alias: 1, kind: 1 }, { unique: true });
+
   const studentMagicTokens = database.collection('student_magic_tokens');
   await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });
   await studentMagicTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });

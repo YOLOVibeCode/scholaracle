@@ -287,7 +287,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     if (
       req.path === '/api/webhooks/noctusoft' ||
       req.path.startsWith('/api/webhooks/twilio') ||
-      req.path === '/api/ingest/v1/assets/upload-base64'
+      req.path === '/api/ingest/v1/assets/upload-base64' ||
+      req.path === '/api/ingest/v1/ai/scraper-assist'
     ) {
       next();
       return;

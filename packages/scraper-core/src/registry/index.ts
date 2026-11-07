@@ -23,6 +23,15 @@ export {
 } from './resolvers';
 
 export {
+  CANONICAL_BUILTIN_ADAPTER_IDS,
+  BUILTIN_ADAPTER_ID_ALIASES,
+  resolveCanonicalAdapterId,
+  isLegacyBuiltinAdapterId,
+  LEGACY_BUILTIN_ADAPTER_IDS,
+} from './adapter-aliases';
+export type { CanonicalBuiltinAdapterId } from './adapter-aliases';
+
+export {
   canvasBuiltinModule,
   skywardBuiltinModule,
   aeriesBuiltinModule,
