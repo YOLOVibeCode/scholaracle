@@ -11,6 +11,9 @@ const MAX_PROPOSALS_PER_WEEK = 3;
 export interface IRepairNightlyDeps {
   readonly loadSkeleton: (key: { step: string; skeletonHash: string }) => Promise<string | null>;
   readonly billingUserId: string;
+  /** Test overrides */
+  readonly resolveLlmConfigFn?: typeof resolveLlmConfig;
+  readonly runScraperRepairProposalFn?: typeof runScraperRepairProposal;
   readonly verifyAndServe?: (
     key: ISlcRepairCandidateKey,
     selectors: Record<string, string>
@@ -18,7 +21,10 @@ export interface IRepairNightlyDeps {
 }
 
 export async function runRepairNightly(database: Db, deps: IRepairNightlyDeps): Promise<number> {
-  if (!resolveLlmConfig('triage')) {
+  const resolveLlm = deps.resolveLlmConfigFn ?? resolveLlmConfig;
+  const runProposal = deps.runScraperRepairProposalFn ?? runScraperRepairProposal;
+
+  if (!resolveLlm('triage')) {
     logger.info('LLM not configured; skipping repair-nightly');
     return 0;
   }
@@ -46,7 +52,7 @@ export async function runRepairNightly(database: Db, deps: IRepairNightlyDeps): 
       continue;
     }
 
-    const result = await runScraperRepairProposal({
+    const result = await runProposal({
       database,
       key,
       skeleton,

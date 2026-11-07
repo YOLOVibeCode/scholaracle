@@ -104,7 +104,13 @@ jobs:
             || (echo "Seed failed"; exit 1)
 
       - name: Run Playwright tests
-        run: pnpm --filter @scholaracle/e2e test ${{ inputs.project && format('--project={0}', inputs.project) || '' }}
+        # Job fails when Playwright exits non-zero (production gate via deploy e2e-dev).
+        run: |
+          args=''
+          if [ -n "${{ inputs.project }}" ]; then
+            args="--project=${{ inputs.project }}"
+          fi
+          pnpm --filter @scholaracle/e2e run test:e2e -- $args
         env:
           CI: 'true'
           BASE_URL: ${{ inputs.base_url || 'http://localhost:2800' }}

@@ -137,37 +137,13 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
-    // Scraper E2E: real Canvas + Skyward scrape (requires env; suite skips if unset)
-    {
-      name: 'scraper-e2e',
-      testMatch: /scraper-generation-e2e\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 300 * 1000,
-    },
-    // Scraper UX: multi-student, multi-connector download flow (no real credentials)
+    // Multi-student onboarding + phone-connect integrations (no bundle download)
     {
       name: 'scraper-ux',
       testMatch: /scraper-ux-multi-student\.spec\.ts/,
       dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 120 * 1000,
-    },
-    // Scraper AI: non-reference platform wizard with mocked AI generation
-    {
-      name: 'scraper-ai',
-      testMatch: /scraper-ai-generation\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 60 * 1000,
-    },
-    // Complete flow: generate → download → one install, one run (requires TEST_CANVAS_*)
-    {
-      name: 'complete-scraper-flow',
-      testMatch: /complete-scraper-flow\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 300 * 1000,
     },
     // Server-side sync: login → add source → trigger worker scrape → verify (requires TEST_CANVAS_*)
     {
@@ -226,20 +202,33 @@ export default defineConfig({
         ]
       : process.env.BASE_URL?.includes('localhost') || !process.env.BASE_URL
         ? [
-            // API server (FIXED port 2801)
             {
-              // Use in-memory MongoDB for fully self-contained E2E (no external Mongo daemon required).
               command:
-                'PORT=2801 API_BASE_URL=http://localhost:2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test SEED_ADMIN_PASSWORD=Admin123! SEED_ADMIN_MFA_SECRET=JBSWY3DPEHPK3PXP pnpm --filter @scholaracle/api dev',
+                'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
+              url: 'http://127.0.0.1:2855/',
+              reuseExistingServer: !process.env.CI,
+              timeout: 120 * 1000,
+              stdout: 'pipe',
+              stderr: 'pipe',
+            },
+            {
+              command: 'bash ../../scripts/start-mailpit-e2e.sh',
+              url: 'http://127.0.0.1:2804/',
+              reuseExistingServer: !process.env.CI,
+              timeout: 120 * 1000,
+              stdout: 'pipe',
+              stderr: 'pipe',
+            },
+            {
+              command:
+                'PORT=2801 API_BASE_URL=http://localhost:2801 BASE_URL=http://localhost:2800 SMTP_HOST=127.0.0.1 SMTP_PORT=2803 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test SEED_ADMIN_PASSWORD=Admin123! SEED_ADMIN_MFA_SECRET=JBSWY3DPEHPK3PXP pnpm --filter @scholaracle/api dev',
               url: 'http://localhost:2801/api/health',
               reuseExistingServer: !process.env.CI,
               timeout: 120 * 1000,
               stdout: 'pipe',
               stderr: 'pipe',
             },
-            // Web app (FIXED port 2800)
             {
-              // Disable Next.js dev tools overlay which can intercept pointer events and cause Playwright flakiness.
               command:
                 'PORT=2800 AUTH_SECRET=e2e-test-secret NEXT_DISABLE_DEVTOOLS=1 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_URL=http://localhost:2801/api pnpm --filter @scholaracle/web dev',
               url: 'http://localhost:2800',

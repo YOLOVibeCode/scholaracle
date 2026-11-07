@@ -65,10 +65,11 @@ export default function AdminCommunicationsPage() {
     if (!isLoading && !error && logsData) setStableLogs(logsData);
   }, [isLoading, error, logsData]);
 
-  // Reset stable view when filters change, so we don't show unrelated stale rows.
+  // Refetch when filters change (useAsyncData does not re-run when fetchFn identity changes).
   useEffect(() => {
     setStableLogs([]);
-  }, [listQuery.recipientEmail, listQuery.status, listQuery.channel, listQuery.type]);
+    refresh();
+  }, [listQuery.recipientEmail, listQuery.status, listQuery.channel, listQuery.type, refresh]);
 
   const logs = logsData ?? stableLogs;
   const showLogsSkeleton = isLoading && stableLogs.length === 0;
