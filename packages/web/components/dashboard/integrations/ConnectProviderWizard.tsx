@@ -180,7 +180,10 @@ export function ConnectProviderWizard({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-xl" data-testid="connect-provider-wizard">
+      <DialogContent
+        className="max-h-[90dvh] w-[calc(100vw-2rem)] max-w-xl overflow-y-auto sm:w-full"
+        data-testid="connect-provider-wizard"
+      >
         <DialogHeader>
           <DialogTitle>
             {step === 'platform' && 'Connect Your School'}
