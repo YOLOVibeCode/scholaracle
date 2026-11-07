@@ -75,7 +75,7 @@ describe('source invite contracts', () => {
   });
 
   it('maps providers to mobile adapter ids and display names', () => {
-    expect(SOURCE_INVITE_ADAPTER_IDS.skyward).toBe('com.skyward.iscorp');
+    expect(SOURCE_INVITE_ADAPTER_IDS.skyward).toBe('skyward');
     expect(SOURCE_INVITE_PROVIDER_NAMES.skyward).toBe('Skyward Family Access');
   });
 });

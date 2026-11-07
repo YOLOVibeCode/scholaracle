@@ -21,7 +21,11 @@ import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
-import { AuthService, AdminAuthService } from '@scholaracle/auth';
+import {
+  AuthService,
+  AdminAuthService,
+  assertConnectorJwtSecretDistinctFromUserSecret,
+} from '@scholaracle/auth';
 import {
   AdminMFATokenRepository,
   AdminPasswordResetTokenRepository,
@@ -100,6 +104,7 @@ import { createSmsStack } from './services/sms/createSmsStack';
 import { maybeBootstrapFirstAdmin } from './bootstrap/maybeBootstrapAdmin';
 
 export interface IServerConfig {
+  readonly connectorJwtSecret?: string;
   readonly port?: number;
   readonly mongodbUri?: string;
   readonly mongodbDbName?: string;
@@ -282,7 +287,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     if (
       req.path === '/api/webhooks/noctusoft' ||
       req.path.startsWith('/api/webhooks/twilio') ||
-      req.path === '/api/ingest/v1/assets/upload-base64'
+      req.path === '/api/ingest/v1/assets/upload-base64' ||
+      req.path === '/api/ingest/v1/ai/scraper-assist'
     ) {
       next();
       return;
@@ -299,6 +305,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   if (!jwtSecret) {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
+
+  let connectorJwtSecret = config.connectorJwtSecret ?? process.env['CONNECTOR_JWT_SECRET'];
+  if (!connectorJwtSecret && nodeEnv !== 'production') {
+    connectorJwtSecret = `${jwtSecret}-connector`;
+  }
+  if (!connectorJwtSecret) {
+    throw new Error('CONNECTOR_JWT_SECRET environment variable is required in production');
+  }
+  assertConnectorJwtSecretDistinctFromUserSecret(jwtSecret, connectorJwtSecret);
 
   const notificationInit = initializeNotificationService(config, database);
   const { notificationService, emailTransport, fromEmail, fromName } = notificationInit;
@@ -415,7 +430,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       '/api/integrations',
       authMiddleware(authService),
       requireParent,
-      integrationsRouter({ database })
+      integrationsRouter({ database, connectorJwtSecret })
     );
     // Account routes (push tokens for parent and student logins, email transfer).
     // Push registration is any authenticated user; household email transfer is
@@ -489,6 +504,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       ingestV1Router({
         database,
         jwtSecret,
+        connectorJwtSecret,
         queue: notificationQueue,
         assetStore: createAssetStore(),
       })

@@ -27,6 +27,7 @@ import {
   buildM402AeriesDashboardSync,
   buildM402AeriesGradebook,
 } from '../fixtures/fakePortalM402';
+import { AERIES_SELECTORS_V1 } from '../selectors/aeriesV1';
 
 const ROOT = 'https://district.aeries.net/student/';
 
@@ -96,7 +97,7 @@ describe('aeries url helpers', () => {
 describe('aeries extractors on simulated pages', () => {
   it('lists the current student and the switcher entries with clean school names', () => {
     document.body.innerHTML = buildM402AeriesDashboardSync('A');
-    const list = extractAeriesStudentList();
+    const list = extractAeriesStudentList(AERIES_SELECTORS_V1);
     expect(list).toEqual([
       {
         name: 'Ann Example',
@@ -113,7 +114,7 @@ describe('aeries extractors on simulated pages', () => {
       }),
     ]);
     expect(list[1]!.switchHref).toMatch(/^ChangeStudent\.aspx\?/);
-    expect(extractAeriesStudentInfo()).toEqual({
+    expect(extractAeriesStudentInfo(AERIES_SELECTORS_V1)).toEqual({
       studentId: '728001',
       name: 'Ann Example',
       grade: '10',
@@ -123,7 +124,7 @@ describe('aeries extractors on simulated pages', () => {
 
   it('reads class cards: name, term, teacher, room, mark, percent, missing count, link', () => {
     document.body.innerHTML = buildM402AeriesDashboardSync('A');
-    const cards = extractAeriesDashboardCourses();
+    const cards = extractAeriesDashboardCourses(AERIES_SELECTORS_V1);
     expect(cards).toHaveLength(2);
     expect(cards[0]).toMatchObject({
       name: 'Spanish 2 a',
@@ -145,7 +146,7 @@ describe('aeries extractors on simulated pages', () => {
 
   it('reads the schedule grid with labels stripped', () => {
     document.body.innerHTML = buildM402AeriesClasses('A');
-    const rows = extractAeriesSchedule();
+    const rows = extractAeriesSchedule(AERIES_SELECTORS_V1);
     expect(rows).toHaveLength(3);
     expect(rows[0]).toEqual({
       courseId: '6033A',
@@ -161,7 +162,7 @@ describe('aeries extractors on simulated pages', () => {
 
   it('reads assignments from the table-view rows only and flags missing work', () => {
     document.body.innerHTML = buildM402AeriesGradebook('222');
-    const rows = extractAeriesAssignments();
+    const rows = extractAeriesAssignments(AERIES_SELECTORS_V1);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual({
       number: '7',
@@ -188,7 +189,7 @@ describe('aeries extractors on simulated pages', () => {
 
   it('reads attendance as one record per marked day or period, skipping clean days', () => {
     document.body.innerHTML = buildM402AeriesAttendanceSync();
-    const att = extractAeriesAttendance();
+    const att = extractAeriesAttendance(AERIES_SELECTORS_V1);
     expect(att).toEqual([
       { date: '09/07/2026', period: '', status: 'HOLIDAY', reason: '', course: '' },
       { date: '10/02/2026', period: '4', status: 'T', reason: '', course: 'Geometry Honors a' },

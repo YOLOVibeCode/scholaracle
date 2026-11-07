@@ -13,7 +13,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
 
   {
     provider: 'canvas',
-    adapterId: 'com.instructure.canvas',
+    adapterId: 'canvas',
     displayName: 'Canvas LMS',
     platformType: 'lms',
     tier: 'api',
@@ -82,7 +82,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
 
   {
     provider: 'aeries',
-    adapterId: 'com.aeries.sis',
+    adapterId: 'aeries',
     displayName: 'Aeries SIS',
     platformType: 'sis',
     tier: 'api',
@@ -178,7 +178,7 @@ export const PLATFORM_DESCRIPTORS: readonly IPlatformDescriptor[] = [
 
   {
     provider: 'skyward-qmlativ',
-    adapterId: 'com.skyward.qmlativ',
+    adapterId: 'skyward',
     displayName: 'Skyward Qmlativ',
     platformType: 'sis',
     tier: 'oneroster',

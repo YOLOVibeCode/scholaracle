@@ -42,6 +42,7 @@ import { installSourceLinkParser } from './src/install/installSourceDeepLink';
 import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore';
 import { sourceInviteApplier } from './src/install/applySourceInvite';
 import { apiClient } from './src/api/client';
+import { fetchPendingSyncRequestsOnAppOpen } from './src/sync/pendingSyncOnAppOpen';
 import {
   clampNavView,
   homeViewForRole,
@@ -164,6 +165,13 @@ function AppContent(): React.ReactElement {
       onError: (message) => Alert.alert('Install link', message),
     });
   }, [isLoading, isLoggedIn, studentMode, applyInviteNav]);
+
+  useEffect(() => {
+    if (!isLoggedIn || studentMode) return;
+    void fetchPendingSyncRequestsOnAppOpen(() => apiClient.getPendingSyncRequests()).catch(
+      () => undefined
+    );
+  }, [isLoggedIn, studentMode, accountEpoch]);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -382,6 +390,7 @@ function AppContent(): React.ReactElement {
           studentExternalId: nav.syncSource.studentExternalId,
           institutionExternalId: nav.syncSource.institutionExternalId,
           sourceId: nav.syncSource.sourceId,
+          studentNameHint: nav.student.name,
         }}
         onDone={() => setNav({ view: 'dashboard', student: nav.student })}
         onCancel={() => setNav({ view: 'dashboard', student: nav.student })}

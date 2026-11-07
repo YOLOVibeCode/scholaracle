@@ -17,7 +17,7 @@ describe('CanvasAdapter', () => {
   describe('meta', () => {
     it('should have correct provider and adapterId', () => {
       expect(adapter.meta.provider).toBe('canvas');
-      expect(adapter.meta.adapterId).toBe('com.instructure.canvas');
+      expect(adapter.meta.adapterId).toBe('canvas');
       expect(adapter.meta.adapterVersion).toBe('0.1.0');
       expect(adapter.meta.displayName).toBe('Canvas LMS');
     });
@@ -163,7 +163,7 @@ describe('CanvasAdapter', () => {
 
       expect(envelope.schemaVersion).toBe(SLC_INGEST_SCHEMA_VERSION_V1);
       expect(envelope.run.provider).toBe('canvas');
-      expect(envelope.run.adapterId).toBe('com.instructure.canvas');
+      expect(envelope.run.adapterId).toBe('canvas');
       expect(envelope.source.sourceId).toBe('src-1');
 
       // 1 course + 1 assignment + 1 gradeSnapshot = 3 ops

@@ -7,7 +7,10 @@ import type { ISlcDeltaOp } from '@scholaracle/contracts';
 import { FakePageDriver } from '../driver/FakePageDriver';
 import type { IScraperModule, IScraperResolver } from '../registry/module';
 import type { IAIEnricher, IClientScrapeHost, IIngestUploader } from './types';
+import { SyncError, STUDENT_MISMATCH_MESSAGE } from './types';
 import { runClientScrape } from './runClientScrape';
+import { aeriesBuiltinModule } from '../registry/builtin-modules';
+import type { IAeriesFullExtract } from '../extractors/aeries/aeries-extractors';
 
 const NOW = '2026-01-15T10:00:00.000Z';
 
@@ -166,5 +169,123 @@ describe('runClientScrape enrichment', () => {
     const { host } = makeHost([COURSE, ATTENDANCE_GAP], { enricher: evil });
     const envelope = await runClientScrape(host);
     expect(envelope.ops[0]?.key.externalId).toBe('skyward-course-A1');
+  });
+});
+
+function m402TwoStudentExtract(): IAeriesFullExtract {
+  return {
+    timestamp: NOW,
+    students: [
+      {
+        name: 'Ann Example',
+        studentId: '728001',
+        grade: '10',
+        school: 'North High School',
+        courses: [
+          {
+            period: '1',
+            name: 'Spanish 2 a',
+            term: 'Quarter 2',
+            teacher: 'Rivera, M',
+            teacherEmail: 'm.rivera@district.example',
+            room: 'S108',
+            currentGrade: 92,
+            currentPercent: 92.1,
+            missingCount: 0,
+            assignments: [],
+          },
+        ],
+        attendance: [],
+      },
+      {
+        name: 'Ben Example',
+        studentId: '826002',
+        grade: '8',
+        school: 'West Middle School',
+        courses: [
+          {
+            period: '7',
+            name: 'Math 8',
+            term: 'Quarter 2',
+            teacher: 'Lindqvist, R',
+            teacherEmail: 'r.lindqvist@district.example',
+            room: 'B12',
+            currentGrade: 100,
+            currentPercent: 100,
+            missingCount: 0,
+            assignments: [],
+          },
+        ],
+        attendance: [],
+      },
+    ],
+  };
+}
+
+describe('runClientScrape studentNameHint', () => {
+  const uploaded: ISlcDeltaOp[][] = [];
+  let reportedFailure: string | undefined;
+
+  const uploader: IIngestUploader = {
+    async upload(envelope) {
+      uploaded.push([...envelope.ops]);
+    },
+    async reportFailure(_runId, _sourceId, error) {
+      reportedFailure = error;
+    },
+  };
+
+  beforeEach(() => {
+    uploaded.length = 0;
+    reportedFailure = undefined;
+  });
+
+  function aeriesHost(studentNameHint: string): IClientScrapeHost {
+    return {
+      driver: new FakePageDriver(),
+      config: {
+        provider: 'aeries',
+        adapterId: 'com.aeries.sis',
+        adapterVersion: 'test@1.0.0',
+        baseUrl: 'https://district.aeries.net/student/',
+        sourceId: 'src-aeries',
+        studentExternalId: 'stu-ben',
+        institutionExternalId: 'district.aeries.net',
+        studentNameHint,
+      },
+      clientType: 'mobile',
+      uploader,
+      resolver: {
+        async resolve() {
+          return {
+            module: {
+              ...aeriesBuiltinModule,
+              scrape: async () => m402TwoStudentExtract() as unknown as Record<string, unknown>,
+            },
+            canRun: true,
+            checkErrors: [],
+          };
+        },
+      },
+    };
+  }
+
+  it('files ops only for the hinted student with the configured studentExternalId', async () => {
+    const envelope = await runClientScrape(aeriesHost('Ben Example'));
+    expect(envelope.ops.every((o) => o.key.studentExternalId === 'stu-ben')).toBe(true);
+    const courseOps = envelope.ops.filter((o) => o.entity === 'course');
+    expect(courseOps.some((o) => String(o.record?.['title']).includes('Math 8'))).toBe(true);
+    expect(courseOps.some((o) => String(o.record?.['title']).includes('Spanish'))).toBe(false);
+    expect(uploaded).toHaveLength(1);
+  });
+
+  it('throws STUDENT_MISMATCH with zero upload when hint matches no student', async () => {
+    await expect(runClientScrape(aeriesHost('Nobody Example'))).rejects.toMatchObject({
+      name: 'SyncError',
+      phase: 'STUDENT_MISMATCH',
+      message: STUDENT_MISMATCH_MESSAGE,
+    } satisfies Partial<SyncError>);
+    expect(uploaded).toHaveLength(0);
+    expect(reportedFailure).toBe(STUDENT_MISMATCH_MESSAGE);
   });
 });

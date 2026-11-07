@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DeleteAccountForm } from './DeleteAccountForm';
 
 export const metadata = {
   title: 'Delete Account | Scholarmancy',
@@ -15,15 +16,20 @@ export default function DeleteAccountPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Delete your account</CardTitle>
             <CardDescription>
-              App Store Guideline 5.1.1 — account deletion initiated by you, completed within 30 days.
+              App Store Guideline 5.1.1 — account deletion initiated by you.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              You can request deletion of your Scholarmancy account at any time. We permanently remove your
-              login, household data, synced academic records, push tokens, and linked Apple / Google /
-              Microsoft sign-in within 30 days.
+              You can delete your Scholarmancy account at any time. When you confirm below (or in the
+              signed-in web flow), we permanently remove your login, household data, synced academic
+              records, push tokens, and linked Apple / Google / Microsoft sign-in.
             </p>
+
+            <section>
+              <h2 className="text-lg font-semibold">Delete while signed in</h2>
+              <DeleteAccountForm />
+            </section>
 
             <section>
               <h2 className="text-lg font-semibold">From the iOS or Android app</h2>
@@ -45,7 +51,7 @@ export default function DeleteAccountPage() {
                   privacy@scholarmancy.com
                 </Link>{' '}
                 from the address on the account. Include “Delete my Scholarmancy account” in the subject.
-                We will confirm and complete deletion within 30 days.
+                We will confirm identity and complete deletion promptly.
               </p>
             </section>
 
