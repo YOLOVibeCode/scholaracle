@@ -25,7 +25,7 @@ import {
 export class SkywardAdapter implements ILmsAdapterWithTest {
   public readonly meta: ILmsAdapterMeta = {
     provider: 'skyward-qmlativ',
-    adapterId: 'com.skyward.qmlativ',
+    adapterId: 'skyward',
     adapterVersion: '0.1.0',
     displayName: 'Skyward Qmlativ',
   };
