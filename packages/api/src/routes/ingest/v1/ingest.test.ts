@@ -636,8 +636,8 @@ describe('Ingest v1 API', () => {
     const baseKey = {
       provider: 'test',
       adapterId: 'com.test.adapter',
-      studentExternalId: 'stu-all',
-      institutionExternalId: 'inst-all',
+      studentExternalId: 'stu-1',
+      institutionExternalId: 'inst-1',
     };
 
     const envelope = {
@@ -882,8 +882,8 @@ describe('Ingest v1 API', () => {
     const baseKey = {
       provider: 'test',
       adapterId: 'com.test.adapter',
-      studentExternalId: 'stu-del',
-      institutionExternalId: 'inst-del',
+      studentExternalId: 'stu-1',
+      institutionExternalId: 'inst-1',
     };
 
     // First upsert a course, then delete it

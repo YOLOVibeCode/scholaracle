@@ -30,6 +30,7 @@ import type {
 import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
 import { computeRunCoverage } from './computeRunCoverage';
+import { narrowStudentExtractForTransform } from './narrowStudentExtract';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -156,6 +157,20 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   // 3. Transform (local step)
   await emit('transforming', 'Converting data...');
 
+  let transformInput: Record<string, unknown>;
+  try {
+    transformInput = narrowStudentExtractForTransform(raw, config.studentNameHint);
+  } catch (err: unknown) {
+    const syncErr = toSyncError(err, 'local', 'Student selection failed');
+    if (recorder) {
+      await recorder
+        .completeRun(runId, { status: 'failed', errorMessage: syncErr.message })
+        .catch(() => undefined);
+    }
+    await uploader.reportFailure?.(runId, config.sourceId, syncErr.message).catch(() => undefined);
+    throw syncErr;
+  }
+
   let ops: ReturnType<typeof module.transform>;
   try {
     const ctx = {
@@ -164,7 +179,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
       studentExternalId: config.studentExternalId,
       institutionExternalId: config.institutionExternalId,
     };
-    ops = module.transform(raw, ctx);
+    ops = module.transform(transformInput, ctx);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'local', 'Transform failed');
     if (recorder) {
