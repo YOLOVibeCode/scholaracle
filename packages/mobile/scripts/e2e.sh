@@ -6,13 +6,12 @@
 # Builds a local Release app (no EAS credits) pointed at E2E_API_URL
 # (default: the UAT API), installs it, then runs the flows in e2e/maestro.
 #
-# Logins: flows other than "launch" need MAESTRO_* variables. Keep them as
+# Logins: flows other than "launch" need MAESTRO_* variables. Locally, keep them as
 # op:// references in E2E_ENV_FILE (default ~/.config/scholarmancy/e2e.env,
-# template: e2e/e2e.env.example). The script runs Maestro under
-# `opx run --env-file`, so values never appear on screen or in argv.
-# Maestro's per-step logs can contain typed text; they are deleted after the
-# run. Screenshots (which show your child's data) go to E2E_ARTIFACTS_DIR,
-# outside the repo.
+# template: e2e/e2e.env.example). The script runs Maestro under `opx run --env-file`.
+# In CI, export MAESTRO_PARENT_EMAIL (and related vars) directly — opx is skipped.
+# Maestro's per-step logs can contain typed text; they are deleted after the run.
+# Screenshots go to E2E_ARTIFACTS_DIR (outside the repo by default).
 set -euo pipefail
 
 platform="${1:-}"; suite="${2:-launch}"; build=1
@@ -21,18 +20,34 @@ platform="${1:-}"; suite="${2:-launch}"; build=1
 case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|sync|all] [--no-build]" >&2; exit 2;; esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
-export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
-export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
-export PATH="$JAVA_HOME/bin:$HOME/.maestro-cli/maestro/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  export JAVA_HOME="${JAVA_HOME:-${RUNNER_JAVA_HOME:-}}"
+  export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+else
+  export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
+  export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+fi
+maestro_path=""
+for d in "$HOME/.maestro/bin" "$HOME/.maestro-cli/maestro/bin"; do
+  if [[ -x "$d/maestro" ]]; then maestro_path="$d"; break; fi
+done
+export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}${maestro_path:+$maestro_path:}$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator"
 export MAESTRO_CLI_NO_ANALYTICS=1
 api_url="${E2E_API_URL:-https://api-uat.scholarmancy.com}"
 ios_device="${E2E_IOS_DEVICE:-iPhone 17 Pro}"
 avd="${E2E_ANDROID_AVD:-scholarmancy-e2e}"
 env_file="${E2E_ENV_FILE:-$HOME/.config/scholarmancy/e2e.env}"
-artifacts="${E2E_ARTIFACTS_DIR:-$HOME/Library/Caches/scholarmancy-e2e}/$(date +%Y%m%d-%H%M%S)-$platform-$suite"
+if [[ -n "${E2E_ARTIFACTS_DIR:-}" ]]; then
+  artifacts="${E2E_ARTIFACTS_DIR}"
+else
+  artifacts="$HOME/Library/Caches/scholarmancy-e2e/$(date +%Y%m%d-%H%M%S)-$platform-$suite"
+fi
 mkdir -p "$artifacts"
 
-command -v maestro >/dev/null || { echo "maestro not found (expected in ~/.maestro-cli/maestro/bin)" >&2; exit 1; }
+command -v maestro >/dev/null || {
+  echo "maestro not found (install: curl -Ls https://get.maestro.mobile.dev | bash)" >&2
+  exit 1
+}
 
 start_device() {
   if [[ "$platform" == ios ]]; then
@@ -49,14 +64,10 @@ start_device() {
 
 build_app() {
   cd "$here"
-  # Explicit env wins over .env files, so the build always targets api_url.
   export EXPO_PUBLIC_API_URL="$api_url"
   if [[ "$platform" == ios ]]; then
     npx expo run:ios --configuration Release --device "$ios_device" --no-bundler
   else
-    # android/gradle.properties caps Gradle at 2 GB heap / 512 MB metaspace, which
-    # a local Release build exceeds ("OutOfMemoryError: Metaspace" in ksp). Raise
-    # it for this run only; the setting is not written to the project.
     export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=2g"
     npx expo run:android --variant release --no-bundler
   fi
@@ -83,14 +94,18 @@ maestro_cmd=(maestro --platform "$platform" test --format junit --output "$artif
 set +e
 if [[ "$suite" == launch ]]; then
   "${maestro_cmd[@]}"
+elif [[ -n "${MAESTRO_PARENT_EMAIL:-}" ]]; then
+  "${maestro_cmd[@]}"
 else
-  [[ -f "$env_file" ]] || { echo "missing $env_file (copy e2e/e2e.env.example and fill in op:// references)" >&2; exit 1; }
+  [[ -f "$env_file" ]] || {
+    echo "missing $env_file (copy e2e/e2e.env.example and fill in op:// references)" >&2
+    exit 1
+  }
   command -v opx >/dev/null || { echo "opx not found" >&2; exit 1; }
   opx run --env-file "$env_file" --reason "Scholarmancy $platform E2E ($suite) on the $platform simulator" -- "${maestro_cmd[@]}"
 fi
 rc=$?
 set -e
-# Step logs can include typed text: remove them; keep screenshots and the report.
 find "$artifacts" -type f \( -name 'commands-*.json' -o -name '*.log' \) -delete 2>/dev/null || true
 echo "result: $([[ $rc -eq 0 ]] && echo PASS || echo FAIL) ($platform, $suite) — artifacts: $artifacts"
 exit $rc
