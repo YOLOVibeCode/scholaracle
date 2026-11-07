@@ -72,7 +72,18 @@ build_app() {
   cd "$here"
   export EXPO_PUBLIC_API_URL="$api_url"
   if [[ "$platform" == ios ]]; then
-    npx expo run:ios --configuration Release --device "$ios_device" --no-bundler
+    # Build for the simulator with xcodebuild and signing off: `expo run:ios` demands a
+    # code-signing certificate on CI runners even for a simulator target.
+    npx expo prebuild --platform ios --no-install >/dev/null
+    (cd ios && pod install >/dev/null)
+    local ws scheme app
+    ws="$(ls -d ios/*.xcworkspace | head -1)"
+    scheme="$(basename "$ws" .xcworkspace)"
+    xcodebuild -quiet -workspace "$ws" -scheme "$scheme" -configuration Release \
+      -sdk iphonesimulator -destination "id=$ios_device" -derivedDataPath build/e2e-ios \
+      CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+    app="$(ls -d build/e2e-ios/Build/Products/Release-iphonesimulator/*.app | head -1)"
+    xcrun simctl install "$ios_device" "$app"
   else
     export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=2g"
     npx expo run:android --variant release --no-bundler

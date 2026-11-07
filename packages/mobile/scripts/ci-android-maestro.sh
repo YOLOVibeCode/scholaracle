@@ -5,6 +5,8 @@ set -euo pipefail
 mode="${1:?usage: ci-android-maestro.sh launch-smoke|sync}"
 root="${GITHUB_WORKSPACE:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 cd "$root/packages/mobile"
+# CI emulators are slow to start the Maestro driver (default timeout was exceeded).
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
 case "$mode" in
   launch-smoke)
     E2E_ARTIFACTS_DIR="$root/mobile-maestro-artifacts/android-launch" pnpm e2e:android launch
