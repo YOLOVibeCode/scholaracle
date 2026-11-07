@@ -730,6 +730,25 @@ describe('ScholarmancyApiClient auth', () => {
       );
     });
 
+    it('should send deviceId when minting a connector token', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      secureStoreData.set('slc_device_id', 'mobile-device-uuid');
+      const fetchMock = mockFetchSequence({
+        status: 200,
+        body: {
+          success: true,
+          token: 'ct-new',
+          jti: 'j1',
+          deviceId: 'mobile-device-uuid',
+          expiresIn: '90d',
+        },
+      });
+      await expect(client.getOrMintConnectorToken()).resolves.toBe('ct-new');
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+      const body = JSON.parse(String(init.body));
+      expect(body['deviceId']).toBe('mobile-device-uuid');
+    });
+
     it('should re-mint once and retry when an ingest call gets a 401 (revoked token)', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
       secureStoreData.set(
@@ -781,6 +800,35 @@ describe('ScholarmancyApiClient auth', () => {
           displayName: 'Canvas (mobile)',
         })
       ).rejects.toMatchObject({ name: 'ApiError', code: 'UNAUTHENTICATED' });
+    });
+  });
+
+  describe('getPendingSyncRequests', () => {
+    it('should GET pending parent sync requests', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({
+        status: 200,
+        body: {
+          success: true,
+          pending: [
+            {
+              syncRequestId: 'sync-1',
+              studentId: 'stu-1',
+              sourceId: 'src-1',
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      });
+      const pending = await client.getPendingSyncRequests();
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/integrations/sync-requests/pending`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.syncRequestId).toBe('sync-1');
     });
   });
 

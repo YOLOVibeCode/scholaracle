@@ -13,7 +13,10 @@ import { transformSkywardExtract } from '../transformers/skyward/skyward-transfo
 import { transformAeriesExtract } from '../transformers/aeries/aeries-transformer';
 import type { ITransformContext } from '../types';
 import { parseScraperManifest, type IScraperManifest } from './manifest';
+import { runPortalStep } from '../pipeline/runPortalStep';
 import type { IScraperHost, IScraperModule } from './module';
+
+export { BUILTIN_ALIAS_TO_ADAPTER, BUILTIN_ADAPTER_ID_ALIASES } from './adapter-aliases';
 
 const CORE_VERSION = '0.1.0';
 
@@ -21,7 +24,7 @@ function canvasManifest(): IScraperManifest {
   return parseScraperManifest({
     id: 'canvas',
     name: 'Canvas LMS',
-    adapterId: 'com.instructure.canvas',
+    adapterId: 'canvas',
     version: CORE_VERSION,
     hosts: ['*.instructure.com'],
     entities: [
@@ -42,7 +45,7 @@ function skywardManifest(): IScraperManifest {
   return parseScraperManifest({
     id: 'skyward',
     name: 'Skyward Qmlativ',
-    adapterId: 'com.skyward.qmlativ',
+    adapterId: 'skyward',
     version: CORE_VERSION,
     hosts: ['*.skyward.com', '*.iscorp.com'],
     entities: [
@@ -63,7 +66,7 @@ function aeriesManifest(): IScraperManifest {
   return parseScraperManifest({
     id: 'aeries',
     name: 'Aeries SIS',
-    adapterId: 'com.aeries.sis',
+    adapterId: 'aeries',
     version: CORE_VERSION,
     hosts: ['*.aeries.net'],
     entities: [
@@ -87,7 +90,9 @@ export const canvasBuiltinModule: IScraperModule = {
       message: 'Running Canvas recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runCanvasRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'canvas.extract', async () =>
+      runCanvasRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {
@@ -103,7 +108,9 @@ export const skywardBuiltinModule: IScraperModule = {
       message: 'Running Skyward recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runSkywardRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'skyward.extract', async () =>
+      runSkywardRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {
@@ -119,7 +126,9 @@ export const aeriesBuiltinModule: IScraperModule = {
       message: 'Running Aeries recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runAeriesRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'aeries.extract', async () =>
+      runAeriesRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {
@@ -127,24 +136,10 @@ export const aeriesBuiltinModule: IScraperModule = {
   },
 };
 
-/** Alias keys → canonical adapterId for BuiltinScraperResolver. */
-export const BUILTIN_ALIAS_TO_ADAPTER: Readonly<Record<string, string>> = {
-  canvas: 'com.instructure.canvas',
-  'com.instructure.canvas': 'com.instructure.canvas',
-  skyward: 'com.skyward.qmlativ',
-  'com.skyward': 'com.skyward.qmlativ',
-  'com.skyward.qmlativ': 'com.skyward.qmlativ',
-  'com.skyward.iscorp': 'com.skyward.qmlativ',
-  aeries: 'com.aeries.sis',
-  'com.aeries': 'com.aeries.sis',
-  'com.aeries.sis': 'com.aeries.sis',
-  'com.aeries.portal': 'com.aeries.sis',
-};
-
 export const BUILTIN_MODULES_BY_ADAPTER: Readonly<Record<string, IScraperModule>> = {
-  'com.instructure.canvas': canvasBuiltinModule,
-  'com.skyward.qmlativ': skywardBuiltinModule,
-  'com.aeries.sis': aeriesBuiltinModule,
+  canvas: canvasBuiltinModule,
+  skyward: skywardBuiltinModule,
+  aeries: aeriesBuiltinModule,
 };
 
 /** Returns all builtin scraper modules as an array. */

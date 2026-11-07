@@ -78,9 +78,9 @@ export class ConnectedSourceStore implements IConnectedSourceStore {
 export const connectedSourceStore = new ConnectedSourceStore();
 
 export const ADAPTER_IDS: Record<string, string> = {
-  canvas: 'com.instructure.canvas',
-  skyward: 'com.skyward.iscorp',
-  aeries: 'com.aeries.portal',
+  canvas: 'canvas',
+  skyward: 'skyward',
+  aeries: 'aeries',
 };
 
 export function sourceIdForStudent(

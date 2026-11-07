@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
@@ -16,10 +17,13 @@ import {
   type IIngestSourceRegisterResponse,
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
+  type IIngestRunSkeletonUploadRequest,
+  type IIngestRunSkeletonUploadResponse,
   type ISlcRunCoverage,
 } from '@scholaracle/contracts';
 import {
   computeRunCoverage,
+  resolveCanonicalAdapterId,
   validateEnvelope as validateEnvelopeFull,
 } from '@scholaracle/scraper-core';
 import { authMiddleware } from '../../../middleware/auth';
@@ -29,6 +33,7 @@ import {
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
   IngestDeviceAuthRepository,
   IngestRunRepository,
@@ -41,6 +46,11 @@ import {
   getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import {
+  INGEST_PLAN_LIMIT_CODE,
+  IngestStudentPlanLimitError,
+  assertIngestWithinStudentPlanLimit,
+} from '../../../services/billing/studentPlanLimit';
 import type { MongoQueue } from '@scholaracle/agents';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 import {
@@ -54,9 +64,10 @@ import { logger } from '../../../logger';
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
-import { runBatchMaterialMatching } from '../../../services/materialMatching/batchMaterialMatcher';
-import { runVisionDescribeByContentHash } from '../../../services/materialMatching/visionDescribeByHash';
+import { runPostIngestIntelligence } from '../../../services/materialMatching/postIngestIntelligence';
 import { createScraperAssistRouter } from './scraperAssist';
+import { encryptRunSkeleton } from '../../../services/runSkeletons/runSkeletonCipher';
+import { RunSkeletonRepository } from '../../../services/runSkeletons/RunSkeletonRepository';
 import {
   syncStudentDataSourcesAfterIngestFailure,
   syncStudentDataSourcesAfterIngestSuccess,
@@ -65,6 +76,7 @@ import {
 export interface IIngestV1RouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  readonly connectorJwtSecret?: string;
   /** When set, enqueue notify jobs after creating alerts so notifications are delivered. */
   readonly queue?: MongoQueue;
   /** Asset blob store for post-ingest vision dedupe. */
@@ -104,6 +116,24 @@ function randomUserCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const pick = (): string => alphabet[Math.floor(Math.random() * alphabet.length)] ?? 'A';
   return `${pick()}${pick()}${pick()}${pick()}-${pick()}${pick()}${pick()}${pick()}`;
+}
+
+function normalizeEnvelopeAdapterIds(envelope: ISlcIngestEnvelopeV1): ISlcIngestEnvelopeV1 {
+  const ops = envelope.ops.map((op) => ({
+    ...op,
+    key: {
+      ...op.key,
+      adapterId: resolveCanonicalAdapterId(op.key.adapterId),
+    },
+  }));
+  return {
+    ...envelope,
+    run: {
+      ...envelope.run,
+      adapterId: resolveCanonicalAdapterId(envelope.run.adapterId),
+    },
+    ops,
+  };
 }
 
 function validateEnvelope(envelope: ISlcIngestEnvelopeV1): { valid: boolean; error?: string } {
@@ -579,25 +609,6 @@ async function generateAlertsFromIngestedAssignments(params: {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Post-ingest intelligence (batched LLM matching + vision dedupe)
-// ---------------------------------------------------------------------------
-
-async function runPostIngestIntelligence(params: {
-  readonly database: Db;
-  readonly userId: string;
-  readonly assetStore?: IAssetStore;
-}): Promise<void> {
-  if (params.assetStore) {
-    await runVisionDescribeByContentHash({
-      database: params.database,
-      userId: params.userId,
-      assetStore: params.assetStore,
-    });
-  }
-  await runBatchMaterialMatching({ database: params.database, userId: params.userId });
-}
-
 /** Maps entity type to MongoDB collection name. */
 const ENTITY_COLLECTION_MAP: Record<string, string> = {
   assignment: 'slc_assignments',
@@ -756,11 +767,11 @@ async function autoCreateStudentsFromOps(params: {
       // should have already returned the owner's userId, so params.userId IS the owner.
       // But if we're still seeing "not found" it means this is a brand-new student.
       if (maxStudents !== -1 && studentCount >= maxStudents) {
-        logger.warn(
-          { userId: params.userId, sourceId: params.sourceId, maxStudents },
-          'Ingest found a student beyond the plan limit; not creating it'
-        );
-        continue;
+        throw new IngestStudentPlanLimitError({
+          currentPlan: subscription?.effectivePlan() ?? 'free',
+          maxStudents,
+          currentCount: studentCount,
+        });
       }
       studentCount += 1;
       const studentName = profileNames.get(studentExtId) ?? studentExtId;
@@ -1089,7 +1100,9 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   const router = express.Router();
 
   const authService = new AuthService(config.database, config.jwtSecret);
-  const connectorTokenService = new ConnectorTokenService(config.jwtSecret);
+  const connectorTokenService = new ConnectorTokenService(
+    config.connectorJwtSecret ?? config.jwtSecret
+  );
   const connectorAuth = connectorAuthMiddleware(connectorTokenService, {
     database: config.database,
   });
@@ -1162,8 +1175,17 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const token = connectorTokenService.createToken(userId, randomUUID());
-      const ok = await deviceRepo.approveByUserCode(userCode, userId, token);
+      const pending = await deviceRepo.findPendingByUserCode(userCode);
+      if (!pending) {
+        throw new NotFoundError('User code not found or expired');
+      }
+      const minted = await mintConnectorTokenForDevice({
+        database: config.database,
+        connectorTokenService,
+        userId,
+        deviceId: pending.deviceCode,
+      });
+      const ok = await deviceRepo.approveByUserCode(userCode, userId, minted.token);
       if (!ok) {
         throw new NotFoundError('User code not found or expired');
       }
@@ -1303,7 +1325,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (!runId) {
         throw new ValidationError('Missing runId');
       }
-      const envelope = req.body as ISlcIngestEnvelopeV1;
+      const envelope = normalizeEnvelopeAdapterIds(req.body as ISlcIngestEnvelopeV1);
 
       const v = validateEnvelope(envelope);
       if (!v.valid) {
@@ -1323,6 +1345,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         envelope.source?.sourceId,
         firstStudentExtId
       );
+
+      try {
+        await assertIngestWithinStudentPlanLimit(config.database, dataUserId, envelope.ops);
+      } catch (err) {
+        if (err instanceof IngestStudentPlanLimitError) {
+          res.status(403).json({
+            success: false,
+            error: err.message,
+            code: INGEST_PLAN_LIMIT_CODE,
+            currentPlan: err.currentPlan,
+            maxStudents: err.maxStudents,
+            currentCount: err.currentCount,
+          });
+          return;
+        }
+        throw err;
+      }
 
       const prepared = await prepareIngestOps({
         ops: envelope.ops,
@@ -1488,6 +1527,87 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
       } satisfies IIngestRunCompleteResponse);
+    })
+  );
+
+  router.post(
+    '/runs/:runId/skeletons',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const actorUserId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        throw new ValidationError('Missing runId');
+      }
+      const body = req.body as IIngestRunSkeletonUploadRequest;
+      if (
+        !body ||
+        typeof body.step !== 'string' ||
+        !body.step ||
+        typeof body.skeleton !== 'string' ||
+        typeof body.sha256 !== 'string' ||
+        typeof body.byteLength !== 'number' ||
+        typeof body.capturedAt !== 'string'
+      ) {
+        throw new ValidationError('Invalid skeleton payload');
+      }
+      if (body.sha256.length < 32) {
+        throw new ValidationError('Invalid skeleton sha256');
+      }
+      const store = config.assetStore;
+      if (!store) {
+        throw new ValidationError('Skeleton storage is not configured');
+      }
+
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      const runDataUserId = existingRun.userId.toString();
+      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
+        throw new AuthenticationError('Not authorized to upload skeleton for this run');
+      }
+
+      const encrypted = encryptRunSkeleton(
+        JSON.stringify({
+          step: body.step,
+          capturedAt: body.capturedAt,
+          pagePath: body.pagePath,
+          skeleton: body.skeleton,
+          byteLength: body.byteLength,
+          sha256: body.sha256,
+          truncated: body.truncated,
+        })
+      );
+      if (!encrypted) {
+        throw new ValidationError('Skeleton encryption is not configured');
+      }
+
+      const safeStep = body.step.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+      const storageKey = `skeletons/${runDataUserId}/${runId}/${safeStep}-${body.sha256.slice(0, 12)}.json.enc`;
+      const blob = JSON.stringify(encrypted);
+      const blobBytes = Buffer.from(blob, 'utf8');
+      await store.put(storageKey, Readable.from(blobBytes), {
+        contentType: 'application/json',
+        contentLength: blobBytes.length,
+      });
+
+      const skeletonRepo = new RunSkeletonRepository(config.database);
+      const saved = await skeletonRepo.insert({
+        userId: runDataUserId,
+        runId,
+        step: body.step,
+        sha256: body.sha256,
+        storageKey,
+        byteLength: body.byteLength,
+      });
+
+      res.status(200).json({
+        success: true,
+        storageKey,
+        expiresAt: saved.expiresAt.toISOString(),
+      } satisfies IIngestRunSkeletonUploadResponse);
     })
   );
 

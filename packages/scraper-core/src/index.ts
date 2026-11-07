@@ -40,6 +40,8 @@ export { buildAdapterVersion } from './types';
 export { PAGE_FNS } from './page-fns/registry';
 export { resolvePageFn, PageFnUnregisteredError, PAGE_FN_UNREGISTERED } from './page-fns/resolve';
 export { getDocumentOuterHtml, isLoginFormShowing } from './page-fns/common-fns';
+export { captureSkeleton, type ICaptureSkeletonResult } from './page-fns/captureSkeleton';
+export { runPortalStep } from './pipeline/runPortalStep';
 export { fetchAssetInWebView, fetchPageInWebView } from './page-fns/asset-fns';
 export type {
   IFetchedAsset,
@@ -59,12 +61,21 @@ export {
 // Skyward
 export * from './extractors/skyward/skyward-extractors';
 export { runSkywardRecipe } from './recipes/skyward-recipe';
+export type { IRunSkywardRecipeOptions } from './recipes/skyward-recipe';
 export { transformSkywardExtract } from './transformers/skyward/skyward-transformer';
 
 // Aeries
 export * from './extractors/aeries/aeries-extractors';
 export { runAeriesRecipe } from './recipes/aeries-recipe';
+export type { IRunAeriesRecipeOptions } from './recipes/aeries-recipe';
 export { transformAeriesExtract } from './transformers/aeries/aeries-transformer';
+
+// Portal selector tables (v1 JSON + defaults for page functions)
+export { AERIES_SELECTORS_V1 } from './selectors/aeriesV1';
+export { SKYWARD_SELECTORS_V1 } from './selectors/skywardV1';
+export type { IAeriesSelectorsV1 } from './selectors/aeriesV1';
+export type { ISkywardSelectorsV1 } from './selectors/skywardV1';
+export { mergeSelectorRecord } from './selectors/mergeSelectorTables';
 
 // Test harness: M4-02 fake portal HTML (Playwright / Express)
 export * from './fixtures/fakePortalM402';
@@ -138,5 +149,10 @@ export {
   skywardBuiltinModule,
   aeriesBuiltinModule,
   BUILTIN_ALIAS_TO_ADAPTER,
+  BUILTIN_ADAPTER_ID_ALIASES,
   BUILTIN_MODULES_BY_ADAPTER,
+  CANONICAL_BUILTIN_ADAPTER_IDS,
+  resolveCanonicalAdapterId,
+  isLegacyBuiltinAdapterId,
+  LEGACY_BUILTIN_ADAPTER_IDS,
 } from './registry';
