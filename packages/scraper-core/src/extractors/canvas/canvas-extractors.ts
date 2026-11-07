@@ -124,18 +124,17 @@ export function extractCanvasUser(selector: string): string {
   return el?.getAttribute('title') ?? el?.textContent?.trim() ?? 'Unknown';
 }
 
-function readDataId(row: Element): string | undefined {
-  const direct = row.getAttribute('data-plannable-id') ?? row.getAttribute('data-id');
-  if (direct?.trim()) return direct.trim();
-  const child = row.querySelector('[data-plannable-id]');
-  const fromChild = child?.getAttribute('data-plannable-id');
-  return fromChild?.trim() || undefined;
-}
-
 /**
  * Extracts to-do items from the Canvas dashboard planner.
  */
 export function extractCanvasToDoItems(): ICanvasBrowserToDoItem[] {
+  // Inlined: page functions run in the portal page without module scope.
+  const readDataId = (row: Element): string | undefined => {
+    const direct = row.getAttribute('data-plannable-id') ?? row.getAttribute('data-id');
+    if (direct?.trim()) return direct.trim();
+    const fromChild = row.querySelector('[data-plannable-id]')?.getAttribute('data-plannable-id');
+    return fromChild?.trim() || undefined;
+  };
   const items: ICanvasBrowserToDoItem[] = [];
   const list = document.querySelector('#planner-todos, .to-do-list, [class*="Todo"]');
   if (!list) return items;
@@ -170,6 +169,13 @@ export function extractCanvasUpcomingEvents(): Array<{
   date: string;
   course?: string;
 }> {
+  // Inlined: page functions run in the portal page without module scope.
+  const readDataId = (row: Element): string | undefined => {
+    const direct = row.getAttribute('data-plannable-id') ?? row.getAttribute('data-id');
+    if (direct?.trim()) return direct.trim();
+    const fromChild = row.querySelector('[data-plannable-id]')?.getAttribute('data-plannable-id');
+    return fromChild?.trim() || undefined;
+  };
   const items: Array<{ id?: string; title: string; date: string; course?: string }> = [];
   const list = document.querySelector('#planner-events, .upcoming-events, [class*="Upcoming"]');
   if (!list) return items;
@@ -545,29 +551,19 @@ export async function fetchCanvasAnnouncements(courseIds: string[]): Promise<
   const res = await fetch(`/api/v1/announcements?${params}&per_page=50`);
   if (!res.ok) return [];
   const json: unknown = await res.json();
-  return Array.isArray(json)
-    ? (json as Array<Record<string, unknown>>).map(canvasAnnouncementFromApi)
-    : [];
-}
-
-function readOptString(v: unknown): string | undefined {
-  return typeof v === 'string' ? v : undefined;
-}
-
-function canvasAnnouncementFromApi(raw: Record<string, unknown>): {
-  id?: string | number;
-  title: string;
-  context_code: string;
-  posted_at?: string;
-  message?: string;
-} {
-  const title = readOptString(raw['title']) ?? '';
-  const ctx = readOptString(raw['context_code']) ?? '';
-  const posted = readOptString(raw['posted_at']);
-  const message = readOptString(raw['message']);
-  const idRaw = raw['id'];
-  const id = typeof idRaw === 'number' || typeof idRaw === 'string' ? idRaw : undefined;
-  return { id, title, context_code: ctx, posted_at: posted, message };
+  if (!Array.isArray(json)) return [];
+  // Inlined: page functions run in the portal page without module scope.
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  return (json as Array<Record<string, unknown>>).map((raw) => {
+    const idRaw = raw['id'];
+    return {
+      id: typeof idRaw === 'number' || typeof idRaw === 'string' ? idRaw : undefined,
+      title: str(raw['title']) ?? '',
+      context_code: str(raw['context_code']) ?? '',
+      posted_at: str(raw['posted_at']),
+      message: str(raw['message']),
+    };
+  });
 }
 
 /**

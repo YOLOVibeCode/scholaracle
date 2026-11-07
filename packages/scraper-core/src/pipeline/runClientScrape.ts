@@ -15,6 +15,7 @@
 import { randomUUID } from './uuid';
 import { SLC_INGEST_SCHEMA_VERSION_V1, type ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 import { validateEnvelope } from '../validator/validator';
+import { resolveCanonicalAdapterId } from '../registry/adapter-aliases';
 import { BuiltinScraperResolver } from '../registry/resolvers';
 import type { IScraperHost } from '../registry/module';
 import { SCRAPER_CORE_PACKAGE_VERSION } from '../version';
@@ -29,6 +30,7 @@ import type {
 import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
 import { computeRunCoverage } from './computeRunCoverage';
+import { narrowStudentExtractForTransform } from './narrowStudentExtract';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -84,7 +86,11 @@ function buildEnvelopeMeta(
 }
 
 export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcIngestEnvelopeV1> {
-  const { config, uploader, recorder, assets, onProgress } = host;
+  const { config: rawConfig, uploader, recorder, assets, onProgress } = host;
+  const config: IClientScrapeConfig = {
+    ...rawConfig,
+    adapterId: resolveCanonicalAdapterId(rawConfig.adapterId),
+  };
   const resolver = host.resolver ?? defaultResolver;
   const runId = randomUUID();
   const coreVersion = config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION;
@@ -151,6 +157,20 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   // 3. Transform (local step)
   await emit('transforming', 'Converting data...');
 
+  let transformInput: Record<string, unknown>;
+  try {
+    transformInput = narrowStudentExtractForTransform(raw, config.studentNameHint);
+  } catch (err: unknown) {
+    const syncErr = toSyncError(err, 'local', 'Student selection failed');
+    if (recorder) {
+      await recorder
+        .completeRun(runId, { status: 'failed', errorMessage: syncErr.message })
+        .catch(() => undefined);
+    }
+    await uploader.reportFailure?.(runId, config.sourceId, syncErr.message).catch(() => undefined);
+    throw syncErr;
+  }
+
   let ops: ReturnType<typeof module.transform>;
   try {
     const ctx = {
@@ -159,7 +179,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
       studentExternalId: config.studentExternalId,
       institutionExternalId: config.institutionExternalId,
     };
-    ops = module.transform(raw, ctx);
+    ops = module.transform(transformInput, ctx);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'local', 'Transform failed');
     if (recorder) {
@@ -323,6 +343,7 @@ export function buildClientScrapeConfig(
 ): IClientScrapeConfig {
   return {
     ...params,
+    adapterId: resolveCanonicalAdapterId(params.adapterId),
     coreVersion: params.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
   };
 }
