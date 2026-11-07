@@ -8,7 +8,7 @@ import { assertOnDashboard } from '../helpers/assertions';
  *
  * Every UI interaction waits for the real API response before proceeding — no blind waits.
  */
-test.describe('@integration Full UX: Register → Add Student → Alert → Email', () => {
+test.describe('@integration Full UX: Register → Add Student → Alert → Email @local-only', () => {
   test('FULL-UX-001: Register, add student via UI, trigger alert, optionally verify Mailpit', async ({
     page,
     request,

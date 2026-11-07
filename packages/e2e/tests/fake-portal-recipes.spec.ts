@@ -24,7 +24,7 @@ async function loginDemo(page: Page, startPath: string, expectPathPart: string):
   await page.waitForURL(new RegExp(expectPathPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 
-test.describe('fake portal recipes', () => {
+test.describe('fake portal recipes @local-only', () => {
   test('Aeries: runAeriesRecipe matches expected counts', async () => {
     const { driver, browser } = await createPlaywrightDriver({ headless: true });
     try {
@@ -35,7 +35,9 @@ test.describe('fake portal recipes', () => {
       );
       const result = await runAeriesRecipe(driver, `${FAKE_ORIGIN}/fake-aeries/student/`);
 
-      expect(result.students.map((s) => s.name)).toEqual([...FAKE_PORTAL_AERIES_EXPECTED.studentNames]);
+      expect(result.students.map((s) => s.name)).toEqual([
+        ...FAKE_PORTAL_AERIES_EXPECTED.studentNames,
+      ]);
       const [ann, ben] = result.students;
       expect(ann!.courses).toHaveLength(FAKE_PORTAL_AERIES_EXPECTED.ann.courseCount);
       expect(ann!.courses.reduce((n, c) => n + c.assignments.length, 0)).toBe(
@@ -57,7 +59,11 @@ test.describe('fake portal recipes', () => {
     const { driver, browser } = await createPlaywrightDriver({ headless: true });
     try {
       const gbPath = FAKE_PORTAL_SKYWARD_GRADEBOOK_PATH;
-      await loginDemo(driver.page, `/skyward/login?next=${encodeURIComponent(gbPath)}&csp=strict`, gbPath);
+      await loginDemo(
+        driver.page,
+        `/skyward/login?next=${encodeURIComponent(gbPath)}&csp=strict`,
+        gbPath
+      );
 
       const extract = await runSkywardRecipe(driver, FAKE_ORIGIN);
 

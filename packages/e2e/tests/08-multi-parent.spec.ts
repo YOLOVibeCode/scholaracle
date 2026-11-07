@@ -84,7 +84,9 @@ test.describe('@feature Multi-Parent Sharing', () => {
     expect(createRes.status()).toBeLessThan(400);
     const created = (await createRes.json()) as { id?: string };
     expect(created.id).toBeTruthy();
-    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
+      timeout: 10_000,
+    });
     await page.locator('[data-testid="wizard-skip-services"]').click();
     await page.locator('[data-testid="wizard-finish"]').click();
     await expect(wizard).not.toBeVisible({ timeout: 10_000 });
@@ -446,7 +448,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
   // ------------------------------------------------------------------
   // MP-007: Owner sends a magic link to a pending invite → recipient clicks and lands on /dashboard
   // ------------------------------------------------------------------
-  test('MP-007: Magic link sent to pending invitee → one-click login → guest parent /dashboard', async ({
+  test('MP-007: Magic link sent to pending invitee → one-click login → guest parent /dashboard @local-only', async ({
     page,
     request,
     browser,
@@ -530,7 +532,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
   // ------------------------------------------------------------------
   // MP-008: Owner sends a magic link for a provisioned student → clicks → lands on /studio
   // ------------------------------------------------------------------
-  test('MP-008: Magic link sent to student → click → /studio (student role)', async ({
+  test('MP-008: Magic link sent to student → click → /studio (student role) @local-only', async ({
     page,
     request,
     browser,

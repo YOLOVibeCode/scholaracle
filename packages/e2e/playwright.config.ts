@@ -23,6 +23,10 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  // Specs that need local-only services (Mailpit, fake portal, a localhost API) are tagged
+  // @local-only and skipped when BASE_URL points at a deployed environment.
+  grepInvert:
+    process.env.BASE_URL && !process.env.BASE_URL.includes('localhost') ? /@local-only/ : undefined,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

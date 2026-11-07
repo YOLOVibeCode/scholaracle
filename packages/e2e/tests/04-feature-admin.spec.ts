@@ -378,7 +378,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await assertToastMessage(page, /bulk send created|created|success|MFA/i);
   });
 
-  test('FEAT-A-013d: Webhook status update reflects in UI', async ({ page, loginAsRole }) => {
+  test('FEAT-A-013d: Webhook status update reflects in UI @local-only', async ({
+    page,
+    loginAsRole,
+  }) => {
     await loginAsRole('admin');
     await page.goto('/admin/communications');
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
@@ -436,7 +439,9 @@ test.describe('@feature Layer 4: Admin Features', () => {
         async () => {
           await page.reload();
           await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
-          await page.locator('[data-testid="communication-filter-email"]').fill('test.parent@example.com');
+          await page
+            .locator('[data-testid="communication-filter-email"]')
+            .fill('test.parent@example.com');
           const logsResponse = await page.waitForResponse(
             (res) => res.url().includes('/admin/communications/logs') && res.ok(),
             { timeout: 15_000 }

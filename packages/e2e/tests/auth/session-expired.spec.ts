@@ -6,14 +6,20 @@ import { TEST_USERS } from '../../fixtures/test-data';
  * Session expired: when API returns 401, client clears token and redirects to login with reason.
  */
 test.describe('Session Expired', () => {
-  test('SESSION-001: 401 redirects to login with session-expired message', async ({ page }) => {
+  test('SESSION-001: 401 redirects to login with session-expired message @local-only', async ({
+    page,
+  }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     const user = TEST_USERS.parent;
     await loginPage.login(user.email, user.password);
 
     await page.waitForURL('/dashboard', { timeout: 15000 });
-    await page.locator('[data-testid="student-count"], [data-testid="dashboard-header"]').first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+    await page
+      .locator('[data-testid="student-count"], [data-testid="dashboard-header"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .catch(() => {});
 
     // Simulate expired session: first data request and every refresh return 401 so client redirects to login
     let firstDataRequestDone = false;
