@@ -242,7 +242,18 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn, accountEpoch, role]);
 
   const startSync = useCallback(async (student: IStudentListItem) => {
-    const source = await connectedSourceStore.getForStudentRecord(student);
+    // Never fail silently: this runs from a button as `void startSync()`, so a lookup
+    // that hangs or throws used to leave the parent tapping Sync with no response.
+    let source: IConnectedSource | null;
+    try {
+      source = await withTimeout(connectedSourceStore.getForStudentRecord(student), 5000);
+    } catch (err) {
+      Alert.alert(
+        'Could not start sync',
+        err instanceof Error ? err.message : 'Reading saved portals failed.'
+      );
+      return;
+    }
     if (!source) {
       Alert.alert(
         'No portal connected',
@@ -474,6 +485,22 @@ function AppContent(): React.ReactElement {
       onOpenSettings={() => setNav({ view: 'settings' })}
     />
   );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out reading saved portals.')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    );
+  });
 }
 
 export default function App(): React.ReactElement {
