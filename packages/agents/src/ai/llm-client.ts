@@ -1,3 +1,4 @@
+import { AiBudgetError } from '@scholaracle/contracts';
 import { resolveModelForRole } from './models';
 
 export interface ILlmMessage {
@@ -82,6 +83,10 @@ export class LlmClient {
 
     if (!res.ok) {
       const text = await res.text();
+      const isBudget = res.status === 402 || /budget|exceeded.*limit/i.test(text);
+      if (isBudget) {
+        throw new AiBudgetError('LLM relay monthly budget exceeded');
+      }
       throw new Error(`LLM API error ${res.status}: ${text}`);
     }
 
