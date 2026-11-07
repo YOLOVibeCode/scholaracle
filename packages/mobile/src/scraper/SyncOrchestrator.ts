@@ -42,6 +42,7 @@ export interface ISyncOrchestratorConfig {
   readonly institutionExternalId: string;
   readonly sourceId: string;
   readonly adapterVersion: string;
+  readonly studentNameHint?: string;
   readonly coreVersion?: string;
 }
 
@@ -125,6 +126,7 @@ export async function runSyncPipeline(
       sourceId: config.sourceId,
       studentExternalId: config.studentExternalId,
       institutionExternalId: config.institutionExternalId,
+      studentNameHint: config.studentNameHint,
       coreVersion: config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
     },
     clientType: 'mobile',

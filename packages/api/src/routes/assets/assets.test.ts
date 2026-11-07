@@ -5,6 +5,7 @@ import type { Db } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
+import { seedActiveConnectorJti } from '../../testHelpers/connectorDeviceTestSeed';
 import { createAssetServeRouter, createAssetUploadRouter } from './assets';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
@@ -262,7 +263,8 @@ describe('Asset upload router — POST /upload-base64', () => {
     testUserId = reg.user.id;
 
     const cts = new ConnectorTokenService(JWT_SECRET, '1h');
-    connectorToken = cts.createToken(testUserId, 'jti-b64');
+    connectorToken = cts.createToken(testUserId, 'jti-b64', 'asset-test-device');
+    await seedActiveConnectorJti(database, testUserId, 'asset-test-device', 'jti-b64');
 
     memStore = makeMemoryStore();
     app = express();
