@@ -239,10 +239,16 @@ export function DashboardScreen({
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => onOpenCourse(item)}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => onOpenCourse(item)}
+              testID="card-course"
+            >
               <View style={styles.cardRow}>
-                <Text style={styles.cardTitle}>{item.courseName}</Text>
-                <Text style={styles.gradeBadge}>
+                <Text style={styles.cardTitle} testID="text-course-name">
+                  {item.courseName}
+                </Text>
+                <Text style={styles.gradeBadge} testID="text-course-grade">
                   {item.letterGrade ??
                     (item.officialGrade != null ? `${item.officialGrade.toFixed(1)}%` : 'N/A')}
                 </Text>
