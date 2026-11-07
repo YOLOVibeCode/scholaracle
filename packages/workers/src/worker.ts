@@ -35,7 +35,7 @@ import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
 import type { GuardedSmsSender } from '@scholaracle/agents';
-import { SyncStalenessMonitor } from './sync-staleness-monitor';
+import { SyncStalenessMonitor, buildSyncStalenessConfigFromEnv } from './sync-staleness-monitor';
 import { logger } from './logger';
 import { initSentry } from './sentry';
 import { safeInterval } from './utils/safeInterval';
@@ -574,8 +574,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Sync staleness monitor — emails account owners when syncs are overdue
   // -----------------------------------------------------------------------
   const stalenessMonitor = new SyncStalenessMonitor(database, emailTransport, {
-    checkIntervalMs: Number(process.env['STALENESS_CHECK_INTERVAL_MS'] ?? 60 * 60_000), // 1 hour
-    staleThresholdMs: Number(process.env['STALENESS_THRESHOLD_MS'] ?? 48 * 60 * 60_000), // 48 hours
+    ...buildSyncStalenessConfigFromEnv(process.env),
     fromEmail: sendGridConfig.fromEmail,
     fromName: sendGridConfig.fromName,
   });

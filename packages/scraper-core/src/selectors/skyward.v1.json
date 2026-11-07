@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "selectors": {
+    "student_name_primary": ".sf_headerName, [id*=\"studentName\"]",
+    "student_name_header_fallback": "#sf_HeaderWrap, header, [role=\"banner\"]",
+    "student_name_topnav": "a, span",
+    "school_name": "[id*=\"schoolName\"]",
+    "grade_info_dialog": "#gradeInfoDialog",
+    "table": "table",
+    "tr": "tr",
+    "td": "td",
+    "td_th": "td, th",
+    "nav_links": "a",
+    "grade_cell_anchor": "a#showGradeInfo",
+    "dialog_wrap": ".sf_DialogWrap",
+    "dialog_close": ".sf_DialogClose, a[title=\"Close\"]",
+    "missing_cell_img": "img"
+  }
+}

@@ -27,12 +27,14 @@ import type {
   IWorkPackView,
   IPushTokenRequest,
   IConnectorTokenResponse,
+  IPendingSyncRequestsResponse,
   IIngestSourceRegisterRequest,
   IIngestRunStartResponse,
   ISourceInviteIssueRequest,
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
+  ISanitizedPageSkeletonCapture,
 } from '@scholaracle/contracts';
 import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
@@ -231,9 +233,10 @@ export class ScholarmancyApiClient {
       if (cached) return cached;
     }
 
+    const deviceId = await getDeviceId();
     const res = await this._post<IConnectorTokenResponse>(
       '/api/integrations/scraper-token',
-      {},
+      { deviceId },
       true
     );
     const stored: IStoredConnectorToken = { token: res.token, mintedAt: Date.now() };
@@ -290,12 +293,31 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  async getPendingSyncRequests(): Promise<IPendingSyncRequestsResponse['pending']> {
+    const res = await this._get<IPendingSyncRequestsResponse>(
+      '/api/integrations/sync-requests/pending'
+    );
+    return res.pending;
+  }
+
   // ---------------------------------------------------------------------------
   // Students
   // ---------------------------------------------------------------------------
 
   async getStudents(): Promise<IStudentListItem[]> {
     return this._get<IStudentListItem[]>('/api/students');
+  }
+
+  async getConsents(): Promise<{ readonly serverAi: boolean }> {
+    return this._get<{ readonly serverAi: boolean }>('/api/consents');
+  }
+
+  async setServerAiConsent(enabled: boolean): Promise<{ readonly serverAi: boolean }> {
+    return this._put<{ readonly serverAi: boolean }>(
+      '/api/consents/server-ai',
+      { enabled },
+      { 'X-Consent-Source': '/mobile/settings' }
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -526,6 +548,39 @@ export class ScholarmancyApiClient {
     if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
   }
 
+  async uploadRunSkeleton(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly connectorToken: string;
+    readonly payload: ISanitizedPageSkeletonCapture;
+  }): Promise<void> {
+    const runRes = await this._connectorFetch(
+      '/api/ingest/v1/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          runId: params.runId,
+          sourceId: params.sourceId,
+          clientMeta: { clientType: 'mobile' },
+        }),
+      },
+      params.connectorToken
+    );
+    if (!runRes.ok) throw await ApiError.fromResponse(runRes, 'Run registration');
+    const runBody = (await runRes.json()) as Partial<IIngestRunStartResponse>;
+    const serverRunId = runBody.runId ?? params.runId;
+
+    const skeletonRes = await this._connectorFetch(
+      `/api/ingest/v1/runs/${serverRunId}/skeletons`,
+      {
+        method: 'POST',
+        body: JSON.stringify(params.payload),
+      },
+      params.connectorToken
+    );
+    if (!skeletonRes.ok) throw await ApiError.fromResponse(skeletonRes, 'Skeleton upload');
+  }
+
   async reportRunFailure(params: {
     readonly runId: string;
     readonly sourceId: string;
@@ -637,6 +692,30 @@ export class ScholarmancyApiClient {
       res = await doGet(await this._refreshAccessToken());
     }
     if (!res.ok) throw await ApiError.fromResponse(res, `GET ${path}`);
+    return res.json() as Promise<T>;
+  }
+
+  private async _put<T>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<T> {
+    const doPut = async (authToken: string): Promise<Response> =>
+      this._timedFetch(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      });
+
+    let res = await doPut(await this._getAccessToken());
+    if (res.status === 401) {
+      res = await doPut(await this._refreshAccessToken());
+    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `PUT ${path}`);
     return res.json() as Promise<T>;
   }
 

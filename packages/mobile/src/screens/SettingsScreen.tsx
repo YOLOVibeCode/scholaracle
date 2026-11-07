@@ -4,12 +4,24 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Linking,
+  Switch,
+  ActivityIndicator,
+} from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
+import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
+import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -25,6 +37,9 @@ export function SettingsScreen({
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
   const [pushStatus, setPushStatus] = useState<string>('unknown');
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [serverAiEnabled, setServerAiEnabled] = useState(false);
+  const [isServerAiLoading, setIsServerAiLoading] = useState(true);
+  const [isServerAiSaving, setIsServerAiSaving] = useState(false);
 
   const loadSources = useCallback(async () => {
     if (hideHousehold) {
@@ -39,7 +54,26 @@ export function SettingsScreen({
     Notifications.getPermissionsAsync()
       .then(({ status }) => setPushStatus(status))
       .catch(() => setPushStatus('unknown'));
-  }, [loadSources]);
+    if (!hideHousehold) {
+      void fetchServerAiConsent()
+        .then(setServerAiEnabled)
+        .catch(() => setServerAiEnabled(false))
+        .finally(() => setIsServerAiLoading(false));
+    } else {
+      setIsServerAiLoading(false);
+    }
+  }, [loadSources, hideHousehold]);
+
+  const handleServerAiToggle = (next: boolean): void => {
+    if (isServerAiSaving) return;
+    setIsServerAiSaving(true);
+    void updateServerAiConsent(next)
+      .then(setServerAiEnabled)
+      .catch(() => {
+        Alert.alert('Could not save', 'Try again when you are back online.');
+      })
+      .finally(() => setIsServerAiSaving(false));
+  };
 
   const handleDisconnect = (source: IConnectedSource): void => {
     Alert.alert(
@@ -88,7 +122,7 @@ export function SettingsScreen({
   const handleDeleteAccount = (): void => {
     Alert.alert(
       'Delete account?',
-      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data within 30 days. School portal passwords stay on this device until you uninstall.',
+      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data. School portal passwords stay on this device until you uninstall.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -140,6 +174,28 @@ export function SettingsScreen({
                 </View>
               ))
             )}
+          </>
+        )}
+
+        {hideHousehold ? null : (
+          <>
+            <Text style={styles.sectionHeader}>Server-side analysis</Text>
+            <View style={styles.card}>
+              <Text style={styles.rowText}>{SERVER_AI_CONSENT_LABEL}</Text>
+              <Text style={styles.hintText}>Off by default. You can change this anytime.</Text>
+              <View style={styles.serverAiRow}>
+                {isServerAiLoading ? (
+                  <ActivityIndicator testID="loading-server-ai" />
+                ) : (
+                  <Switch
+                    value={serverAiEnabled}
+                    onValueChange={handleServerAiToggle}
+                    disabled={isServerAiSaving}
+                    testID="switch-server-ai"
+                  />
+                )}
+              </View>
+            </View>
           </>
         )}
 
@@ -248,6 +304,7 @@ const styles = StyleSheet.create({
   rowText: { fontSize: 14, color: '#1a1a2e' },
   rowValue: { fontWeight: '600', textTransform: 'capitalize' },
   hintText: { fontSize: 13, color: '#6c757d', marginTop: 6 },
+  serverAiRow: { marginTop: 12, alignItems: 'flex-start' },
   signOutBtn: {
     backgroundColor: '#fff',
     borderWidth: 1,

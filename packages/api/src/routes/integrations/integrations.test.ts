@@ -33,7 +33,12 @@ describe('Integrations API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
-    app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
+    const connectorJwtSecret = 'integrations-test-connector-secret-min-32';
+    app.use(
+      '/api/integrations',
+      authMiddleware(authService),
+      integrationsRouter({ database, connectorJwtSecret })
+    );
     app.use(createErrorHandler());
   });
 
@@ -734,12 +739,13 @@ describe('Integrations API Routes', () => {
       const res = await request(app)
         .post('/api/integrations/scraper-token')
         .set('Authorization', `Bearer ${testToken}`)
-        .send({});
+        .send({ deviceId: 'integrations-test-device' });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.token).toBeDefined();
       expect(res.body.jti).toBeDefined();
-      expect(res.body.expiresIn).toBe('365 days');
+      expect(res.body.deviceId).toBe('integrations-test-device');
+      expect(res.body.expiresIn).toBe('90d');
     });
   });
 
@@ -770,13 +776,15 @@ describe('Integrations API Routes', () => {
       await request(app)
         .post('/api/integrations/scraper-token')
         .set('Authorization', `Bearer ${testToken}`)
-        .send({});
+        .send({ deviceId: 'revoke-test-device' });
 
       const res = await request(app)
         .delete('/api/integrations/scraper-token')
-        .set('Authorization', `Bearer ${testToken}`);
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ deviceId: 'revoke-test-device' });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.revoked).toBe(true);
     });
   });
 

@@ -23,9 +23,9 @@ export const SOURCE_INVITE_PAYLOAD_KEYS = [
 export const SOURCE_INVITE_ISSUE_RESPONSE_KEYS = ['success', 'expiresAt', 'emailedTo'] as const;
 
 export const SOURCE_INVITE_ADAPTER_IDS: Readonly<Record<SourceInviteProvider, string>> = {
-  canvas: 'com.instructure.canvas',
-  skyward: 'com.skyward.iscorp',
-  aeries: 'com.aeries.portal',
+  canvas: 'canvas',
+  skyward: 'skyward',
+  aeries: 'aeries',
 };
 
 export const SOURCE_INVITE_PROVIDER_NAMES: Readonly<Record<SourceInviteProvider, string>> = {

@@ -73,6 +73,9 @@ export async function createIndexes(database: Db): Promise<void> {
   const smsConsents = database.collection('sms_consents');
   await smsConsents.createIndex({ phoneE164: 1, purpose: 1 }, { unique: true });
 
+  const consents = database.collection('consents');
+  await consents.createIndex({ userId: 1, purpose: 1 }, { unique: true });
+
   const smsContactOptInInvites = database.collection('sms_contact_optin_invites');
   await smsContactOptInInvites.createIndex({ token: 1 }, { unique: true });
   await smsContactOptInInvites.createIndex({ studentId: 1, contactEmail: 1, createdAt: -1 });
@@ -88,6 +91,10 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcDeviceAuth.createIndex({ userCode: 1 }, { unique: true });
   await slcDeviceAuth.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+  const slcDevices = database.collection('slc_devices');
+  await slcDevices.createIndex({ userId: 1, deviceId: 1 }, { unique: true });
+  await slcDevices.createIndex({ activeJti: 1 });
+
   const slcSources = database.collection('slc_sources');
   await slcSources.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
   await slcSources.createIndex({ userId: 1, updatedAt: -1 });
@@ -98,9 +105,14 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcRuns.createIndex({ runId: 1 });
   await slcRuns.createIndex({ status: 1, startedAt: 1 });
 
+  const slcRunSkeletons = database.collection('slc_run_skeletons');
+  await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
+  await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
+  await syncRequests.createIndex({ requestedByUserId: 1, fulfilledAt: 1, createdAt: -1 });
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
@@ -218,6 +230,9 @@ export async function createIndexes(database: Db): Promise<void> {
     'payload.institutionExternalId': 1,
     consumedAt: 1,
   });
+
+  const slcExternalIdAliases = database.collection('slc_external_id_aliases');
+  await slcExternalIdAliases.createIndex({ alias: 1, kind: 1 }, { unique: true });
 
   const studentMagicTokens = database.collection('student_magic_tokens');
   await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });

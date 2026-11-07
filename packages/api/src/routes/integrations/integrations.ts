@@ -19,10 +19,21 @@ import {
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { encryptCredentials } from '../../utils/credentialsCipher';
-import { createIntegrationSchema, updateIntegrationSchema, assignStudentSchema } from './schemas';
+import {
+  createIntegrationSchema,
+  updateIntegrationSchema,
+  assignStudentSchema,
+  connectorTokenMintSchema,
+  connectorTokenRevokeSchema,
+} from './schemas';
+import {
+  mintConnectorTokenForDevice,
+  revokeConnectorDevice,
+} from '../../services/connectorDeviceTokens';
 
 export interface IIntegrationsRouterConfig {
   readonly database: import('mongodb').Db;
+  readonly connectorJwtSecret?: string;
 }
 
 function getUserId(req: Request): string | null {
@@ -380,44 +391,49 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
   // Scraper Token Management (must come BEFORE /:id to avoid route collision)
   // -------------------------------------------------------------------------
 
-  const connectorTokenService = new ConnectorTokenService(undefined, '365d');
-  const revokedTokensCollection = config.database.collection('revoked_connector_tokens');
+  const connectorTokenService = new ConnectorTokenService(config.connectorJwtSecret);
 
   /**
    * POST /api/integrations/scraper-token
-   * Generate a new scraper connector token (1yr expiry).
-   * Revokes any previous scraper token for this user.
+   * Mint a per-device connector token (≤90d). Does not revoke other devices.
    */
   router.post(
     '/scraper-token',
     asyncHandler(async (req: Request, res: Response) => {
       const userId = requireUserId(req);
-
-      // Revoke previous scraper token(s) for this user
-      await revokedTokensCollection.updateMany(
-        { userId, tokenPurpose: 'scraper' },
-        { $set: { revokedAt: new Date() } }
-      );
-
-      // Generate new token
-      const jti = randomUUID();
-      const token = connectorTokenService.createToken(userId, jti);
-
-      // Record the token for future revocation tracking
-      await revokedTokensCollection.insertOne({
+      const parsed = connectorTokenMintSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues[0]?.message ?? 'Invalid body');
+      }
+      const body = await mintConnectorTokenForDevice({
+        database: config.database,
+        connectorTokenService,
         userId,
-        jti,
-        tokenPurpose: 'scraper',
-        createdAt: new Date(),
-        revokedAt: null,
+        deviceId: parsed.data.deviceId.trim(),
       });
+      res.status(200).json(body satisfies IConnectorTokenResponse);
+    })
+  );
 
-      res.status(200).json({
-        success: true,
-        token,
-        jti,
-        expiresIn: '365 days',
-      } satisfies IConnectorTokenResponse);
+  /**
+   * POST /api/integrations/scraper-token/refresh
+   * Rotate the connector token for one device (parent session).
+   */
+  router.post(
+    '/scraper-token/refresh',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
+      const parsed = connectorTokenMintSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues[0]?.message ?? 'Invalid body');
+      }
+      const body = await mintConnectorTokenForDevice({
+        database: config.database,
+        connectorTokenService,
+        userId,
+        deviceId: parsed.data.deviceId.trim(),
+      });
+      res.status(200).json(body satisfies IConnectorTokenResponse);
     })
   );
 
@@ -425,6 +441,8 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
    * GET /api/integrations/scraper-token
    * Get current scraper token status (active/expiring/expired/none).
    */
+  const revokedTokensCollection = config.database.collection('revoked_connector_tokens');
+
   router.get(
     '/scraper-token',
     asyncHandler(async (req: Request, res: Response) => {
@@ -451,21 +469,46 @@ export function integrationsRouter(config: IIntegrationsRouterConfig): Router {
 
   /**
    * DELETE /api/integrations/scraper-token
-   * Revoke the current scraper token.
+   * Revoke the connector token for one device.
    */
   router.delete(
     '/scraper-token',
     asyncHandler(async (req: Request, res: Response) => {
       const userId = requireUserId(req);
+      const parsed = connectorTokenRevokeSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues[0]?.message ?? 'Invalid body');
+      }
+      const wasRevoked = await revokeConnectorDevice({
+        database: config.database,
+        userId,
+        deviceId: parsed.data.deviceId.trim(),
+      });
+      res.status(200).json({ success: true, revoked: wasRevoked });
+    })
+  );
 
-      const result = await revokedTokensCollection.updateMany(
-        { userId, tokenPurpose: 'scraper', revokedAt: null },
-        { $set: { revokedAt: new Date() } }
-      );
-
+  /**
+   * GET /api/integrations/sync-requests/pending
+   * Parent sync requests not yet fulfilled (client-led sync).
+   */
+  router.get(
+    '/sync-requests/pending',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
+      const rows = await config.database
+        .collection('sync_requests')
+        .find({ requestedByUserId: userId, fulfilledAt: null })
+        .sort({ createdAt: -1 })
+        .toArray();
       res.status(200).json({
         success: true,
-        revoked: result.modifiedCount,
+        pending: rows.map((row) => ({
+          syncRequestId: row['syncRequestId'] as string,
+          studentId: row['studentId'] as string,
+          sourceId: row['sourceId'] as string,
+          createdAt: (row['createdAt'] as Date).toISOString(),
+        })),
       });
     })
   );

@@ -132,6 +132,19 @@ describe('describeSyncFailure', () => {
     expect(view.message).toContain('Network request failed.');
   });
 
+  it('describes STUDENT_MISMATCH without sending the parent back to the portal', () => {
+    const view = describeSyncFailure({
+      phase: 'STUDENT_MISMATCH',
+      message: 'No matching child on the portal.',
+      provider: 'aeries',
+      loginFormShowing: false,
+    });
+    expect(view.kind).toBe('student-mismatch');
+    expect(view.title).toBe('Student name does not match the portal');
+    expect(view.message).toBe('No matching child on the portal.');
+    expect(view.canSignInAgain).toBe(false);
+  });
+
   it('falls back to a generic portal name and reason', () => {
     const view = describeSyncFailure({
       phase: undefined,
