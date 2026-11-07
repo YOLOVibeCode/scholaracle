@@ -6,6 +6,7 @@ import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
   AuthenticationError,
+  ConflictError,
   NotFoundError,
   ValidationError,
   type ISlcIngestEnvelopeV1,
@@ -33,6 +34,7 @@ import {
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { assertIngestRunActor, assertRunStatus } from './ingestRunLifecycle';
 import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
   IngestDeviceAuthRepository,
@@ -74,6 +76,7 @@ import {
   syncStudentDataSourcesAfterIngestFailure,
   syncStudentDataSourcesAfterIngestSuccess,
 } from './syncStudentDataSourcesFromIngest';
+import { recordRepairCandidatesFromCoverage } from '../../../services/repairCandidates/recordRepairCandidatesFromCoverage';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -111,6 +114,13 @@ function parseOptionalStringArray(raw: unknown): readonly string[] | undefined {
     if (typeof x === 'string') out.push(x);
   }
   return out;
+}
+
+function parseOptionalSkeletonHash(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 function randomUserCode(): string {
@@ -1219,6 +1229,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new ValidationError('runId mismatch');
       }
 
+      const runRecord = await runRepo.findByRunId(runId);
+      if (!runRecord) {
+        throw new NotFoundError('Run not found');
+      }
+      assertIngestRunActor(runRecord, actorUserId);
+      assertRunStatus(runRecord, ['started']);
+
       // Resolve the owner's userId from the ops' studentExternalId.
       const firstStudentExtId = envelope.ops.find(
         (op) => typeof op.key?.studentExternalId === 'string'
@@ -1332,11 +1349,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       }
       const coverageSnapshot = computeRunCoverage(prepared.ops);
       const warningLines = warningsFromFullValidation({ ...envelope, ops: prepared.ops });
-      await runRepo.markUploaded(dataUserId, runId, {
+      const markedUploaded = await runRepo.markUploaded(dataUserId, runId, {
         coverage: coverageSnapshot,
         warnings: [...warningLines],
         opCount: prepared.ops.length,
       });
+      if (!markedUploaded) {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
       res
         .status(200)
         .json({ success: true, accepted: true } satisfies IIngestEnvelopeAcceptResponse);
@@ -1367,11 +1387,17 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
       const status = (req.body?.status as string | undefined) ?? 'success';
       if (status === 'failed') {
+        if (existingRun.status === 'failed' || existingRun.status === 'committed') {
+          throw new ConflictError('Run is not in a valid state for this request');
+        }
         const error =
           typeof req.body?.error === 'string' && req.body.error.length > 0
             ? req.body.error
             : 'Run failed';
-        await runRepo.failRun({ userId: runDataUserId, runId, error });
+        const failed = await runRepo.failRun({ userId: runDataUserId, runId, error });
+        if (!failed) {
+          throw new ConflictError('Run is not in a valid state for this request');
+        }
         const srcId = existingRun.sourceId;
         if (srcId) {
           await syncStudentDataSourcesAfterIngestFailure({
@@ -1386,16 +1412,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         return;
       }
 
+      if (existingRun.status !== 'uploaded') {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
+
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
       const bodyCoverage = parseOptionalCoverage(req.body?.coverage);
       const bodyWarnings = parseOptionalStringArray(req.body?.warnings);
-      await runRepo.commitRun({
+      const committed = await runRepo.commitRun({
         userId: runDataUserId,
         runId,
         newCursor: cursor ?? null,
         ...(bodyCoverage !== undefined ? { coverage: bodyCoverage } : {}),
         ...(bodyWarnings !== undefined ? { warnings: bodyWarnings } : {}),
       });
+      if (!committed) {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
       // Stamp lastSyncedAt on the data source
       const committedRun = await runRepo.findByUserIdAndRunId(runDataUserId, runId);
       if (committedRun?.sourceId) {
@@ -1410,6 +1443,24 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           coverage: committedRun.coverage,
           opCount: committedRun.opCount,
         });
+
+        const skeletonHash = parseOptionalSkeletonHash(req.body?.skeletonHash);
+        const coverageForRepair = committedRun.coverage ?? undefined;
+        if (skeletonHash && coverageForRepair) {
+          const source = await sourceRepo.findByUserIdAndSourceId(
+            runDataUserId,
+            committedRun.sourceId
+          );
+          if (source?.portalBaseUrl) {
+            await recordRepairCandidatesFromCoverage({
+              database: config.database,
+              portalBaseUrl: source.portalBaseUrl,
+              recipeId: source.adapterId,
+              skeletonHash,
+              coverage: coverageForRepair,
+            });
+          }
+        }
       }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({

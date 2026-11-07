@@ -1,5 +1,5 @@
-import type { Collection, Db, ObjectId } from 'mongodb';
-import type { ISlcRunCoverage } from '@scholaracle/contracts';
+import { MongoServerError, type Collection, type Db, type ObjectId } from 'mongodb';
+import { ConflictError, type ISlcRunCoverage } from '@scholaracle/contracts';
 import { IngestRun, type IIngestRunData, type IngestRunStatus } from '../../models/IngestRun';
 
 export interface IIngestRunReader {
@@ -38,19 +38,19 @@ export interface IIngestRunWriter {
       readonly warnings?: readonly string[] | null;
       readonly opCount?: number;
     }
-  ): Promise<void>;
+  ): Promise<boolean>;
   commitRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
     readonly coverage?: ISlcRunCoverage | null;
     readonly warnings?: readonly string[] | null;
-  }): Promise<void>;
+  }): Promise<boolean>;
   failRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly error: string;
-  }): Promise<void>;
+  }): Promise<boolean>;
 }
 
 export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
@@ -81,7 +81,19 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       clientMeta: params.clientMeta ?? null,
     };
 
-    await this._collection.insertOne(doc);
+    if (await this.findByRunId(params.runId)) {
+      throw new ConflictError('Run already exists');
+    }
+
+    try {
+      await this._collection.insertOne(doc);
+    } catch (err) {
+      if (err instanceof MongoServerError && err.code === 11000) {
+        throw new ConflictError('Run already exists');
+      }
+      throw err;
+    }
+
     const stored = await this._collection.findOne({ userId: params.userId, runId: params.runId });
     return new IngestRun(stored ?? doc);
   }
@@ -94,7 +106,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       readonly warnings?: readonly string[] | null;
       readonly opCount?: number;
     }
-  ): Promise<void> {
+  ): Promise<boolean> {
     const setDoc: Record<string, unknown> = {
       status: 'uploaded' satisfies IngestRunStatus,
       uploadedAt: new Date(),
@@ -108,7 +120,11 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     if (extras?.opCount !== undefined) {
       setDoc['opCount'] = extras.opCount;
     }
-    await this._collection.updateOne({ userId, runId }, { $set: setDoc });
+    const result = await this._collection.updateOne(
+      { userId, runId, status: 'started' satisfies IngestRunStatus },
+      { $set: setDoc }
+    );
+    return result.modifiedCount === 1;
   }
 
   async commitRun(params: {
@@ -117,19 +133,28 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     readonly newCursor?: { readonly type: 'opaque'; readonly value: string } | null;
     readonly coverage?: ISlcRunCoverage | null;
     readonly warnings?: readonly string[] | null;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const existing = await this._collection.findOne({
       userId: params.userId,
       runId: params.runId,
+      status: 'uploaded' satisfies IngestRunStatus,
     });
-    const coverageToSet =
-      params.coverage !== undefined ? params.coverage : (existing?.coverage ?? null);
-    const warningsToSet =
-      params.warnings !== undefined ? params.warnings : (existing?.warnings ?? null);
-    const opCountToSet = existing?.opCount;
+    if (!existing) {
+      return false;
+    }
 
-    await this._collection.updateOne(
-      { userId: params.userId, runId: params.runId },
+    const coverageToSet =
+      params.coverage !== undefined ? params.coverage : (existing.coverage ?? null);
+    const warningsToSet =
+      params.warnings !== undefined ? params.warnings : (existing.warnings ?? null);
+    const opCountToSet = existing.opCount;
+
+    const result = await this._collection.updateOne(
+      {
+        userId: params.userId,
+        runId: params.runId,
+        status: 'uploaded' satisfies IngestRunStatus,
+      },
       {
         $set: {
           status: 'committed' satisfies IngestRunStatus,
@@ -141,15 +166,20 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
         },
       }
     );
+    return result.modifiedCount === 1;
   }
 
   async failRun(params: {
     readonly userId: ObjectId | string;
     readonly runId: string;
     readonly error: string;
-  }): Promise<void> {
-    await this._collection.updateOne(
-      { userId: params.userId, runId: params.runId },
+  }): Promise<boolean> {
+    const result = await this._collection.updateOne(
+      {
+        userId: params.userId,
+        runId: params.runId,
+        status: { $in: ['started', 'uploaded'] satisfies IngestRunStatus[] },
+      },
       {
         $set: {
           status: 'failed' satisfies IngestRunStatus,
@@ -158,6 +188,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
         },
       }
     );
+    return result.modifiedCount === 1;
   }
 
   async findByUserIdAndRunId(userId: ObjectId | string, runId: string): Promise<IngestRun | null> {

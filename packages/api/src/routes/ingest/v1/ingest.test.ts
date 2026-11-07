@@ -249,10 +249,11 @@ describe('Ingest v1 API', () => {
       ],
     };
     await seedBindingsForEnvelope(database, ownerUserId, envelope);
-    await request(app)
+    const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
+    expect(upload.status).toBe(200);
     // The envelope commit finishes after the 200, so poll briefly for the row.
     let stored = null as Record<string, unknown> | null;
     for (let i = 0; i < 50 && !stored; i++) {

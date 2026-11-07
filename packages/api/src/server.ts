@@ -39,6 +39,7 @@ import {
   SessionRepository,
   StudentRepository,
   SourceInviteRepository,
+  createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
@@ -692,6 +693,7 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   installProcessHandlers(logger);
 
   const database = await initializeDatabase(config);
+  await createIndexes(database);
   await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);

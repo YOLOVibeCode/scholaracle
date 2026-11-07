@@ -6,6 +6,19 @@
  * models/Ingest.ts.
  */
 
+import type { ISlcRunCoverage } from '../../models/Ingest';
+
+/** Request body of POST /api/ingest/v1/runs/:runId/complete (success path). */
+export interface IIngestRunCompleteRequest {
+  readonly status?: 'success' | 'failed';
+  readonly error?: string;
+  readonly cursor?: { readonly type: 'opaque'; readonly value: string };
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
+  /** SHA-256 hex of sanitized page skeleton for district-level repair dedupe. */
+  readonly skeletonHash?: string;
+}
+
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */
 export interface IIngestSourceRegisterRequest {
   readonly sourceId: string;
