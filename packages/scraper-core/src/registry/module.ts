@@ -17,6 +17,8 @@ export interface IScraperHost {
   readonly driver: IPageDriver;
   readonly progress: ScraperProgressCallback;
   readonly config: IScraperRuntimeConfig;
+  /** When set, portal recipe steps invoke this on failure only (never on success). */
+  readonly captureSkeletonOnFailure?: (step: string) => Promise<void>;
 }
 
 export interface IScraperModule {

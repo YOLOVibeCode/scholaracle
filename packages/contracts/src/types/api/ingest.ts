@@ -53,3 +53,32 @@ export interface IIngestRunFailedResponse {
   readonly failed: true;
   readonly error?: string;
 }
+
+/** Sanitized structural DOM snapshot from `common.captureSkeleton` on the device. */
+export interface ISanitizedPageSkeletonCapture {
+  readonly step: string;
+  readonly capturedAt: string;
+  readonly pagePath?: string;
+  readonly skeleton: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly truncated?: boolean;
+}
+
+/** Request body of POST /api/ingest/v1/runs/:runId/skeletons. */
+export interface IIngestRunSkeletonUploadRequest {
+  readonly step: string;
+  readonly capturedAt: string;
+  readonly pagePath?: string;
+  readonly skeleton: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly truncated?: boolean;
+}
+
+/** Response of POST /api/ingest/v1/runs/:runId/skeletons. */
+export interface IIngestRunSkeletonUploadResponse {
+  readonly success: boolean;
+  readonly storageKey: string;
+  readonly expiresAt: string;
+}
