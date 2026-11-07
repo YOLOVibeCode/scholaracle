@@ -114,6 +114,12 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
   await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+  const repairCandidates = database.collection('repair_candidates');
+  await repairCandidates.createIndex(
+    { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+    { unique: true }
+  );
+
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
