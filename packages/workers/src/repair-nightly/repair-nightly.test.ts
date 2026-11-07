@@ -32,7 +32,14 @@ describe('runRepairNightly', () => {
 
   beforeEach(async () => {
     await database.collection('repair_candidates').deleteMany({});
-    mockedResolveLlmConfig.mockReturnValue({ apiKey: 'k', baseUrl: 'https://x', model: 'm' });
+    await database.collection('repair_proposals').deleteMany({});
+    process.env['LITELLM_API_KEY'] = 'e2e-test-key';
+    process.env['LITELLM_API_BASE'] = 'https://relay.test';
+    mockedResolveLlmConfig.mockImplementation(() => ({
+      apiKey: 'k',
+      baseUrl: 'https://x',
+      model: 'm',
+    }));
     mockedRunScraperRepairProposal.mockClear();
     mockedRunScraperRepairProposal.mockResolvedValue({ status: 'proposed' });
   });

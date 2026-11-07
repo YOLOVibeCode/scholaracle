@@ -173,7 +173,7 @@ test.describe('@feature Onboarding Wizard', () => {
   // ------------------------------------------------------------------
   // OB-005: Add second student and reuse existing integration
   // ------------------------------------------------------------------
-  test('OB-005: Second student reuses existing integration', async ({ page }) => {
+  test('OB-005: Free plan caps at one student (second create blocked)', async ({ page }) => {
     const registerPage = new RegisterPage(page);
     await registerPage.goto();
 
@@ -215,30 +215,23 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.locator('[data-testid="wizard-finish"]').click();
     await expect(wizard).not.toBeVisible({ timeout: 5000 });
 
-    // ── Second student via a fresh wizard open (bundle does not create account integrations)
-    await page.click('[data-testid="onboarding-add-student-cta"]');
+    // ── Second student: free plan allows only one
+    await page.goto('/dashboard/students');
+    await page.click('[data-testid="button-add-student"]');
     await expect(wizard).toBeVisible({ timeout: 5000 });
 
     const student2 = `Second Child ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', student2);
-    await page.fill('[data-testid="wizard-student-grade"]', '5');
-
     const createStudent5b = page.waitForResponse(
       (r) => r.url().includes('/students') && r.request().method() === 'POST'
     );
     await page.click('[data-testid="wizard-next-step"]');
-    await createStudent5b;
-
-    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
-      timeout: 15_000,
-    });
-    await page.locator('[data-testid="wizard-skip-services"]').click();
-    await page.locator('[data-testid="wizard-finish"]').click();
-    await expect(wizard).not.toBeVisible({ timeout: 5000 });
+    const createRes = await createStudent5b;
+    expect(createRes.status()).toBe(403);
 
     await page.goto('/dashboard/students');
     await expect(page.locator(`text=${student1}`)).toBeVisible({ timeout: 10000 });
-    await expect(page.locator(`text=${student2}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(`text=${student2}`)).not.toBeVisible();
   });
 
   // ------------------------------------------------------------------
