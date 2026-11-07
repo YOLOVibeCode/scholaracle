@@ -16,6 +16,7 @@ import { DashboardScreen } from './src/screens/DashboardScreen';
 import { CourseDetailScreen } from './src/screens/CourseDetailScreen';
 import { AssignmentDetailScreen } from './src/screens/AssignmentDetailScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
+import { SyncAllScreen } from './src/screens/SyncAllScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
@@ -61,6 +62,7 @@ interface INavState {
   readonly view: AppView;
   readonly student?: IStudentListItem;
   readonly syncSource?: IConnectedSource;
+  readonly syncAllSources?: readonly IConnectedSource[];
   readonly course?: ICourseGrade;
   readonly assignment?: ICourseGradeAssignment;
   readonly sourceInvite?: ISourceInvitePayload;
@@ -409,7 +411,38 @@ function AppContent(): React.ReactElement {
   }
 
   if (nav.view === 'settings') {
-    return <SettingsScreen onBack={() => setNav({ view: 'students' })} />;
+    return (
+      <SettingsScreen
+        onBack={() => setNav({ view: 'students' })}
+        onSyncAll={(grouped) => {
+          if (grouped.length === 0) return;
+          setNav({ view: 'sync-all', syncAllSources: grouped });
+        }}
+      />
+    );
+  }
+
+  if (nav.view === 'sync-all' && nav.syncAllSources?.length) {
+    const credentialKey = nav.syncAllSources[0]!.credentialKey;
+    return (
+      <SyncAllScreen
+        credentialKey={credentialKey}
+        items={nav.syncAllSources.map((source) => ({
+          config: {
+            provider: source.provider,
+            adapterId: source.adapterId,
+            baseUrl: source.baseUrl,
+            studentExternalId: source.studentExternalId,
+            institutionExternalId: source.institutionExternalId,
+            sourceId: source.sourceId,
+            adapterVersion: source.adapterVersion,
+          },
+          studentNameHint: source.studentExternalId,
+        }))}
+        onDone={() => setNav({ view: 'settings' })}
+        onCancel={() => setNav({ view: 'settings' })}
+      />
+    );
   }
 
   return (

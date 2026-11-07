@@ -107,10 +107,8 @@ export type {
   ResourceAction,
   IClassifyResourceParams,
 } from './pipeline';
-export {
-  mapGapKindToRecipeStep,
-  uniqueGapKindsFromCoverage,
-} from './repair/gapKindToRecipeStep';
+export { mapGapKindToRecipeStep, uniqueGapKindsFromCoverage } from './repair/gapKindToRecipeStep';
+export { selectorTableJsonForRecipe } from './repair/selectorTableJson';
 export {
   SyncError,
   runClientScrape,

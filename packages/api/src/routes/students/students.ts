@@ -5,6 +5,8 @@ import {
   StudentRepository,
   IngestSourceRepository,
   IngestRunRepository,
+  SlcBindingRepository,
+  PortalAccountRepository,
   AlertRepository,
   SubscriptionRepository,
   UserRepository,
@@ -29,9 +31,7 @@ import {
   type IStudentListItem,
   type IStudentGradesResponse,
   type ISourceListItem,
-  type IRunListItem,
   type ITriggerSyncResponse,
-  type ISlcRunCoverage,
   type IStudentMaterialsResponse,
   type ISlcCourse,
 } from '@scholaracle/contracts';
@@ -47,6 +47,7 @@ import {
   patchCourseTutorialSchema,
 } from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
+import { serializeIngestRunListItem } from './ingestRunSerialize';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
 import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
@@ -329,6 +330,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
+  const bindingRepository = new SlcBindingRepository(config.database);
+  const portalAccountRepository = new PortalAccountRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
   const subscriptionRepository = new SubscriptionRepository(config.database);
@@ -3249,30 +3252,33 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const sources: ISourceListItem[] = [];
+      const bindings = await bindingRepository.findByStudentId(student.dataUserId(), studentId);
 
-      for (const ds of student.dataSources) {
+      for (const binding of bindings) {
         const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(
           student.dataUserId(),
-          ds.id
+          binding.sourceId
         );
         if (!ingestSource) continue;
+        const ds = student.dataSources.find((row) => row.id === binding.sourceId);
         sources.push({
-          id: ds.id,
-          pluginId: ds.pluginId,
+          id: binding.sourceId,
+          pluginId: ingestSource.adapterId,
           provider: ingestSource.provider,
           displayName: ingestSource.displayName,
           portalBaseUrl: ingestSource.portalBaseUrl,
-          enabled: ds.enabled,
-          schedule: ds.schedule ?? 'manual',
-          dataTypes: ds.dataTypes ? [...ds.dataTypes] : [],
-          status: ds.status ?? 'active',
-          hasCredentials: Boolean(ds.credentials?.encrypted),
-          lastScraped: ds.lastScraped?.toISOString(),
-          lastSuccess: ds.lastSuccess?.toISOString(),
-          lastSuccessAt: ds.lastSuccessAt?.toISOString(),
-          lastRunId: ds.lastRunId,
-          lastCounts: ds.lastCounts,
-          lastError: ds.lastError ?? null,
+          enabled: ds?.enabled ?? true,
+          schedule: ds?.schedule ?? 'manual',
+          dataTypes: ds?.dataTypes ? [...ds.dataTypes] : [],
+          status: ds?.status ?? 'active',
+          hasCredentials: Boolean(ds?.credentials?.encrypted),
+          lastScraped: ds?.lastScraped?.toISOString(),
+          lastSuccess: ds?.lastSuccess?.toISOString(),
+          lastSuccessAt: ds?.lastSuccessAt?.toISOString(),
+          lastRunId: ds?.lastRunId,
+          lastCounts: ds?.lastCounts,
+          lastError: ds?.lastError ?? null,
+          portalAccountId: binding.portalAccountId,
         });
       }
 
@@ -3314,6 +3320,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         adapterId: body.adapterId,
         displayName: body.displayName,
         portalBaseUrl: body.portalBaseUrl || undefined,
+      });
+
+      const portalUrl = body.portalBaseUrl?.trim() ?? `https://manual.${body.provider}.local`;
+      const institutionExternalId =
+        portalUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || 'manual';
+      const portalAccount = await portalAccountRepository.upsertByHost({
+        userId: student.dataUserId(),
+        provider: body.provider,
+        adapterId: body.adapterId,
+        portalBaseUrl: portalUrl,
+        institutionExternalId,
+        displayName: body.displayName,
+      });
+      const studentExternalId =
+        student.studentId?.split(':', 2).pop() ?? student.studentId ?? studentId;
+      await bindingRepository.upsert({
+        userId: student.dataUserId(),
+        portalAccountId: portalAccount.portalAccountId,
+        studentId,
+        sourceId,
+        studentExternalId,
       });
 
       const newDataSource: IDataSource = {
@@ -3565,17 +3592,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Run not found');
       }
 
-      res.status(200).json({
-        runId: run.runId,
-        sourceId: run.sourceId,
-        status: run.status,
-        startedAt: run.startedAt.toISOString(),
-        uploadedAt: run.uploadedAt?.toISOString(),
-        committedAt: run.committedAt?.toISOString(),
-        error: run.error ?? null,
-        coverage: run.coverage ?? undefined,
-        warnings: run.warnings ?? undefined,
-      } satisfies IRunListItem);
+      res.status(200).json(serializeIngestRunListItem(run));
     })
   );
 
@@ -3612,34 +3629,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         limit
       );
 
-      res.status(200).json(
-        runs.map((r) => {
-          const row = r as unknown as {
-            runId: string;
-            sourceId: string;
-            status: string;
-            startedAt: Date;
-            uploadedAt?: Date;
-            committedAt?: Date;
-            abandonedAt?: Date;
-            error?: string | null;
-            coverage?: ISlcRunCoverage | null;
-            warnings?: readonly string[] | null;
-          };
-          return {
-            runId: row.runId,
-            sourceId: row.sourceId,
-            status: row.status,
-            startedAt: row.startedAt.toISOString(),
-            uploadedAt: row.uploadedAt?.toISOString(),
-            committedAt: row.committedAt?.toISOString(),
-            abandonedAt: row.abandonedAt?.toISOString(),
-            error: row.error ?? null,
-            coverage: row.coverage ?? undefined,
-            warnings: row.warnings ?? undefined,
-          } satisfies IRunListItem;
-        })
-      );
+      res.status(200).json(runs.map((r) => serializeIngestRunListItem(r)));
     })
   );
 
