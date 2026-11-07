@@ -51,6 +51,7 @@ interface ISyncConfig {
   readonly studentExternalId: string;
   readonly institutionExternalId: string;
   readonly sourceId: string;
+  readonly studentNameHint?: string;
 }
 
 interface ISyncScreenProps {
@@ -172,6 +173,7 @@ export function SyncScreen({
           institutionExternalId: config.institutionExternalId,
           sourceId: config.sourceId,
           adapterVersion: ADAPTER_VERSION,
+          studentNameHint: config.studentNameHint,
         },
         apiClient,
         connectorToken,
