@@ -212,11 +212,13 @@ test.describe('@feature Onboarding Wizard', () => {
     const skipServices1 = page.locator('[data-testid="wizard-skip-services"]');
     await expect(skipServices1).toBeVisible({ timeout: 15_000 });
     await skipServices1.click();
-    const addAnotherButton = page.locator('[data-testid="wizard-add-another-student"]');
-    await expect(addAnotherButton).toBeVisible({ timeout: 5000 });
-    await addAnotherButton.click();
+    await page.locator('[data-testid="wizard-finish"]').click();
+    await expect(wizard).not.toBeVisible({ timeout: 5000 });
 
-    // ── Second student (bundle entries do not create account integrations; skip services)
+    // ── Second student via a fresh wizard open (bundle does not create account integrations)
+    await page.click('[data-testid="onboarding-add-student-cta"]');
+    await expect(wizard).toBeVisible({ timeout: 5000 });
+
     const student2 = `Second Child ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', student2);
     await page.fill('[data-testid="wizard-student-grade"]', '5');
@@ -227,17 +229,12 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.click('[data-testid="wizard-next-step"]');
     await createStudent5b;
 
-    await expect(page.locator('[data-testid="wizard-add-new-provider"]')).toBeVisible({
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
       timeout: 15_000,
     });
-    const skipServices2 = page.locator('[data-testid="wizard-skip-services"]');
-    await expect(skipServices2).toBeVisible({ timeout: 15_000 });
-    await skipServices2.click();
-
-    const finishButton = page.locator('[data-testid="wizard-finish"]');
-    await expect(finishButton).toBeVisible({ timeout: 5000 });
-    await finishButton.click();
-    await expect(wizard).not.toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="wizard-skip-services"]').click();
+    await page.locator('[data-testid="wizard-finish"]').click();
+    await expect(wizard).not.toBeVisible({ timeout: 5000 });
 
     await page.goto('/dashboard/students');
     await expect(page.locator(`text=${student1}`)).toBeVisible({ timeout: 10000 });

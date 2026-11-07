@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { generateUniqueEmail } from '../fixtures/test-data';
 
 /**
  * E2E: Blended-family consent-based contacts
@@ -127,11 +128,10 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
 
   test('BFC-003: Ricky adds Christian and Gideon, invites Jessica and Jennifer; Jessica accepts', async ({
     request,
-  }, testInfo) => {
-    const ts3 = `${Date.now()}-${testInfo.retry}-${testInfo.parallelIndex}`;
-    const rickyEmail = `ricky3-${ts3}@blended-e2e.test`;
-    const jessicaEmail = `jessica3-${ts3}@blended-e2e.test`;
-    const jenniferEmail = `jennifer-${ts3}@blended-e2e.test`;
+  }) => {
+    const rickyEmail = generateUniqueEmail('ricky3-bfc');
+    const jessicaEmail = generateUniqueEmail('jessica3-bfc');
+    const jenniferEmail = generateUniqueEmail('jennifer-bfc');
 
     const regR = await request.post(`${apiBaseUrl}/api/auth/register`, {
       data: { email: rickyEmail, password, name: 'Ricky' },
