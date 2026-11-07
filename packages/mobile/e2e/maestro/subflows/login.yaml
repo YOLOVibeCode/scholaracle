@@ -55,6 +55,12 @@ appId: com.scholarmancy.app
 - retry:
     maxRetries: 2
     commands:
+      # iOS offers to save the password over the app after a successful sign-in.
+      - runFlow:
+          when:
+            visible: "Not Now"
+          commands:
+            - tapOn: "Not Now"
       - runFlow:
           when:
             visible:
