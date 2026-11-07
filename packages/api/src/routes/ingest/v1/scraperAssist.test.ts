@@ -4,6 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { createScraperAssistRouter } from './scraperAssist';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import { seedActiveConnectorJti } from '../../../testHelpers/connectorDeviceTestSeed';
 import { createErrorHandler } from '../../../middleware/errorHandler';
 
 const mockComplete = jest.fn().mockResolvedValue({
@@ -63,7 +64,8 @@ describe('POST /ai/scraper-assist', () => {
     process.env['LITELLM_API_KEY'] = 'test-litellm';
     app = mountAssistApp(database);
     const tokenService = new ConnectorTokenService('test-jwt-secret-min-32-chars!!');
-    connectorToken = tokenService.createToken('user-1', 'jti-test-1');
+    connectorToken = tokenService.createToken('user-1', 'jti-test-1', 'assist-device');
+    await seedActiveConnectorJti(database, 'user-1', 'assist-device', 'jti-test-1');
   });
 
   afterAll(async () => {
@@ -168,8 +170,10 @@ describe('POST /ai/scraper-assist', () => {
   it('stops a user at the daily limit and keeps other users unaffected', async () => {
     const limitedApp = mountAssistApp(database, { dailyLimit: 2, burstMax: 100 });
     const tokenService = new ConnectorTokenService('test-jwt-secret-min-32-chars!!');
-    const capped = tokenService.createToken('user-daily-cap', 'jti-daily-1');
-    const other = tokenService.createToken('user-daily-other', 'jti-daily-2');
+    const capped = tokenService.createToken('user-daily-cap', 'jti-daily-1', 'device-cap');
+    const other = tokenService.createToken('user-daily-other', 'jti-daily-2', 'device-other');
+    await seedActiveConnectorJti(database, 'user-daily-cap', 'device-cap', 'jti-daily-1');
+    await seedActiveConnectorJti(database, 'user-daily-other', 'device-other', 'jti-daily-2');
     const call = (token: string) =>
       request(limitedApp)
         .post('/api/ingest/v1/ai/scraper-assist')
@@ -188,8 +192,10 @@ describe('POST /ai/scraper-assist', () => {
     const burstApp = mountAssistApp(database, { dailyLimit: 100, burstMax: 10 });
     const token = new ConnectorTokenService('test-jwt-secret-min-32-chars!!').createToken(
       'user-burst-11',
-      'jti-burst-11'
+      'jti-burst-11',
+      'device-burst-11'
     );
+    await seedActiveConnectorJti(database, 'user-burst-11', 'device-burst-11', 'jti-burst-11');
     const call = () =>
       request(burstApp)
         .post('/api/ingest/v1/ai/scraper-assist')

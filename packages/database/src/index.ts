@@ -18,6 +18,7 @@ export * from './models/AgendaOverride';
 
 // Connector / ingestion models
 export * from './models/IngestDeviceAuth';
+export * from './models/ConnectorDevice';
 export * from './models/IngestSource';
 export * from './models/IngestRun';
 export * from './models/ExternalIdAlias/ExternalIdAlias';
@@ -46,6 +47,7 @@ export * from './repositories/SmsContactOptInInviteRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';
+export * from './repositories/ConnectorDeviceRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
 export * from './repositories/SourceInviteRepository';

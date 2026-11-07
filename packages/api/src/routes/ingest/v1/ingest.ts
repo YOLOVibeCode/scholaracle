@@ -30,6 +30,7 @@ import {
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
   IngestDeviceAuthRepository,
   IngestRunRepository,
@@ -71,6 +72,7 @@ import {
 export interface IIngestV1RouterConfig {
   readonly database: Db;
   readonly jwtSecret?: string;
+  readonly connectorJwtSecret?: string;
   /** When set, enqueue notify jobs after creating alerts so notifications are delivered. */
   readonly queue?: MongoQueue;
   /** Asset blob store for post-ingest vision dedupe. */
@@ -1113,7 +1115,9 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
   const router = express.Router();
 
   const authService = new AuthService(config.database, config.jwtSecret);
-  const connectorTokenService = new ConnectorTokenService(config.jwtSecret);
+  const connectorTokenService = new ConnectorTokenService(
+    config.connectorJwtSecret ?? config.jwtSecret
+  );
   const connectorAuth = connectorAuthMiddleware(connectorTokenService, {
     database: config.database,
   });
@@ -1186,8 +1190,17 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const token = connectorTokenService.createToken(userId, randomUUID());
-      const ok = await deviceRepo.approveByUserCode(userCode, userId, token);
+      const pending = await deviceRepo.findPendingByUserCode(userCode);
+      if (!pending) {
+        throw new NotFoundError('User code not found or expired');
+      }
+      const minted = await mintConnectorTokenForDevice({
+        database: config.database,
+        connectorTokenService,
+        userId,
+        deviceId: pending.deviceCode,
+      });
+      const ok = await deviceRepo.approveByUserCode(userCode, userId, minted.token);
       if (!ok) {
         throw new NotFoundError('User code not found or expired');
       }
