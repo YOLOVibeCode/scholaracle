@@ -50,7 +50,19 @@ appId: com.scholarmancy.app
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
-- extendedWaitUntil:
-    visible:
-      id: students-list
-    timeout: 60000
+# A login request can fail on a flaky CI network ("fetch failed ... canceled", API shown
+# as unreachable). If the error shows, tap Sign In again before giving up.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: text-login-error
+          commands:
+            - tapOn:
+                id: button-login
+      - extendedWaitUntil:
+          visible:
+            id: students-list
+          timeout: 40000
