@@ -1,0 +1,16 @@
+# Fake Skyward login page (scripts/fake-portal-server.mjs, demo/demo).
+appId: com.scholarmancy.app
+---
+- extendedWaitUntil:
+    visible: 'Fake Skyward|Username'
+    timeout: 60000
+- tapOn: Username
+- inputText:
+    text: ${MAESTRO_PORTAL_USERNAME}
+    label: Type portal username
+- tapOn: Password
+- inputText:
+    text: ${MAESTRO_PORTAL_PASSWORD}
+    label: Type portal password
+- hideKeyboard
+- tapOn: 'Sign in'

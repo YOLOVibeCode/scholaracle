@@ -1,0 +1,18 @@
+# App boots, shows the login screen and reports its build stamp. Needs no logins.
+appId: com.scholarmancy.app
+name: Launch
+tags: [launch]
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: input-email
+    timeout: 60000
+- assertVisible:
+    id: input-password
+- assertVisible:
+    id: button-login
+- takeScreenshot: launch-login
