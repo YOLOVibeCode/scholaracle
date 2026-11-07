@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db } from 'mongodb';
+import type { Db, Document, UpdateFilter } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import {
   ACCOUNT_DELETION_AUDIT_COLLECTION,
@@ -68,9 +68,8 @@ async function removeFromOtherFamiliesShares(
   if (email) match.push({ email: email.toLowerCase() }, { email });
   await db.collection('students').updateMany(
     { sharedWith: { $elemMatch: { $or: match } } },
-    {
-      $pull: { sharedWith: { $or: match } },
-    }
+    // The driver's PullOperator typing does not accept $or inside an array element filter.
+    { $pull: { sharedWith: { $or: match } } } as unknown as UpdateFilter<Document>
   );
 }
 

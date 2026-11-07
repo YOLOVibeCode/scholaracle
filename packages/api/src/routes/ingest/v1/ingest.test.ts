@@ -233,7 +233,8 @@ describe('Ingest v1 API', () => {
             provider: 'canvas',
             adapterId: 'com.instructure.canvas',
             externalId: 'legacy-a-1',
-            studentExternalId: 'stu-legacy',
+            // Same student as the first test: a second student would trip the Free plan limit (#70).
+            studentExternalId: 'stu-1',
             institutionExternalId: 'inst-legacy',
             courseExternalId: 'course-legacy',
           },
@@ -246,9 +247,12 @@ describe('Ingest v1 API', () => {
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
-    const stored = await database
-      .collection('slc_assignments')
-      .findOne({ externalId: 'legacy-a-1' });
+    // The envelope commit finishes after the 200, so poll briefly for the row.
+    let stored = null as Record<string, unknown> | null;
+    for (let i = 0; i < 50 && !stored; i++) {
+      stored = await database.collection('slc_assignments').findOne({ externalId: 'legacy-a-1' });
+      if (!stored) await new Promise((r) => setTimeout(r, 50));
+    }
     expect(stored?.['adapterId']).toBe('canvas');
   });
 
