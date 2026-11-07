@@ -23,8 +23,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'missing_assignment',
     severity: 'critical',
     subject: 'Missing Assignment Alert',
-    body: 'Ava has not submitted "Original Ode" in English 1. This is categorized as a Minor assignment.',
-    studentName: 'Ava Lewis',
+    body: 'Avery has not submitted "Original Ode" in English 1. This is categorized as a Minor assignment.',
+    studentName: 'Avery Sample',
     courseName: 'English 1',
     assignmentTitle: 'Original Ode',
     recipientType: 'parent',
@@ -38,8 +38,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'missing_assignment',
     severity: 'critical',
     subject: 'Missing Assignment Alert',
-    body: 'Ava has not submitted "What makes a powerful photo?" in Journalism which was due on March 2. This is categorized as a Major assignment.',
-    studentName: 'Ava Lewis',
+    body: 'Avery has not submitted "What makes a powerful photo?" in Journalism which was due on March 2. This is categorized as a Major assignment.',
+    studentName: 'Avery Sample',
     courseName: 'Journalism',
     assignmentTitle: 'What makes a powerful photo?',
     recipientType: 'parent',
@@ -53,8 +53,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'missing_assignment',
     severity: 'critical',
     subject: 'Missing Assignment Alert',
-    body: 'Ava has 7 missing assignments in Journalism (Period 3) including "Checkpoint Grade #5- Peer Review" (due Feb 25) and "Checkpoint Grade #3- Ladder" (due Feb 19).',
-    studentName: 'Ava Lewis',
+    body: 'Avery has 7 missing assignments in Journalism (Period 3) including "Checkpoint Grade #5- Peer Review" (due Feb 25) and "Checkpoint Grade #3- Ladder" (due Feb 19).',
+    studentName: 'Avery Sample',
     courseName: 'Journalism (Per 3)',
     assignmentTitle: 'Multiple missing assignments',
     recipientType: 'parent',
@@ -68,8 +68,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'failing_grade',
     severity: 'critical',
     subject: 'Failing Grade Alert',
-    body: 'Ava is currently failing Journalism (Period 3) with a grade of 58%. She has 7 missing assignments in this course. This requires immediate attention.',
-    studentName: 'Ava Lewis',
+    body: 'Avery is currently failing Journalism (Period 3) with a grade of 58%. She has 7 missing assignments in this course. This requires immediate attention.',
+    studentName: 'Avery Sample',
     courseName: 'Journalism (Per 3)',
     assignmentTitle: '',
     recipientType: 'parent',
@@ -83,8 +83,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'grade_drop',
     severity: 'warning',
     subject: 'Grade Below 75% Warning',
-    body: "Ava's grade in English 1 is 74% and Art 1 is 74%. Both are below the passing threshold of 75%.",
-    studentName: 'Ava Lewis',
+    body: "Avery's grade in English 1 is 74% and Art 1 is 74%. Both are below the passing threshold of 75%.",
+    studentName: 'Avery Sample',
     courseName: 'English 1 / Art 1',
     assignmentTitle: '',
     recipientType: 'parent',
@@ -98,8 +98,8 @@ const sampleItems: IEmailDigestPendingItem[] = [
     alertType: 'grade_improvement',
     severity: 'positive',
     subject: 'Strong Performance',
-    body: 'Ava is performing well in Spanish 1 (92%) and Principles AG Food & Nat Res (85%). Keep up the great work!',
-    studentName: 'Ava Lewis',
+    body: 'Avery is performing well in Spanish 1 (92%) and Principles AG Food & Nat Res (85%). Keep up the great work!',
+    studentName: 'Avery Sample',
     courseName: 'Spanish 1',
     assignmentTitle: '',
     recipientType: 'parent',
@@ -114,7 +114,7 @@ const sampleItems: IEmailDigestPendingItem[] = [
     severity: 'info',
     subject: 'Assignment Category Summary',
     body: 'Algebra 1 breakdown: Major assignments (40% weight) average 79%, Minor assignments (60% weight) average 74%. Focus on improving Minor assignment scores.',
-    studentName: 'Ava Lewis',
+    studentName: 'Avery Sample',
     courseName: 'Algebra 1',
     assignmentTitle: '',
     recipientType: 'parent',
@@ -188,13 +188,13 @@ const sampleGrades: IGradeBlock[] = [
 ];
 
 const aiInsight =
-  'Ava has 15 missing assignments across her courses, with the most urgent being in Journalism Period 3 (7 missing, currently failing at 58%). English 1 and Art 1 are both at 74%, just below passing. Her strongest subjects are Spanish 1 (92%) and Principles AG Food & Nat Res (85%). Priority this week: submit missing Journalism assignments and the Original Ode for English 1.';
+  'Avery has 15 missing assignments across her courses, with the most urgent being in Journalism Period 3 (7 missing, currently failing at 58%). English 1 and Art 1 are both at 74%, just below passing. Her strongest subjects are Spanish 1 (92%) and Principles AG Food & Nat Res (85%). Priority this week: submit missing Journalism assignments and the Original Ode for English 1.';
 
 async function main(): Promise<void> {
   const { subject, html } = buildDigestEmail({
     items: sampleItems,
     dashboardUrl: 'https://scholarmancy.com/dashboard',
-    studentName: 'Ava Lewis',
+    studentName: 'Avery Sample',
     recipientType: 'parent',
     aiInsight,
     grades: sampleGrades,
@@ -209,8 +209,8 @@ async function main(): Promise<void> {
   });
 
   const recipients = [
-    { name: 'Robert Lewis', email: 'rmlewis1976@gmail.com' },
-    { name: 'Jessica Lewis', email: 'jdenise11@hotmail.com' },
+    { name: 'Robin Sample', email: 'coparent.one@example.com' },
+    { name: 'Jamie Sample', email: 'coparent.two@example.com' },
     { name: 'Ricardo Vega Jr', email: 'rvegajr@noctusoft.com' },
   ];
 

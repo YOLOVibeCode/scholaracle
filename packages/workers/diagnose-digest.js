@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Check what data exists for Ava and create a proper comprehensive digest
+ * Check what data exists for Avery and create a proper comprehensive digest
  */
 const { MongoClient, ObjectId } = require('mongodb');
 
@@ -18,7 +18,7 @@ async function investigateAndFix() {
     await client.connect();
     const db = client.db();
     
-    console.log('🔍 Investigating Ava\'s data...\n');
+    console.log('🔍 Investigating Avery\'s data...\n');
     
     // Check grade snapshots
     console.log('1️⃣ Checking grade snapshots...');

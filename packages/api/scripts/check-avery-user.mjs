@@ -1,7 +1,7 @@
 /**
  * One-off read-only script: find user(s) matching rvegajr (noctusoft/darkware)
- * and list their students (expect Ava) and sharedWith count (expect 2 guests).
- * Usage: MONGODB_URI='...' [MONGODB_DB_NAME=scholaracle] node scripts/check-ava-user.mjs
+ * and list their students (expect Avery) and sharedWith count (expect 2 guests).
+ * Usage: MONGODB_URI='...' [MONGODB_DB_NAME=scholaracle] node scripts/check-avery-user.mjs
  */
 import { MongoClient } from 'mongodb';
 

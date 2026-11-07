@@ -1,5 +1,5 @@
 /**
- * PlaywrightUX: Multi-student onboarding + integrations phone-connect bundle.
+ * Multi-student onboarding + phone-connect integrations (no bundle download).
  */
 import { test, expect } from '../fixtures/auth';
 
@@ -36,18 +36,18 @@ async function createStudentViaWizard(
   ).toBeVisible({ timeout: 10_000 });
 }
 
-test.describe('Scraper UX: Multi-student and bundled script', () => {
+test.describe('Scraper UX: Multi-student and phone connect', () => {
   test.setTimeout(120_000);
 
   test.describe.serial('Multi-student flow', () => {
-    test('Login and add student Ava Lewis', async ({ page, loginAsRole }) => {
+    test('Login and add student Avery Sample', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
-      await createStudentViaWizard(page, 'Ava Lewis', '9');
+      await createStudentViaWizard(page, 'Avery Sample', '9');
     });
 
-    test('Add student Noah Lewis', async ({ page, loginAsRole }) => {
+    test('Add student Noah Sample', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
-      await createStudentViaWizard(page, 'Noah Lewis', '11');
+      await createStudentViaWizard(page, 'Noah Sample', '11');
     });
 
     test('Add Canvas and Skyward to integrations bundle', async ({ page, loginAsRole }) => {
@@ -57,8 +57,8 @@ test.describe('Scraper UX: Multi-student and bundled script', () => {
       const card = page.locator('[data-testid="self-hosted-scraper-card"]');
 
       for (const [platform, url, student] of [
-        ['canvas', 'https://example.instructure.com', 'Ava Lewis'],
-        ['skyward', 'https://skyward.example.com', 'Noah Lewis'],
+        ['canvas', 'https://example.instructure.com', 'Avery Sample'],
+        ['skyward', 'https://skyward.example.com', 'Noah Sample'],
       ] as const) {
         await page.locator('[data-testid="button-connect-school"]').click();
         await expect(page.getByRole('dialog')).toBeVisible();

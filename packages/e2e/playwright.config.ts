@@ -137,37 +137,13 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
-    // Scraper E2E: real Canvas + Skyward scrape (requires env; suite skips if unset)
-    {
-      name: 'scraper-e2e',
-      testMatch: /scraper-generation-e2e\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 300 * 1000,
-    },
-    // Scraper UX: multi-student, multi-connector download flow (no real credentials)
+    // Multi-student onboarding + phone-connect integrations (no bundle download)
     {
       name: 'scraper-ux',
       testMatch: /scraper-ux-multi-student\.spec\.ts/,
       dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 120 * 1000,
-    },
-    // Scraper AI: non-reference platform wizard with mocked AI generation
-    {
-      name: 'scraper-ai',
-      testMatch: /scraper-ai-generation\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 60 * 1000,
-    },
-    // Complete flow: generate → download → one install, one run (requires TEST_CANVAS_*)
-    {
-      name: 'complete-scraper-flow',
-      testMatch: /complete-scraper-flow\.spec\.ts/,
-      dependencies: ['critical'],
-      use: { ...devices['Desktop Chrome'] },
-      timeout: 300 * 1000,
     },
     // Server-side sync: login → add source → trigger worker scrape → verify (requires TEST_CANVAS_*)
     {

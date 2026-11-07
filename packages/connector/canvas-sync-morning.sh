@@ -25,7 +25,7 @@ if [ -f .env.canvas ]; then
   set +a
 fi
 
-: "${CANVAS_URL:?Set CANVAS_URL (e.g. https://ldisd.instructure.com)}"
+: "${CANVAS_URL:?Set CANVAS_URL (e.g. https://exampleisd.instructure.com)}"
 : "${CANVAS_GOOGLE_EMAIL:?Set CANVAS_GOOGLE_EMAIL}"
 : "${CANVAS_GOOGLE_PASSWORD:?Set CANVAS_GOOGLE_PASSWORD}"
 

@@ -17,9 +17,9 @@ async function triggerDigest() {
     const db = client.db();
     console.log('✅ Connected\n');
 
-    const student = await db.collection('students').findOne({ name: 'Ava Lewis' });
+    const student = await db.collection('students').findOne({ name: 'Avery Sample' });
     if (!student) {
-      throw new Error('Student "Ava Lewis" not found');
+      throw new Error('Student "Avery Sample" not found');
     }
 
     const owner = await db.collection('users').findOne({ _id: student.userId });

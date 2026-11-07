@@ -15,7 +15,7 @@ const ctx: ITransformContext = {
 
 function makeExtract(overrides: Partial<ISkywardFullExtract> = {}): ISkywardFullExtract {
   return {
-    student: 'Emma Lewis',
+    student: 'Emma Sample',
     school: 'Central HS',
     courses: [],
     missingAssignments: [],

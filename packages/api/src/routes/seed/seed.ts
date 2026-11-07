@@ -751,7 +751,7 @@ async function handleDemoSeed(
     {
       userId: jessicaUser?._id?.toString(),
       email: DEMO_CONTACT_JESSICA,
-      name: 'Jessica Demo',
+      name: 'Jamie Demo',
       role: 'parent',
       status: 'accepted',
       invitedAt,
@@ -775,7 +775,7 @@ async function handleDemoSeed(
     {
       userId: jessicaUser?._id?.toString(),
       email: DEMO_CONTACT_JESSICA,
-      name: 'Jessica Demo',
+      name: 'Jamie Demo',
       role: 'parent',
       status: 'accepted',
       invitedAt,
@@ -785,7 +785,7 @@ async function handleDemoSeed(
     },
     {
       email: DEMO_CONTACT_JENNIFER,
-      name: 'Jennifer Demo',
+      name: 'Jordan Demo',
       role: 'parent',
       status: 'pending',
       invitedAt,

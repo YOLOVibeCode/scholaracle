@@ -657,10 +657,12 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
 }
 
-// Start worker if this file is run directly
-if (require.main === module) {
+// Start worker if this file is run directly (never when Jest imports this module)
+if (require.main === module && process.env['JEST_WORKER_ID'] === undefined) {
   startWorker().catch((error: unknown) => {
     logger.fatal({ err: error }, 'failed to start worker');
-    process.exit(1);
+    if (process.env['JEST_WORKER_ID'] === undefined) {
+      process.exit(1);
+    }
   });
 }

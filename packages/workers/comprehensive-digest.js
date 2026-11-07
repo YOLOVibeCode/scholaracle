@@ -34,7 +34,7 @@ async function sendComprehensiveDigest() {
       {
         userId: new ObjectId(USER_ID),
         studentId: new ObjectId(STUDENT_ID),
-        studentName: 'Ava Lewis',
+        studentName: 'Avery Sample',
         type: 'grade_drop',
         severity: 'warning',
         title: 'Grade Drop: English',
@@ -46,7 +46,7 @@ async function sendComprehensiveDigest() {
       {
         userId: new ObjectId(USER_ID),
         studentId: new ObjectId(STUDENT_ID),
-        studentName: 'Ava Lewis',
+        studentName: 'Avery Sample',
         type: 'assignment_due',
         severity: 'info',
         title: 'Due Tomorrow: Algebra Homework',
@@ -58,7 +58,7 @@ async function sendComprehensiveDigest() {
       {
         userId: new ObjectId(USER_ID),
         studentId: new ObjectId(STUDENT_ID),
-        studentName: 'Ava Lewis',
+        studentName: 'Avery Sample',
         type: 'missing_assignment',
         severity: 'critical',
         title: 'Missing: Science Lab Report',
@@ -70,7 +70,7 @@ async function sendComprehensiveDigest() {
       {
         userId: new ObjectId(USER_ID),
         studentId: new ObjectId(STUDENT_ID),
-        studentName: 'Ava Lewis',
+        studentName: 'Avery Sample',
         type: 'grade_improvement',
         severity: 'positive',
         title: '🎉 Great Work in History!',
@@ -95,15 +95,15 @@ async function sendComprehensiveDigest() {
     // Send to each parent with DigestSender-like logic
     const recipients = [
       { email: 'rvegajr@noctusoft.com', name: 'R Vega Jr', type: 'parent' },
-      { email: 'rmlewis1976@gmail.com', name: 'Robert Lewis', type: 'parent' },
-      { email: 'jdenise11@hotmail.com', name: 'Jessica Lewis', type: 'parent' },
+      { email: 'coparent.one@example.com', name: 'Robin Sample', type: 'parent' },
+      { email: 'coparent.two@example.com', name: 'Jamie Sample', type: 'parent' },
     ];
     
     for (const recipient of recipients) {
       console.log(`📤 Sending to ${recipient.email}...`);
       
       // Build comprehensive HTML
-      const subject = `Scholarmancy Daily Update — ${alerts.length} alerts for Ava Lewis`;
+      const subject = `Scholarmancy Daily Update — ${alerts.length} alerts for Avery Sample`;
       
       let html = `
 <!DOCTYPE html>
@@ -117,7 +117,7 @@ async function sendComprehensiveDigest() {
     <span style="font-size: 18px; font-weight: 600;">Scholarmancy</span>
   </div>
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <h2>Daily Update for Ava Lewis</h2>
+    <h2>Daily Update for Avery Sample</h2>
     <p>You have ${alerts.length} updates:</p>`;
       
       // Add grade bar if we have grades
@@ -158,7 +158,7 @@ async function sendComprehensiveDigest() {
           to: recipient.email,
           from: { email: FROM_EMAIL, name: FROM_NAME },
           subject: subject,
-          text: `Scholarmancy: ${alerts.length} updates for Ava Lewis`,
+          text: `Scholarmancy: ${alerts.length} updates for Avery Sample`,
           html: html,
         });
         

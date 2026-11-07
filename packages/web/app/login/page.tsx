@@ -165,7 +165,7 @@ function LoginForm() {
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 font-medium text-blue-600 hover:underline dark:text-blue-400"
                   data-testid="link-forgot-password"
                 >
                   Forgot password?

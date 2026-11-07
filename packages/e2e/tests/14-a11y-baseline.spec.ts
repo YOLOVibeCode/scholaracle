@@ -22,15 +22,13 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
   }) => {
     await page.goto('/login');
     await expect(page.locator('[data-testid="input-email"]')).toBeVisible({ timeout: 30_000 });
-    // Golden-path login form only; OAuth chrome is covered in OAuthButtons unit coverage.
-    await expectNoA11yViolations(page, { include: ['[data-testid="form-login"]'] });
+    await expectNoA11yViolations(page);
   });
 
   test('A11Y-002: /register has no serious/critical axe violations', async ({ page }) => {
     await page.goto('/register');
     await expect(page.locator('[data-testid="input-email"]')).toBeVisible({ timeout: 30_000 });
-    // Golden-path login form only; OAuth chrome is covered in OAuthButtons unit coverage.
-    await expectNoA11yViolations(page, { include: ['[data-testid="form-login"]'] });
+    await expectNoA11yViolations(page);
   });
 
   test('A11Y-003: /forgot-password has no serious/critical axe violations', async ({ page }) => {
@@ -45,8 +43,7 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.goto();
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
-    // Excluding any third-party iframes — we test those separately.
-    await expectNoA11yViolations(page, { include: ['main'], exclude: ['iframe'] });
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
   test('A11Y-005: /dashboard/alerts has no serious/critical axe violations', async ({ page }) => {
@@ -55,7 +52,7 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
     await page.goto('/dashboard/alerts');
-    await expectNoA11yViolations(page, { include: ['main'], exclude: ['iframe'] });
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
   test('A11Y-006: /dashboard/settings has no serious/critical axe violations', async ({ page }) => {
@@ -64,7 +61,7 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
     await page.goto('/dashboard/settings');
-    await expectNoA11yViolations(page, { include: ['main'], exclude: ['iframe'] });
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
   test('A11Y-006b: /dashboard/billing has no serious/critical axe violations', async ({ page }) => {
@@ -74,7 +71,7 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await page.waitForURL(/\/dashboard/);
     await page.goto('/dashboard/billing');
     await expect(page.getByTestId('billing-page')).toBeVisible();
-    await expectNoA11yViolations(page, { include: ['main'], exclude: ['iframe'] });
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
   test('A11Y-007 (boundary): error state on /login retains accessible role="alert"', async ({
@@ -85,26 +82,23 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.login('nonexistent@example.com', 'WrongPassword123!', {
       waitForDashboard: false,
     });
-    // Wait for error UI before scanning — covers the error-state branch (often forgotten).
     await expect(page.getByTestId('message-error')).toBeVisible();
-    await expectNoA11yViolations(page, { include: ['[data-testid="form-login"]'] });
+    await expectNoA11yViolations(page);
   });
 
   test('A11Y-008 (negative): /register submit-disabled state stays accessible', async ({
     page,
   }) => {
     await page.goto('/register');
-    // Tab through and confirm focusable order is sane (each input gets focus).
     const inputs = await page.locator('input').count();
     for (let i = 0; i < Math.min(inputs, 6); i++) {
       await page.keyboard.press('Tab');
     }
-    // Submit empty: native validation kicks in. Page must remain a11y-clean.
     await page
       .getByTestId('button-register')
       .click()
       .catch(() => {
-        // Native validation may block submission; that's fine.
+        /* native validation may block */
       });
     await expectNoA11yViolations(page);
   });

@@ -18,7 +18,7 @@ function makeResponse(
 ): IStudentMaterialsResponse {
   return {
     studentId: 'stu-1',
-    studentName: 'Emma Lewis',
+    studentName: 'Emma Sample',
     totalMaterials: materialsByCourse.reduce((n, materials) => n + materials.length, 0),
     courses: materialsByCourse.map((materials, index) => ({
       courseExternalId: `course-${index + 1}`,

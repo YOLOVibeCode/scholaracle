@@ -199,7 +199,7 @@ describe('SyncStalenessMonitor', () => {
     it('sends no email when source synced 1 hour ago', async () => {
       const ownerId = new ObjectId();
       const oneHourAgo = new Date(Date.now() - 60 * 60_000);
-      await seedOwnerAndStudent({ ownerId, lastSuccessAt: oneHourAgo, studentName: 'Ava' });
+      await seedOwnerAndStudent({ ownerId, lastSuccessAt: oneHourAgo, studentName: 'Avery' });
 
       const monitor = new SyncStalenessMonitor(database, mockTransport, {
         staleThresholdMs: TWENTY_FOUR_H_MS,

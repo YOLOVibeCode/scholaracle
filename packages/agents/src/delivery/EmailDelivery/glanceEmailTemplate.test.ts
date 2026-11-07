@@ -18,25 +18,25 @@ describe('buildGlanceEmail', () => {
   ];
 
   it('returns subject with student name', () => {
-    const { subject } = buildGlanceEmail({ studentName: 'Ava Lewis' });
-    expect(subject).toContain("Ava Lewis's Snapshot");
+    const { subject } = buildGlanceEmail({ studentName: 'Avery Sample' });
+    expect(subject).toContain("Avery Sample's Snapshot");
   });
 
   it('includes grade bar when grades provided', () => {
-    const { html } = buildGlanceEmail({ studentName: 'Ava', grades: sampleGrades });
+    const { html } = buildGlanceEmail({ studentName: 'Avery', grades: sampleGrades });
     expect(html).toContain('Math');
     expect(html).toContain('English');
     expect(html).toContain('http://example.com/math');
   });
 
   it('omits grade bar when no grades', () => {
-    const { html } = buildGlanceEmail({ studentName: 'Ava', grades: [] });
+    const { html } = buildGlanceEmail({ studentName: 'Avery', grades: [] });
     expect(html).not.toContain('http://example.com');
   });
 
   it('renders missing assignments table', () => {
     const { html } = buildGlanceEmail({
-      studentName: 'Ava',
+      studentName: 'Avery',
       missingAssignments: [
         { title: 'Chapter 5 Quiz', courseName: 'Math', dueAt: new Date('2026-04-10') },
       ],
@@ -48,7 +48,7 @@ describe('buildGlanceEmail', () => {
 
   it('renders upcoming deadlines table', () => {
     const { html } = buildGlanceEmail({
-      studentName: 'Ava',
+      studentName: 'Avery',
       upcomingDeadlines: [
         { title: 'Essay Draft', courseName: 'English', dueAt: new Date('2026-04-15') },
       ],
@@ -59,7 +59,7 @@ describe('buildGlanceEmail', () => {
 
   it('shows all caught up when no missing or upcoming', () => {
     const { html } = buildGlanceEmail({
-      studentName: 'Ava',
+      studentName: 'Avery',
       missingAssignments: [],
       upcomingDeadlines: [],
     });
@@ -68,16 +68,16 @@ describe('buildGlanceEmail', () => {
 
   it('includes AI insight when provided', () => {
     const { html } = buildGlanceEmail({
-      studentName: 'Ava',
-      aiInsight: 'Ava is doing great in Math.',
+      studentName: 'Avery',
+      aiInsight: 'Avery is doing great in Math.',
     });
-    expect(html).toContain('Ava is doing great in Math.');
+    expect(html).toContain('Avery is doing great in Math.');
     expect(html).toContain('Today&rsquo;s Summary');
   });
 
   it('includes dashboard CTA when url provided', () => {
     const { html } = buildGlanceEmail({
-      studentName: 'Ava',
+      studentName: 'Avery',
       dashboardUrl: 'https://app.scholarmancy.com/dashboard/students/123/view',
     });
     expect(html).toContain('View Dashboard');

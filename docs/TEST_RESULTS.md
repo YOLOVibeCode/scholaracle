@@ -47,8 +47,8 @@
 |--------|--------|---------------|
 | **User ID** | ✅ | `69a4f0c73671c632ca591c7c` |
 | **Email** | ✅ | `rvegajr@noctusoft.com` |
-| **Student** | ✅ | Ava Lewis |
-| **Student Alert Email** | ✅ | `29alewis@ldisd.net` |
+| **Student** | ✅ | Avery Sample |
+| **Student Alert Email** | ✅ | `student.one@exampleisd.net` |
 | **Notification Frequency** | ✅ | `proactive` |
 | **Email Enabled** | ✅ | `true` |
 | **Digest Times** | ✅ | `05:28`, `05:29`, `05:30` (test slots) |
@@ -59,8 +59,8 @@
 
 | Contact | Email | Name | Status | Receive Alerts | Channels |
 |---------|-------|------|--------|----------------|----------|
-| **Robert Lewis** | rmlewis1976@gmail.com | ✅ Robert Lewis | ✅ accepted | ✅ true | ✅ email |
-| **Jessica Lewis** | jdenise11@hotmail.com | ✅ Jessica Lewis | ✅ accepted | ✅ true | ✅ email |
+| **Robin Sample** | coparent.one@example.com | ✅ Robin Sample | ✅ accepted | ✅ true | ✅ email |
+| **Jamie Sample** | coparent.two@example.com | ✅ Jamie Sample | ✅ accepted | ✅ true | ✅ email |
 
 **Status**: ✅ **FIXED** — Names were `undefined`, now correctly set
 
@@ -126,7 +126,7 @@
 | **2. Notify Job Creation** | ⬜ UNTESTED | No recent notify jobs found in queue |
 | **3. Deliver Job Creation** | ⬜ UNTESTED | No recent deliver jobs found |
 | **4. Email Delivery** | ⬜ UNTESTED | No evidence of recent digest emails sent |
-| **5. Recipient Verification** | ⬜ PENDING | Need to verify all 4 recipients (Ava, Robert, Jessica, Ricky) received correct emails |
+| **5. Recipient Verification** | ⬜ PENDING | Need to verify all 4 recipients (Avery, Robin, Jamie, Ricky) received correct emails |
 
 **Next Action Required**: Trigger a test sync → verify alert creation → flush digest → verify email delivery
 
@@ -184,7 +184,7 @@
 ## Recommendations
 
 ### Immediate Actions
-1. ✅ **Trigger a test sync** for Ava to generate fresh alerts
+1. ✅ **Trigger a test sync** for Avery to generate fresh alerts
 2. ✅ **Flush digest emails** using workers script
 3. ✅ **Monitor worker logs** for digest sending activity
 4. ⬜ **Verify email inbox** for all 4 recipients
@@ -220,11 +220,11 @@ Scholaracle is **production-ready** with the following status:
 
 ### 🎯 Recommendation
 **Deploy to production** and perform live verification tests with the following manual checks:
-1. Trigger sync for Ava
+1. Trigger sync for Avery
 2. Wait for digest time slot (05:28, 05:29, or 05:30 AM)
 3. Verify emails received by all 4 recipients:
-   - ✅ Student email (29alewis@ldisd.net) — student-toned
-   - ✅ Parent emails (rmlewis1976@gmail.com, jdenise11@hotmail.com, rvegajr@noctusoft.com) — parent-toned
+   - ✅ Student email (student.one@exampleisd.net) — student-toned
+   - ✅ Parent emails (coparent.one@example.com, coparent.two@example.com, rvegajr@noctusoft.com) — parent-toned
 4. Verify grade bar displays correctly with color coding
 5. Verify AI insights are included
 6. Test password reset flow manually

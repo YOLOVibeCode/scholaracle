@@ -17,7 +17,7 @@ function makeItem(overrides: Partial<IEmailDigestPendingItem>): IEmailDigestPend
     severity: 'high',
     subject: 'Alert',
     body: 'Alert message',
-    studentName: 'Ava',
+    studentName: 'Avery',
     createdAt: new Date(),
     ...overrides,
   };
@@ -191,7 +191,7 @@ describe('DigestSender', () => {
 
     await sender.sendDigestForUser('user-123');
 
-    expect(mockInsightService.generateInsight).toHaveBeenCalledWith(items, 'Ava');
+    expect(mockInsightService.generateInsight).toHaveBeenCalledWith(items, 'Avery');
     expect(mockTransport.send).toHaveBeenCalled();
     const call = (mockTransport.send as jest.Mock).mock.calls[0][0] as { html: string };
     expect(call.html).toContain('AI says: Focus on Math this week.');

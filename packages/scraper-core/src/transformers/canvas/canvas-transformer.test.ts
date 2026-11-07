@@ -37,7 +37,7 @@ function makeCourse(overrides: Partial<ICanvasBrowserCourse> = {}): ICanvasBrows
 
 function makeExtract(overrides: Partial<ICanvasBrowserExtract> = {}): ICanvasBrowserExtract {
   return {
-    user: 'Emma Lewis',
+    user: 'Emma Sample',
     courses: [],
     toDoItems: [],
     upcomingEvents: [],

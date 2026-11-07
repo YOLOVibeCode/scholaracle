@@ -25,13 +25,13 @@ async function triggerDigestDirect() {
     console.log('✅ Connected\n');
 
     console.log('📧 Creating digest notification for:', RECIPIENT_EMAIL);
-    console.log('   Student: Ava Lewis\n');
+    console.log('   Student: Avery Sample\n');
 
     // Create alert
     const alert = {
       userId: new ObjectId(USER_ID),
       studentId: new ObjectId(STUDENT_ID),
-      studentName: 'Ava Lewis',
+      studentName: 'Avery Sample',
       type: 'manual_digest',
       severity: 'info',
       title: 'Grade System Updated - Skyward Now Primary',
@@ -53,7 +53,7 @@ async function triggerDigestDirect() {
       userId: USER_ID,
       alertId: alertResult.insertedId.toString(),
       studentId: STUDENT_ID,
-      studentName: 'Ava Lewis',
+      studentName: 'Avery Sample',
       recipientEmail: RECIPIENT_EMAIL,
       createdAt: new Date(),
     });
@@ -67,7 +67,7 @@ async function triggerDigestDirect() {
       scheduledFor: new Date(),
       attempts: 0,
       maxAttempts: 3,
-      name: 'Manual digest - Ava Lewis to primary owner',
+      name: 'Manual digest - Avery Sample to primary owner',
       data: {
         userId: USER_ID,
         immediate: true,
@@ -79,7 +79,7 @@ async function triggerDigestDirect() {
 
     console.log('📬 DIGEST QUEUED!');
     console.log(`   To: ${RECIPIENT_EMAIL}`);
-    console.log('   Subject: Daily Digest for Ava Lewis');
+    console.log('   Subject: Daily Digest for Avery Sample');
     console.log('   Content: Grade system update notification\n');
 
     console.log('⏳ Worker will process within 30 seconds...');

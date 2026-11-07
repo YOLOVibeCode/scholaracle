@@ -1,7 +1,7 @@
 /**
- * One-off: For rvegajr@noctusoft.com (Ava Lewis), auto-accept all sharedWith (co-parents),
- * set student alertEmail to 29alewis@ldisd.net, and enqueue 2 test alert jobs.
- * Usage: MONGODB_URI='...' [MONGODB_DB_NAME=scholaracle] node scripts/ava-noctusoft-accept-and-test-alerts.mjs
+ * One-off: For rvegajr@noctusoft.com (Avery Sample), auto-accept all sharedWith (co-parents),
+ * set student alertEmail to student.one@exampleisd.net, and enqueue 2 test alert jobs.
+ * Usage: MONGODB_URI='...' [MONGODB_DB_NAME=scholaracle] node scripts/avery-noctusoft-accept-and-test-alerts.mjs
  */
 import { MongoClient, ObjectId } from 'mongodb';
 
@@ -10,7 +10,7 @@ const dbName = process.env.MONGODB_DB_NAME || 'scholaracle';
 
 const NOCTUSOFT_EMAIL = 'rvegajr@noctusoft.com';
 const AVA_STUDENT_ID = '69a4f1b53671c632ca591c7f';
-const AVA_ALERT_EMAIL = '29alewis@ldisd.net';
+const AVA_ALERT_EMAIL = 'student.one@exampleisd.net';
 
 if (!uri) {
   console.error('Set MONGODB_URI');
@@ -71,7 +71,7 @@ async function main() {
     await client.close();
     process.exit(1);
   }
-  console.log('Updated student Ava Lewis: sharedWith accepted (', sharedWith.length, '), alertEmail =', AVA_ALERT_EMAIL);
+  console.log('Updated student Avery Sample: sharedWith accepted (', sharedWith.length, '), alertEmail =', AVA_ALERT_EMAIL);
 
   const jobPayload = (type, severity, relatedData) => ({
     type: 'notify',
@@ -94,13 +94,13 @@ async function main() {
   });
 
   const job1 = jobPayload('missing_assignment', 'high', {
-    studentName: 'Ava Lewis',
+    studentName: 'Avery Sample',
     course: 'Algebra I',
     assignment: 'Homework 5',
     daysAgo: 1,
   });
   const job2 = jobPayload('grade_drop', 'critical', {
-    studentName: 'Ava Lewis',
+    studentName: 'Avery Sample',
     course: 'English',
     previousGrade: 'B+',
     currentGrade: 'C',

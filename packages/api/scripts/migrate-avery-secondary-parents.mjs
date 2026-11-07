@@ -1,11 +1,11 @@
 /**
- * One-off migration: move Ava Lewis's secondaryParents into sharedWith and set alertEmail.
- * Run once: MONGODB_URI='...' node packages/api/scripts/migrate-ava-secondary-parents.mjs
+ * One-off migration: move Avery Sample's secondaryParents into sharedWith and set alertEmail.
+ * Run once: MONGODB_URI='...' node packages/api/scripts/migrate-avery-secondary-parents.mjs
  */
 import { MongoClient, ObjectId } from 'mongodb';
 
 const AVA_STUDENT_ID = '69a4f1b53671c632ca591c7f';
-const AVA_ALERT_EMAIL = '29alewis@ldisd.net';
+const AVA_ALERT_EMAIL = 'student.one@exampleisd.net';
 
 const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB_NAME || 'scholaracle';

@@ -11,7 +11,7 @@ describe('GlanceInsightService', () => {
   it('returns insight text from LLM', async () => {
     const svc = new GlanceInsightService({ llmClient: mockLlmClient('Focus on Math today.') });
     const input: IGlanceInsightInput = {
-      studentName: 'Ava',
+      studentName: 'Avery',
       gradeCount: 5,
       lowestGradePercent: 72,
       lowestGradeCourse: 'Math',
@@ -26,7 +26,7 @@ describe('GlanceInsightService', () => {
   it('returns undefined when LLM returns empty', async () => {
     const svc = new GlanceInsightService({ llmClient: mockLlmClient('') });
     const input: IGlanceInsightInput = {
-      studentName: 'Ava',
+      studentName: 'Avery',
       gradeCount: 0,
       missingCount: 0,
       upcomingCount: 0,
@@ -42,7 +42,7 @@ describe('GlanceInsightService', () => {
     } as unknown as LlmClient;
     const svc = new GlanceInsightService({ llmClient: llm });
     const input: IGlanceInsightInput = {
-      studentName: 'Ava',
+      studentName: 'Avery',
       gradeCount: 0,
       missingCount: 0,
       upcomingCount: 0,
@@ -56,7 +56,7 @@ describe('GlanceInsightService', () => {
     const llm = mockLlmClient('ok');
     const svc = new GlanceInsightService({ llmClient: llm });
     await svc.generateInsight({
-      studentName: 'Ava',
+      studentName: 'Avery',
       gradeCount: 3,
       missingCount: 2,
       upcomingCount: 1,

@@ -189,17 +189,17 @@ describe('ScholarmancyApiClient auth', () => {
       const created = {
         id: 'stu-mongo-1',
         userId: 'user-1',
-        name: 'Gideon',
+        name: 'Gabe',
         grade: 8,
       };
       const fetchMock = mockFetchSequence({ status: 201, body: created });
 
-      await expect(client.createStudent({ name: 'Gideon', grade: 8 })).resolves.toEqual(created);
+      await expect(client.createStudent({ name: 'Gabe', grade: 8 })).resolves.toEqual(created);
       expect(fetchMock).toHaveBeenCalledWith(
         `${BASE_URL}/api/students`,
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ name: 'Gideon', grade: 8 }),
+          body: JSON.stringify({ name: 'Gabe', grade: 8 }),
           headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
         })
       );
@@ -336,7 +336,7 @@ describe('ScholarmancyApiClient auth', () => {
     function makeGradesResponse(overrides?: Record<string, unknown>): Record<string, unknown> {
       return {
         studentId: STUDENT_ID,
-        studentName: 'Emma Lewis',
+        studentName: 'Emma Sample',
         overallGPA: 3.8,
         atRiskCourses: 0,
         courseGrades: [
@@ -454,7 +454,7 @@ describe('ScholarmancyApiClient auth', () => {
     function makeMaterialsResponse(): Record<string, unknown> {
       return {
         studentId: STUDENT_ID,
-        studentName: 'Emma Lewis',
+        studentName: 'Emma Sample',
         totalMaterials: 2,
         courses: [
           {
@@ -537,7 +537,7 @@ describe('ScholarmancyApiClient auth', () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
       const body = {
         studentId: STUDENT_ID,
-        studentName: 'Emma Lewis',
+        studentName: 'Emma Sample',
         totalMaterials: 1,
         courses: [
           {
@@ -1193,7 +1193,7 @@ describe('ScholarmancyApiClient source invites', () => {
       portalBaseUrl: 'https://skyward.iscorp.com',
       displayName: 'Skyward Family Access (skyward.iscorp.com)',
       studentId: 'stu-1',
-      studentExternalId: 'ava-lewis',
+      studentExternalId: 'avery-sample',
       institutionExternalId: 'skyward.iscorp.com',
     };
     mockFetchSequence({ status: 200, body: { success: true, invite } });

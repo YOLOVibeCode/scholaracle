@@ -75,7 +75,14 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     const studentName = `Shared Student ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', studentName);
+    await page.fill('[data-testid="wizard-student-grade"]', '10');
+    const createStudentRes = page.waitForResponse(
+      (r) => r.url().includes('/students') && r.request().method() === 'POST'
+    );
     await page.click('[data-testid="wizard-next-step"]');
+    const createRes = await createStudentRes;
+    expect(createRes.status()).toBeLessThan(400);
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({ timeout: 10_000 });
     await page.locator('[data-testid="wizard-skip-services"]').click();
     await page.locator('[data-testid="wizard-finish"]').click();
     await expect(wizard).not.toBeVisible({ timeout: 3000 });

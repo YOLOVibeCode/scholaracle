@@ -12,7 +12,7 @@ beforeAll(() => {
 
 const REDACTION_CORPUS = [
   'Emma Johnson',
-  'Robert Smith',
+  'Robin Smith',
   'emma.johnson@lisd.net',
   '12345678',
   'stu-abcdef',
@@ -32,7 +32,7 @@ function buildLeakHtml(): string {
           <h1>Emma Johnson</h1>
           <a href="mailto:emma.johnson@lisd.net">Contact</a>
           <span data-student-id="stu-abcdef">Grade 92%</span>
-          <p>Call (555) 123-4567 or 555-123-4567 for Robert Smith</p>
+          <p>Call (555) 123-4567 or 555-123-4567 for Robin Smith</p>
           <input type="hidden" value="Alpha Beta Gamma" />
         </div>
       </body>
@@ -57,7 +57,7 @@ describe('captureSkeleton', () => {
     document.documentElement.innerHTML = buildLeakHtml();
     const result = await captureSkeleton({
       step: 'test.redaction',
-      redact: ['Emma Johnson', 'Robert Smith'],
+      redact: ['Emma Johnson', 'Robin Smith'],
     });
     const blob = `${result.skeleton}\n${result.pagePath ?? ''}\n${result.sha256}`;
     expect(leakCheck(blob, REDACTION_CORPUS)).toEqual([]);

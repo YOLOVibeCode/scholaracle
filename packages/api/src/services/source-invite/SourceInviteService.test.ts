@@ -81,8 +81,8 @@ function makeService(
   clock: FakeClock,
   students: IStudentOwnerLookup = new FakeStudents({
     id: STUDENT_ID,
-    name: 'Ava Lewis',
-    studentExternalId: 'ava-lewis',
+    name: 'Avery Sample',
+    studentExternalId: 'avery-sample',
   })
 ): SourceInviteService {
   return new SourceInviteService(
@@ -97,7 +97,7 @@ function makeService(
 describe('SourceInviteService', () => {
   const hasher = new Sha256TokenHasher();
 
-  it('issue then redeem same user returns Ava payload', async () => {
+  it('issue then redeem same user returns Avery payload', async () => {
     const store = new MemorySourceInviteStore();
     const clock = new FakeClock(new Date('2026-08-15T00:00:00.000Z'));
     const service = makeService(store, clock);
@@ -112,7 +112,7 @@ describe('SourceInviteService', () => {
     expect(issued.token).toBe(AVA_TOKEN);
     expect(issued.payload.portalBaseUrl).toBe('https://skyward.iscorp.com');
     expect(issued.payload.adapterId).toBe(SOURCE_INVITE_ADAPTER_IDS.skyward);
-    expect(issued.payload.studentExternalId).toBe('ava-lewis');
+    expect(issued.payload.studentExternalId).toBe('avery-sample');
     expect(issued.expiresAt.getTime() - clock.now().getTime()).toBe(SOURCE_INVITE_TTL_MS);
 
     const payload = await service.redeem({ userId: USER_A, token: AVA_TOKEN });
@@ -180,7 +180,7 @@ describe('SourceInviteService', () => {
       clock,
       new FixedTokenGenerator('aa'.repeat(32)),
       hasher,
-      new FakeStudents({ id: STUDENT_ID, name: 'Ava Lewis', studentExternalId: 'ava-lewis' })
+      new FakeStudents({ id: STUDENT_ID, name: 'Avery Sample', studentExternalId: 'avery-sample' })
     );
     await first.issue({
       userId: USER_A,
@@ -195,7 +195,7 @@ describe('SourceInviteService', () => {
       clock,
       new FixedTokenGenerator('bb'.repeat(32)),
       hasher,
-      new FakeStudents({ id: STUDENT_ID, name: 'Ava Lewis', studentExternalId: 'ava-lewis' })
+      new FakeStudents({ id: STUDENT_ID, name: 'Avery Sample', studentExternalId: 'avery-sample' })
     );
     await second.issue({
       userId: USER_A,
@@ -262,7 +262,7 @@ describe('SourceInviteService', () => {
         },
       },
       hasher,
-      new FakeStudents({ id: STUDENT_ID, name: 'Ava', studentExternalId: 'ava-lewis' })
+      new FakeStudents({ id: STUDENT_ID, name: 'Avery', studentExternalId: 'avery-sample' })
     );
     await service.issue({
       userId: USER_A,

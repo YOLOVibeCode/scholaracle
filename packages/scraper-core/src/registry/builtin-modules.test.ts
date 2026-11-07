@@ -24,7 +24,7 @@ describe('getBuiltinModules', () => {
       expect(matchHost(skywardHosts(), 'https://school.skyward.com/home')).toBe(true);
     });
 
-    it('matches skyward.iscorp.com portals (Ava Lewis portal)', () => {
+    it('matches skyward.iscorp.com portals (Avery Sample portal)', () => {
       expect(
         matchHost(
           skywardHosts(),

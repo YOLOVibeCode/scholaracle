@@ -14,7 +14,7 @@ One email, one token, two last-mile buttons:
 3. **Continue in browser** → `{webOrigin}/dashboard/install-source?t={token}`.
 4. Authenticated **redeem** returns metadata only. The user types the portal password on-device (app WebView or extension).
 
-Ava fixture: provider `skyward`, portal `https://skyward.iscorp.com`.
+Avery fixture: provider `skyward`, portal `https://skyward.iscorp.com`.
 
 Do not email binaries, `.command`, or JS. Google Classroom OAuth is a later `authMethod` on this envelope.
 

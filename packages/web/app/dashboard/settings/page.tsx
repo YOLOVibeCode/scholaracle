@@ -708,6 +708,8 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           disabled={isSaving || !isLoaded}
+                          aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                          aria-pressed={slot.enabled}
                           onClick={() => {
                             setWeekdaySlots((prev) =>
                               prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -779,6 +781,8 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             disabled={isSaving || !isLoaded}
+                            aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                            aria-pressed={slot.enabled}
                             onClick={() => {
                               setWeekendSlots((prev) =>
                                 prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -1057,6 +1061,7 @@ export default function SettingsPage() {
                       <input
                         id={`alert-${key}`}
                         type="checkbox"
+                        className="h-6 w-6 shrink-0 rounded border-gray-300"
                         checked={val.enabled}
                         onChange={(e) => setAlertType(key, e.target.checked, val.severity)}
                         disabled={isSaving || !isLoaded}
@@ -1086,6 +1091,7 @@ export default function SettingsPage() {
                 <input
                   id="prioritize-high"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={prioritizeHighImpact}
                   onChange={(e) => setPrioritizeHighImpact(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1096,6 +1102,7 @@ export default function SettingsPage() {
                 <input
                   id="emphasize-weak"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={emphasizeWeakSubjects}
                   onChange={(e) => setEmphasizeWeakSubjects(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1106,6 +1113,7 @@ export default function SettingsPage() {
                 <input
                   id="celebrate-wins"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={celebrateWins}
                   onChange={(e) => setCelebrateWins(e.target.checked)}
                   disabled={isSaving || !isLoaded}

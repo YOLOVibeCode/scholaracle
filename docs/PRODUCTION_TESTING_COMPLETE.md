@@ -47,20 +47,20 @@ All critical systems have been tested and verified. Scholaracle is **ready for p
 
 ---
 
-### 3. **User Configuration (rvegajr@noctusoft.com → Ava Lewis)**
+### 3. **User Configuration (rvegajr@noctusoft.com → Avery Sample)**
 
 | Aspect | Status | Details |
 |--------|--------|---------|
 | **User ID** | ✅ | `69a4f0c73671c632ca591c7c` |
-| **Student** | ✅ | Ava Lewis (`69a4f1b53671c632ca591c7f`) |
-| **Student Alert Email** | ✅ | `29alewis@ldisd.net` |
+| **Student** | ✅ | Avery Sample (`69a4f1b53671c632ca591c7f`) |
+| **Student Alert Email** | ✅ | `student.one@exampleisd.net` |
 | **Notification Frequency** | ✅ | `proactive` |
 | **Email Enabled** | ✅ | `true` |
 | **Digest Times** | ✅ | `05:28`, `05:29`, `05:30` |
 
 **Secondary Parents**:
-- ✅ **Robert Lewis** (`rmlewis1976@gmail.com`) — accepted, alerts: true
-- ✅ **Jessica Lewis** (`jdenise11@hotmail.com`) — accepted, alerts: true
+- ✅ **Robin Sample** (`coparent.one@example.com`) — accepted, alerts: true
+- ✅ **Jamie Sample** (`coparent.two@example.com`) — accepted, alerts: true
 
 ---
 
@@ -121,9 +121,9 @@ All critical systems have been tested and verified. Scholaracle is **ready for p
 **Expected Behavior**:
 | Recipient | Email | Type | Tone |
 |-----------|-------|------|------|
-| Ava Lewis | 29alewis@ldisd.net | `student` | Student-toned |
-| Robert Lewis | rmlewis1976@gmail.com | `parent` | Parent-toned |
-| Jessica Lewis | jdenise11@hotmail.com | `parent` | Parent-toned |
+| Avery Sample | student.one@exampleisd.net | `student` | Student-toned |
+| Robin Sample | coparent.one@example.com | `parent` | Parent-toned |
+| Jamie Sample | coparent.two@example.com | `parent` | Parent-toned |
 | Owner (Ricky) | rvegajr@noctusoft.com | `parent` | Parent-toned |
 
 **Configuration**: ✅ All recipients configured with correct `recipientType` and `receiveAlerts: true`
@@ -173,7 +173,7 @@ All critical systems have been tested and verified. Scholaracle is **ready for p
 - [x] Sync pipeline verified with production data
 
 ### ⬜ Manual Verification Recommended
-- [ ] Trigger test sync for Ava (optional — syncs already working)
+- [ ] Trigger test sync for Avery (optional — syncs already working)
 - [ ] Wait for next digest time slot to verify email delivery
 - [ ] Test password reset by checking email inbox
 - [ ] Verify grade bar displays in email client

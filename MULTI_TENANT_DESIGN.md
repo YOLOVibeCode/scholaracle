@@ -2,9 +2,9 @@
 
 ## Problem
 
-**Before:** `Student.studentId` used raw external IDs like `"ava-lewis"`, which could collide across:
+**Before:** `Student.studentId` used raw external IDs like `"avery-sample"`, which could collide across:
 - Different users with students of the same name
-- Different institutions (two "ava-lewis" students at different schools)
+- Different institutions (two "avery-sample" students at different schools)
 - Different data sources
 
 This created a **critical security vulnerability** where User A could potentially access User B's student data if their external IDs collided.
@@ -16,14 +16,14 @@ This created a **critical security vulnerability** where User A could potentiall
 ```typescript
 {
   userId: ObjectId,           // Owner of this student
-  name: "Ava Lewis",
-  studentId: "ldisd.instructure.com:ava-lewis",  // Composite: "institution:student"
+  name: "Avery Sample",
+  studentId: "exampleisd.instructure.com:avery-sample",  // Composite: "institution:student"
   dataSources: [
     {
-      id: "canvas-ava-lewis",
+      id: "canvas-avery-sample",
       provider: "canvas",
       pluginId: "canvas-browser",
-      baseUrl: "https://ldisd.instructure.com"
+      baseUrl: "https://exampleisd.instructure.com"
     }
   ]
 }
@@ -36,12 +36,12 @@ studentId = "${institutionExternalId}:${studentExternalId}"
 ```
 
 **Examples:**
-- `"ldisd.instructure.com:ava-lewis"` - Canvas at LDISD
-- `"skyward.ldisd.edu:12345"` - Skyward SIS at LDISD
-- `"classroom.google.com:ava@school.edu"` - Google Classroom
+- `"exampleisd.instructure.com:avery-sample"` - Canvas at EXAMPLEISD
+- `"skyward.exampleisd.edu:12345"` - Skyward SIS at EXAMPLEISD
+- `"classroom.google.com:avery@school.edu"` - Google Classroom
 
 **Backwards Compatibility:**
-- If no institution is provided: `studentId = "ava-lewis"` (legacy format)
+- If no institution is provided: `studentId = "avery-sample"` (legacy format)
 - Queries parse the composite key and match accordingly
 
 ### Data Storage (slc_* collections)
@@ -53,8 +53,8 @@ Each ingested entity stores both fields separately:
   "userId": "69a4f0c73671c632ca591c7c",
   "provider": "canvas",
   "adapterId": "canvas-browser",
-  "studentExternalId": "ava-lewis",
-  "institutionExternalId": "ldisd.instructure.com",
+  "studentExternalId": "avery-sample",
+  "institutionExternalId": "exampleisd.instructure.com",
   "externalId": "canvas-12242-assignment-68",
   "record": { /* assignment data */ }
 }
@@ -90,7 +90,7 @@ const query = {
 ✅ No cross-user data leakage possible
 
 ### 2. Institution Isolation
-✅ Composite key prevents "ava-lewis" at School A from matching "ava-lewis" at School B
+✅ Composite key prevents "avery-sample" at School A from matching "avery-sample" at School B
 ✅ Students from different institutions are distinct entities
 
 ### 3. Database Constraint
@@ -104,7 +104,7 @@ const query = {
 ## Migration Strategy
 
 ### Existing Data
-- Legacy students with `studentId = "ava-lewis"` continue to work
+- Legacy students with `studentId = "avery-sample"` continue to work
 - Queries handle both formats (composite and simple)
 - No data migration required
 
@@ -140,22 +140,22 @@ const query = {
 
 ### Scenario 1: Same student name, different users
 ```
-User A: student "ava-lewis" → studentId: "schoolA.com:ava-lewis"
-User B: student "ava-lewis" → studentId: "schoolB.com:ava-lewis"
+User A: student "avery-sample" → studentId: "schoolA.com:avery-sample"
+User B: student "avery-sample" → studentId: "schoolB.com:avery-sample"
 Result: ✅ Two distinct Student records, no collision
 ```
 
 ### Scenario 2: Same institution, different students
 ```
-User A: student "ava-lewis" → studentId: "ldisd.com:ava-lewis"
-User A: student "emma-smith" → studentId: "ldisd.com:emma-smith"
+User A: student "avery-sample" → studentId: "exampleisd.com:avery-sample"
+User A: student "emma-smith" → studentId: "exampleisd.com:emma-smith"
 Result: ✅ Two distinct Student records for same user
 ```
 
 ### Scenario 3: Cross-user query attempt
 ```
-User A queries studentId "schoolB.com:ava-lewis" (belongs to User B)
-Query: { userId: UserA, studentId: "schoolB.com:ava-lewis" }
+User A queries studentId "schoolB.com:avery-sample" (belongs to User B)
+Query: { userId: UserA, studentId: "schoolB.com:avery-sample" }
 Result: ✅ No match, no data leakage
 ```
 
