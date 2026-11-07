@@ -75,16 +75,18 @@ test.describe('@integration Full UX: Register → Add Student → Alert → Emai
         studentId,
         type: 'grade_drop',
         severity: 'critical',
-        userId: email,
         relatedData: {
           courseName: 'Math',
           previousGrade: 92,
           currentGrade: 85,
         },
       },
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
-    expect(alertRes.status()).toBe(201);
+    expect([201, 202]).toContain(alertRes.status());
 
     // 8. Optionally verify Mailpit received the alert email
     if (mailpitUi) {

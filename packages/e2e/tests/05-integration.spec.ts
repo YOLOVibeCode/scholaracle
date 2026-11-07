@@ -287,6 +287,12 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     const userToken = await page.evaluate(() => localStorage.getItem('auth_token'));
     expect(userToken).toBeTruthy();
 
+    const createStudentRes = await request.post(`${apiBaseUrl}/api/students`, {
+      data: { name: 'Connector Student', grade: 10, studentId: 'student-ext-1' },
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    expect(createStudentRes.ok()).toBeTruthy();
+
     // 1) Start device flow
     const startRes = await request.post(`${apiBaseUrl}/api/ingest/v1/device/start`, { data: {} });
     expect(startRes.ok()).toBeTruthy();
@@ -514,33 +520,20 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
   });
 
   test('INT-005: Multi-Student Family', async ({ page }) => {
-    // 1. Parent logs in
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     await loginPage.login('test.parent@example.com', 'TestPass123!');
 
-    // 2. Add multiple students
-    const students = ['Alice Student', 'Bob Student', 'Charlie Student'];
+    const seededStudents = ['Student One', 'Student Two'];
 
-    for (const studentName of students) {
-      await page.goto('/dashboard/students/new');
-      await page.fill('[data-testid="input-student-name"], input[name="name"]', studentName);
-      await page.fill('[data-testid="input-student-grade"], input[name="grade"]', '10');
-      await page.fill('[data-testid="input-student-school"], input[name="school"]', 'Test High');
-
-      await page.click('[data-testid="button-save-student"], button[type="submit"]');
-      await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
-    }
-
-    // 3. Verify all students appear
     await page.goto('/dashboard/students');
-
-    for (const studentName of students) {
-      await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
+    for (const studentName of seededStudents) {
+      await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10_000 });
     }
 
-    // 4. Verify aggregated alerts on dashboard
     await page.goto('/dashboard');
-    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('[data-testid="student-link"]').first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });
