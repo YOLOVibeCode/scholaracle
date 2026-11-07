@@ -1,37 +1,38 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db, ObjectId } from 'mongodb';
+import { type Db, ObjectId } from 'mongodb';
 import { AlertRepository } from '@scholaracle/database';
 import { AuthService } from '@scholaracle/auth';
 import { alertsApiRouter } from '../alerts-api/alerts-api';
 import { authMiddleware } from '../../middleware/auth';
-import { createErrorHandler } from '../../middleware/errorHandler';
+import { closeTestApp, createTestApp } from '../../test-utils/createTestApp';
 
 describe('Alerts API Routes', () => {
   let app: Express;
   let database: Db;
-  let mongoClient: MongoClient;
   let authService: AuthService;
   let testToken: string;
   let testUserId: string;
+  let testHarness: Awaited<ReturnType<typeof createTestApp>>;
 
   beforeAll(async () => {
-    // Connect to test database
-    const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
-    const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle_test';
-
-    try {
-      mongoClient = new MongoClient(mongodbUri);
-      await mongoClient.connect();
-      database = mongoClient.db(dbName);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('MongoDB not available, skipping integration tests');
+    testHarness = await createTestApp({
+      skipOnConnectFailure: true,
+      configure: ({ app: testApp, database: db }) => {
+        authService = new AuthService(db);
+        app = testApp;
+        database = db;
+        testApp.use(
+          '/api/alerts-api',
+          authMiddleware(authService),
+          alertsApiRouter({ database: db })
+        );
+      },
+    });
+    if (!testHarness) {
       return;
     }
 
-    // Create test user and get token
-    authService = new AuthService(database);
     const registerResult = await authService.register(
       'test@example.com',
       'password123',
@@ -41,17 +42,11 @@ describe('Alerts API Routes', () => {
       testUserId = registerResult.user.id;
       testToken = registerResult.token ?? '';
     }
-
-    // Setup Express app with routes
-    app = express();
-    app.use(express.json());
-    app.use('/api/alerts-api', authMiddleware(authService), alertsApiRouter({ database }));
-    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
-    if (mongoClient) {
-      await mongoClient.close();
+    if (testHarness) {
+      await closeTestApp(testHarness);
     }
   });
 
