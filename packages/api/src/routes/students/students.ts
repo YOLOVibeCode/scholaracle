@@ -5,6 +5,8 @@ import {
   StudentRepository,
   IngestSourceRepository,
   IngestRunRepository,
+  SlcBindingRepository,
+  PortalAccountRepository,
   AlertRepository,
   SubscriptionRepository,
   UserRepository,
@@ -328,6 +330,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
+  const bindingRepository = new SlcBindingRepository(config.database);
+  const portalAccountRepository = new PortalAccountRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
   const subscriptionRepository = new SubscriptionRepository(config.database);
@@ -3248,30 +3252,33 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const sources: ISourceListItem[] = [];
+      const bindings = await bindingRepository.findByStudentId(student.dataUserId(), studentId);
 
-      for (const ds of student.dataSources) {
+      for (const binding of bindings) {
         const ingestSource = await ingestSourceRepository.findByUserIdAndSourceId(
           student.dataUserId(),
-          ds.id
+          binding.sourceId
         );
         if (!ingestSource) continue;
+        const ds = student.dataSources.find((row) => row.id === binding.sourceId);
         sources.push({
-          id: ds.id,
-          pluginId: ds.pluginId,
+          id: binding.sourceId,
+          pluginId: ingestSource.adapterId,
           provider: ingestSource.provider,
           displayName: ingestSource.displayName,
           portalBaseUrl: ingestSource.portalBaseUrl,
-          enabled: ds.enabled,
-          schedule: ds.schedule ?? 'manual',
-          dataTypes: ds.dataTypes ? [...ds.dataTypes] : [],
-          status: ds.status ?? 'active',
-          hasCredentials: Boolean(ds.credentials?.encrypted),
-          lastScraped: ds.lastScraped?.toISOString(),
-          lastSuccess: ds.lastSuccess?.toISOString(),
-          lastSuccessAt: ds.lastSuccessAt?.toISOString(),
-          lastRunId: ds.lastRunId,
-          lastCounts: ds.lastCounts,
-          lastError: ds.lastError ?? null,
+          enabled: ds?.enabled ?? true,
+          schedule: ds?.schedule ?? 'manual',
+          dataTypes: ds?.dataTypes ? [...ds.dataTypes] : [],
+          status: ds?.status ?? 'active',
+          hasCredentials: Boolean(ds?.credentials?.encrypted),
+          lastScraped: ds?.lastScraped?.toISOString(),
+          lastSuccess: ds?.lastSuccess?.toISOString(),
+          lastSuccessAt: ds?.lastSuccessAt?.toISOString(),
+          lastRunId: ds?.lastRunId,
+          lastCounts: ds?.lastCounts,
+          lastError: ds?.lastError ?? null,
+          portalAccountId: binding.portalAccountId,
         });
       }
 
@@ -3313,6 +3320,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         adapterId: body.adapterId,
         displayName: body.displayName,
         portalBaseUrl: body.portalBaseUrl || undefined,
+      });
+
+      const portalUrl = body.portalBaseUrl?.trim() ?? `https://manual.${body.provider}.local`;
+      const institutionExternalId =
+        portalUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || 'manual';
+      const portalAccount = await portalAccountRepository.upsertByHost({
+        userId: student.dataUserId(),
+        provider: body.provider,
+        adapterId: body.adapterId,
+        portalBaseUrl: portalUrl,
+        institutionExternalId,
+        displayName: body.displayName,
+      });
+      const studentExternalId =
+        student.studentId?.split(':', 2).pop() ?? student.studentId ?? studentId;
+      await bindingRepository.upsert({
+        userId: student.dataUserId(),
+        portalAccountId: portalAccount.portalAccountId,
+        studentId,
+        sourceId,
+        studentExternalId,
       });
 
       const newDataSource: IDataSource = {

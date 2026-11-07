@@ -1,1 +1,6 @@
-export { AiUsageRepository, type AiFeature, type IAiUsageRecord } from './AiUsageRepository';
+export {
+  AiUsageRepository,
+  type AiFeature,
+  type IAiUsageRecord,
+  type IAiUsageCostRecord,
+} from './AiUsageRepository';

@@ -16,6 +16,10 @@ import {
   sourceIdForStudent,
   type IConnectedSourceStore,
 } from '../sources/ConnectedSourceStore';
+import {
+  registerHouseholdBinding,
+  type IHouseholdBindingRegistrar,
+} from '../sources/registerHouseholdBinding';
 import { saveCredential } from '../credentials/saveCredential';
 import { extractHostname } from '../utils/urlNormalize';
 import {
@@ -35,6 +39,8 @@ export interface IOnboardingSourceRegistrar {
 export interface IApplyOnboardingDeps {
   readonly createStudent: IOnboardingStudentWriter['createStudent'];
   readonly registerIngestSource: IOnboardingSourceRegistrar['registerIngestSource'];
+  readonly upsertPortalAccount?: IHouseholdBindingRegistrar['upsertPortalAccount'];
+  readonly upsertPortalBinding?: IHouseholdBindingRegistrar['upsertPortalBinding'];
   readonly sources: IConnectedSourceStore;
 }
 
@@ -100,28 +106,48 @@ export async function applyOnboarding(
     students.push(created);
     const studentMongoId = created.id;
     const studentExternalId = created.studentId ?? studentMongoId;
-    await deps.sources.upsert({
+    const sourceId = sourceIdForStudent(provider, institutionExternalId, studentMongoId);
+    const connected = {
       provider,
       adapterId,
       baseUrl: portalUrl,
-      sourceId: sourceIdForStudent(provider, institutionExternalId, studentMongoId),
+      sourceId,
       credentialKey,
       studentExternalId,
       institutionExternalId,
       studentId: studentMongoId,
       adapterVersion: '0.1.0',
-    });
-    try {
-      await deps.registerIngestSource({
-        sourceId: sourceIdForStudent(provider, institutionExternalId, studentMongoId),
-        provider,
-        adapterId,
-        displayName: `${providerLabel(provider)} (${institutionExternalId})`,
-        portalBaseUrl: portalUrl,
-      });
-    } catch {
-      // Sync-time re-register heals this.
+    } as const;
+    const displayName = `${providerLabel(provider)} (${institutionExternalId})`;
+    let portalAccountId: string | undefined;
+    if (deps.upsertPortalAccount && deps.upsertPortalBinding) {
+      try {
+        portalAccountId = await registerHouseholdBinding({
+          source: connected,
+          displayName,
+          registrar: {
+            upsertPortalAccount: deps.upsertPortalAccount,
+            upsertPortalBinding: deps.upsertPortalBinding,
+            registerIngestSource: deps.registerIngestSource,
+          },
+        });
+      } catch {
+        // Sync-time binding registration can heal offline onboarding.
+      }
+    } else {
+      try {
+        await deps.registerIngestSource({
+          sourceId,
+          provider,
+          adapterId,
+          displayName,
+          portalBaseUrl: portalUrl,
+        });
+      } catch {
+        // Sync-time re-register heals this.
+      }
     }
+    await deps.sources.upsert({ ...connected, portalAccountId });
   }
 
   if (students.length === 0) {
