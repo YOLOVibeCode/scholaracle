@@ -1,4 +1,5 @@
 import { MongoClient, type Db } from 'mongodb';
+import { ConflictError } from '@scholaracle/contracts';
 import { IngestRunRepository } from './IngestRunRepository';
 
 describe('IngestRunRepository', () => {
@@ -104,6 +105,7 @@ describe('IngestRunRepository', () => {
       runId: 'run-a',
       lastCursor: null,
     });
+    await repo.markUploaded('user-1', 'run-a', { opCount: 0 });
     await repo.commitRun({
       userId: 'user-1',
       runId: 'run-a',
@@ -119,6 +121,7 @@ describe('IngestRunRepository', () => {
       runId: 'run-b',
       lastCursor: { type: 'opaque', value: 'c1' },
     });
+    await repo.markUploaded('user-1', 'run-b', { opCount: 0 });
     await repo.commitRun({
       userId: 'user-1',
       runId: 'run-b',
@@ -136,6 +139,7 @@ describe('IngestRunRepository', () => {
       runId: 'run-src1',
       lastCursor: null,
     });
+    await repo.markUploaded('user-1', 'run-src1', { opCount: 0 });
     await repo.commitRun({
       userId: 'user-1',
       runId: 'run-src1',
@@ -148,6 +152,7 @@ describe('IngestRunRepository', () => {
       runId: 'run-src2',
       lastCursor: null,
     });
+    await repo.markUploaded('user-1', 'run-src2', { opCount: 0 });
     await repo.commitRun({
       userId: 'user-1',
       runId: 'run-src2',
@@ -216,5 +221,52 @@ describe('IngestRunRepository', () => {
     expect(run!.status).toBe('failed');
     expect(run!.error).toBe('session expired');
     expect(run!.clientMeta).toEqual({ clientType: 'mobile', coreVersion: '0.1.0' });
+  });
+
+  it('rejects duplicate runId on startRun', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-dup',
+      lastCursor: null,
+    });
+
+    await expect(
+      repo.startRun({
+        userId: 'user-1',
+        sourceId: 'src-1',
+        runId: 'run-dup',
+        lastCursor: null,
+      })
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('commitRun returns false when envelope was not uploaded', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-no-upload',
+      lastCursor: null,
+    });
+
+    const committed = await repo.commitRun({
+      userId: 'user-1',
+      runId: 'run-no-upload',
+      newCursor: null,
+    });
+    expect(committed).toBe(false);
+  });
+
+  it('markUploaded returns false when run is not started', async () => {
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-twice',
+      lastCursor: null,
+    });
+    const first = await repo.markUploaded('user-1', 'run-twice', { opCount: 1 });
+    const second = await repo.markUploaded('user-1', 'run-twice', { opCount: 2 });
+    expect(first).toBe(true);
+    expect(second).toBe(false);
   });
 });
