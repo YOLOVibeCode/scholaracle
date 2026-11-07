@@ -9,7 +9,7 @@ import {
   type SubscriptionPlan,
 } from '@scholaracle/database';
 import { AdminAuthService, AuthService } from '@scholaracle/auth';
-import { NotFoundError, ValidationError } from '@scholaracle/contracts';
+import { NotFoundError, ValidationError, maskEmail, maskPhone } from '@scholaracle/contracts';
 import type { IPasswordChangedEmailSender } from '../../../services/PasswordChangedEmailSender';
 import {
   adminAuthMiddleware,
@@ -18,22 +18,7 @@ import {
 import { requireAdminStepUp } from '../../../middleware/adminStepUp';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 
-// ---------------------------------------------------------------------------
-// Data masking utilities
-// ---------------------------------------------------------------------------
-
-/** Mask email: "user@example.com" → "u***@example.com" */
-export function maskEmail(email: string): string {
-  const [local, domain] = email.split('@');
-  if (!local || !domain) return '***';
-  return `${local[0]}***@${domain}`;
-}
-
-/** Mask phone: "+15551234567" → "+1***4567" */
-export function maskPhone(phone: string): string {
-  if (phone.length <= 4) return '***';
-  return `${phone.slice(0, 2)}***${phone.slice(-4)}`;
-}
+export { maskEmail, maskPhone };
 
 export interface ICustomersRouterConfig {
   readonly database: Db;

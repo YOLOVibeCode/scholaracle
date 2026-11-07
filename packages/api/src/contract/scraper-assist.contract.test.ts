@@ -6,10 +6,10 @@ import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import { ConnectorDeviceRepository } from '@scholaracle/database';
 import { createScraperAssistRouter } from '../routes/ingest/v1/scraperAssist';
 import { createErrorHandler } from '../middleware/errorHandler';
 import { assertKeys } from './assertExactKeys';
-import { seedActiveConnectorJti } from '../testHelpers/connectorDeviceTestSeed';
 
 jest.mock('@scholaracle/agents', () => ({
   LlmClient: jest.fn().mockImplementation(() => ({
@@ -42,10 +42,16 @@ describe('scraper-assist API contract (CLI client)', () => {
     app.use('/api/ingest/v1/ai', createScraperAssistRouter({ database, jwtSecret }));
     app.use(createErrorHandler());
     const tokenService = new ConnectorTokenService(jwtSecret);
-    const deviceId = 'contract-cli-device';
-    const jti = 'jti-cli-contract';
-    await seedActiveConnectorJti(database, 'contract-cli-user', deviceId, jti);
-    connectorToken = tokenService.createToken('contract-cli-user', jti, deviceId);
+    connectorToken = tokenService.createToken(
+      'contract-cli-user',
+      'jti-cli-contract',
+      'contract-device'
+    );
+    await new ConnectorDeviceRepository(database).upsertActiveToken({
+      userId: 'contract-cli-user',
+      deviceId: 'contract-device',
+      activeJti: 'jti-cli-contract',
+    });
   });
 
   afterAll(async () => {

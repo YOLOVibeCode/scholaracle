@@ -11,7 +11,7 @@ import {
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../../middleware/rateLimit';
 import { recordAiUsage } from '../../../services/ai-rate-limit';
-import { getScraperSystemPrompt } from '../../../services/scraper-generator/prompts';
+import { getScraperSystemPrompt } from './scraperAssistPrompts';
 
 const DEFAULT_DAILY_LIMIT = 40;
 const BURST_WINDOW_MS = 60_000;

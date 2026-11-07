@@ -6,6 +6,7 @@
  */
 
 import type {
+  ISanitizedPageSkeletonCapture,
   ISlcIngestEnvelopeV1,
   ISlcDeltaOp,
   ISlcRunCoverage,
@@ -99,6 +100,16 @@ export interface IIngestUploader {
    * before upload). Optional — implementations may no-op this.
    */
   reportFailure?(runId: string, sourceId: string, error: string): Promise<void>;
+
+  /**
+   * Upload a sanitized page skeleton captured after a failed portal recipe step.
+   * Optional — mobile implements; other clients may no-op.
+   */
+  uploadSkeleton?(
+    runId: string,
+    sourceId: string,
+    payload: ISanitizedPageSkeletonCapture
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,4 +213,6 @@ export interface IClientScrapeHost {
   readonly resolver?: IScraperResolver;
   /** Emit progress events back to the caller UI. */
   readonly onProgress?: SyncProgressCallback;
+  /** When true, failed portal steps capture a sanitized DOM skeleton and upload it. */
+  readonly captureSkeletons?: boolean;
 }

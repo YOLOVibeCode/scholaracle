@@ -11,7 +11,9 @@ const EXTRACTORS = [
   'aeries/aeries-extractors.ts',
   'skyward/skyward-extractors.ts',
   'canvas/canvas-extractors.ts',
-].map((f) => join(__dirname, '..', 'extractors', f));
+]
+  .map((f) => join(__dirname, '..', 'extractors', f))
+  .concat(join(__dirname, 'captureSkeleton.ts'));
 
 function moduleLevelNames(): Set<string> {
   const names = new Set<string>();
