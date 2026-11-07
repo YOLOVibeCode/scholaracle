@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth';
+import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function ForgotPasswordForm() {
   const searchParams = useSearchParams();
@@ -56,21 +57,11 @@ function ForgotPasswordForm() {
         </CardHeader>
         <form data-testid="form-forgot-password" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && (
-              <div
-                data-testid="message-error"
-                className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200"
-              >
-                {error}
-              </div>
-            )}
+            {error && <FormErrorAlert>{error}</FormErrorAlert>}
             {success && (
-              <div
-                data-testid="message-success"
-                className="rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-200"
-              >
+              <FormStatusAlert variant="success" data-testid="message-success">
                 If an account exists for that email, we&apos;ve sent a password reset link. Check your inbox.
-              </div>
+              </FormStatusAlert>
             )}
             {!success && (
               <div className="space-y-2">

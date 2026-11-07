@@ -189,6 +189,14 @@ export default defineConfig({
       },
       timeout: 90 * 1000,
     },
+    // WCAG 2.2 AA baseline (axe-core) on parent dashboard surfaces
+    {
+      name: 'a11y',
+      testMatch: /14-a11y-baseline\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 90 * 1000,
+    },
     // Fake Aeries/Skyward portal + scraper recipes (no app stack; needs e2e-fake-portal on 2855)
     {
       name: 'fake-portal',
