@@ -411,11 +411,9 @@ const SKYWARD_NAV =
  * Recipe must click Gradebook before courses appear.
  */
 export function buildM402SkywardHomeHtml(): string {
-  return (
-    '<div class="sf_headerName">Test Student</div><div id="schoolName">Example High School</div>' +
-    SKYWARD_NAV +
-    '<main><p>Family Access Home</p></main>'
-  );
+  return `<div class="sf_headerName">Test Student</div><div id="schoolName">Example High School</div>${
+    SKYWARD_NAV
+  }<main><p>Family Access Home</p></main>`;
 }
 
 /** Courses + grid + dialog + missing slice (no outer nav). */
@@ -454,15 +452,15 @@ export function buildM402SkywardGradebookHtml(
 
 export function buildM402SkywardAttendanceBody(): string {
   return (
-    `<table><tr><th>Attendance</th><th>Period</th><th>Status</th><th>Course</th></tr>` +
-    `<tr><td>Sep 05 2026</td><td>1</td><td>P</td><td>Algebra I</td></tr></table>`
+    '<table><tr><th>Attendance</th><th>Period</th><th>Status</th><th>Course</th></tr>' +
+    '<tr><td>Sep 05 2026</td><td>1</td><td>P</td><td>Algebra I</td></tr></table>'
   );
 }
 
 export function buildM402SkywardScheduleBody(): string {
   return (
-    `<table><tr><th>Term 1</th></tr>` +
-    `<tr><td>Period 1 (8:00 AM - 8:50 AM)</td><td style="background:#eee">Algebra I<br/>Smith<br/>Room 101</td></tr></table>`
+    '<table><tr><th>Term 1</th></tr>' +
+    '<tr><td>Period 1 (8:00 AM - 8:50 AM)</td><td style="background:#eee">Algebra I<br/>Smith<br/>Room 101</td></tr></table>'
   );
 }
 
@@ -477,13 +475,20 @@ export function buildM402SkywardScheduleSection(): string {
 export const FAKE_PORTAL_SKYWARD_GRADEBOOK_PATH =
   '/scripts/wsisa.dll/WService=fake-portal/sfgradebook001.w';
 
+export interface IM402SimAeriesDriverOptions {
+  readonly gradebookHtmlForGn?: (gradebookNumber: string) => string;
+}
+
 /** Jsdom driver: swaps document per URL like the fake Express portal. */
 export class M402SimAeriesDriver implements IPageDriver {
   readonly visited: string[] = [];
   private current: 'A' | 'B' = 'A';
   private currentUrl: string;
 
-  constructor(private readonly studentRoot: string) {
+  constructor(
+    private readonly studentRoot: string,
+    private readonly options?: IM402SimAeriesDriverOptions
+  ) {
     this.currentUrl = `${studentRoot}Dashboard.aspx`;
   }
 
@@ -505,7 +510,8 @@ export class M402SimAeriesDriver implements IPageDriver {
         this.current === 'A' ? buildM402AeriesAttendanceSync() : '<table id="tblNewFlex"></table>';
     else if (path.startsWith('Widgets/ClassSummary/RedirectToGradebook')) {
       const gn = new URL(url).searchParams.get('GradebookNumber') ?? '';
-      document.body.innerHTML = buildM402AeriesGradebook(gn);
+      const html = this.options?.gradebookHtmlForGn?.(gn) ?? buildM402AeriesGradebook(gn);
+      document.body.innerHTML = html;
     } else document.body.innerHTML = '<p>Not Found</p>';
   }
 

@@ -73,24 +73,29 @@ describe('fakePortalM402 expected counts', () => {
     const driver = new M402SimAeriesDriver(AERIES_ROOT);
     const result = await runAeriesRecipe(driver, AERIES_ROOT);
 
-    expect(result.students.map((s) => s.name)).toEqual([...FAKE_PORTAL_AERIES_EXPECTED.studentNames]);
+    expect(result.students.map((s) => s.name)).toEqual([
+      ...FAKE_PORTAL_AERIES_EXPECTED.studentNames,
+    ]);
     const [ann, ben] = result.students;
     expect(ann!.courses).toHaveLength(FAKE_PORTAL_AERIES_EXPECTED.ann.courseCount);
-    expect(
-      ann!.courses.reduce((n, c) => n + c.assignments.length, 0)
-    ).toBe(FAKE_PORTAL_AERIES_EXPECTED.ann.totalAssignments);
+    expect(ann!.courses.reduce((n, c) => n + c.assignments.length, 0)).toBe(
+      FAKE_PORTAL_AERIES_EXPECTED.ann.totalAssignments
+    );
     expect(ann!.attendance).toHaveLength(FAKE_PORTAL_AERIES_EXPECTED.ann.attendanceCount);
 
     expect(ben!.courses).toHaveLength(FAKE_PORTAL_AERIES_EXPECTED.ben.courseCount);
-    expect(
-      ben!.courses.reduce((n, c) => n + c.assignments.length, 0)
-    ).toBe(FAKE_PORTAL_AERIES_EXPECTED.ben.totalAssignments);
+    expect(ben!.courses.reduce((n, c) => n + c.assignments.length, 0)).toBe(
+      FAKE_PORTAL_AERIES_EXPECTED.ben.totalAssignments
+    );
     expect(ben!.attendance).toHaveLength(FAKE_PORTAL_AERIES_EXPECTED.ben.attendanceCount);
   });
 
   it('matches runSkywardRecipe on M402 Skyward html', async () => {
     mountSkywardFixture();
-    const extract = await runSkywardRecipe(new SkywardJsdomDriver(), 'https://skyward.example.test');
+    const extract = await runSkywardRecipe(
+      new SkywardJsdomDriver(),
+      'https://skyward.example.test'
+    );
 
     expect(extract.courses).toHaveLength(FAKE_PORTAL_SKYWARD_EXPECTED.courseCount);
     expect(extract.assignments).toHaveLength(FAKE_PORTAL_SKYWARD_EXPECTED.assignmentRowCount);

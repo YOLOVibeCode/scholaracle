@@ -132,6 +132,10 @@ export async function createIndexes(database: Db): Promise<void> {
     { unique: true }
   );
 
+  const servedSelectorPatches = database.collection('served_selector_patches');
+  await servedSelectorPatches.createIndex({ patchId: 1 }, { unique: true });
+  await servedSelectorPatches.createIndex({ portalHost: 1, status: 1, servedAt: -1 });
+
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });

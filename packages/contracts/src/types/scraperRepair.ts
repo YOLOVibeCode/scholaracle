@@ -29,3 +29,26 @@ export const SCRAPER_REPAIR_GAP_KINDS: readonly SlcSyncGapKind[] = [
   'no_assignments',
   'no_grade',
 ];
+
+export type SelectorPatchLifecycleStatus = 'served' | 'verified' | 'failed';
+
+/** Device-fetchable selector patch row after server replay verification. */
+export interface ISlcServedSelectorPatch {
+  readonly patchId: string;
+  readonly portalHost: string;
+  readonly recipeId: string;
+  readonly step: string;
+  readonly selectors: Readonly<Record<string, string>>;
+  readonly status: SelectorPatchLifecycleStatus;
+}
+
+export interface IRemoteSelectorPatchesFlags {
+  readonly remoteSelectorPatches: boolean;
+  readonly killSwitch: boolean;
+}
+
+export interface IServedSelectorPatchesResponse {
+  readonly success: boolean;
+  readonly flags: IRemoteSelectorPatchesFlags;
+  readonly patches: readonly ISlcServedSelectorPatch[];
+}

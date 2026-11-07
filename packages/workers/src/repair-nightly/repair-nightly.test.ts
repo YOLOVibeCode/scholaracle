@@ -30,7 +30,10 @@ describe('runRepairNightly', () => {
       baseUrl: 'https://x',
       model: 'm',
     }));
-    mockRunProposal = jest.fn().mockResolvedValue({ status: 'proposed' });
+    mockRunProposal = jest.fn().mockResolvedValue({
+      status: 'proposed',
+      patch: { selectors: { row: '.grade-row' } },
+    });
   });
 
   const baseDeps = () => ({
@@ -64,6 +67,28 @@ describe('runRepairNightly', () => {
     });
     expect(n).toBe(0);
     expect(mockRunProposal).not.toHaveBeenCalled();
+  });
+
+  it('invokes verifyAndServe after a proposal when configured', async () => {
+    await database.collection('repair_candidates').insertOne({
+      portalHost: 'h.example',
+      recipeId: 'aeries',
+      step: 'aeries.gradebook.assignments',
+      skeletonHash: 'f'.repeat(64),
+      gapKind: 'no_grade_no_assignments',
+      seenCount: 1,
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+    });
+    const verifyAndServe = jest.fn().mockResolvedValue('served');
+    await runRepairNightly(database, {
+      ...baseDeps(),
+      verifyAndServe,
+    });
+    expect(verifyAndServe).toHaveBeenCalledWith(
+      expect.objectContaining({ step: 'aeries.gradebook.assignments' }),
+      { row: '.grade-row' }
+    );
   });
 
   it('invokes repair when skeleton is present', async () => {

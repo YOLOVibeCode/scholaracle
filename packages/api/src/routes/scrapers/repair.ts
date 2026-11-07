@@ -2,7 +2,7 @@ import express, { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { AdminAuthService } from '@scholaracle/auth';
-import { ValidationError } from '@scholaracle/contracts';
+import { ERROR_CODES, ValidationError } from '@scholaracle/contracts';
 import { runScraperRepairProposal } from '@scholaracle/agents';
 import { selectorTableJsonForRecipe } from '../../services/scraperRepair/selectorTableForRecipe';
 import { adminAuthMiddleware } from '../../middleware/adminAuth';
@@ -10,6 +10,7 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../middleware/rateLimit';
 import { checkScraperRepairPlanQuota } from '../../services/scraperRepair/scraperRepairQuota';
 import { loadSkeletonByHash } from '../../services/scraperRepair/loadSkeleton';
+import { verifyAndServeProposal } from '../../services/selectorPatches/verifyAndServeProposal';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
 
 const MAX_SKELETON_BYTES = 200 * 1024;
@@ -109,10 +110,24 @@ export function createScrapersRepairRouter(config: IScrapersRepairRouterConfig):
         });
         return;
       }
+      if (result.status === 'budget_exceeded') {
+        res.status(402).json({
+          success: false,
+          error: 'LLM relay monthly budget exceeded',
+          code: ERROR_CODES.AI_BUDGET,
+        });
+        return;
+      }
+
+      let serveStatus: string | undefined;
+      if (result.status === 'proposed' && result.patch) {
+        serveStatus = await verifyAndServeProposal(config.database, body, result.patch.selectors);
+      }
 
       res.status(200).json({
         success: true,
         status: result.status,
+        ...(serveStatus ? { serveStatus } : {}),
         ...(result.patch ? { proposal: result.patch } : {}),
       });
     })

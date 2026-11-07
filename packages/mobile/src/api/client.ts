@@ -35,6 +35,7 @@ import type {
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
   ISanitizedPageSkeletonCapture,
+  IServedSelectorPatchesResponse,
   IPortalAccountUpsertRequest,
   IPortalAccountUpsertResponse,
   IPortalBindingUpsertRequest,
@@ -495,6 +496,33 @@ export class ScholarmancyApiClient {
    * GET /api/students/:id/sources filters the source out and the sync
    * history stays empty. Safe to call repeatedly.
    */
+  async listIngestConnectorSources(
+    connectorToken: string
+  ): Promise<readonly { readonly portalBaseUrl?: string }[]> {
+    const res = await this._connectorFetch(
+      '/api/ingest/v1/sources',
+      { method: 'GET' },
+      connectorToken
+    );
+    if (!res.ok) throw await ApiError.fromResponse(res, 'List ingest sources');
+    const body = (await res.json()) as { sources?: readonly { portalBaseUrl?: string }[] };
+    return body.sources ?? [];
+  }
+
+  async getServedSelectorPatches(
+    portalHost: string,
+    connectorToken: string
+  ): Promise<IServedSelectorPatchesResponse> {
+    const query = encodeURIComponent(portalHost);
+    const res = await this._connectorFetch(
+      `/api/ingest/v1/selector-patches?portalHost=${query}`,
+      { method: 'GET' },
+      connectorToken
+    );
+    if (!res.ok) throw await ApiError.fromResponse(res, 'Served selector patches');
+    return (await res.json()) as IServedSelectorPatchesResponse;
+  }
+
   async registerIngestSource(source: IIngestSourceRegisterRequest): Promise<void> {
     const res = await this._connectorFetch('/api/ingest/v1/sources', {
       method: 'POST',
@@ -558,12 +586,14 @@ export class ScholarmancyApiClient {
     });
     if (!envelopeRes.ok) throw await ApiError.fromResponse(envelopeRes, 'Envelope upload');
 
+    const appliedPatchId = envelope.run.meta?.['appliedSelectorPatchId'];
     const completeRes = await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
       body: JSON.stringify({
         status: 'success',
         ...(envelope.run.coverage !== undefined ? { coverage: envelope.run.coverage } : {}),
         ...(envelope.run.warnings !== undefined ? { warnings: envelope.run.warnings } : {}),
+        ...(appliedPatchId ? { appliedSelectorPatchId: appliedPatchId } : {}),
       }),
     });
     if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
