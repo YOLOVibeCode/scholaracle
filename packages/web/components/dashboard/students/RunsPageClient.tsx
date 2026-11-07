@@ -5,9 +5,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import type { ISlcRunCoverage } from '@scholaracle/contracts';
+import type { ISlcIngestRunStep, ISlcRunCoverage } from '@scholaracle/contracts';
 import { apiClient } from '@/lib/api/client';
 import { RunGapList } from './RunGapList';
+import { RunStepList } from './RunStepList';
+import { RunWarningsList } from './RunWarningsList';
 
 interface IRunRow {
   readonly runId: string;
@@ -18,6 +20,8 @@ interface IRunRow {
   readonly coreVersion?: string;
   readonly error?: string | null;
   readonly coverage?: ISlcRunCoverage;
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly warnings?: readonly string[];
 }
 
 export function RunsPageClient({ studentId }: { readonly studentId: string }): React.ReactElement {
@@ -45,6 +49,8 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
                 error?: string | null;
                 clientMeta?: Record<string, string>;
                 coverage?: ISlcRunCoverage;
+                steps?: readonly ISlcIngestRunStep[];
+                warnings?: readonly string[];
               }>
             >(`/students/${studentId}/sources/${sid}/runs`);
             for (const r of rows) {
@@ -57,6 +63,8 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
                 clientType: r.clientMeta?.['clientType'],
                 coreVersion: r.clientMeta?.['coreVersion'],
                 coverage: r.coverage,
+                steps: r.steps,
+                warnings: r.warnings,
               });
             }
           } catch {
@@ -97,6 +105,10 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
               {r.coreVersion && <span>core: {r.coreVersion}</span>}
             </div>
             {r.error && <p className="text-xs text-red-600">{r.error}</p>}
+            {r.steps && r.steps.length > 0 && <RunStepList runId={r.runId} steps={r.steps} />}
+            {r.warnings && r.warnings.length > 0 && (
+              <RunWarningsList runId={r.runId} warnings={r.warnings} />
+            )}
             {r.coverage && <RunGapList runId={r.runId} coverage={r.coverage} />}
           </li>
         ))}

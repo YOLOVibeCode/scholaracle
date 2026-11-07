@@ -6,6 +6,8 @@
  * models/Ingest.ts.
  */
 
+import type { ISlcIngestRunStep, ISlcIngestRunStats } from '../../models/Ingest';
+
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */
 export interface IIngestSourceRegisterRequest {
   readonly sourceId: string;
@@ -52,4 +54,16 @@ export interface IIngestRunFailedResponse {
   readonly committed: false;
   readonly failed: true;
   readonly error?: string;
+}
+
+/** Request body of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceRequest {
+  readonly step: ISlcIngestRunStep;
+  readonly stats?: ISlcIngestRunStats;
+  readonly warnings?: readonly string[];
+}
+
+/** Response of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceResponse {
+  readonly success: boolean;
 }

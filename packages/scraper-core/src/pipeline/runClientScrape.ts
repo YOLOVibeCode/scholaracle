@@ -98,10 +98,22 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   const phaseStart = { current: Date.now() };
 
+  const postServerTrace = (step: {
+    readonly name: string;
+    readonly startedAt: string;
+    readonly ms: number;
+    readonly ok: boolean;
+    readonly error?: string;
+  }): void => {
+    if (uploader.postTrace) {
+      void uploader.postTrace(runId, step).catch(() => undefined);
+    }
+  };
+
   const emit = async (
     phase: SyncPhase,
     message: string,
-    extra?: { opCount?: number }
+    extra?: { opCount?: number; ok?: boolean; error?: string }
   ): Promise<void> => {
     const now = Date.now();
     const durationMs = now - phaseStart.current;
@@ -115,8 +127,40 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     if (recorder) {
       await recorder.addPhase(runId, record).catch(() => undefined);
     }
+    postServerTrace({
+      name: phase,
+      startedAt: record.timestamp,
+      ms: durationMs,
+      ok: extra?.ok ?? true,
+      ...(extra?.error ? { error: extra.error } : {}),
+    });
     onProgress?.({ phase, message, ...extra });
   };
+
+  const clientMeta = {
+    clientType: host.clientType,
+    coreVersion,
+    adapterVersion: config.adapterVersion,
+  };
+  const startingStep = {
+    name: 'starting',
+    startedAt,
+    ms: 0,
+    ok: true,
+  };
+
+  if (uploader.beginRun) {
+    await uploader
+      .beginRun({
+        runId,
+        sourceId: config.sourceId,
+        clientMeta,
+        startingStep,
+      })
+      .catch(() => undefined);
+  } else {
+    postServerTrace(startingStep);
+  }
 
   // 0. Register run in local recorder (optional)
   if (recorder) {

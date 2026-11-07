@@ -1,5 +1,9 @@
 import type { Collection, Db, ObjectId } from 'mongodb';
-import type { ISlcRunCoverage } from '@scholaracle/contracts';
+import type {
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+} from '@scholaracle/contracts';
 import { IngestRun, type IIngestRunData, type IngestRunStatus } from '../../models/IngestRun';
 
 export interface IIngestRunReader {
@@ -29,13 +33,24 @@ export interface IIngestRunWriter {
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
     readonly clientMeta?: Readonly<Record<string, string>> | null;
+    readonly initialStep?: ISlcIngestRunStep;
   }): Promise<IngestRun>;
+  appendTraceStep(
+    userId: ObjectId | string,
+    runId: string,
+    patch: {
+      readonly step: ISlcIngestRunStep;
+      readonly stats?: ISlcIngestRunStats;
+      readonly warnings?: readonly string[];
+    }
+  ): Promise<void>;
   markUploaded(
     userId: ObjectId | string,
     runId: string,
     extras?: {
       readonly coverage?: ISlcRunCoverage | null;
       readonly warnings?: readonly string[] | null;
+      readonly stats?: ISlcIngestRunStats | null;
       readonly opCount?: number;
     }
   ): Promise<void>;
@@ -67,6 +82,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     readonly runId: string;
     readonly lastCursor?: { readonly type: 'opaque'; readonly value: string } | null;
     readonly clientMeta?: Readonly<Record<string, string>> | null;
+    readonly initialStep?: ISlcIngestRunStep;
   }): Promise<IngestRun> {
     const doc: IIngestRunData = {
       userId: params.userId,
@@ -79,6 +95,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       startedAt: new Date(),
       error: null,
       clientMeta: params.clientMeta ?? null,
+      ...(params.initialStep !== undefined ? { steps: [params.initialStep] } : {}),
     };
 
     await this._collection.insertOne(doc);
@@ -92,9 +109,11 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     extras?: {
       readonly coverage?: ISlcRunCoverage | null;
       readonly warnings?: readonly string[] | null;
+      readonly stats?: ISlcIngestRunStats | null;
       readonly opCount?: number;
     }
   ): Promise<void> {
+    const existing = await this._collection.findOne({ userId, runId });
     const setDoc: Record<string, unknown> = {
       status: 'uploaded' satisfies IngestRunStatus,
       uploadedAt: new Date(),
@@ -103,12 +122,44 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       setDoc['coverage'] = extras.coverage;
     }
     if (extras?.warnings !== undefined) {
-      setDoc['warnings'] = extras.warnings;
+      const prior = existing?.warnings ? [...existing.warnings] : [];
+      const incoming = extras.warnings ? [...extras.warnings] : [];
+      setDoc['warnings'] = [...prior, ...incoming];
+    }
+    if (extras?.stats !== undefined) {
+      setDoc['stats'] = { ...(existing?.stats ?? {}), ...extras.stats };
     }
     if (extras?.opCount !== undefined) {
       setDoc['opCount'] = extras.opCount;
     }
     await this._collection.updateOne({ userId, runId }, { $set: setDoc });
+  }
+
+  async appendTraceStep(
+    userId: ObjectId | string,
+    runId: string,
+    patch: {
+      readonly step: ISlcIngestRunStep;
+      readonly stats?: ISlcIngestRunStats;
+      readonly warnings?: readonly string[];
+    }
+  ): Promise<void> {
+    const existing = await this._collection.findOne({ userId, runId });
+    const setDoc: Record<string, unknown> = {};
+    if (patch.stats !== undefined) {
+      setDoc['stats'] = { ...(existing?.stats ?? {}), ...patch.stats };
+    }
+    if (patch.warnings !== undefined) {
+      const prior = existing?.warnings ? [...existing.warnings] : [];
+      setDoc['warnings'] = [...prior, ...patch.warnings];
+    }
+    const update: { $push: { steps: ISlcIngestRunStep }; $set?: Record<string, unknown> } = {
+      $push: { steps: patch.step },
+    };
+    if (Object.keys(setDoc).length > 0) {
+      update.$set = setDoc;
+    }
+    await this._collection.updateOne({ userId, runId }, update);
   }
 
   async commitRun(params: {

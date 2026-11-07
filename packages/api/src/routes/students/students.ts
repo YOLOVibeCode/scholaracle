@@ -29,9 +29,7 @@ import {
   type IStudentListItem,
   type IStudentGradesResponse,
   type ISourceListItem,
-  type IRunListItem,
   type ITriggerSyncResponse,
-  type ISlcRunCoverage,
   type IStudentMaterialsResponse,
   type ISlcCourse,
 } from '@scholaracle/contracts';
@@ -47,6 +45,7 @@ import {
   patchCourseTutorialSchema,
 } from './schemas';
 import { validateGradeHistoryQuery } from './gradeHistoryQueryValidator';
+import { serializeIngestRunListItem } from './ingestRunSerialize';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 import { signAssetUrl } from '../../services/assets/signedUrl';
 import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
@@ -3565,17 +3564,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Run not found');
       }
 
-      res.status(200).json({
-        runId: run.runId,
-        sourceId: run.sourceId,
-        status: run.status,
-        startedAt: run.startedAt.toISOString(),
-        uploadedAt: run.uploadedAt?.toISOString(),
-        committedAt: run.committedAt?.toISOString(),
-        error: run.error ?? null,
-        coverage: run.coverage ?? undefined,
-        warnings: run.warnings ?? undefined,
-      } satisfies IRunListItem);
+      res.status(200).json(serializeIngestRunListItem(run));
     })
   );
 
@@ -3612,34 +3601,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         limit
       );
 
-      res.status(200).json(
-        runs.map((r) => {
-          const row = r as unknown as {
-            runId: string;
-            sourceId: string;
-            status: string;
-            startedAt: Date;
-            uploadedAt?: Date;
-            committedAt?: Date;
-            abandonedAt?: Date;
-            error?: string | null;
-            coverage?: ISlcRunCoverage | null;
-            warnings?: readonly string[] | null;
-          };
-          return {
-            runId: row.runId,
-            sourceId: row.sourceId,
-            status: row.status,
-            startedAt: row.startedAt.toISOString(),
-            uploadedAt: row.uploadedAt?.toISOString(),
-            committedAt: row.committedAt?.toISOString(),
-            abandonedAt: row.abandonedAt?.toISOString(),
-            error: row.error ?? null,
-            coverage: row.coverage ?? undefined,
-            warnings: row.warnings ?? undefined,
-          } satisfies IRunListItem;
-        })
-      );
+      res.status(200).json(runs.map((r) => serializeIngestRunListItem(r)));
     })
   );
 
