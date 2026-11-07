@@ -63,9 +63,9 @@ interface ISyncScreenProps {
 type SyncState = 'loading-creds' | 'login' | 'syncing' | 'done' | 'error';
 
 const ADAPTER_IDS: Record<string, string> = {
-  canvas: 'com.instructure.canvas',
-  skyward: 'com.skyward.iscorp',
-  aeries: 'com.aeries.portal',
+  canvas: 'canvas',
+  skyward: 'skyward',
+  aeries: 'aeries',
 };
 
 const ADAPTER_VERSION = '0.1.0';

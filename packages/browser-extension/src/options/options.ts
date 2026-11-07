@@ -10,9 +10,9 @@ const ADAPTER_BY_HOST: ReadonlyArray<{
   readonly provider: IPortalCredential['provider'];
   readonly adapterId: string;
 }> = [
-  { match: /instructure\.com/i, provider: 'canvas', adapterId: 'com.instructure.canvas' },
-  { match: /skyward/i, provider: 'skyward', adapterId: 'com.skyward.iscorp' },
-  { match: /aeries/i, provider: 'aeries', adapterId: 'com.aeries.portal' },
+  { match: /instructure\.com/i, provider: 'canvas', adapterId: 'canvas' },
+  { match: /skyward/i, provider: 'skyward', adapterId: 'skyward' },
+  { match: /aeries/i, provider: 'aeries', adapterId: 'aeries' },
 ];
 
 function show(msg: string, ok: boolean): void {
