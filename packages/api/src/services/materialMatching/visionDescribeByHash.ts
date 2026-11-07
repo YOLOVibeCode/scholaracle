@@ -3,6 +3,7 @@ import type { IAssetStore } from '../assets/IAssetStore';
 import { AssetRepository } from '../assets/AssetRepository';
 import { LlmClient } from '@scholaracle/agents';
 import { resolveLlmConfig } from '../llm/resolveLlmConfig';
+import { hasServerAiConsent } from '../consent/serverAiConsent';
 
 const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
 const MAX_IMAGE_BYTES = 5_000_000;
@@ -22,6 +23,9 @@ export async function runVisionDescribeByContentHash(params: {
   readonly assetStore: IAssetStore;
   readonly llmClient?: LlmClient;
 }): Promise<{ readonly describeCallCount: number }> {
+  if (!(await hasServerAiConsent(params.database, params.userId))) {
+    return { describeCallCount: 0 };
+  }
   const cfg = resolveLlmConfig();
   const llm =
     params.llmClient ??

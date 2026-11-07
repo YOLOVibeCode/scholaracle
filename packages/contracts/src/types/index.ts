@@ -2,4 +2,5 @@ export type { SyncSchedule, NotificationTone, NotificationFrequency } from './Sc
 export type { IStudentAlertPreferences } from './StudentAlertPreferences';
 export type { IStudentContact, IAlertRecipientResolved } from './StudentContact';
 export * from './smsCompliance';
+export * from './serverAiConsent';
 export * from './api';

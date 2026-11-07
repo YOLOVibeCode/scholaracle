@@ -1,0 +1,1 @@
+export { ServerAiConsentRepository } from './ServerAiConsentRepository';
