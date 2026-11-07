@@ -68,7 +68,7 @@ export default defineConfig({
     // Layer 1: Auth (depends on critical)
     {
       name: 'auth',
-      testMatch: /01-auth\.spec\.ts|auth\/.*\.spec\.ts/,
+      testMatch: /01-auth\.spec\.ts|16-admin-mfa\.spec\.ts|auth\/.*\.spec\.ts/,
       dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 60 * 1000,
@@ -222,7 +222,7 @@ export default defineConfig({
             {
               // Use in-memory MongoDB for fully self-contained E2E (no external Mongo daemon required).
               command:
-                'PORT=2801 API_BASE_URL=http://localhost:2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test pnpm --filter @scholaracle/api dev',
+                'PORT=2801 API_BASE_URL=http://localhost:2801 MONGODB_URI=memory MONGODB_DB_NAME=scholaracle_test JWT_SECRET=test-secret NODE_ENV=test SEED_ADMIN_PASSWORD=Admin123! SEED_ADMIN_MFA_SECRET=JBSWY3DPEHPK3PXP pnpm --filter @scholaracle/api dev',
               url: 'http://localhost:2801/api/health',
               reuseExistingServer: !process.env.CI,
               timeout: 120 * 1000,

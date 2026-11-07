@@ -301,6 +301,46 @@ describe('Admin Customer Routes', () => {
         .toArray();
       expect(auditLogs.length).toBeGreaterThan(0);
     });
+
+    it('IMPERSONATE-ASSURANCE-001: writes audit row and parent JWT cannot call admin APIs', async () => {
+      await database.collection('audit_logs').deleteMany({});
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'scope-assurance@test.com',
+        passwordHash,
+        name: 'Scope Assurance User',
+      });
+      const customerId = customer._id!.toString();
+      const reason = 'Audit and scope check';
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customerId}/impersonate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ reason });
+
+      expect(res.status).toBe(200);
+      const parentToken = res.body.data?.token as string;
+      expect(parentToken).toBeTruthy();
+
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:impersonate', entityId: customerId })
+        .toArray();
+      expect(auditLogs).toHaveLength(1);
+      expect(auditLogs[0]?.['reason']).toBe(reason);
+      expect(auditLogs[0]?.['adminEmail']).toBe('admin@test.com');
+
+      const adminDenied = await request(app)
+        .get('/api/admin/customers')
+        .set('Authorization', `Bearer ${parentToken}`);
+      expect(adminDenied.status).toBe(401);
+
+      const userAuth = new AuthService(database, 'test-secret');
+      const decoded = await userAuth.verifyToken(parentToken);
+      expect(decoded?.userId).toBe(customerId);
+    });
   });
 
   describe('GET /api/admin/customers', () => {
