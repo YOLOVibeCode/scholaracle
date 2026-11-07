@@ -35,6 +35,12 @@ export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}${maestro_path:+$maestro_path:}$PATH:$
 export MAESTRO_CLI_NO_ANALYTICS=1
 api_url="${E2E_API_URL:-https://api-uat.scholarmancy.com}"
 ios_device="${E2E_IOS_DEVICE:-iPhone 17 Pro}"
+# expo run:ios treats an unmatched name as a physical device and demands code signing;
+# resolve a simulator name to its UDID so the build always targets the simulator.
+if [[ "$platform" == ios && ! "$ios_device" =~ ^[0-9A-F-]{36}$ ]]; then
+  udid="$(xcrun simctl list devices available | grep -F "    $ios_device (" | head -1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' || true)"
+  [[ -n "$udid" ]] && ios_device="$udid"
+fi
 avd="${E2E_ANDROID_AVD:-scholarmancy-e2e}"
 env_file="${E2E_ENV_FILE:-$HOME/.config/scholarmancy/e2e.env}"
 if [[ -n "${E2E_ARTIFACTS_DIR:-}" ]]; then

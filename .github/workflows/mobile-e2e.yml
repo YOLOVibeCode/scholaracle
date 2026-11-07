@@ -151,13 +151,7 @@ jobs:
           force-avd-creation: true
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            set -euo pipefail
-            cd packages/mobile
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-launch"
-            pnpm e2e:android launch
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-smoke"
-            pnpm e2e:android smoke --no-build
+          script: bash packages/mobile/scripts/ci-android-maestro.sh launch-smoke
 
       - name: Build fake portal deps
         run: |
@@ -179,18 +173,7 @@ jobs:
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            set -euo pipefail
-            FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node scripts/fake-portal-server.mjs &
-            sleep 3
-            cd packages/mobile
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-sync"
-            export MAESTRO_PORTAL_PROVIDER=skyward
-            export MAESTRO_PORTAL_URL=http://10.0.2.2:2855/skyward/login?csp=strict
-            export MAESTRO_PORTAL_USERNAME=demo
-            export MAESTRO_PORTAL_PASSWORD=demo
-            export MAESTRO_USE_FAKE_PORTAL=1
-            pnpm e2e:android sync --no-build
+          script: bash packages/mobile/scripts/ci-android-maestro.sh sync
 
       - name: Upload Maestro artifacts (Android)
         if: always()
