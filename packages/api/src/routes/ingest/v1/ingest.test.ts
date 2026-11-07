@@ -184,6 +184,15 @@ describe('Ingest v1 API', () => {
 
   it('normalizes legacy built-in adapterIds to canvas on envelope commit', async () => {
     const connectorToken = await getConnectorToken();
+    const userDoc = await database.collection('users').findOne({ email: 'slc-user@test.com' });
+    if (!userDoc?._id) throw new Error('Test user not found');
+    const studentRepo = new StudentRepository(database);
+    await studentRepo.create({
+      userId: userDoc._id as ObjectId,
+      name: 'Legacy Ingest Student',
+      grade: 9,
+      studentId: 'stu-legacy',
+    });
     const sourceId = 'src-legacy-adapter';
     await request(app)
       .post('/api/ingest/v1/sources')
@@ -234,10 +243,11 @@ describe('Ingest v1 API', () => {
         },
       ],
     };
-    await request(app)
+    const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
+    expect(upload.status).toBe(200);
     const stored = await database
       .collection('slc_assignments')
       .findOne({ externalId: 'legacy-a-1' });
