@@ -42,6 +42,7 @@ export const USER_SCOPED_DELETION_TARGETS: readonly UserScopedDeletionTarget[] =
   { name: 'email_digest_pending' },
   { name: 'sms_digest_pending' },
   { name: 'ai_usage' },
+  { name: 'repair_proposals' },
   { name: 'admin_notes' },
   { name: 'oauth_accounts', userIdAsObjectId: true },
   { name: 'sessions', userIdAsObjectId: true },

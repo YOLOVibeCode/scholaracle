@@ -330,6 +330,7 @@ describe('Admin Customer Routes', () => {
         .toArray();
       expect(auditLogs).toHaveLength(1);
       expect(auditLogs[0]?.['reason']).toBe(reason);
+      // Audit rows store emails masked (M3-12, #83).
       expect(auditLogs[0]?.['adminEmail']).toBe('a***@test.com');
 
       const adminDenied = await request(app)

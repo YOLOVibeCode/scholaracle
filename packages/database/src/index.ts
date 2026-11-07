@@ -57,6 +57,7 @@ export * from './repositories/IngestRunRepository';
 export * from './repositories/PortalAccountRepository';
 export * from './repositories/SlcBindingRepository';
 export * from './repositories/RepairCandidateRepository';
+export * from './repositories/RepairProposalRepository';
 export * from './repositories/SourceInviteRepository';
 export * from './repositories/ExternalIdAliasRepository/ExternalIdAliasRepository';
 

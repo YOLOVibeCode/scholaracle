@@ -119,6 +119,31 @@ describe('repair candidates on ingest complete', () => {
         })
         .expect(200);
 
+      // Since the run state machine (#77), a run must be uploaded before it can complete.
+      const now = new Date().toISOString();
+      const upload = await request(app)
+        .post(`/api/ingest/v1/runs/${runId}/envelope`)
+        .set('Authorization', `Bearer ${connectorToken}`)
+        .send({
+          schemaVersion: 'slc.ingest.v1',
+          run: {
+            runId,
+            startedAt: now,
+            provider: 'aeries',
+            adapterId: 'com.aeries.portal',
+            adapterVersion: '1.0.0',
+            mode: 'delta',
+            timezone: 'America/Chicago',
+          },
+          source: {
+            sourceId,
+            displayName: 'Aeries',
+            portalBaseUrl: 'https://district.aeries.net/student/',
+          },
+          ops: [],
+        });
+      expect(upload.status).toBe(200);
+
       const complete = await request(app)
         .post(`/api/ingest/v1/runs/${runId}/complete`)
         .set('Authorization', `Bearer ${connectorToken}`)

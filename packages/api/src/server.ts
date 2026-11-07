@@ -84,6 +84,7 @@ import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
+import { createScrapersRepairRouter } from './routes/scrapers/repair';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -289,7 +290,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       req.path === '/api/webhooks/noctusoft' ||
       req.path.startsWith('/api/webhooks/twilio') ||
       req.path === '/api/ingest/v1/assets/upload-base64' ||
-      req.path === '/api/ingest/v1/ai/scraper-assist'
+      req.path === '/api/ingest/v1/ai/scraper-assist' ||
+      req.path === '/api/scrapers/repair'
     ) {
       next();
       return;
@@ -557,6 +559,14 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
     app.use('/api/assets', createAssetServeRouter(assetsConfig));
+    app.use(
+      '/api/scrapers',
+      createScrapersRepairRouter({
+        database,
+        jwtSecret,
+        assetStore,
+      })
+    );
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);

@@ -65,6 +65,11 @@ import {
   type ISourceCourse,
 } from '@scholaracle/connector';
 import { logger } from '../../../logger';
+
+/** Reject ingest that lacks a portal-account binding only once bindings are backfilled. */
+function ingestRequiresBindings(): boolean {
+  return process.env['INGEST_REQUIRE_BINDINGS'] === 'true';
+}
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
@@ -1256,15 +1261,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           ops: envelope.ops,
         });
       } catch (err) {
-        if (err instanceof IngestMissingBindingError) {
+        if (err instanceof IngestMissingBindingError && !ingestRequiresBindings()) {
+          // Existing sources have no bindings yet (no backfill), and installed app builds
+          // and the desktop CLI do not create them. Warn until INGEST_REQUIRE_BINDINGS=true.
+          logger.warn(
+            { runId: req.params['runId'], sourceId: envelopeSourceId },
+            'Ingest without a portal-account binding (allowed: INGEST_REQUIRE_BINDINGS off)'
+          );
+        } else if (err instanceof IngestMissingBindingError) {
           res.status(422).json({
             success: false,
             error: err.message,
             code: INGEST_MISSING_BINDING_CODE,
           });
           return;
+        } else {
+          throw err;
         }
-        throw err;
       }
 
       try {

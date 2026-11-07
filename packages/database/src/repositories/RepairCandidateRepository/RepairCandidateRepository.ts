@@ -46,4 +46,9 @@ export class RepairCandidateRepository {
     if (!doc) return null;
     return new RepairCandidate(doc);
   }
+
+  async listForNightlyRepair(limit: number): Promise<readonly IRepairCandidateData[]> {
+    const capped = Math.max(1, Math.min(limit, 500));
+    return this._collection.find({}).sort({ lastSeenAt: -1 }).limit(capped).toArray();
+  }
 }

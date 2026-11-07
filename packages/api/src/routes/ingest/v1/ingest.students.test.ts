@@ -186,7 +186,8 @@ describe('Ingest v1: student matching and plan cap', () => {
     expect((students[0]!['dataSources'] as unknown[]).length).toBe(1);
   });
 
-  it('rejects ingest without a binding with 422', async () => {
+  it('rejects ingest without a binding with 422 when INGEST_REQUIRE_BINDINGS=true', async () => {
+    process.env['INGEST_REQUIRE_BINDINGS'] = 'true';
     const { connectorToken } = await connect('no-binding@test.com');
     const runId = await startIngestRun(connectorToken);
     const now = new Date().toISOString();
@@ -207,8 +208,34 @@ describe('Ingest v1: student matching and plan cap', () => {
         source: { sourceId: 'src-phone', displayName: 'Canvas' },
         ops: buildAssignmentOps(['kid-a'], now),
       });
+    delete process.env['INGEST_REQUIRE_BINDINGS'];
     expect(blocked.status).toBe(422);
     expect(blocked.body.code).toBe(INGEST_MISSING_BINDING_CODE);
+  });
+
+  it('accepts ingest without a binding while INGEST_REQUIRE_BINDINGS is off (legacy sources)', async () => {
+    delete process.env['INGEST_REQUIRE_BINDINGS'];
+    const { connectorToken } = await connect('legacy-no-binding@test.com');
+    const runId = await startIngestRun(connectorToken);
+    const now = new Date().toISOString();
+    const res = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        schemaVersion: 'slc.ingest.v1',
+        run: {
+          runId,
+          startedAt: now,
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          adapterVersion: '1.0.0',
+          mode: 'delta',
+          timezone: 'America/Chicago',
+        },
+        source: { sourceId: 'src-phone', displayName: 'Canvas' },
+        ops: buildAssignmentOps(['kid-a'], now),
+      });
+    expect(res.status).toBe(200);
   });
 
   it('runs two students as separate ingest runs with distinct studentExternalId', async () => {
