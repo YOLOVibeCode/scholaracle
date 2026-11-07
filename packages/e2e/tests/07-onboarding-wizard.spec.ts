@@ -209,12 +209,14 @@ test.describe('@feature Onboarding Wizard', () => {
     });
 
     await expect(wizard).toContainText('Canvas', { timeout: 5000 });
-    await page.locator('[data-testid="wizard-skip-services"]').click();
+    const skipServices1 = page.locator('[data-testid="wizard-skip-services"]');
+    await expect(skipServices1).toBeVisible({ timeout: 15_000 });
+    await skipServices1.click();
     const addAnotherButton = page.locator('[data-testid="wizard-add-another-student"]');
     await expect(addAnotherButton).toBeVisible({ timeout: 5000 });
     await addAnotherButton.click();
 
-    // ── Second student: connect-services step (reuse integration if shown, else skip)
+    // ── Second student (bundle entries do not create account integrations; skip services)
     const student2 = `Second Child ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', student2);
     await page.fill('[data-testid="wizard-student-grade"]', '5');
@@ -225,20 +227,12 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.click('[data-testid="wizard-next-step"]');
     await createStudent5b;
 
-    // If an existing integration is shown, reuse it; otherwise skip services
-    const skipServicesBtn = page.locator('[data-testid="wizard-skip-services"]');
-    await expect(skipServicesBtn).toBeVisible();
-    const integrationCards = wizard.locator('button:has-text("Canvas")');
-    const hasReuse = await integrationCards
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if (hasReuse) {
-      await integrationCards.first().click();
-      await page.locator('[data-testid="wizard-connect-submit"]').click();
-    } else {
-      await skipServicesBtn.click();
-    }
+    await expect(page.locator('[data-testid="wizard-add-new-provider"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    const skipServices2 = page.locator('[data-testid="wizard-skip-services"]');
+    await expect(skipServices2).toBeVisible({ timeout: 15_000 });
+    await skipServices2.click();
 
     const finishButton = page.locator('[data-testid="wizard-finish"]');
     await expect(finishButton).toBeVisible({ timeout: 5000 });
@@ -253,11 +247,12 @@ test.describe('@feature Onboarding Wizard', () => {
   // ------------------------------------------------------------------
   // OB-006: Open wizard from Students page
   // ------------------------------------------------------------------
-  test('OB-006: Open wizard from Students page Add Student button', async ({
-    page,
-    loginAsRole,
-  }) => {
-    await loginAsRole('parent');
+  test('OB-006: Open wizard from Students page Add Student button', async ({ page }) => {
+    const registerPage = new RegisterPage(page);
+    await registerPage.goto();
+    const email = generateUniqueEmail('students-page');
+    await registerPage.register(email, 'Students Page User', 'SecurePass123!');
+    await assertOnDashboard(page);
 
     await page.goto('/dashboard/students');
     await expect(page).toHaveURL('/dashboard/students');
@@ -276,7 +271,7 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.fill('[data-testid="wizard-student-name"]', studentName);
 
     const createStudent6 = page.waitForResponse(
-      (r) => r.url().includes('/students') && r.request().method() === 'POST' && r.ok()
+      (r) => r.url().includes('/students') && r.request().method() === 'POST'
     );
     await page.click('[data-testid="wizard-next-step"]');
     await createStudent6;

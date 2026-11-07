@@ -104,11 +104,8 @@ echo "Done"
 
       await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
       await page.getByLabel(/School portal URL/i).fill('https://example.instructure.com');
-      await page.getByLabel(/Student name/i).fill('Ava Lewis');
-      await page.getByLabel(/^Username$/i).fill('ava@example.com');
-      await page.getByLabel(/^Password$/i).fill('placeholder');
+      await page.locator('[data-testid="connect-provider-student-name-hint"]').fill('Ava Lewis');
 
-      // Canvas is a reference platform → "Continue" adds to bundle immediately
       await page.locator('[data-testid="connect-provider-continue"]').click();
 
       // Wizard closes, Canvas appears in bundle
@@ -121,9 +118,7 @@ echo "Done"
 
       await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
       await page.getByLabel(/School portal URL/i).fill('https://skyward.example.com');
-      await page.getByLabel(/Student name/i).fill('Noah Lewis');
-      await page.getByLabel(/^Username$/i).fill('noah.parent');
-      await page.getByLabel(/^Password$/i).fill('placeholder');
+      await page.locator('[data-testid="connect-provider-student-name-hint"]').fill('Noah Lewis');
 
       await page.locator('[data-testid="connect-provider-continue"]').click();
       await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });

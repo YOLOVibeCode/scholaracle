@@ -127,8 +127,8 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
 
   test('BFC-003: Ricky adds Christian and Gideon, invites Jessica and Jennifer; Jessica accepts', async ({
     request,
-  }) => {
-    const ts3 = Date.now();
+  }, testInfo) => {
+    const ts3 = `${Date.now()}-${testInfo.retry}-${testInfo.parallelIndex}`;
     const rickyEmail = `ricky3-${ts3}@blended-e2e.test`;
     const jessicaEmail = `jessica3-${ts3}@blended-e2e.test`;
     const jenniferEmail = `jennifer-${ts3}@blended-e2e.test`;
