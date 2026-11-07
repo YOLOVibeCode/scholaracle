@@ -25,9 +25,13 @@
  *   (`.gridDate`, `.AllDayCodeReadOnly`, then one cell per period).
  */
 
+import type { IAeriesSelectorsV1 } from '../../selectors/aeriesV1';
+
 // ---------------------------------------------------------------------------
 // Raw extract types
 // ---------------------------------------------------------------------------
+
+export type { IAeriesSelectorsV1 };
 
 export interface IAeriesCourseExtract {
   readonly period: string;
@@ -122,23 +126,20 @@ export interface IAeriesScheduleRow {
  * header plus each entry of the student switcher. Falls back to the
  * `.StudentCard` widgets when the switcher is absent.
  */
-export function extractAeriesStudentList(): IAeriesStudentListItem[] {
+export function extractAeriesStudentList(selectors: IAeriesSelectorsV1): IAeriesStudentListItem[] {
   const results: IAeriesStudentListItem[] = [];
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const parseLabel = (text: string): { name: string; grade: string; school: string } => {
-    // "Jane Doe Example High School - Grade 10": without markup, take the first
-    // two words as the name and the rest as the school.
     const m = text.match(/^(\S+\s+\S+)\s+(.+?)\s*-\s*Grade:?\s*(\d+)\s*$/);
     if (m) return { name: m[1] ?? '', grade: m[3] ?? '', school: m[2] ?? '' };
     return { name: text, grade: '', school: '' };
   };
   const leftSide = (el: Element): { name: string; grade: string; school: string } => {
-    const nameEl = el.querySelector('.StudentName, .TextHeading');
+    const nameEl = el.querySelector(selectors.studentList_name_heading);
     const name = clean(nameEl?.textContent);
     const all = clean(el.textContent);
     const gradeMatch = all.match(/Grade:?\s*(\d+)/);
     if (name) {
-      // "<name> <school> - Grade N" -> drop the name, then the grade suffix.
       let rest = all.startsWith(name) ? all.slice(name.length) : all.replace(name, '');
       rest = rest.replace(/\s*-?\s*Grade:?\s*\d+.*$/, '');
       return { name, grade: gradeMatch?.[1] ?? '', school: clean(rest) };
@@ -146,12 +147,12 @@ export function extractAeriesStudentList(): IAeriesStudentListItem[] {
     return parseLabel(all);
   };
 
-  const current = document.querySelector('#StudentNameDropDown');
+  const current = document.querySelector(selectors.studentNameDropDown);
   if (current) {
     const info = leftSide(current);
     if (info.name) results.push({ ...info, switchHref: '', isCurrent: true });
   }
-  const options = document.querySelectorAll('#StudentNameDropDownMenu a.StudentNameDropDownOption');
+  const options = document.querySelectorAll(selectors.studentNameDropDownMenu_options);
   for (const opt of options) {
     if (opt.classList.contains('LinkNewStudent')) continue;
     const href = opt.getAttribute('href') ?? '';
@@ -162,12 +163,13 @@ export function extractAeriesStudentList(): IAeriesStudentListItem[] {
     results.push({ ...info, switchHref: href, isCurrent: false });
   }
   if (results.length === 0) {
-    for (const card of document.querySelectorAll('.StudentCard')) {
-      const name = clean(card.querySelector('.StudentCardData a, .TextHeading')?.textContent);
+    for (const card of document.querySelectorAll(selectors.studentList_card)) {
+      const name = clean(card.querySelector(selectors.studentList_card_name)?.textContent);
       const text = clean(card.textContent);
       const grade = text.match(/Grade:?\s*(\d+)/)?.[1] ?? '';
       const school = clean(text.split(/Grade:?\s*\d+/)[1]);
-      const link = card.querySelector('a[href*="ChangeStudent"]')?.getAttribute('href') ?? '';
+      const link =
+        card.querySelector(selectors.studentList_change_student_link)?.getAttribute('href') ?? '';
       if (name) results.push({ name, grade, school, switchHref: link, isCurrent: false });
     }
   }
@@ -180,7 +182,7 @@ export function extractAeriesStudentList(): IAeriesStudentListItem[] {
  * Details page. Period is not on the card; the recipe fills it from the
  * schedule (Classes.aspx) or from the Gradebook Details course option.
  */
-export function extractAeriesDashboardCourses(): Array<{
+export function extractAeriesDashboardCourses(selectors: IAeriesSelectorsV1): Array<{
   period: string;
   name: string;
   term: string;
@@ -209,16 +211,14 @@ export function extractAeriesDashboardCourses(): Array<{
     gradebookHref: string;
     lastUpdated: string;
   }> = [];
-  const cards = document.querySelectorAll('#divClass .Card, .classesSection .Card');
+  const cards = document.querySelectorAll(selectors.dashboard_class_cards);
   for (const card of cards) {
-    const titleEl = card.querySelector('a.TextHeading');
+    const titleEl = card.querySelector(selectors.dashboard_card_title_link);
     const fullTitle = clean(titleEl?.textContent);
     if (!fullTitle) continue;
-    // "Spanish 2 a - Quarter 2" -> name + term
     const tm = fullTitle.match(/^(.*?)\s*-\s*((?:Quarter|Semester|Trimester|Term)\s*\d+|[^-]+)$/);
     const name = tm ? clean(tm[1]) : fullTitle;
     const term = tm ? clean(tm[2]) : '';
-    // Teacher is a bare text node between the title link and the room span.
     let teacher = '';
     for (const node of card.childNodes) {
       if (node.nodeType === 3) {
@@ -229,17 +229,17 @@ export function extractAeriesDashboardCourses(): Array<{
         }
       }
     }
-    const room = clean(card.querySelector(':scope > .TextSubSection')?.textContent);
-    const gradeText = clean(card.querySelector('.Grade')?.textContent);
+    const room = clean(card.querySelector(selectors.dashboard_card_room)?.textContent);
+    const gradeText = clean(card.querySelector(selectors.dashboard_card_grade)?.textContent);
     const gm = gradeText.match(/^(\d+(?:\.\d+)?)\s*\((\d+(?:\.\d+)?)%\)/);
     const pm = gradeText.match(/(\d+(?:\.\d+)?)%/);
     const wholeMark = gradeText.match(/^(\d+(?:\.\d+)?)/);
     const missingText = clean(
-      card.querySelector('.footer .MissingAssignment, .footer .NonMissingAssignment')?.textContent
+      card.querySelector(selectors.dashboard_card_missing_footer)?.textContent
     );
-    const missingFallback = clean(card.querySelector('.footer')?.textContent).match(
-      /Missing Assignments\s*(\d+)/
-    );
+    const missingFallback = clean(
+      card.querySelector(selectors.dashboard_card_footer)?.textContent
+    ).match(/Missing Assignments\s*(\d+)/);
     const href = titleEl?.getAttribute('href') ?? '';
     out.push({
       period: '',
@@ -253,23 +253,22 @@ export function extractAeriesDashboardCourses(): Array<{
       missingCount: parseInt(missingText || missingFallback?.[1] || '0', 10) || 0,
       assignments: [],
       gradebookHref: href,
-      lastUpdated: clean(card.querySelector('.ClassLastUpdated')?.textContent),
+      lastUpdated: clean(card.querySelector(selectors.dashboard_card_last_updated)?.textContent),
     });
   }
   return out;
 }
 
 /** Reads the schedule grid on Classes.aspx. */
-export function extractAeriesSchedule(): IAeriesScheduleRow[] {
+export function extractAeriesSchedule(selectors: IAeriesSelectorsV1): IAeriesScheduleRow[] {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const strip = (text: string, label: string): string =>
     clean(text).replace(new RegExp(`^${label}\\s*`, 'i'), '');
   const out: IAeriesScheduleRow[] = [];
-  const table = document.querySelector('#gridCourses');
+  const table = document.querySelector(selectors.classes_schedule_table);
   if (!table) return out;
-  // Column order from the sub-header row.
   let labels: string[] = [];
-  const header = table.querySelector('tr.SubHeaderRow');
+  const header = table.querySelector(selectors.classes_subheader_row);
   if (header) labels = Array.from(header.children).map((c) => clean(c.textContent));
   const idx = (name: string, fallback: number): number => {
     const i = labels.findIndex((l) => l.toLowerCase() === name.toLowerCase());
@@ -282,7 +281,7 @@ export function extractAeriesSchedule(): IAeriesScheduleRow[] {
   const iSec = idx('Sec', 5);
   const iRoom = idx('Room', 6);
   const iEmail = idx('Email', 9);
-  for (const row of table.querySelectorAll('tbody tr')) {
+  for (const row of table.querySelectorAll(selectors.classes_tbody_rows)) {
     if (row.classList.contains('SubHeaderRow')) continue;
     const cells = Array.from(row.children);
     if (cells.length < 7) continue;
@@ -292,7 +291,7 @@ export function extractAeriesSchedule(): IAeriesScheduleRow[] {
     const emailCell = cells[iEmail];
     const email =
       emailCell
-        ?.querySelector('a[href^="mailto:"]')
+        ?.querySelector(selectors.classes_email_link)
         ?.getAttribute('href')
         ?.replace(/^mailto:/i, '') ?? strip(emailCell?.textContent ?? '', 'Email');
     out.push({
@@ -310,13 +309,13 @@ export function extractAeriesSchedule(): IAeriesScheduleRow[] {
 }
 
 /** Extracts the course dropdown options from GradebookDetails. */
-export function extractAeriesCourseDropdownOptions(): Array<{
+export function extractAeriesCourseDropdownOptions(selectors: IAeriesSelectorsV1): Array<{
   value: string;
   text: string;
   selected: boolean;
 }> {
   const select = document.querySelector(
-    'select[name="ctl00$MainContent$subGBS$dlGN"], select[id*="dlGN"]'
+    selectors.gradebook_course_dropdown
   ) as HTMLSelectElement | null;
   if (!select) return [];
   return Array.from(select.options).map((o: HTMLOptionElement) => ({
@@ -327,38 +326,39 @@ export function extractAeriesCourseDropdownOptions(): Array<{
 }
 
 /** Extracts teacher name and email from the current GradebookDetails page. */
-export function extractAeriesTeacher(): { name: string; email: string } {
+export function extractAeriesTeacher(selectors: IAeriesSelectorsV1): {
+  name: string;
+  email: string;
+} {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
-  const scope = document.querySelector('#ctl00_MainContent_subGBS_tblEverything') ?? document.body;
-  const name = clean(
-    document.querySelector('#ctl00_MainContent_subGBS_lblTeacherName')?.textContent
-  );
-  const link = scope.querySelector('a[href^="mailto:"]') as HTMLAnchorElement | null;
+  const scope = document.querySelector(selectors.gradebook_scope_table) ?? document.body;
+  const name = clean(document.querySelector(selectors.gradebook_teacher_name)?.textContent);
+  const link = scope.querySelector(selectors.gradebook_mailto) as HTMLAnchorElement | null;
   const email = link ? clean(link.getAttribute('href')?.replace(/^mailto:/i, '') ?? '') : '';
   return { name, email };
 }
 
 /** Kept for callers that only want the address. */
-export function extractAeriesTeacherEmail(): string {
-  const scope = document.querySelector('#ctl00_MainContent_subGBS_tblEverything') ?? document.body;
-  const link = scope.querySelector('a[href^="mailto:"]');
+export function extractAeriesTeacherEmail(selectors: IAeriesSelectorsV1): string {
+  const scope = document.querySelector(selectors.gradebook_scope_table) ?? document.body;
+  const link = scope.querySelector(selectors.gradebook_mailto);
   if (link) return (link.getAttribute('href') ?? '').replace(/^mailto:/i, '').trim();
   return '';
 }
 
 /** Extracts assignment rows from the current GradebookDetails page (table view rows). */
-export function extractAeriesAssignments(): IAeriesAssignmentExtract[] {
+export function extractAeriesAssignments(
+  selectors: IAeriesSelectorsV1
+): IAeriesAssignmentExtract[] {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const num = (s: string): number | null => {
     const m = s.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
     return m ? parseFloat(m[0]) : null;
   };
   const results: IAeriesAssignmentExtract[] = [];
-  const table = document.querySelector(
-    '#ctl00_MainContent_subGBS_assignmentsView table, table.GradebookDetailsTable'
-  );
+  const table = document.querySelector(selectors.gradebook_assignments_table);
   if (!table) return results;
-  const headerRow = table.querySelector('tr');
+  const headerRow = table.querySelector(selectors.tag_tr);
   const labels = headerRow
     ? Array.from(headerRow.children).map((c) => clean(c.textContent).toLowerCase())
     : [];
@@ -376,10 +376,11 @@ export function extractAeriesAssignments(): IAeriesAssignmentExtract[] {
   const iDue = col('due date', 8);
   const iGC = col('grading complete', 9);
 
-  const rows = Array.from(table.querySelectorAll('tr')).filter(
+  const rows = Array.from(table.querySelectorAll(selectors.tag_tr)).filter(
     (r) =>
       r !== headerRow &&
-      (r.classList.contains('TableView') || r.classList.contains('assignment-info'))
+      (r.classList.contains(selectors.gradebook_row_class_tableView) ||
+        r.classList.contains(selectors.gradebook_row_class_assignment_info))
   );
   for (const row of rows) {
     const cells = Array.from(row.children);
@@ -424,38 +425,42 @@ export function extractAeriesAssignments(): IAeriesAssignmentExtract[] {
  * carries a code, plus one per all-day code. Days with nothing marked are
  * skipped.
  */
-export function extractAeriesAttendance(): IAeriesAttendanceExtract[] {
+export function extractAeriesAttendance(selectors: IAeriesSelectorsV1): IAeriesAttendanceExtract[] {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
   const results: IAeriesAttendanceExtract[] = [];
-  const grid = document.querySelector('#tblNewFlex');
+  const grid = document.querySelector(selectors.attendance_grid);
   if (!grid) return results;
-  // Column -> {period, course} from the most recent header row.
   let columns: Array<{ period: string; course: string }> = [];
-  for (const row of grid.querySelectorAll('tbody tr, tr')) {
-    if (row.classList.contains('InlineHeaderTR')) {
+  for (const row of grid.querySelectorAll(selectors.attendance_rows)) {
+    if (row.classList.contains(selectors.attendance_inline_header)) {
       columns = Array.from(row.children).map((td) => ({
-        period: clean(td.querySelector('.HeaderPD')?.textContent),
-        course: clean(td.querySelector('.HeaderClass')?.textContent).replace(/^\(\d+\)\s*/, ''),
+        period: clean(td.querySelector(selectors.attendance_header_period)?.textContent),
+        course: clean(td.querySelector(selectors.attendance_header_course)?.textContent).replace(
+          /^\(\d+\)\s*/,
+          ''
+        ),
       }));
       continue;
     }
-    const date = clean(row.querySelector('.gridDate')?.textContent);
+    const date = clean(row.querySelector(selectors.attendance_grid_date)?.textContent);
     if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(date)) continue;
     const cells = Array.from(row.children);
     const allDay = clean(
-      cells[1]?.querySelector('.AllDayCodeReadOnly')?.textContent ?? cells[1]?.textContent
+      cells[1]?.querySelector(selectors.attendance_all_day)?.textContent ?? cells[1]?.textContent
     );
     if (allDay && allDay !== '-') {
       results.push({ date, period: '', status: allDay, reason: '', course: '' });
     }
     for (let i = 2; i < cells.length; i++) {
       const cell = cells[i]!;
-      if (cell.querySelector('.NoClass')) continue;
+      if (cell.querySelector(selectors.attendance_no_class)) continue;
       const code = clean(cell.textContent);
       if (!code || code === '-') continue;
       const meta = columns[i] ?? { period: String(i - 1), course: '' };
       const title =
-        cell.getAttribute('title') ?? cell.querySelector('[title]')?.getAttribute('title') ?? '';
+        cell.getAttribute('title') ??
+        cell.querySelector(selectors.attendance_title_attr)?.getAttribute('title') ??
+        '';
       results.push({
         date,
         period: meta.period,
@@ -469,30 +474,34 @@ export function extractAeriesAttendance(): IAeriesAttendanceExtract[] {
 }
 
 /** Extracts student id / name / grade / school from the banner shown on inner pages. */
-export function extractAeriesStudentInfo(): {
+export function extractAeriesStudentInfo(selectors: IAeriesSelectorsV1): {
   studentId: string;
   name: string;
   grade: string;
   school: string;
 } {
   const clean = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
-  const idEl = document.querySelector('.student-id');
+  const idEl = document.querySelector(selectors.student_info_id);
   let studentId = clean(idEl?.textContent).match(/\d{4,}/)?.[0] ?? '';
   if (!studentId) {
-    const hidden = document.querySelector('#txtBackpackStudentID') as HTMLInputElement | null;
+    const hidden = document.querySelector(
+      selectors.student_info_hidden_id
+    ) as HTMLInputElement | null;
     if (hidden?.value && /^\d{4,}$/.test(hidden.value)) studentId = hidden.value;
   }
   if (!studentId) {
     const m = (document.body.textContent ?? '').match(/Student ID:?\s*(\d{4,})/i);
     studentId = m?.[1] ?? '';
   }
-  let name = clean(document.querySelector('.student-full-name')?.textContent);
-  let grade = clean(document.querySelector('.student-grade')?.textContent).match(/\d+/)?.[0] ?? '';
+  let name = clean(document.querySelector(selectors.student_info_full_name)?.textContent);
+  let grade =
+    clean(document.querySelector(selectors.student_info_grade)?.textContent).match(/\d+/)?.[0] ??
+    '';
   let school = '';
-  const header = document.querySelector('#StudentNameDropDown');
+  const header = document.querySelector(selectors.studentNameDropDown);
   if (header) {
     const text = clean(header.textContent);
-    const headName = clean(header.querySelector('.StudentName')?.textContent);
+    const headName = clean(header.querySelector(selectors.studentList_name_heading)?.textContent);
     const gm = text.match(/Grade:?\s*(\d+)/);
     if (!grade && gm) grade = gm[1] ?? '';
     if (headName) {
@@ -517,14 +526,14 @@ export function extractAeriesStudentInfo(): {
 }
 
 /** Clicks the student switcher entry whose text contains `name`. */
-export function switchAeriesStudentByName(name: string): boolean {
-  const toggle = document.querySelector('#StudentNameDropDown') as HTMLElement | null;
+export function switchAeriesStudentByName(opts: {
+  selectors: IAeriesSelectorsV1;
+  name: string;
+}): boolean {
+  const { selectors, name } = opts;
+  const toggle = document.querySelector(selectors.studentNameDropDown) as HTMLElement | null;
   if (toggle) toggle.click();
-  const links = Array.from(
-    document.querySelectorAll(
-      '#StudentNameDropDownMenu a.StudentNameDropDownOption, a[href*="ChangeStudent"]'
-    )
-  );
+  const links = Array.from(document.querySelectorAll(selectors.student_switch_links));
   for (const link of links) {
     if ((link.textContent ?? '').replace(/\s+/g, ' ').includes(name)) {
       (link as HTMLAnchorElement).click();
@@ -535,9 +544,13 @@ export function switchAeriesStudentByName(name: string): boolean {
 }
 
 /** Choose a course in the Gradebook Details dropdown and fire its change event (postback). */
-export function selectAeriesCourseOption(value: string): void {
+export function selectAeriesCourseOption(opts: {
+  selectors: IAeriesSelectorsV1;
+  value: string;
+}): void {
+  const { selectors, value } = opts;
   const dropdown = document.querySelector(
-    'select[name="ctl00$MainContent$subGBS$dlGN"], select[id*="dlGN"]'
+    selectors.gradebook_course_dropdown
   ) as HTMLSelectElement | null;
   if (dropdown) {
     dropdown.value = value;
@@ -546,14 +559,11 @@ export function selectAeriesCourseOption(value: string): void {
 }
 
 /** True once the dashboard class cards have rendered (they load after the page). */
-export function isAeriesDashboardReady(): boolean {
-  return (
-    document.querySelector('#divClass .Card a.TextHeading, .classesSection .Card a.TextHeading') !==
-    null
-  );
+export function isAeriesDashboardReady(selectors: IAeriesSelectorsV1): boolean {
+  return document.querySelector(selectors.dashboard_ready) !== null;
 }
 
 /** True once the attendance grid has rendered its day rows (it loads after the page). */
-export function isAeriesAttendanceReady(): boolean {
-  return document.querySelector('#tblNewFlex .gridDate') !== null;
+export function isAeriesAttendanceReady(selectors: IAeriesSelectorsV1): boolean {
+  return document.querySelector(selectors.attendance_ready) !== null;
 }

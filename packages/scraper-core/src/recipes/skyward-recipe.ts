@@ -9,6 +9,7 @@ import type { IPageDriver } from '../driver/IPageDriver';
 import type {
   ISkywardFullExtract,
   ISkywardCourseExtract,
+  ISkywardSelectorsV1,
 } from '../extractors/skyward/skyward-extractors';
 import {
   extractSkywardStudentName,
@@ -21,6 +22,12 @@ import {
   isSkywardGradeInfoReady,
   closeSkywardDialogs,
 } from '../extractors/skyward/skyward-extractors';
+import { SKYWARD_SELECTORS_V1 } from '../selectors/skywardV1';
+import { mergeSelectorRecord } from '../selectors/mergeSelectorTables';
+
+export interface IRunSkywardRecipeOptions {
+  readonly selectors?: Partial<ISkywardSelectorsV1>;
+}
 
 /** Grade period literals in priority order (most recent school term first). */
 const GRADE_PERIOD_PRIORITY = ['4TH', 'PR4', '3RD', 'PR3', '2ND', 'PR2', '1ST', 'PR1'];
@@ -119,14 +126,16 @@ export function pickSkywardCurrentGrade(grades: Readonly<Record<string, string>>
  */
 export async function runSkywardRecipe(
   driver: IPageDriver,
-  _baseUrl: string
+  _baseUrl: string,
+  options?: IRunSkywardRecipeOptions
 ): Promise<ISkywardFullExtract> {
-  const studentName = await driver.evaluate(extractSkywardStudentName);
-  const schoolName = await driver.evaluate(extractSkywardSchoolName);
+  const selectors = mergeSelectorRecord(SKYWARD_SELECTORS_V1, options?.selectors);
+  const studentName = await driver.evaluate(extractSkywardStudentName, selectors);
+  const schoolName = await driver.evaluate(extractSkywardSchoolName, selectors);
 
   // --- Gradebook ---
   // Navigate to Gradebook section via nav link
-  await navigateSkywardSection(driver, 'Gradebook');
+  await navigateSkywardSection(driver, selectors, 'Gradebook');
   await driver.sleep(3000);
 
   const html = await driver.content();
@@ -218,15 +227,20 @@ export async function runSkywardRecipe(
   // Per-course assignments: click the course's grade cell, wait for its
   // #gradeInfoDialog, read it, close it (closing marks it read).
   const allAssignments: ISkywardFullExtract['assignments'] = [];
-  await closeDialogsQuietly(driver);
+  await closeDialogsQuietly(driver, selectors);
   for (const course of courses) {
     if (!course._cni) continue;
     try {
       const periods = [...GRADE_PERIOD_PRIORITY, ...Object.keys(course.grades).reverse()];
-      const opened = await driver.evaluate(openSkywardGradeInfo, { cni: course._cni, periods });
+      const opened = await driver.evaluate(openSkywardGradeInfo, {
+        selectors,
+        cni: course._cni,
+        periods,
+      });
       if (opened === null) continue;
-      if (!(await waitForGradeDialog(driver))) continue;
+      if (!(await waitForGradeDialog(driver, selectors))) continue;
       const assignments = await driver.evaluate(extractSkywardCourseAssignments, {
+        selectors,
         courseName: course.name,
         coursePeriod: course.period,
       });
@@ -234,16 +248,16 @@ export async function runSkywardRecipe(
     } catch {
       // continue to next course
     } finally {
-      await closeDialogsQuietly(driver);
+      await closeDialogsQuietly(driver, selectors);
     }
   }
 
   // --- Attendance ---
   let attendance: ISkywardFullExtract['attendance'] = [];
   try {
-    await navigateSkywardSection(driver, 'Attendance');
+    await navigateSkywardSection(driver, selectors, 'Attendance');
     await driver.sleep(3000);
-    attendance = await driver.evaluate(extractSkywardAttendance);
+    attendance = await driver.evaluate(extractSkywardAttendance, selectors);
   } catch {
     // continue
   }
@@ -251,9 +265,9 @@ export async function runSkywardRecipe(
   // --- Schedule ---
   let schedule: ISkywardFullExtract['schedule'] = [];
   try {
-    await navigateSkywardSection(driver, 'Schedule');
+    await navigateSkywardSection(driver, selectors, 'Schedule');
     await driver.sleep(3000);
-    schedule = await driver.evaluate(extractSkywardSchedule);
+    schedule = await driver.evaluate(extractSkywardSchedule, selectors);
   } catch {
     // continue
   }
@@ -270,12 +284,16 @@ export async function runSkywardRecipe(
   };
 }
 
-async function navigateSkywardSection(driver: IPageDriver, linkText: string): Promise<void> {
+async function navigateSkywardSection(
+  driver: IPageDriver,
+  selectors: ISkywardSelectorsV1,
+  linkText: string
+): Promise<void> {
   // Navigation via URL manipulation is more reliable than clicking nav links in WebViews
   // The driver is expected to navigate to the section; clicking is handled by the recipe
   // by injecting a click on the nav link text.
   try {
-    await driver.evaluate(clickSkywardNavLink, linkText);
+    await driver.evaluate(clickSkywardNavLink, { selectors, text: linkText });
     await driver.waitForLoad({ timeout: 10000 });
     await driver.sleep(2000);
   } catch {
@@ -283,18 +301,24 @@ async function navigateSkywardSection(driver: IPageDriver, linkText: string): Pr
   }
 }
 
-async function waitForGradeDialog(driver: IPageDriver): Promise<boolean> {
+async function waitForGradeDialog(
+  driver: IPageDriver,
+  selectors: ISkywardSelectorsV1
+): Promise<boolean> {
   const polls = Math.ceil(GRADE_DIALOG_TIMEOUT_MS / GRADE_DIALOG_POLL_MS);
   for (let i = 0; i <= polls; i++) {
-    if (await driver.evaluate(isSkywardGradeInfoReady)) return true;
+    if (await driver.evaluate(isSkywardGradeInfoReady, selectors)) return true;
     if (i < polls) await driver.sleep(GRADE_DIALOG_POLL_MS);
   }
   return false;
 }
 
-async function closeDialogsQuietly(driver: IPageDriver): Promise<void> {
+async function closeDialogsQuietly(
+  driver: IPageDriver,
+  selectors: ISkywardSelectorsV1
+): Promise<void> {
   try {
-    await driver.evaluate(closeSkywardDialogs);
+    await driver.evaluate(closeSkywardDialogs, selectors);
     await driver.sleep(300);
   } catch {
     // best effort
