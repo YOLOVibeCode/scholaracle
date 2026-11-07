@@ -145,6 +145,10 @@ jobs:
     with:
       base_url: https://web-dev-8552.up.railway.app
       api_base_url: https://api-dev-c268.up.railway.app/api
+      # Deployed-environment gate: the layered chain (critical → auth → dashboard →
+      # navigation → feature). The full suite, including Mailpit-dependent and fake-portal
+      # specs, runs on localhost for every PR; against dev it exceeded the 30-minute limit.
+      project: feature
 
   # ─── OTA update → TestFlight preview channel ─────────────────────────
   # Runs after E2E (or wait-for-dev if E2E is skipped).
