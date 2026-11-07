@@ -18,9 +18,11 @@ import {
   type IIngestSourceRegisterResponse,
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
+  type IIngestRunTraceResponse,
   type IIngestRunSkeletonUploadRequest,
   type IIngestRunSkeletonUploadResponse,
   type ISlcRunCoverage,
+  collectEnvelopeEntityWarnings,
 } from '@scholaracle/contracts';
 import {
   computeRunCoverage,
@@ -34,6 +36,7 @@ import {
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { parseIngestRunStats, parseIngestRunStep } from './ingestTraceHelpers';
 import { assertIngestRunActor, assertRunStatus } from './ingestRunLifecycle';
 import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
@@ -99,9 +102,24 @@ export interface IIngestV1RouterConfig {
 }
 
 function warningsFromFullValidation(envelope: ISlcIngestEnvelopeV1): readonly string[] {
-  return validateEnvelopeFull(envelope)
+  const joinWarnings = validateEnvelopeFull(envelope)
     .checks.filter((c) => c.severity === 'warning')
     .map((c) => c.message);
+  return [...joinWarnings, ...collectEnvelopeEntityWarnings(envelope)];
+}
+
+function statsFromEnvelope(envelope: ISlcIngestEnvelopeV1): Record<string, number> {
+  const report = validateEnvelopeFull(envelope);
+  const fromEnvelope = envelope.stats ?? {};
+  const fromCounts: Record<string, number> = {};
+  for (const [entity, count] of Object.entries(report.entityCounts)) {
+    fromCounts[`entity_${entity}`] = count;
+  }
+  return {
+    ...fromEnvelope,
+    ...fromCounts,
+    opsTotal: envelope.ops.length,
+  };
 }
 
 function parseOptionalCoverage(raw: unknown): ISlcRunCoverage | undefined {
@@ -1197,6 +1215,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         clientMeta && typeof clientMeta === 'object' && !Array.isArray(clientMeta)
           ? (clientMeta as Record<string, string>)
           : null;
+      const initialStep = parseIngestRunStep(req.body?.step);
       await runRepo.startRun({
         userId: dataUserId,
         actorUserId,
@@ -1204,6 +1223,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         runId,
         lastCursor,
         clientMeta: meta,
+        ...(initialStep !== null ? { initialStep } : {}),
       });
 
       res.status(200).json({
@@ -1212,6 +1232,36 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         mode: 'delta',
         lastCursor,
       } satisfies IIngestRunStartResponse);
+    })
+  );
+
+  router.post(
+    '/runs/:runId/trace',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const actorUserId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        throw new ValidationError('Missing runId');
+      }
+      const step = parseIngestRunStep(req.body?.step);
+      if (step === null) {
+        throw new ValidationError('Invalid trace step');
+      }
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      assertIngestRunActor(existingRun, actorUserId);
+      const runDataUserId = existingRun.userId.toString();
+      const traceStats = parseIngestRunStats(req.body?.stats);
+      const traceWarnings = parseOptionalStringArray(req.body?.warnings);
+      await runRepo.appendTraceStep(runDataUserId, runId, {
+        step,
+        ...(traceStats !== undefined ? { stats: traceStats } : {}),
+        ...(traceWarnings !== undefined ? { warnings: traceWarnings } : {}),
+      });
+      res.status(200).json({ success: true } satisfies IIngestRunTraceResponse);
     })
   );
 
@@ -1360,11 +1410,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           });
         }
       }
+      const preparedEnvelope = { ...envelope, ops: prepared.ops };
       const coverageSnapshot = computeRunCoverage(prepared.ops);
-      const warningLines = warningsFromFullValidation({ ...envelope, ops: prepared.ops });
+      const warningLines = warningsFromFullValidation(preparedEnvelope);
+      const runStats = statsFromEnvelope(preparedEnvelope);
       const markedUploaded = await runRepo.markUploaded(dataUserId, runId, {
         coverage: coverageSnapshot,
         warnings: [...warningLines],
+        stats: runStats,
         opCount: prepared.ops.length,
       });
       if (!markedUploaded) {
@@ -1392,11 +1445,8 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new NotFoundError('Run not found');
       }
       // Verify the actor initiated this run or is the owner.
-      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      assertIngestRunActor(existingRun, actorUserId);
       const runDataUserId = existingRun.userId.toString();
-      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
-        throw new AuthenticationError('Not authorized to complete this run');
-      }
 
       const status = (req.body?.status as string | undefined) ?? 'success';
       if (status === 'failed') {
