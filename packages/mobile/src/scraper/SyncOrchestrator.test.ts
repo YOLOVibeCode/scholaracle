@@ -259,6 +259,45 @@ describe('runSyncPipeline', () => {
     }
   });
 
+  it('passes studentNameHint through to the scrape host config', async () => {
+    let capturedHint: string | undefined;
+    const resolver: IScraperResolver = {
+      async resolve() {
+        const module: IScraperModule = {
+          metadata: {
+            id: 'canvas',
+            name: 'Canvas',
+            adapterId: 'com.instructure.canvas',
+            version: '0.1.0',
+            hosts: ['*.instructure.com'],
+            entities: ['course'],
+            entry: 'builtin:canvas',
+            publisher: 'scholaracle',
+          },
+          scrape: async (host) => {
+            capturedHint = host.config.studentNameHint;
+            return { user: 'Test Student', courses: [], timestamp: NOW };
+          },
+          transform: () => [courseOp()],
+        };
+        return { module, canRun: true, checkErrors: [] };
+      },
+    };
+    const recorder = makeRecorder();
+    const uploader = makeUploader();
+    const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+    await runSyncPipeline(
+      driver,
+      { ...config, studentNameHint: 'Ben Example' },
+      uploader,
+      'token',
+      recorder,
+      undefined,
+      { resolver }
+    );
+    expect(capturedHint).toBe('Ben Example');
+  });
+
   it('should resolve addPhase before the next pipeline step runs', async () => {
     const events: string[] = [];
     const recorder: IRunRecorder = {
