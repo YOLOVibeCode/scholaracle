@@ -307,6 +307,18 @@ export class ScholarmancyApiClient {
     return this._get<IStudentListItem[]>('/api/students');
   }
 
+  async getConsents(): Promise<{ readonly serverAi: boolean }> {
+    return this._get<{ readonly serverAi: boolean }>('/api/consents');
+  }
+
+  async setServerAiConsent(enabled: boolean): Promise<{ readonly serverAi: boolean }> {
+    return this._put<{ readonly serverAi: boolean }>(
+      '/api/consents/server-ai',
+      { enabled },
+      { 'X-Consent-Source': '/mobile/settings' }
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Student studio (IStudioApi — student JWT only)
   // ---------------------------------------------------------------------------
@@ -646,6 +658,30 @@ export class ScholarmancyApiClient {
       res = await doGet(await this._refreshAccessToken());
     }
     if (!res.ok) throw await ApiError.fromResponse(res, `GET ${path}`);
+    return res.json() as Promise<T>;
+  }
+
+  private async _put<T>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<T> {
+    const doPut = async (authToken: string): Promise<Response> =>
+      this._timedFetch(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      });
+
+    let res = await doPut(await this._getAccessToken());
+    if (res.status === 401) {
+      res = await doPut(await this._refreshAccessToken());
+    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `PUT ${path}`);
     return res.json() as Promise<T>;
   }
 
