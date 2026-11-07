@@ -16,6 +16,7 @@ export interface IConnectedSource {
   readonly studentExternalId: string;
   readonly institutionExternalId: string;
   readonly studentId?: string;
+  readonly portalAccountId?: string;
   readonly adapterVersion: string;
 }
 

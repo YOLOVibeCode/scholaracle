@@ -5,6 +5,7 @@ import { AuthService } from '@scholaracle/auth';
 import { StudentRepository, UserRepository } from '@scholaracle/database';
 import { ingestV1Router } from './ingest';
 import { createErrorHandler } from '../../../middleware/errorHandler';
+import { seedBindingsForEnvelope } from '../../../test-utils/seedIngestBinding';
 
 describe('Ingest v1 API', () => {
   let app: Express;
@@ -12,6 +13,7 @@ describe('Ingest v1 API', () => {
   let mongoClient: MongoClient;
   let authService: AuthService;
   let userToken: string;
+  let ownerUserId: string;
 
   beforeAll(async () => {
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -43,8 +45,10 @@ describe('Ingest v1 API', () => {
     process.env['CONNECTOR_JWT_SECRET'] = 'test-secret-connector';
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
-    if (!reg.success || !reg.token) throw new Error('Failed to register test user');
+    if (!reg.success || !reg.token || !reg.user?.id)
+      throw new Error('Failed to register test user');
     userToken = reg.token;
+    ownerUserId = reg.user.id;
 
     app = express();
     app.use(express.json());
@@ -173,6 +177,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -243,6 +248,7 @@ describe('Ingest v1 API', () => {
         },
       ],
     };
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -807,6 +813,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -928,6 +935,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)

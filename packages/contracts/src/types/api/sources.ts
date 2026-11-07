@@ -26,6 +26,7 @@ export interface ISourceListItem {
   readonly lastRunId?: string;
   readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
+  readonly portalAccountId?: string;
 }
 
 export interface IRunListItem {

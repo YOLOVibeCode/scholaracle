@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
@@ -401,6 +402,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       guardedSmsSender
     );
 
+    app.use(
+      '/api/portal-accounts',
+      authMiddleware(authService),
+      requireParent,
+      portalAccountsRouter({ database })
+    );
     app.use(
       '/api/students',
       authMiddleware(authService),
