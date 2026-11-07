@@ -12,13 +12,13 @@ import { installSourceLinkParser } from './installSourceDeepLink';
 import type { IPendingSourceInviteStore } from './types';
 
 const AVA_TOKEN = 'ab'.repeat(32);
-const AVA: ISourceInvitePayload = {
+const AVERY: ISourceInvitePayload = {
   provider: 'skyward',
   adapterId: SOURCE_INVITE_ADAPTER_IDS.skyward,
   portalBaseUrl: 'https://skyward.iscorp.com',
   displayName: 'Skyward Family Access (skyward.iscorp.com)',
   studentId: 'stu-mongo-1',
-  studentExternalId: 'ava-lewis',
+  studentExternalId: 'avery-sample',
   institutionExternalId: 'skyward.iscorp.com',
 };
 
@@ -48,7 +48,7 @@ describe('handleInstallLink', () => {
     await handleInstallLink(`scholarmancy://install-source?t=${AVA_TOKEN}`, {
       parser: installSourceLinkParser,
       pending: { save: jest.fn(), take: jest.fn() },
-      redeem: jest.fn().mockResolvedValue(AVA),
+      redeem: jest.fn().mockResolvedValue(AVERY),
       apply: { apply },
       isLoggedIn: true,
       onApplied,
@@ -56,7 +56,7 @@ describe('handleInstallLink', () => {
     });
     expect(apply).toHaveBeenCalled();
     expect(onApplied).toHaveBeenCalledWith(
-      AVA,
+      AVERY,
       expect.objectContaining({ sourceId: 'local-skyward-skyward.iscorp.com' })
     );
   });
@@ -79,7 +79,7 @@ describe('handleInstallLink', () => {
     const onApplied = jest.fn();
     await redeemPendingInstall({
       pending: { save: jest.fn(), take: jest.fn().mockResolvedValue(AVA_TOKEN) },
-      redeem: jest.fn().mockResolvedValue(AVA),
+      redeem: jest.fn().mockResolvedValue(AVERY),
       apply: { apply: jest.fn().mockResolvedValue({}) },
       onApplied,
       onError: jest.fn(),

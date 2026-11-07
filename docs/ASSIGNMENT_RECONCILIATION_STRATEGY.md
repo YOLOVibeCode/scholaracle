@@ -265,7 +265,7 @@ await db.collection('slc_assignment_reconciliation').insertMany(
 
 ---
 
-## 📈 Expected Impact on Ava's Missing Count
+## 📈 Expected Impact on Avery's Missing Count
 
 ### Current State
 - **Canvas Missing**: 75 assignments (all with no due date)

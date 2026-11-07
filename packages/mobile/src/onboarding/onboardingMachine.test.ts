@@ -33,19 +33,19 @@ describe('onboardingMachine', () => {
   it('requires at least one named child before leaving children', () => {
     let state = createInitialOnboardingState('logged-in');
     expect(canAdvance(state)).toBe(false);
-    state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
+    state = updateChild(state, state.children[0]!.key, { name: 'Gabe' });
     expect(canAdvance(state)).toBe(true);
   });
 
   it('adds a second child and will not remove the last remaining row', () => {
     let state = createInitialOnboardingState('logged-in');
-    state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
+    state = updateChild(state, state.children[0]!.key, { name: 'Gabe' });
     state = addChild(state);
     expect(state.children).toHaveLength(2);
-    state = updateChild(state, state.children[1]!.key, { name: 'Christian' });
+    state = updateChild(state, state.children[1]!.key, { name: 'Casey' });
     state = removeChild(state, state.children[0]!.key);
     expect(state.children).toHaveLength(1);
-    expect(state.children[0]?.name).toBe('Christian');
+    expect(state.children[0]?.name).toBe('Casey');
     const same = removeChild(state, state.children[0]!.key);
     expect(same.children).toHaveLength(1);
   });
@@ -57,7 +57,7 @@ describe('onboardingMachine', () => {
     state = reduceOnboarding(state, { type: 'set-password', value: 'mock-password12' });
     state = reduceOnboarding(state, { type: 'next' });
     expect(state.step).toBe('children');
-    state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
+    state = updateChild(state, state.children[0]!.key, { name: 'Gabe' });
     state = reduceOnboarding(state, { type: 'next' });
     expect(state.step).toBe('provider');
     state = reduceOnboarding(state, { type: 'set-provider', provider: 'skyward' });
@@ -77,7 +77,7 @@ describe('onboardingMachine', () => {
 
   it('rejects a portal URL without a hostname', () => {
     let state = createInitialOnboardingState('logged-in');
-    state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
+    state = updateChild(state, state.children[0]!.key, { name: 'Gabe' });
     state = reduceOnboarding(state, { type: 'next' });
     state = reduceOnboarding(state, { type: 'set-provider', provider: 'skyward' });
     state = reduceOnboarding(state, { type: 'next' });
@@ -87,10 +87,10 @@ describe('onboardingMachine', () => {
 
   it('goes back without losing child names', () => {
     let state = createInitialOnboardingState('logged-in');
-    state = updateChild(state, state.children[0]!.key, { name: 'Gideon' });
+    state = updateChild(state, state.children[0]!.key, { name: 'Gabe' });
     state = reduceOnboarding(state, { type: 'next' });
     state = reduceOnboarding(state, { type: 'back' });
     expect(state.step).toBe('children');
-    expect(state.children[0]?.name).toBe('Gideon');
+    expect(state.children[0]?.name).toBe('Gabe');
   });
 });

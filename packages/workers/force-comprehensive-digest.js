@@ -16,8 +16,8 @@ sgMail.setApiKey(SENDGRID_API_KEY);
 
 const recipients = [
   'rvegajr@noctusoft.com',
-  'rmlewis1976@gmail.com',
-  'jdenise11@hotmail.com'
+  'coparent.one@example.com',
+  'coparent.two@example.com'
 ];
 
 const html = `
@@ -58,7 +58,7 @@ const html = `
 </head>
 <body>
   <div class="header">
-    <h1>📊 Academic Digest for Ava Lewis</h1>
+    <h1>📊 Academic Digest for Avery Sample</h1>
     <p>Your comprehensive weekly academic summary • March 9, 2026</p>
   </div>
 
@@ -67,7 +67,7 @@ const html = `
     <div class="insight">
       <h3>💡 AI Insight</h3>
       <p>
-        Ava is performing exceptionally well across all subjects! English and Social Studies show particular strength with A grades. 
+        Avery is performing exceptionally well across all subjects! English and Social Studies show particular strength with A grades. 
         Math and Science are progressing well with solid B+ performance. The upcoming Chemistry assignment due next week is a good 
         opportunity to maintain this momentum. Overall academic trajectory is excellent - keep up the great work!
       </p>
@@ -164,7 +164,7 @@ async function sendComprehensiveDigest() {
           name: 'Scholaracle'
         },
         replyTo: 'rvegajr@yolovibecodebootcamp.com',
-        subject: '📊 Weekly Academic Digest for Ava Lewis',
+        subject: '📊 Weekly Academic Digest for Avery Sample',
         html: html,
         trackingSettings: {
           clickTracking: { enable: false },

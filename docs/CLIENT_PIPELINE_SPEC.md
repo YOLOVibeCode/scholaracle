@@ -407,11 +407,11 @@ instead of `Map<fileName, assignmentArrayIndex>`. The transformer then uses `can
 **`_cni`** is the Skyward section ID field already captured by the recipe (`sectionId.split('_')[1]`).
 Transformers MUST use it when non-empty.
 
-**Hardcoded LDISD term calendar**: the term definitions in `skyward-transformer.ts` are
+**Hardcoded EXAMPLEISD term calendar**: the term definitions in `skyward-transformer.ts` are
 district-specific. The recipe MUST be updated to extract the grading period header labels and
 date ranges from the gradebook HTML. The transformer then receives the actual term definitions
 in the extract rather than relying on a hardcoded constant. Until that recipe work is done the
-hardcoded calendar remains acceptable for the LDISD deployment.
+hardcoded calendar remains acceptable for the EXAMPLEISD deployment.
 
 ### 6.3 Aeries
 

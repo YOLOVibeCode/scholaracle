@@ -36,7 +36,7 @@ describe('mapGapKindToRecipeStep — Aeries', () => {
       timestamp: '2026-01-15T10:00:00.000Z',
       students: [
         {
-          name: 'Emma Lewis',
+          name: 'Emma Sample',
           studentId: 'S12345',
           grade: '10',
           school: 'Central HS',

@@ -1,4 +1,4 @@
-# Ava Lewis - Grade Precedence Implementation Summary
+# Avery Sample - Grade Precedence Implementation Summary
 
 ## What We Built
 
@@ -25,7 +25,7 @@ Algebra 1:
 Result: 76% (Skyward takes precedence regardless of value)
 ```
 
-### 3. Expected Changes for Ava
+### 3. Expected Changes for Avery
 
 Based on the last successful sync (completed in 90s):
 
@@ -78,7 +78,7 @@ Based on the last successful sync (completed in 90s):
 ### 6. When Changes Take Effect
 
 **Next Sync Run**:
-1. Worker picks up sync job for Ava
+1. Worker picks up sync job for Avery
 2. Skyward browser scraper extracts latest data
 3. Course reconciliation runs with new precedence logic
 4. Grades update to show Skyward as primary
@@ -202,7 +202,7 @@ To verify the changes work:
 
 **Immediate** (within 1 hour):
 - Next scheduled sync picks up new code
-- Ava's grades update to show Skyward as primary
+- Avery's grades update to show Skyward as primary
 
 **Short-term** (within 24 hours):
 - All students' grades reconciled with SIS precedence
@@ -217,7 +217,7 @@ To verify the changes work:
 
 ## Conclusion
 
-The grade precedence system is now live in production code. The next sync run for Ava will automatically apply the new logic, showing Skyward (SIS) grades as authoritative while preserving Canvas data for reference.
+The grade precedence system is now live in production code. The next sync run for Avery will automatically apply the new logic, showing Skyward (SIS) grades as authoritative while preserving Canvas data for reference.
 
 **Key Benefit**: Parents see the official grades of record (from SIS) that match report cards, eliminating confusion from LMS projected grades that include extra credit or different weighting.
 

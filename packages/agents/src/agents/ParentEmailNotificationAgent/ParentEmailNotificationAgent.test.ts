@@ -45,7 +45,7 @@ describe('ParentEmailNotificationAgent', () => {
         studentId: 'student-123',
         severity: 'high',
         relatedData: {
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           course: 'Math',
           assignment: 'Homework 5',
           daysAgo: 2,
@@ -62,7 +62,7 @@ describe('ParentEmailNotificationAgent', () => {
         studentId: 'student-123',
         severity: 'high',
         relatedData: {
-          studentName: 'Ava',
+          studentName: 'Avery',
           course: 'Math',
           assignment: 'HW',
           daysAgo: 1,
@@ -79,7 +79,7 @@ describe('ParentEmailNotificationAgent', () => {
         studentId: 'student-123',
         severity: 'high',
         relatedData: {
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           course: 'Math',
           assignment: 'Homework 5',
           daysAgo: 2,
@@ -87,9 +87,9 @@ describe('ParentEmailNotificationAgent', () => {
         },
       });
       const notification = agent.generate(alert);
-      expect(notification.subject).toContain('Ava Lewis');
+      expect(notification.subject).toContain('Avery Sample');
       expect(notification.subject).toContain('Missing:');
-      expect(notification.body).toContain('Ava Lewis');
+      expect(notification.body).toContain('Avery Sample');
       expect(notification.body).toContain('Math');
       expect(notification.body).toContain('Homework 5');
       expect(notification.priority).toBe(NotificationPriority.HIGH);

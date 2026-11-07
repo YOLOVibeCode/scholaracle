@@ -47,21 +47,21 @@ slc_grade_snapshots:      16
 - **User ID**: `69a4f0c73671c632ca591c7c`
 - **Name**: R Vega Jr
 - **Alert Email**: ❌ NOT SET
-- **Student**: Ava Lewis (ID: `69a4f1b53671c632ca591c7f`)
-- **Student Alert Email**: ✅ `29alewis@ldisd.net`
+- **Student**: Avery Sample (ID: `69a4f1b53671c632ca591c7f`)
+- **Student Alert Email**: ✅ `student.one@exampleisd.net`
 - **Notification Preferences**:
   - Frequency: `proactive`
   - Email Enabled: ✅ `true`
   - Digest Times: `05:28`, `05:29`, `05:30` (testing slots)
 
-### ✅ Secondary Parents (Ava Lewis)
-1. **rmlewis1976@gmail.com** (Robert Lewis)
+### ✅ Secondary Parents (Avery Sample)
+1. **coparent.one@example.com** (Robin Sample)
    - Status: ✅ `accepted`
    - Receive Alerts: ✅ `true`
    - Channels: ✅ `['email']`
    - ⚠️ Name: `undefined` (missing)
 
-2. **jdenise11@hotmail.com** (Jessica Lewis)
+2. **coparent.two@example.com** (Jamie Sample)
    - Status: ✅ `accepted`
    - Receive Alerts: ✅ `true`
    - Channels: ✅ `['email']`
@@ -71,7 +71,7 @@ slc_grade_snapshots:      16
 
 ## 3. Sync Pipeline Status
 
-### Recent Sync Runs (Ava — User: `69a4f0c73671c632ca591c7c`)
+### Recent Sync Runs (Avery — User: `69a4f0c73671c632ca591c7c`)
 
 | Run ID | Status | Created | Duration | Notes |
 |--------|--------|---------|----------|-------|
@@ -116,26 +116,26 @@ slc_grade_snapshots:      16
 
 ## 5. Recipient Routing Test
 
-### Expected Recipients (for Ava's alerts):
+### Expected Recipients (for Avery's alerts):
 
 | Recipient | Email | Type | Expected Tone |
 |-----------|-------|------|---------------|
-| **Ava Lewis** | 29alewis@ldisd.net | `student` | Student-toned |
-| **Robert Lewis** | rmlewis1976@gmail.com | `parent` | Parent-toned |
-| **Jessica Lewis** | jdenise11@hotmail.com | `parent` | Parent-toned |
+| **Avery Sample** | student.one@exampleisd.net | `student` | Student-toned |
+| **Robin Sample** | coparent.one@example.com | `parent` | Parent-toned |
+| **Jamie Sample** | coparent.two@example.com | `parent` | Parent-toned |
 | **Owner (Ricky)** | rvegajr@noctusoft.com | `parent` | Parent-toned |
 
 ### Configuration Issues Found:
 1. ⚠️ Owner `alertEmail` not set (will use `rvegajr@noctusoft.com` as fallback)
-2. ⚠️ Secondary parent names are `undefined` (should be "Robert Lewis" and "Jessica Lewis")
-3. ✅ Student `alertEmail` correctly set to `29alewis@ldisd.net`
+2. ⚠️ Secondary parent names are `undefined` (should be "Robin Sample" and "Jamie Sample")
+3. ✅ Student `alertEmail` correctly set to `student.one@exampleisd.net`
 4. ✅ All secondary parents have `status: accepted` and `receiveAlerts: true`
 
 ---
 
 ## 6. Grade Bar & Digest Email Test
 
-### Grade Snapshots Available (Ava)
+### Grade Snapshots Available (Avery)
 - **Total Snapshots**: 16 courses with grades
 - **Status**: ✅ Data available for grade bar rendering
 
@@ -217,7 +217,7 @@ slc_grade_snapshots:      16
    - **Impact**: Cannot generate proper notification content
    - **Fix**: Debug alert creation in ingest pipeline
 
-2. **Secondary Parent Names Missing**: `rmlewis1976@gmail.com` and `jdenise11@hotmail.com` have `name: undefined`
+2. **Secondary Parent Names Missing**: `coparent.one@example.com` and `coparent.two@example.com` have `name: undefined`
    - **Impact**: Emails will lack proper recipient names
    - **Fix**: Update `sharedWith` records with correct names
 
@@ -243,7 +243,7 @@ slc_grade_snapshots:      16
 ## 10. Recommendations
 
 ### Immediate Actions
-1. ✅ **Run a fresh sync** for Ava to trigger alert generation
+1. ✅ **Run a fresh sync** for Avery to trigger alert generation
 2. ✅ **Fix secondary parent names** in database
 3. ✅ **Trigger digest flush** to test email delivery
 4. ✅ **Monitor worker logs** for digest sending activity
@@ -272,8 +272,8 @@ slc_grade_snapshots:      16
      { _id: ObjectId('69a4f1b53671c632ca591c7f') },
      {
        $set: {
-         'sharedWith.0.name': 'Robert Lewis',
-         'sharedWith.1.name': 'Jessica Lewis'
+         'sharedWith.0.name': 'Robin Sample',
+         'sharedWith.1.name': 'Jamie Sample'
        }
      }
    )

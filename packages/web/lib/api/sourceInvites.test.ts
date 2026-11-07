@@ -79,7 +79,7 @@ describe('sourceInvitesApi', () => {
       portalBaseUrl: 'https://skyward.iscorp.com',
       displayName: 'Skyward',
       studentId: 'stu-1',
-      studentExternalId: 'ava-lewis',
+      studentExternalId: 'avery-sample',
       institutionExternalId: 'skyward.iscorp.com',
     };
     fetchSpy.mockResolvedValue(fakeResponse({ success: true, invite }));

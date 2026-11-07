@@ -8,8 +8,8 @@ const { MongoClient } = require('mongodb');
     await client.connect();
     const db = client.db();
     
-    // Find Ava
-    const student = await db.collection('students').findOne({ name: 'Ava Lewis' });
+    // Find Avery
+    const student = await db.collection('students').findOne({ name: 'Avery Sample' });
     if (!student) {
       console.log('❌ Student not found');
       process.exit(1);
@@ -19,7 +19,7 @@ const { MongoClient } = require('mongodb');
     const studentId = student._id.toString();
     
     console.log('\n╔════════════════════════════════════════════════════════════╗');
-    console.log('║         AVA LEWIS - GRADE PRECEDENCE VERIFICATION         ║');
+    console.log('║         AVERY SAMPLE - GRADE PRECEDENCE VERIFICATION         ║');
     console.log('╚════════════════════════════════════════════════════════════╝\n');
     
     // Get last sync

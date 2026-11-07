@@ -12,8 +12,8 @@ function isMultiStudentExtract(raw: Record<string, unknown>): raw is Record<stri
 }
 
 /**
- * Parents often enter a shorter name in the app ("Christian", "Chris") than the
- * portal shows ("Christian Vega"). Match exactly first; otherwise accept the one
+ * Parents often enter a shorter name in the app ("Casey", "Chris") than the
+ * portal shows ("Casey Owner"). Match exactly first; otherwise accept the one
  * student whose name has, for every word of the hint, a word starting with it.
  * No match or more than one candidate returns undefined (the caller fails safe).
  */

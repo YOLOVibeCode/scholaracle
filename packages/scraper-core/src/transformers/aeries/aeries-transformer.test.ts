@@ -23,7 +23,7 @@ function makeExtract(overrides: Partial<IAeriesFullExtract> = {}): IAeriesFullEx
 
 function makeStudent(overrides: Partial<IAeriesFullExtract['students'][number]> = {}) {
   return {
-    name: 'Emma Lewis',
+    name: 'Emma Sample',
     studentId: 'S12345',
     grade: '10',
     school: 'Central HS',

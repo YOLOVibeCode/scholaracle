@@ -1206,7 +1206,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const termsColl = config.database.collection('slc_academic_terms');
       const gradeSnapshotsColl = config.database.collection('slc_grade_snapshots');
 
-      // studentId is either plain "ava-lewis" (new) or legacy "institution:student"
+      // studentId is either plain "avery-sample" (new) or legacy "institution:student"
       const rawStudentId = student.studentId ?? '';
       const legacyParts = rawStudentId.split(':', 2);
       const studentExternalId = legacyParts.length === 2 ? legacyParts[1]! : rawStudentId;

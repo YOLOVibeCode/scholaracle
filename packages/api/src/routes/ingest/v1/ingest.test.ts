@@ -420,7 +420,7 @@ describe('Ingest v1 API', () => {
     const studentRepo = new StudentRepository(database);
     await studentRepo.create({
       userId,
-      name: 'Emma Lewis',
+      name: 'Emma Sample',
       grade: 7,
       studentId: 'stu-emma-1',
       dataSources: [{ id: 'src-connector-students', pluginId: 'canvas', enabled: true }],
@@ -443,7 +443,7 @@ describe('Ingest v1 API', () => {
       .set('Authorization', `Bearer ${connectorToken}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    const emma = res.body.find((s: { name?: string }) => s.name === 'Emma Lewis');
+    const emma = res.body.find((s: { name?: string }) => s.name === 'Emma Sample');
     expect(emma).toBeDefined();
     expect(emma.externalId).toBe('stu-emma-1');
     expect(emma.grade).toBe(7);
@@ -781,7 +781,7 @@ describe('Ingest v1 API', () => {
           key: { ...baseKey, externalId: 'profile-1' },
           observedAt: now,
           record: {
-            name: 'Emma Lewis',
+            name: 'Emma Sample',
             gradeLevel: '10th',
             school: 'Lake Dallas HS',
             studentId: '12345',
@@ -863,7 +863,7 @@ describe('Ingest v1 API', () => {
     });
     expect(storedProfile).toBeDefined();
     const profileRecord = storedProfile?.['record'] as Record<string, unknown> | undefined;
-    expect(profileRecord?.['name']).toBe('Emma Lewis');
+    expect(profileRecord?.['name']).toBe('Emma Sample');
     expect(profileRecord?.['gradeLevel']).toBe('10th');
 
     const storedGrade = await database.collection('slc_grade_snapshots').findOne({

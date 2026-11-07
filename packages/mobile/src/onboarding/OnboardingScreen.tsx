@@ -248,7 +248,7 @@ export function OnboardingScreen({
               <View key={child.key} style={styles.childRow}>
                 <TextInput
                   style={[styles.input, styles.childName]}
-                  placeholder={index === 0 ? 'First name (e.g. Gideon)' : 'First name'}
+                  placeholder={index === 0 ? 'First name (e.g. Gabe)' : 'First name'}
                   placeholderTextColor="#999"
                   value={child.name}
                   onChangeText={(name) => setState((s) => updateChild(s, child.key, { name }))}

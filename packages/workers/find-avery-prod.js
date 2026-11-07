@@ -10,16 +10,16 @@ async function findAva() {
   await client.connect();
   const db = client.db(dbName);
   
-  // Look for student with email containing "alewis" or name containing "Ava"
+  // Look for student with email containing "student.one" or name containing "Avery"
   const students = await db.collection('students').find({
     $or: [
-      { 'profile.email': /alewis/i },
-      { 'profile.name': /ava/i },
-      { name: /ava/i }
+      { 'profile.email': /student.one/i },
+      { 'profile.name': /avery/i },
+      { name: /avery/i }
     ]
   }).toArray();
   
-  console.log('\nFound', students.length, 'student(s) matching Ava:');
+  console.log('\nFound', students.length, 'student(s) matching Avery:');
   students.forEach(s => {
     console.log({
       _id: s._id.toString(),

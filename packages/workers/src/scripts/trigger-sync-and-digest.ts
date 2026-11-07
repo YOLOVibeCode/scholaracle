@@ -1,5 +1,5 @@
 /**
- * Script: trigger sync for Ava (all sources), wait for completion, then send digest.
+ * Script: trigger sync for Avery (all sources), wait for completion, then send digest.
  * Usage: npx ts-node src/scripts/trigger-sync-and-digest.ts --studentId=<id>
  * Env: MONGODB_URI, SENDGRID_API_KEY (or SMTP_*), BASE_URL, API_BASE_URL, AUTH_TOKEN
  */

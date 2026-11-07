@@ -42,8 +42,8 @@ Click-through script for a complete end-to-end demo. Covers the parent dashboard
    - Toast / confirmation should appear
 
 8. Navigate to **Dashboard** → **Parents** tab
-   - Confirm Jessica (accepted), Ricky, Jennifer are listed
-   - Click **Send login link** on Jessica → send via email → confirm success
+   - Confirm Jamie (accepted), Ricky, Jordan are listed
+   - Click **Send login link** on Jamie → send via email → confirm success
 
 ---
 
@@ -68,13 +68,13 @@ Click-through script for a complete end-to-end demo. Covers the parent dashboard
 
 ---
 
-## 4. Guest parent — Jessica
+## 4. Guest parent — Jamie
 
 1. Use the magic-link email sent in step 1c, or log in directly:
    - Log out, navigate to `/login`
-   - Use Jessica's email (from seed: `jessica.demo@scholarmancy.com`) and `DemoPass123!`
+   - Use Jamie's email (from seed: `jamie.demo@scholarmancy.com`) and `DemoPass123!`
    - Expected: redirect to `/dashboard` in read-only guest view
-2. Confirm Jessica sees Emma + Liam grades but cannot edit settings
+2. Confirm Jamie sees Emma + Liam grades but cannot edit settings
 
 ---
 
@@ -102,10 +102,10 @@ OAuth will be added in the `mobile-oauth` track once Apple certs exist.
 | Emma grades | `/dashboard` shows AP Bio, Algebra II | |
 | Liam grades | `/dashboard` shows 7th-grade courses | |
 | Send magic link to Emma | Toast / success message | |
-| Send magic link to Jessica | Toast / success message | |
+| Send magic link to Jamie | Toast / success message | |
 | Emma student login | `/studio` with today's tasks | |
 | Liam student login | `/studio` with today's tasks | |
 | Student cannot reach `/dashboard` | Redirected to `/studio` | |
-| Jessica guest login | `/dashboard` read-only view | |
+| Jamie guest login | `/dashboard` read-only view | |
 | Mobile: no OAuth buttons | Welcome screen shows email/password only | |
 | Mobile: password login works | Dashboard + connector wizard loads | |

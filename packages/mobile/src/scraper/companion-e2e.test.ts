@@ -17,7 +17,7 @@ import { runSyncPipeline, type ISyncOrchestratorConfig } from './SyncOrchestrato
 import type { IEnvelopeUploader, IRunRecorder } from '../api/interfaces';
 
 const REALISTIC_EXTRACT: ICanvasBrowserExtract = {
-  user: 'Emma Lewis',
+  user: 'Emma Sample',
   timestamp: '2026-08-04T12:00:00.000Z',
   toDoItems: [],
   upcomingEvents: [],

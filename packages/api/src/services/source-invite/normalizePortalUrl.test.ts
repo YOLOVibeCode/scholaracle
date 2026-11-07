@@ -5,7 +5,7 @@
 import { normalizePortalUrl } from './normalizePortalUrl';
 
 describe('normalizePortalUrl', () => {
-  it('strips trailing slash and lowercases host for Ava Skyward', () => {
+  it('strips trailing slash and lowercases host for Avery Skyward', () => {
     expect(normalizePortalUrl('https://skyward.iscorp.com/')).toBe('https://skyward.iscorp.com');
   });
 
