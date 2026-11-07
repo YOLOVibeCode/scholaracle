@@ -1,22 +1,24 @@
 appId: com.scholarmancy.app
 ---
-- launchApp:
-    clearState: true
-    permissions:
-      all: deny
 - runFlow:
     when:
       platform: iOS
     commands:
       - clearKeychain
+# On CI emulators a clear-state relaunch can race the previous task's teardown, which
+# kills the new process and leaves the app on its splash screen. Relaunch until the
+# sign-in screen shows.
+- retry:
+    maxRetries: 2
+    commands:
       - launchApp:
           clearState: true
           permissions:
             all: deny
-- extendedWaitUntil:
-    visible:
-      id: input-email
-    timeout: 60000
+      - extendedWaitUntil:
+          visible:
+            id: input-email
+          timeout: 40000
 - tapOn:
     id: input-email
 - inputText:
@@ -27,9 +29,9 @@ appId: com.scholarmancy.app
 - inputText:
     text: ${MAESTRO_PARENT_PASSWORD}
     label: Type parent password
-- hideKeyboard
-- tapOn:
-    id: button-login
+# The password field submits on Return (onSubmitEditing). hideKeyboard is unreliable on
+# iOS simulators, and the keyboard can cover the Sign In button.
+- pressKey: Enter
 - extendedWaitUntil:
     visible:
       id: students-list

@@ -3,14 +3,17 @@ appId: com.scholarmancy.app
 name: Launch
 tags: [launch]
 ---
-- launchApp:
-    clearState: true
-    permissions:
-      all: deny
-- extendedWaitUntil:
-    visible:
-      id: input-email
-    timeout: 60000
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            all: deny
+      - extendedWaitUntil:
+          visible:
+            id: input-email
+          timeout: 40000
 - assertVisible:
     id: input-password
 - assertVisible:
