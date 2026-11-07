@@ -84,6 +84,12 @@ async function createIndexes(): Promise<void> {
   await db.collection('slc_runs').createIndex({ status: 1, startedAt: 1 });
   console.log('  slc_runs.sourceId+createdAt, status+startedAt');
 
+  await db.collection('repair_candidates').createIndex(
+    { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+    { unique: true }
+  );
+  console.log('  repair_candidates.portalHost+recipeId+step+skeletonHash+gapKind (unique)');
+
   await db.collection('sync_requests').createIndex({ syncRequestId: 1 }, { unique: true });
   await db.collection('sync_requests').createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
   console.log('  sync_requests.syncRequestId (unique), studentId+sourceId+createdAt');

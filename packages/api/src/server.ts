@@ -38,6 +38,7 @@ import {
   SessionRepository,
   StudentRepository,
   SourceInviteRepository,
+  createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
@@ -65,8 +66,6 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
-import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
-import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
@@ -442,14 +441,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       createAccountRouter({ database, baseUrl })
     );
     app.use(
-      '/api/scrapers',
-      createScrapersRouter({
-        database,
-        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
-      })
-    );
-
-    app.use(
       '/api/oauth',
       createGoogleOAuthRouter({
         database,
@@ -638,7 +629,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
-    app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
@@ -696,6 +686,7 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   installProcessHandlers(logger);
 
   const database = await initializeDatabase(config);
+  await createIndexes(database);
   await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
