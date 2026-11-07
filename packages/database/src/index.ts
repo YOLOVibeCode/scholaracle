@@ -21,6 +21,8 @@ export * from './models/IngestDeviceAuth';
 export * from './models/ConnectorDevice';
 export * from './models/IngestSource';
 export * from './models/IngestRun';
+export * from './models/PortalAccount';
+export * from './models/SlcBinding';
 export * from './models/RepairCandidate';
 export * from './models/ExternalIdAlias/ExternalIdAlias';
 
@@ -52,6 +54,8 @@ export * from './repositories/IngestDeviceAuthRepository';
 export * from './repositories/ConnectorDeviceRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
+export * from './repositories/PortalAccountRepository';
+export * from './repositories/SlcBindingRepository';
 export * from './repositories/RepairCandidateRepository';
 export * from './repositories/RepairProposalRepository';
 export * from './repositories/SourceInviteRepository';
