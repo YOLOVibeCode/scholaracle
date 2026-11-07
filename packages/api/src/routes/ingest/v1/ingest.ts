@@ -41,6 +41,11 @@ import {
   getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
+import {
+  INGEST_PLAN_LIMIT_CODE,
+  IngestStudentPlanLimitError,
+  assertIngestWithinStudentPlanLimit,
+} from '../../../services/billing/studentPlanLimit';
 import type { MongoQueue } from '@scholaracle/agents';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 import {
@@ -756,11 +761,11 @@ async function autoCreateStudentsFromOps(params: {
       // should have already returned the owner's userId, so params.userId IS the owner.
       // But if we're still seeing "not found" it means this is a brand-new student.
       if (maxStudents !== -1 && studentCount >= maxStudents) {
-        logger.warn(
-          { userId: params.userId, sourceId: params.sourceId, maxStudents },
-          'Ingest found a student beyond the plan limit; not creating it'
-        );
-        continue;
+        throw new IngestStudentPlanLimitError({
+          currentPlan: subscription?.effectivePlan() ?? 'free',
+          maxStudents,
+          currentCount: studentCount,
+        });
       }
       studentCount += 1;
       const studentName = profileNames.get(studentExtId) ?? studentExtId;
@@ -1323,6 +1328,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         envelope.source?.sourceId,
         firstStudentExtId
       );
+
+      try {
+        await assertIngestWithinStudentPlanLimit(config.database, dataUserId, envelope.ops);
+      } catch (err) {
+        if (err instanceof IngestStudentPlanLimitError) {
+          res.status(403).json({
+            success: false,
+            error: err.message,
+            code: INGEST_PLAN_LIMIT_CODE,
+            currentPlan: err.currentPlan,
+            maxStudents: err.maxStudents,
+            currentCount: err.currentCount,
+          });
+          return;
+        }
+        throw err;
+      }
 
       const prepared = await prepareIngestOps({
         ops: envelope.ops,
