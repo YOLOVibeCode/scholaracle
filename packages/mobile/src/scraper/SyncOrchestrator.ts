@@ -16,7 +16,7 @@ import {
   type IAIEnricher,
   type IAssetHost,
 } from '@scholaracle/scraper-core';
-import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
+import type { ISanitizedPageSkeletonCapture, ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 // Re-export pipeline types for existing callers
 export type {
   SyncPhase,
@@ -70,6 +70,20 @@ function buildMobileUploader(uploader: IEnvelopeUploader, connectorToken: string
           connectorToken,
           error,
           clientMeta: { clientType: 'mobile' },
+        })
+        .catch(() => undefined);
+    },
+    async uploadSkeleton(
+      runId: string,
+      sourceId: string,
+      payload: ISanitizedPageSkeletonCapture
+    ): Promise<void> {
+      await uploader
+        .uploadRunSkeleton({
+          runId,
+          sourceId,
+          connectorToken,
+          payload,
         })
         .catch(() => undefined);
     },
@@ -130,6 +144,7 @@ export async function runSyncPipeline(
       coreVersion: config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
     },
     clientType: 'mobile',
+    captureSkeletons: true,
     uploader: buildMobileUploader(uploader, connectorToken),
     recorder: buildMobileRecorder(recorder),
     onProgress,
