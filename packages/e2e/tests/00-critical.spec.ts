@@ -66,8 +66,4 @@ test.describe('@critical Layer 0: Critical Infrastructure', () => {
     expect(body).toHaveProperty('status');
     expect(body.status).toBe('ok');
   });
-
-  test('GATE-PROBE: deliberate failure for CI gate proof', () => {
-    expect(1).toBe(2);
-  });
 });
