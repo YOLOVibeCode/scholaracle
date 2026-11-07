@@ -6,6 +6,7 @@
  */
 
 import { extractSkywardCourseAssignments } from './skyward-extractors';
+import { SKYWARD_SELECTORS_V1 } from '../../selectors/skywardV1';
 
 describe('driver-contract — extractSkywardCourseAssignments', () => {
   it('accepts a single options object (not two positional strings)', () => {
@@ -15,7 +16,11 @@ describe('driver-contract — extractSkywardCourseAssignments', () => {
 
   it('returns an empty array when document has no #gradeInfoDialog', () => {
     // Running pure in Node (no DOM) — the function should degrade gracefully.
-    const result = extractSkywardCourseAssignments({ courseName: 'ALGEBRA', coursePeriod: '1' });
+    const result = extractSkywardCourseAssignments({
+      selectors: SKYWARD_SELECTORS_V1,
+      courseName: 'ALGEBRA',
+      coursePeriod: '1',
+    });
     expect(result).toEqual([]);
   });
 });

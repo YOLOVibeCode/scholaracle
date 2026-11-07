@@ -417,4 +417,72 @@ describe('Subscription', () => {
       expect(sub.effectivePlan(now)).toBe('free');
     });
   });
+
+  describe('effectivePlan drives maxStudents (matrix)', () => {
+    const now = new Date('2026-11-03T12:00:00Z');
+    const daysFromNow = (days: number): Date => new Date(now.getTime() + days * 86_400_000);
+
+    const cases: Array<{
+      name: string;
+      overrides: Parameters<typeof makeRequiredData>[0];
+      expectedPlan: keyof typeof PLAN_FEATURES;
+    }> = [
+      {
+        name: 'active premium in period',
+        overrides: { plan: 'premium', status: 'active', currentPeriodEnd: daysFromNow(10) },
+        expectedPlan: 'premium',
+      },
+      {
+        name: 'cancelled premium',
+        overrides: {
+          plan: 'premium',
+          status: 'cancelled',
+          currentPeriodEnd: daysFromNow(30),
+        },
+        expectedPlan: 'free',
+      },
+      {
+        name: 'paused premium',
+        overrides: { plan: 'premium', status: 'paused', currentPeriodEnd: daysFromNow(30) },
+        expectedPlan: 'free',
+      },
+      {
+        name: 'past_due inside grace',
+        overrides: {
+          plan: 'premium',
+          status: 'past_due',
+          currentPeriodEnd: daysFromNow(-2),
+        },
+        expectedPlan: 'premium',
+      },
+      {
+        name: 'trialing before trialEnd',
+        overrides: {
+          plan: 'premium',
+          status: 'trialing',
+          trialEnd: daysFromNow(3),
+          currentPeriodEnd: daysFromNow(3),
+        },
+        expectedPlan: 'premium',
+      },
+      {
+        name: 'trialing after trialEnd',
+        overrides: {
+          plan: 'premium',
+          status: 'trialing',
+          trialEnd: daysFromNow(-1),
+          currentPeriodEnd: daysFromNow(-1),
+        },
+        expectedPlan: 'free',
+      },
+    ];
+
+    it.each(cases)('$name', ({ overrides, expectedPlan }) => {
+      const sub = new Subscription(makeRequiredData(overrides));
+      expect(sub.effectivePlan(now)).toBe(expectedPlan);
+      expect(PLAN_FEATURES[sub.effectivePlan(now)].maxStudents).toBe(
+        PLAN_FEATURES[expectedPlan].maxStudents
+      );
+    });
+  });
 });
