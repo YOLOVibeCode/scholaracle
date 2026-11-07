@@ -24,8 +24,7 @@ export interface IScraperManifest {
 }
 
 export type ManifestRunValidation =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly errors: string[] };
+  { readonly ok: true } | { readonly ok: false; readonly errors: string[] };
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
