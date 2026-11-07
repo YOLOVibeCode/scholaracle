@@ -11,10 +11,12 @@ import { ingestV1Router } from '../ingest/v1/ingest';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { seedActiveConnectorJti } from '../../testHelpers/connectorDeviceTestSeed';
 
 describe('Course tutorial override (integration)', () => {
   jest.setTimeout(60_000);
   const jwtSecret = 'test-jwt-secret-min-32-chars!!';
+  const connectorJwtSecret = `${jwtSecret}-connector`;
   let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let database: Db;
@@ -38,7 +40,7 @@ describe('Course tutorial override (integration)', () => {
       requireParent,
       studentsRouter({ database, baseUrl: 'http://test.example' })
     );
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
+    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret, connectorJwtSecret }));
     app.use(createErrorHandler());
 
     const reg = await authService.register('tutorial-parent@test.com', 'password123', 'Parent');
@@ -65,7 +67,14 @@ describe('Course tutorial override (integration)', () => {
   });
 
   async function ingestCourseTutorialUpsert(tutorialWindow: string): Promise<void> {
-    const connectorToken = new ConnectorTokenService(jwtSecret).createToken(userId, randomJti());
+    const jti = randomJti();
+    const deviceId = 'course-tutorial-device';
+    const connectorToken = new ConnectorTokenService(connectorJwtSecret).createToken(
+      userId,
+      jti,
+      deviceId
+    );
+    await seedActiveConnectorJti(database, userId, deviceId, jti);
     await request(app)
       .post('/api/ingest/v1/sources')
       .set('Authorization', `Bearer ${connectorToken}`)

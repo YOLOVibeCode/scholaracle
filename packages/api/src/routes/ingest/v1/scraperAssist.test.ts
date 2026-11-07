@@ -4,6 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { createScraperAssistRouter } from './scraperAssist';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import { seedActiveConnectorJti } from '../../../testHelpers/connectorDeviceTestSeed';
 
 jest.mock('@scholaracle/agents', () => ({
   LlmClient: jest.fn().mockImplementation(() => ({
@@ -43,7 +44,8 @@ describe('POST /ai/scraper-assist', () => {
       createScraperAssistRouter({ database, jwtSecret: 'test-jwt-secret-min-32-chars!!' })
     );
     const tokenService = new ConnectorTokenService('test-jwt-secret-min-32-chars!!');
-    connectorToken = tokenService.createToken('user-1', 'jti-test-1');
+    connectorToken = tokenService.createToken('user-1', 'jti-test-1', 'assist-device');
+    await seedActiveConnectorJti(database, 'user-1', 'assist-device', 'jti-test-1');
   });
 
   afterAll(async () => {
@@ -99,8 +101,10 @@ describe('POST /ai/scraper-assist', () => {
       })
     );
     const tokenService = new ConnectorTokenService('test-jwt-secret-min-32-chars!!');
-    const capped = tokenService.createToken('user-daily-cap', 'jti-daily-1');
-    const other = tokenService.createToken('user-daily-other', 'jti-daily-2');
+    const capped = tokenService.createToken('user-daily-cap', 'jti-daily-1', 'device-cap');
+    const other = tokenService.createToken('user-daily-other', 'jti-daily-2', 'device-other');
+    await seedActiveConnectorJti(database, 'user-daily-cap', 'device-cap', 'jti-daily-1');
+    await seedActiveConnectorJti(database, 'user-daily-other', 'device-other', 'jti-daily-2');
     const call = (token: string) =>
       request(limitedApp)
         .post('/api/ingest/v1/ai/scraper-assist')
@@ -129,8 +133,10 @@ describe('POST /ai/scraper-assist', () => {
     );
     const token = new ConnectorTokenService('test-jwt-secret-min-32-chars!!').createToken(
       'user-burst',
-      'jti-burst-1'
+      'jti-burst-1',
+      'device-burst'
     );
+    await seedActiveConnectorJti(database, 'user-burst', 'device-burst', 'jti-burst-1');
     const call = () =>
       request(burstApp)
         .post('/api/ingest/v1/ai/scraper-assist')
