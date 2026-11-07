@@ -382,6 +382,7 @@ function AppContent(): React.ReactElement {
           studentExternalId: nav.syncSource.studentExternalId,
           institutionExternalId: nav.syncSource.institutionExternalId,
           sourceId: nav.syncSource.sourceId,
+          studentNameHint: nav.student.name,
         }}
         onDone={() => setNav({ view: 'dashboard', student: nav.student })}
         onCancel={() => setNav({ view: 'dashboard', student: nav.student })}
