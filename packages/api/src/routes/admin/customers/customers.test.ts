@@ -330,7 +330,8 @@ describe('Admin Customer Routes', () => {
         .toArray();
       expect(auditLogs).toHaveLength(1);
       expect(auditLogs[0]?.['reason']).toBe(reason);
-      expect(auditLogs[0]?.['adminEmail']).toBe('admin@test.com');
+      expect(auditLogs[0]?.['adminEmail']).toBe('a***@test.com');
+      expect(auditLogs[0]?.['entityId']).toBe(customerId);
 
       const adminDenied = await request(app)
         .get('/api/admin/customers')
