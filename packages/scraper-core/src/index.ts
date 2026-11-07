@@ -59,12 +59,21 @@ export {
 // Skyward
 export * from './extractors/skyward/skyward-extractors';
 export { runSkywardRecipe } from './recipes/skyward-recipe';
+export type { IRunSkywardRecipeOptions } from './recipes/skyward-recipe';
 export { transformSkywardExtract } from './transformers/skyward/skyward-transformer';
 
 // Aeries
 export * from './extractors/aeries/aeries-extractors';
 export { runAeriesRecipe } from './recipes/aeries-recipe';
+export type { IRunAeriesRecipeOptions } from './recipes/aeries-recipe';
 export { transformAeriesExtract } from './transformers/aeries/aeries-transformer';
+
+// Portal selector tables (v1 JSON + defaults for page functions)
+export { AERIES_SELECTORS_V1 } from './selectors/aeriesV1';
+export { SKYWARD_SELECTORS_V1 } from './selectors/skywardV1';
+export type { IAeriesSelectorsV1 } from './selectors/aeriesV1';
+export type { ISkywardSelectorsV1 } from './selectors/skywardV1';
+export { mergeSelectorRecord } from './selectors/mergeSelectorTables';
 
 // Test harness: M4-02 fake portal HTML (Playwright / Express)
 export * from './fixtures/fakePortalM402';

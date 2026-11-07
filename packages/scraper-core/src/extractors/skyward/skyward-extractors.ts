@@ -5,9 +5,13 @@
  * — no imports, no closure over outer scope.
  */
 
+import type { ISkywardSelectorsV1 } from '../../selectors/skywardV1';
+
 // ---------------------------------------------------------------------------
 // Raw extract types
 // ---------------------------------------------------------------------------
+
+export type { ISkywardSelectorsV1 };
 
 export interface ISkywardCourseExtract {
   readonly name: string;
@@ -73,16 +77,16 @@ export interface ISkywardFullExtract {
 // ---------------------------------------------------------------------------
 
 /** Extracts the student name from the Skyward header area. */
-export function extractSkywardStudentName(): string {
-  const el = document.querySelector('.sf_headerName, [id*="studentName"]');
+export function extractSkywardStudentName(selectors: ISkywardSelectorsV1): string {
+  const el = document.querySelector(selectors.student_name_primary);
   if (el) return el.textContent?.trim() ?? '';
-  const header = document.querySelector('#sf_HeaderWrap, header, [role="banner"]');
+  const header = document.querySelector(selectors.student_name_header_fallback);
   if (header) {
     const headerText = header.textContent ?? '';
     const nameMatch = headerText.match(/([A-Z][a-z]+\s+[A-Z]\.?\s*[A-Z][a-z]+)/);
     if (nameMatch) return nameMatch[1]!;
   }
-  const topNav = document.querySelectorAll('a, span');
+  const topNav = document.querySelectorAll(selectors.student_name_topnav);
   for (const node of topNav) {
     const text = node.textContent?.trim() ?? '';
     if (text.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) && text.length < 40) return text;
@@ -91,8 +95,8 @@ export function extractSkywardStudentName(): string {
 }
 
 /** Extracts the school name from the Skyward page. */
-export function extractSkywardSchoolName(): string {
-  const el = document.querySelector('[id*="schoolName"]');
+export function extractSkywardSchoolName(selectors: ISkywardSelectorsV1): string {
+  const el = document.querySelector(selectors.school_name);
   if (el) return el.textContent?.trim() ?? '';
   const allText = document.body?.textContent ?? '';
   const schoolMatch = allText.match(
@@ -101,11 +105,14 @@ export function extractSkywardSchoolName(): string {
   return schoolMatch?.[1] ?? 'Unknown School';
 }
 
+export interface ISkywardCourseAssignmentsOpts {
+  readonly selectors: ISkywardSelectorsV1;
+  readonly courseName: string;
+  readonly coursePeriod: string;
+}
+
 /** Extracts assignments from the Skyward gradeInfoDialog for a specific course. */
-export function extractSkywardCourseAssignments(opts: {
-  courseName: string;
-  coursePeriod: string;
-}): Array<{
+export function extractSkywardCourseAssignments(opts: ISkywardCourseAssignmentsOpts): Array<{
   title: string;
   course: string;
   period: string;
@@ -116,16 +123,12 @@ export function extractSkywardCourseAssignments(opts: {
   grade: string;
   status: 'graded' | 'missing' | 'late' | 'unknown';
 }> {
-  const { courseName, coursePeriod } = opts;
-  // Read only a grade dialog whose content has not been handed out yet
-  // (closeSkywardDialogs records a fingerprint of what it closed; Skyward
-  // refills the same element for the next course), so one course's
-  // assignments are never filed under the next course.
+  const { selectors, courseName, coursePeriod } = opts;
   const fingerprint = (d: Element): string => {
     const text = (d.textContent ?? '').replace(/\s+/g, ' ').trim();
     return `${text.length}:${text.slice(0, 300)}`;
   };
-  const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
+  const dialogs = Array.from(document.querySelectorAll(selectors.grade_info_dialog));
   const dialog = dialogs.find((d) => d.getAttribute('data-slc-seen') !== fingerprint(d)) ?? null;
   if (!dialog) return [];
 
@@ -141,10 +144,10 @@ export function extractSkywardCourseAssignments(opts: {
     status: 'graded' | 'missing' | 'late' | 'unknown';
   }> = [];
 
-  const tables = dialog.querySelectorAll('table');
+  const tables = dialog.querySelectorAll(selectors.table);
   let assignTable: Element | null = null;
   for (const t of tables) {
-    const headerRow = t.querySelector('tr');
+    const headerRow = t.querySelector(selectors.tr);
     const headerText = headerRow?.textContent ?? '';
     if (
       headerText.includes('Assignment') &&
@@ -158,7 +161,7 @@ export function extractSkywardCourseAssignments(opts: {
 
   let currentCategory = '';
 
-  const rows = assignTable.querySelectorAll('tr');
+  const rows = assignTable.querySelectorAll(selectors.tr);
   for (const row of rows) {
     const text = row.textContent?.trim().replace(/\s+/g, ' ') ?? '';
     if (text.includes('weighted at')) {
@@ -167,14 +170,14 @@ export function extractSkywardCourseAssignments(opts: {
       continue;
     }
 
-    const cells = row.querySelectorAll('td');
+    const cells = row.querySelectorAll(selectors.td);
     if (cells.length >= 5) {
       const due = cells[0]?.textContent?.trim() ?? '';
       const title = cells[1]?.textContent?.trim() ?? '';
       const grade = cells[2]?.textContent?.trim() ?? '';
       const pointsRaw = cells[4]?.textContent?.trim() ?? '';
       const missingCell = cells[5]?.textContent?.trim() ?? '';
-      const hasMissingImg = cells[5]?.querySelector('img') !== null;
+      const hasMissingImg = cells[5]?.querySelector(selectors.missing_cell_img) !== null;
 
       if (!title || title === 'Assignment' || title.includes('weighted at')) continue;
 
@@ -205,7 +208,7 @@ export function extractSkywardCourseAssignments(opts: {
 }
 
 /** Extracts attendance records from the Skyward attendance page. */
-export function extractSkywardAttendance(): Array<{
+export function extractSkywardAttendance(selectors: ISkywardSelectorsV1): Array<{
   date: string;
   status: string;
   period: string;
@@ -219,13 +222,13 @@ export function extractSkywardAttendance(): Array<{
     course: string;
     reason: string;
   }> = [];
-  const tables = document.querySelectorAll('table');
+  const tables = document.querySelectorAll(selectors.table);
   for (const table of tables) {
-    const headerText = table.querySelector('tr')?.textContent ?? '';
+    const headerText = table.querySelector(selectors.tr)?.textContent ?? '';
     if (!headerText.includes('Attendance') || !headerText.includes('Period')) continue;
-    const trs = table.querySelectorAll('tr');
+    const trs = table.querySelectorAll(selectors.tr);
     for (let i = 1; i < trs.length; i++) {
-      const tds = trs[i]!.querySelectorAll('td');
+      const tds = trs[i]!.querySelectorAll(selectors.td);
       if (tds.length >= 3) {
         const texts = Array.from(tds).map((td) => (td as Element).textContent?.trim() ?? '');
         const dateText = texts[0] ?? '';
@@ -245,7 +248,7 @@ export function extractSkywardAttendance(): Array<{
 }
 
 /** Extracts schedule entries from the Skyward schedule page. */
-export function extractSkywardSchedule(): Array<{
+export function extractSkywardSchedule(selectors: ISkywardSelectorsV1): Array<{
   period: string;
   time: string;
   course: string;
@@ -259,15 +262,15 @@ export function extractSkywardSchedule(): Array<{
     teacher: string;
     room: string;
   }> = [];
-  const tables = document.querySelectorAll('table');
+  const tables = document.querySelectorAll(selectors.table);
   for (const table of tables) {
-    const headerRow = table.querySelector('tr');
+    const headerRow = table.querySelector(selectors.tr);
     const headerText = headerRow?.textContent ?? '';
-    if (!headerText.includes('Term') && !headerText.includes('2025')) continue;
+    if (!headerText.includes('Term')) continue;
 
-    const rows = table.querySelectorAll('tr');
+    const rows = table.querySelectorAll(selectors.tr);
     for (let i = 1; i < rows.length; i++) {
-      const tds = rows[i]!.querySelectorAll('td, th');
+      const tds = rows[i]!.querySelectorAll(selectors.td_th);
       if (tds.length < 2) continue;
 
       const periodCell = tds[0]?.textContent?.trim() ?? '';
@@ -308,17 +311,20 @@ export function extractSkywardSchedule(): Array<{
 }
 
 /**
- * Click the navigation link whose trimmed text equals `text`. Runs in the page;
- * self-contained.
+ * Clicks the first nav link whose visible text matches `text` after normalizing
+ * whitespace (nested spans / line breaks on real portals).
  */
-export function clickSkywardNavLink(text: string): void {
-  const links = Array.from(document.querySelectorAll('a'));
-  for (const link of links) {
-    if (link.textContent?.trim() === text) {
-      (link as HTMLAnchorElement).click();
-      return;
-    }
-  }
+export function clickSkywardNavLink(opts: { selectors: ISkywardSelectorsV1; text: string }): void {
+  const { selectors, text } = opts;
+  // Self-contained on purpose: page functions run inside the portal page and cannot
+  // reach module helpers (a helper call threw there and silently stopped navigation).
+  const norm = (s: string | null | undefined): string =>
+    (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const want = norm(text);
+  const links = Array.from(document.querySelectorAll(selectors.nav_links));
+  const exact = links.find((l) => norm(l.textContent) === want);
+  const target = exact ?? links.find((l) => norm(l.textContent).includes(want));
+  if (target) (target as HTMLAnchorElement).click();
 }
 
 /**
@@ -328,13 +334,20 @@ export function clickSkywardNavLink(text: string): void {
  * assignments. Returns the literal clicked, or null when the course has no
  * grade cell.
  */
-export function openSkywardGradeInfo(opts: { cni: string; periods: string[] }): string | null {
-  const cells = Array.from(document.querySelectorAll('a#showGradeInfo')).filter(
-    (a) => a.getAttribute('data-cni') === opts.cni
+export interface IOpenSkywardGradeInfoOpts {
+  readonly selectors: ISkywardSelectorsV1;
+  readonly cni: string;
+  readonly periods: readonly string[];
+}
+
+export function openSkywardGradeInfo(opts: IOpenSkywardGradeInfoOpts): string | null {
+  const { selectors, cni, periods } = opts;
+  const cells = Array.from(document.querySelectorAll(selectors.grade_cell_anchor)).filter(
+    (a) => a.getAttribute('data-cni') === cni
   ) as HTMLAnchorElement[];
   if (cells.length === 0) return null;
   let target: HTMLAnchorElement | undefined;
-  for (const period of opts.periods) {
+  for (const period of periods) {
     target = cells.find((a) => a.getAttribute('data-lit') === period);
     if (target) break;
   }
@@ -343,7 +356,6 @@ export function openSkywardGradeInfo(opts: { cni: string; periods: string[] }): 
   return target.getAttribute('data-lit') ?? '';
 }
 
-/** True once an unread #gradeInfoDialog holds an assignment table. */
 /**
  * Skyward reuses ONE #gradeInfoDialog element for every course and refills it,
  * so "already read" cannot be a marker on the element. closeSkywardDialogs
@@ -351,15 +363,15 @@ export function openSkywardGradeInfo(opts: { cni: string; periods: string[] }): 
  * dialog is ready again once it shows an assignment table whose fingerprint
  * differs from the recorded one.
  */
-export function isSkywardGradeInfoReady(): boolean {
+export function isSkywardGradeInfoReady(selectors: ISkywardSelectorsV1): boolean {
   const fingerprint = (d: Element): string => {
     const text = (d.textContent ?? '').replace(/\s+/g, ' ').trim();
     return `${text.length}:${text.slice(0, 300)}`;
   };
-  const dialogs = Array.from(document.querySelectorAll('#gradeInfoDialog'));
+  const dialogs = Array.from(document.querySelectorAll(selectors.grade_info_dialog));
   return dialogs.some((d) => {
-    const hasTable = Array.from(d.querySelectorAll('table')).some((t) => {
-      const header = t.querySelector('tr')?.textContent ?? '';
+    const hasTable = Array.from(d.querySelectorAll(selectors.table)).some((t) => {
+      const header = t.querySelector(selectors.tr)?.textContent ?? '';
       return header.includes('Assignment') && (header.includes('Due') || header.includes('Score'));
     });
     if (!hasTable) return false;
@@ -372,12 +384,12 @@ export function isSkywardGradeInfoReady(): boolean {
  * and mark every #gradeInfoDialog as read, so a later wait only matches the
  * next course's dialog. Returns how many close buttons were clicked.
  */
-export function closeSkywardDialogs(): number {
+export function closeSkywardDialogs(selectors: ISkywardSelectorsV1): number {
   let closed = 0;
-  for (const wrap of Array.from(document.querySelectorAll('.sf_DialogWrap'))) {
+  for (const wrap of Array.from(document.querySelectorAll(selectors.dialog_wrap))) {
     const style = window.getComputedStyle(wrap);
     if (style.display === 'none' || style.visibility === 'hidden') continue;
-    const button = wrap.querySelector('.sf_DialogClose, a[title="Close"]');
+    const button = wrap.querySelector(selectors.dialog_close);
     if (button) {
       (button as HTMLElement).click();
       closed++;
@@ -388,7 +400,7 @@ export function closeSkywardDialogs(): number {
       new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })
     );
   }
-  for (const dialog of Array.from(document.querySelectorAll('#gradeInfoDialog'))) {
+  for (const dialog of Array.from(document.querySelectorAll(selectors.grade_info_dialog))) {
     const text = (dialog.textContent ?? '').replace(/\s+/g, ' ').trim();
     dialog.setAttribute('data-slc-seen', `${text.length}:${text.slice(0, 300)}`);
   }
