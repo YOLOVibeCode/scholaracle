@@ -2,7 +2,7 @@ import express, { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { AdminAuthService } from '@scholaracle/auth';
-import { ValidationError } from '@scholaracle/contracts';
+import { ERROR_CODES, ValidationError } from '@scholaracle/contracts';
 import { runScraperRepairProposal } from '@scholaracle/agents';
 import { selectorTableJsonForRecipe } from '../../services/scraperRepair/selectorTableForRecipe';
 import { adminAuthMiddleware } from '../../middleware/adminAuth';
@@ -106,6 +106,14 @@ export function createScrapersRepairRouter(config: IScrapersRepairRouterConfig):
           success: false,
           error: 'Weekly proposal limit for this candidate',
           code: 'WEEKLY_CAP',
+        });
+        return;
+      }
+      if (result.status === 'budget_exceeded') {
+        res.status(402).json({
+          success: false,
+          error: 'LLM relay monthly budget exceeded',
+          code: ERROR_CODES.AI_BUDGET,
         });
         return;
       }

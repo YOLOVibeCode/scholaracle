@@ -6,6 +6,7 @@ import {
   NotFoundError,
   ConflictError,
   RateLimitError,
+  AiBudgetError,
   ExternalServiceError,
   InternalError,
 } from './httpErrors';
@@ -72,6 +73,7 @@ describe('AppError', () => {
       [new NotFoundError(), 404, ERROR_CODES.NOT_FOUND, true],
       [new ConflictError(), 409, ERROR_CODES.CONFLICT, true],
       [new RateLimitError(), 429, ERROR_CODES.RATE_LIMITED, true],
+      [new AiBudgetError(), 402, ERROR_CODES.AI_BUDGET, true],
       [new ExternalServiceError(), 502, ERROR_CODES.EXTERNAL_SERVICE_ERROR, true],
       [new InternalError(), 500, ERROR_CODES.INTERNAL_ERROR, false],
     ])('%s should map to status %i / code %s', (error, status, code, isOperational) => {
