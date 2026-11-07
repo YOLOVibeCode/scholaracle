@@ -1017,6 +1017,75 @@ describe('Students API Routes', () => {
       expect(row.officialGrade).toBe(expectedPercent);
       expect(row.gradeSource).toBe('sis');
     });
+
+    it('prefers gradeSnapshot percentGrade over zeroed assignment computation', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Snapshot Vs Zero Assignments', grade: 10 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      const courseExternalId = 'm2-08-lms-snap-course';
+      const todayYMD = new Date().toISOString().slice(0, 10);
+      const snapshotPercent = 92.1;
+      const recentDue = new Date().toISOString();
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        externalId: courseExternalId,
+        deletedAt: null,
+        record: { name: 'Algebra', title: 'Algebra' },
+      });
+
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        externalId: 'a-zero-earned',
+        deletedAt: null,
+        record: {
+          title: 'Homework 1',
+          status: 'graded',
+          pointsPossible: 100,
+          pointsEarned: 0,
+          dueAt: recentDue,
+        },
+      });
+
+      await database.collection('slc_grade_snapshots').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        provider: 'canvas',
+        deletedAt: null,
+        record: {
+          courseExternalId,
+          percentGrade: snapshotPercent,
+          asOfDate: todayYMD,
+          sourceType: 'lms',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/grades`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courseGrades).toHaveLength(1);
+      const row = res.body.courseGrades[0] as {
+        officialGrade: number;
+        gradeSource: string;
+      };
+      expect(row.officialGrade).toBe(snapshotPercent);
+      expect(row.officialGrade).not.toBe(0);
+      expect(row.gradeSource).toBe('lms');
+    });
   });
 
   describe('GET /api/students/:id/sources', () => {
