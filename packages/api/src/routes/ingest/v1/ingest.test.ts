@@ -24,6 +24,9 @@ describe('Ingest v1 API', () => {
     // Clean collections used by ingest
     await database.collection('users').deleteMany({ email: 'slc-user@test.com' });
     await database.collection('slc_device_auth').deleteMany({});
+    await database.collection('slc_devices').deleteMany({});
+    await database.collection('revoked_connector_tokens').deleteMany({});
+    await database.collection('subscriptions').deleteMany({});
     await database.collection('slc_sources').deleteMany({});
     await database.collection('slc_runs').deleteMany({});
     await database.collection('slc_assignments').deleteMany({});
@@ -43,8 +46,20 @@ describe('Ingest v1 API', () => {
     process.env['CONNECTOR_JWT_SECRET'] = 'test-secret-connector';
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
-    if (!reg.success || !reg.token) throw new Error('Failed to register test user');
+    if (!reg.success || !reg.token || !reg.user?.id) throw new Error('Failed to register test user');
     userToken = reg.token;
+    const now = new Date();
+    await database.collection('subscriptions').insertOne({
+      userId: reg.user.id,
+      plan: 'family',
+      status: 'active',
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      billingCycle: 'monthly',
+      createdAt: now,
+      updatedAt: now,
+      events: [{ type: 'created', toPlan: 'family', timestamp: now }],
+    });
 
     app = express();
     app.use(express.json());
@@ -242,10 +257,11 @@ describe('Ingest v1 API', () => {
         },
       ],
     };
-    await request(app)
+    const uploadRes = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
+    expect(uploadRes.status).toBe(200);
     const stored = await database
       .collection('slc_assignments')
       .findOne({ externalId: 'legacy-a-1' });
