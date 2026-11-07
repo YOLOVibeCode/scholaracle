@@ -1,6 +1,6 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
-import type { runScraperRepairProposal, resolveLlmConfig } from '@scholaracle/agents';
+import type { AiRole, runScraperRepairProposal, resolveLlmConfig } from '@scholaracle/agents';
 import { runRepairNightly } from './repair-nightly';
 
 describe('runRepairNightly', () => {
@@ -25,7 +25,7 @@ describe('runRepairNightly', () => {
   beforeEach(async () => {
     await database.collection('repair_candidates').deleteMany({});
     await database.collection('repair_proposals').deleteMany({});
-    mockResolveLlm = jest.fn(() => ({
+    mockResolveLlm = jest.fn((_role: AiRole) => ({
       apiKey: 'k',
       baseUrl: 'https://x',
       model: 'm',
