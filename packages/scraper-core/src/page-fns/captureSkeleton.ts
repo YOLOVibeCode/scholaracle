@@ -3,8 +3,6 @@
  * All helpers are nested so Hermes can inject this file's source without imports.
  */
 
-const SKELETON_MAX_BYTES = 200 * 1024;
-
 export interface ICaptureSkeletonResult {
   readonly step: string;
   readonly capturedAt: string;
@@ -52,9 +50,13 @@ export async function captureSkeleton(opts: {
     return '<w>';
   }
 
+  const SKELETON_MAX_BYTES = 200 * 1024;
+  // Tolerate a missing argument (the Hermes smoke gate calls page functions with none).
+  const step = opts?.step ?? '';
+  const redactTerms: readonly string[] = opts?.redact ?? [];
   const REDACT_WORDS = Array.from(
     new Set(
-      (opts.redact ?? [])
+      redactTerms
         .flatMap((term) => term.toLowerCase().split(/[^a-z0-9]+/))
         .filter((w) => w.length >= 3)
     )
@@ -92,7 +94,7 @@ export async function captureSkeleton(opts: {
   }
 
   function tokenizePagePath(): string {
-    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const path = typeof window !== 'undefined' && window.location ? window.location.pathname : '';
     if (!path) return '';
     return path
       .split('/')
@@ -145,7 +147,7 @@ export async function captureSkeleton(opts: {
     const tree: ISkeletonNode = JSON.parse(JSON.stringify(root)) as ISkeletonNode;
     let truncated = false;
 
-    const measure = (): number => JSON.stringify({ v: 1, step: opts.step, r: tree }).length;
+    const measure = (): number => JSON.stringify({ v: 1, step, r: tree }).length;
 
     const shrinkNode = (node: ISkeletonNode): boolean => {
       const ch = node.ch;
@@ -222,12 +224,12 @@ export async function captureSkeleton(opts: {
   const rootEl = document.documentElement;
   const root = serializeElement(rootEl, 0) ?? { t: 'html' };
   const { tree, truncated } = capTree(root);
-  const skeleton = JSON.stringify({ v: 1, step: opts.step, r: tree });
+  const skeleton = JSON.stringify({ v: 1, step, r: tree });
   const byteLength = encodeUtf8(skeleton).length;
   const sha256 = await sha256Hex(skeleton);
 
   return {
-    step: opts.step,
+    step,
     capturedAt: new Date().toISOString(),
     pagePath: tokenizePagePath(),
     skeleton,
