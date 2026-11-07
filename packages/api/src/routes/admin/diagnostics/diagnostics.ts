@@ -432,6 +432,11 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           startedAt: r['startedAt'],
           committedAt: r['committedAt'],
           error: r['error'],
+          steps: r['steps'],
+          stats: r['stats'],
+          warnings: r['warnings'],
+          lastCursor: r['lastCursor'],
+          newCursor: r['newCursor'],
         })),
         stuckJobs: stuckJobs.length,
         diagnosis: {

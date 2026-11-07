@@ -68,6 +68,7 @@ import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
+import { createAdminAiRouter } from './routes/admin/ai';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
@@ -646,6 +647,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
+    app.use('/api/admin/ai', createAdminAiRouter({ database, jwtSecret }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));

@@ -14,7 +14,10 @@ import {
   type ISlcEventOverride,
   type ISlcStudentProfile,
   SLC_ENTITY_TYPES,
+  SLC_INGEST_SCHEMA_VERSION_V1,
   validateEntityRecord,
+  collectEnvelopeEntityWarnings,
+  type ISlcIngestEnvelopeV1,
 } from './Ingest';
 
 // ---------------------------------------------------------------------------
@@ -706,6 +709,61 @@ describe('validateEntityRecord — unknown entity', () => {
     const result = validateEntityRecord('foobar' as SlcEntityType, { title: 'test' });
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('Unknown entity type: foobar');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectEnvelopeEntityWarnings
+// ---------------------------------------------------------------------------
+
+describe('collectEnvelopeEntityWarnings', () => {
+  it('returns warnings when upsert records fail validateEntityRecord', () => {
+    const envelope: ISlcIngestEnvelopeV1 = {
+      schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
+      run: {
+        runId: 'run-test',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        provider: 'canvas',
+        adapterId: 'com.test.canvas',
+        adapterVersion: '1.0.0',
+        mode: 'delta',
+        timezone: 'America/Chicago',
+      },
+      source: { sourceId: 'src-1', displayName: 'Test' },
+      ops: [
+        {
+          op: 'upsert',
+          entity: 'course',
+          key: {
+            provider: 'canvas',
+            adapterId: 'com.test.canvas',
+            externalId: 'c-1',
+            studentExternalId: 's-1',
+            institutionExternalId: 'i-1',
+          },
+          observedAt: '2026-01-01T00:00:00.000Z',
+          record: { title: 'Valid Course' },
+        },
+        {
+          op: 'upsert',
+          entity: 'assignment',
+          key: {
+            provider: 'canvas',
+            adapterId: 'com.test.canvas',
+            externalId: 'a-bad',
+            studentExternalId: 's-1',
+            institutionExternalId: 'i-1',
+          },
+          observedAt: '2026-01-01T00:00:00.000Z',
+          record: {},
+        },
+      ],
+    };
+
+    const warnings = collectEnvelopeEntityWarnings(envelope);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.some((w) => w.includes('assignment[a-bad]'))).toBe(true);
+    expect(warnings.some((w) => w.includes('title'))).toBe(true);
   });
 });
 
