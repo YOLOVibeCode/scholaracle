@@ -86,9 +86,36 @@ export function buildM402AeriesDashboardSync(student: 'A' | 'B'): string {
         ]);
   const cards =
     student === 'A'
-      ? buildM402AeriesCard('Spanish 2 a', 'Quarter 2', 'Rivera, M', 'S108', '92', '92.1', '0', '111') +
-        buildM402AeriesCard('Geometry Honors a', 'Quarter 2', 'Okafor, J', 'M110', '78', '78.4', '2', '222')
-      : buildM402AeriesCard('Math 8', 'Quarter 2', 'Lindqvist, R', 'B12', '100', '100.0', '0', '333');
+      ? buildM402AeriesCard(
+          'Spanish 2 a',
+          'Quarter 2',
+          'Rivera, M',
+          'S108',
+          '92',
+          '92.1',
+          '0',
+          '111'
+        ) +
+        buildM402AeriesCard(
+          'Geometry Honors a',
+          'Quarter 2',
+          'Okafor, J',
+          'M110',
+          '78',
+          '78.4',
+          '2',
+          '222'
+        )
+      : buildM402AeriesCard(
+          'Math 8',
+          'Quarter 2',
+          'Lindqvist, R',
+          'B12',
+          '100',
+          '100.0',
+          '0',
+          '333'
+        );
   return (
     `${head}<input id="txtBackpackStudentID" type="hidden" value="${student === 'A' ? '728001' : '826002'}"/>` +
     `<div id="divClass" class="widget-wrapper"><div class="widget-body classesSection">${cards}</div></div>`
@@ -98,8 +125,26 @@ export function buildM402AeriesDashboardSync(student: 'A' | 'B'): string {
 /** Inner HTML of `.classesSection` (shared by sync HTML and deferred hydration script). */
 export function buildM402AeriesDashboardCardsInner(student: 'A' | 'B'): string {
   return student === 'A'
-    ? buildM402AeriesCard('Spanish 2 a', 'Quarter 2', 'Rivera, M', 'S108', '92', '92.1', '0', '111') +
-        buildM402AeriesCard('Geometry Honors a', 'Quarter 2', 'Okafor, J', 'M110', '78', '78.4', '2', '222')
+    ? buildM402AeriesCard(
+        'Spanish 2 a',
+        'Quarter 2',
+        'Rivera, M',
+        'S108',
+        '92',
+        '92.1',
+        '0',
+        '111'
+      ) +
+        buildM402AeriesCard(
+          'Geometry Honors a',
+          'Quarter 2',
+          'Okafor, J',
+          'M110',
+          '78',
+          '78.4',
+          '2',
+          '222'
+        )
     : buildM402AeriesCard('Math 8', 'Quarter 2', 'Lindqvist, R', 'B12', '100', '100.0', '0', '333');
 }
 
@@ -268,7 +313,17 @@ export function buildM402AeriesGradebook(gn: string): string {
           'Yes',
           false
         ) +
-        buildM402AeriesAssignmentRow('8', 'Homework 3.2', 'Formative', 'Missing', '', '11/05/2026', '', 'No', true),
+        buildM402AeriesAssignmentRow(
+          '8',
+          'Homework 3.2',
+          'Formative',
+          'Missing',
+          '',
+          '11/05/2026',
+          '',
+          'No',
+          true
+        ),
     },
     '333': {
       p: '7',
@@ -319,7 +374,9 @@ export function buildM402AeriesAttendanceSync(): string {
   );
 }
 
-export function buildM402AeriesAttendanceDeferredShell(opts: { readonly scriptSrc: string }): string {
+export function buildM402AeriesAttendanceDeferredShell(opts: {
+  readonly scriptSrc: string;
+}): string {
   return `<div class="student-id">728001</div><table id="tblNewFlex"><tbody></tbody></table><script src="${opts.scriptSrc}" defer></script>`;
 }
 
@@ -331,17 +388,40 @@ export const FAKE_PORTAL_SKYWARD_ASSIGNMENTS: Readonly<Record<string, string>> =
     '<tr><td>09/03/2026</td><td>Lab 1</td><td>91</td><td>91.00</td><td>91 out of 100</td><td></td></tr>',
 };
 
-export function buildM402SkywardCourseTable(sectionId: string, name: string, period: string): string {
+export function buildM402SkywardCourseTable(
+  sectionId: string,
+  name: string,
+  period: string
+): string {
   return (
     `<table id="classDesc_${sectionId}"><tr><td class="bld classDesc"><a href="#">${name}</a></td></tr>` +
     `<tr><td><label>Period</label> ${period} (8:00 AM - 8:50 AM)</td></tr></table>`
   );
 }
 
-const SKYWARD_NAV = '<nav><a href="#">Gradebook</a><a href="#">Attendance</a><a href="#">Schedule</a></nav>';
+const SKYWARD_NAV =
+  '<nav class="sf_menu">' +
+  '<a href="#"><span>  Gradebook  </span></a>' +
+  '<a href="#">Attendance</a>' +
+  '<a href="#">Schedule</a>' +
+  '</nav>';
+
+/**
+ * Fake Skyward Family Access home (sfhome01-style): nav only, no gradebook markup yet.
+ * Recipe must click Gradebook before courses appear.
+ */
+export function buildM402SkywardHomeHtml(): string {
+  return (
+    '<div class="sf_headerName">Test Student</div><div id="schoolName">Example High School</div>' +
+    SKYWARD_NAV +
+    '<main><p>Family Access Home</p></main>'
+  );
+}
 
 /** Courses + grid + dialog + missing slice (no outer nav). */
-export function buildM402SkywardGradebookBody(opts: { readonly extraCourse?: boolean } = {}): string {
+export function buildM402SkywardGradebookBody(
+  opts: { readonly extraCourse?: boolean } = {}
+): string {
   const { extraCourse } = opts;
   return (
     `${buildM402SkywardCourseTable('1_111_0_0', 'Algebra I', '1')}${buildM402SkywardCourseTable(
@@ -366,7 +446,9 @@ export function buildM402SkywardGradebookBody(opts: { readonly extraCourse?: boo
 }
 
 /** Nav + courses + grid + dialog + missing slice (no script — tests attach listeners in jsdom). */
-export function buildM402SkywardGradebookHtml(opts: { readonly extraCourse?: boolean } = {}): string {
+export function buildM402SkywardGradebookHtml(
+  opts: { readonly extraCourse?: boolean } = {}
+): string {
   return SKYWARD_NAV + buildM402SkywardGradebookBody(opts);
 }
 
@@ -379,7 +461,7 @@ export function buildM402SkywardAttendanceBody(): string {
 
 export function buildM402SkywardScheduleBody(): string {
   return (
-    `<table><tr><th>Term 1 2025</th></tr>` +
+    `<table><tr><th>Term 1</th></tr>` +
     `<tr><td>Period 1 (8:00 AM - 8:50 AM)</td><td style="background:#eee">Algebra I<br/>Smith<br/>Room 101</td></tr></table>`
   );
 }
@@ -414,8 +496,10 @@ export class M402SimAeriesDriver implements IPageDriver {
       document.body.innerHTML = buildM402AeriesDashboardSync(this.current);
       return;
     }
-    if (path.startsWith('Dashboard.aspx')) document.body.innerHTML = buildM402AeriesDashboardSync(this.current);
-    else if (path.startsWith('Classes.aspx')) document.body.innerHTML = buildM402AeriesClasses(this.current);
+    if (path.startsWith('Dashboard.aspx'))
+      document.body.innerHTML = buildM402AeriesDashboardSync(this.current);
+    else if (path.startsWith('Classes.aspx'))
+      document.body.innerHTML = buildM402AeriesClasses(this.current);
     else if (path.startsWith('Attendance.aspx'))
       document.body.innerHTML =
         this.current === 'A' ? buildM402AeriesAttendanceSync() : '<table id="tblNewFlex"></table>';
