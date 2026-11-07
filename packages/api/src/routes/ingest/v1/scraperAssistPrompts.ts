@@ -1,6 +1,4 @@
-import type { IGenerateRequest } from './ai-generator';
-import type { IPageAnalysis } from './crawler';
-
+/** System prompt for client-side scraper assist (LLM runs on server; scrape runs on device). */
 export function getScraperSystemPrompt(): string {
   return `You are a Scholaracle scraper engineer. You generate Playwright-based TypeScript browser scrapers that log into educational platforms, extract ALL available student data, and produce ISlcDeltaOp[] operations.
 
@@ -74,73 +72,7 @@ The generated scraper must work for ANY user at this school, not just one specif
 - The same scraper code will be reused for every parent at this school — only the config changes
 - Use the selectors from the page analysis but keep all user data parameterized
 
-## Script Metadata
-
-Include this metadata object at the top of the scraper:
-\`\`\`typescript
-const SCRAPER_META = {
-  generatedAt: '${new Date().toISOString()}',
-  generationModel: 'claude-sonnet-4',
-  platformName: '<from request>',
-  portalUrl: '<from request>',
-};
-\`\`\`
-
 ## Import Paths (in the generated code)
 
-scraper.ts imports from:
-- BaseScraper: use inline abstract class (do NOT import from external module)
-- Types: use inline type definitions
-- Transformer: import from './transformer'
-- Metadata: import from './metadata.json'
-
-transformer.ts imports:
-- Define ISlcDeltaOp inline (do NOT import from external module)
-
 The generated code must be SELF-CONTAINED. Do not reference any external @scholaracle packages.`;
-}
-
-export function getScraperGeneratePrompt(
-  request: IGenerateRequest,
-  pageAnalysis?: IPageAnalysis | null
-): string {
-  let base = `Generate a Playwright scraper for "${request.platformName}".
-
-Login URL: ${request.loginUrl}
-Login method: ${request.loginMethod}
-Data to scrape: ${request.dataTypes.join(', ')}
-${request.notes ? `Special notes: ${request.notes}` : ''}`;
-
-  if (pageAnalysis) {
-    base += `
-
-## REAL PAGE ANALYSIS (use these EXACT selectors)
-
-Page title: ${pageAnalysis.title}
-Login form:
-- Email/username field: ${pageAnalysis.loginForm.emailField ?? 'N/A'}
-- Password field: ${pageAnalysis.loginForm.passwordField ?? 'N/A'}
-- Submit button: ${pageAnalysis.loginForm.submitButton ?? 'N/A'}
-- Form action: ${pageAnalysis.loginForm.formAction ?? 'N/A'}
-- Method: ${pageAnalysis.loginForm.method ?? 'post'}
-${pageAnalysis.loginForm.ssoOptions?.length ? `- SSO options on page: ${pageAnalysis.loginForm.ssoOptions.join(', ')}` : ''}
-
-Navigation links found: ${pageAnalysis.navigation.length ? pageAnalysis.navigation.map((n) => `${n.text} -> ${n.href}`).join('; ') : 'none'}
-${pageAnalysis.detectedFramework ? `Detected framework: ${pageAnalysis.detectedFramework}` : ''}
-
-You MUST use the exact selectors above for the login form. Do not guess — these came from the real page.`;
-  }
-
-  base += `
-
-The scraper must:
-1. Launch a headless browser (headless: true)
-2. Navigate to ${request.loginUrl}
-3. Authenticate using the EXACT selectors from the page analysis (email/username + password from config)
-4. Navigate to every available page to extract data
-5. Return structured raw data
-6. Transform to ISlcDeltaOp[] with all applicable entity types
-
-Create all three files with --- filename --- headers.`;
-  return base;
 }
