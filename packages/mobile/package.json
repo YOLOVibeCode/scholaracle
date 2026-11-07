@@ -63,6 +63,8 @@
     "ship:production:android": "bash scripts/ship-production.sh android",
     "update:preview": "pnpm preflight && npx eas-cli update --channel preview --environment preview --message \"OTA update\" --non-interactive",
     "update:production": "pnpm preflight && npx eas-cli update --channel production --environment production --message \"OTA update\" --non-interactive",
-    "clean": "rm -rf coverage dist .expo /tmp/expo-preflight-export"
+    "clean": "rm -rf coverage dist .expo /tmp/expo-preflight-export",
+    "e2e:ios": "bash scripts/e2e.sh ios",
+    "e2e:android": "bash scripts/e2e.sh android"
   }
 }

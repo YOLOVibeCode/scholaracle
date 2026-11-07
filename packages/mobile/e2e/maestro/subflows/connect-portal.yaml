@@ -1,0 +1,31 @@
+# From the "No portal connected" alert to a saved portal on this device.
+appId: com.scholarmancy.app
+---
+- tapOn: Connect
+- tapOn:
+    id: button-provider-${MAESTRO_PORTAL_PROVIDER}
+- tapOn:
+    id: input-connect-url
+- eraseText: 200
+- inputText: ${MAESTRO_PORTAL_URL}
+- tapOn:
+    id: button-connect-url-next
+- tapOn:
+    id: input-connect-username
+- inputText:
+    text: ${MAESTRO_PORTAL_USERNAME}
+    label: Type portal username
+- tapOn:
+    id: input-connect-password
+- inputText:
+    text: ${MAESTRO_PORTAL_PASSWORD}
+    label: Type portal password
+- hideKeyboard
+- tapOn:
+    id: button-connect-save
+- extendedWaitUntil:
+    visible:
+      id: button-sync
+    timeout: 30000
+- tapOn:
+    id: button-sync

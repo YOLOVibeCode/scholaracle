@@ -1,0 +1,36 @@
+appId: com.scholarmancy.app
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - clearKeychain
+      - launchApp:
+          clearState: true
+          permissions:
+            all: deny
+- extendedWaitUntil:
+    visible:
+      id: input-email
+    timeout: 60000
+- tapOn:
+    id: input-email
+- inputText:
+    text: ${MAESTRO_PARENT_EMAIL}
+    label: Type parent email
+- tapOn:
+    id: input-password
+- inputText:
+    text: ${MAESTRO_PARENT_PASSWORD}
+    label: Type parent password
+- hideKeyboard
+- tapOn:
+    id: button-login
+- extendedWaitUntil:
+    visible:
+      id: students-list
+    timeout: 60000
