@@ -35,6 +35,10 @@ import type {
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
   ISanitizedPageSkeletonCapture,
+  IPortalAccountUpsertRequest,
+  IPortalAccountUpsertResponse,
+  IPortalBindingUpsertRequest,
+  IPortalBindingUpsertResponse,
 } from '@scholaracle/contracts';
 import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
@@ -497,6 +501,23 @@ export class ScholarmancyApiClient {
       body: JSON.stringify(source),
     });
     if (!res.ok) throw await ApiError.fromResponse(res, 'Source registration');
+  }
+
+  async upsertPortalAccount(
+    body: IPortalAccountUpsertRequest
+  ): Promise<{ portalAccountId: string }> {
+    const res = await this._put<IPortalAccountUpsertResponse>('/api/portal-accounts', body);
+    return { portalAccountId: res.portalAccount.portalAccountId };
+  }
+
+  async upsertPortalBinding(
+    portalAccountId: string,
+    body: IPortalBindingUpsertRequest
+  ): Promise<void> {
+    await this._put<IPortalBindingUpsertResponse>(
+      `/api/portal-accounts/${portalAccountId}/bindings`,
+      body
+    );
   }
 
   async redeemSourceInvite(token: string): Promise<ISourceInvitePayload> {

@@ -19,6 +19,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
+import { groupSourcesByPortalAccount, portalAccountGroupKey } from '../sync/syncAllByPortalAccount';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
@@ -27,11 +28,13 @@ interface ISettingsScreenProps {
   onBack(): void;
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
+  onSyncAll?(sources: readonly IConnectedSource[]): void;
 }
 
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
+  onSyncAll,
 }: ISettingsScreenProps): React.ReactElement {
   const { logout } = useAuth();
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
@@ -155,22 +158,35 @@ export function SettingsScreen({
                 <Text style={styles.emptyText}>No portals connected on this device.</Text>
               </View>
             ) : (
-              sources.map((source) => (
-                <View key={source.sourceId} style={styles.card}>
-                  <View style={styles.sourceRow}>
-                    <View style={styles.sourceInfo}>
-                      <Text style={styles.sourceName}>{source.provider}</Text>
-                      <Text style={styles.sourceSub}>{source.institutionExternalId}</Text>
-                      <Text style={styles.sourceSub}>Student: {source.studentExternalId}</Text>
-                    </View>
+              [...groupSourcesByPortalAccount(sources).entries()].map(([groupKey, grouped]) => (
+                <View key={groupKey} style={styles.card}>
+                  <Text style={styles.sourceName}>{grouped[0]?.provider ?? 'Portal'}</Text>
+                  <Text style={styles.sourceSub}>{grouped[0]?.institutionExternalId}</Text>
+                  {grouped.map((source) => (
+                    <Text key={source.sourceId} style={styles.sourceSub}>
+                      Student: {source.studentExternalId}
+                    </Text>
+                  ))}
+                  {onSyncAll && grouped.length > 1 ? (
                     <TouchableOpacity
-                      style={styles.disconnectBtn}
-                      onPress={() => handleDisconnect(source)}
-                      testID={`button-disconnect-${source.sourceId}`}
+                      style={styles.syncAllBtn}
+                      onPress={() => onSyncAll(grouped)}
+                      testID={`button-sync-all-${portalAccountGroupKey(grouped[0]!)}`}
                     >
-                      <Text style={styles.disconnectText}>Disconnect</Text>
+                      <Text style={styles.syncAllText}>Sync all ({grouped.length})</Text>
                     </TouchableOpacity>
-                  </View>
+                  ) : null}
+                  {grouped.map((source) => (
+                    <View key={source.sourceId} style={styles.sourceRow}>
+                      <TouchableOpacity
+                        style={styles.disconnectBtn}
+                        onPress={() => handleDisconnect(source)}
+                        testID={`button-disconnect-${source.sourceId}`}
+                      >
+                        <Text style={styles.disconnectText}>Disconnect</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
               ))
             )}
@@ -301,6 +317,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   disconnectText: { color: '#dc3545', fontWeight: '600', fontSize: 13 },
+  syncAllBtn: {
+    marginTop: 10,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#4361ee',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  syncAllText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   rowText: { fontSize: 14, color: '#1a1a2e' },
   rowValue: { fontWeight: '600', textTransform: 'capitalize' },
   hintText: { fontSize: 13, color: '#6c757d', marginTop: 6 },

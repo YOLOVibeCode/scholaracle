@@ -27,6 +27,8 @@ export const USER_SCOPED_DELETION_TARGETS: readonly UserScopedDeletionTarget[] =
   { name: 'slc_alerts', userIdAsObjectId: true },
   { name: 'slc_communication_log' },
   { name: 'slc_sources', userIdAsObjectId: true },
+  { name: 'slc_portal_accounts', userIdAsObjectId: true },
+  { name: 'slc_bindings', userIdAsObjectId: true },
   { name: 'slc_runs', userIdAsObjectId: true },
   { name: 'slc_device_auth', userIdAsObjectId: true },
   { name: 'alerts' },

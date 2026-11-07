@@ -99,6 +99,25 @@ describe('repair candidates on ingest complete', () => {
         .send({ sourceId });
       expect(run.status).toBe(200);
       const runId = run.body.runId as string;
+      const now = new Date().toISOString();
+      await request(app)
+        .post(`/api/ingest/v1/runs/${runId}/envelope`)
+        .set('Authorization', `Bearer ${connectorToken}`)
+        .send({
+          schemaVersion: 'slc.ingest.v1',
+          run: {
+            runId,
+            startedAt: now,
+            provider: 'aeries',
+            adapterId: 'com.aeries.portal',
+            adapterVersion: '1.0.0',
+            mode: 'delta',
+            timezone: 'America/Los_Angeles',
+          },
+          source: { sourceId, displayName: 'Aeries' },
+          ops: [],
+        })
+        .expect(200);
 
       // Since the run state machine (#77), a run must be uploaded before it can complete.
       const now = new Date().toISOString();
