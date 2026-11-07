@@ -36,6 +36,7 @@ export class LlmClient {
   private readonly _apiKey: string;
   private readonly _model: string;
   private readonly _baseUrl: string;
+  private _lastSystemPrompt = '';
 
   constructor(config: ILlmClientConfig) {
     this._apiKey = config.apiKey;
@@ -45,7 +46,7 @@ export class LlmClient {
 
   public async complete(
     messages: readonly ILlmMessage[],
-    options?: { maxTokens?: number; system?: string }
+    options?: { maxTokens?: number; system?: string; cacheSystemPrefix?: boolean }
   ): Promise<ILlmResponse> {
     const maxTokens = options?.maxTokens ?? 512;
 
@@ -56,7 +57,17 @@ export class LlmClient {
     };
 
     if (options?.system) {
-      body['system'] = options.system;
+      this._lastSystemPrompt = options.system;
+      const useCache = options.cacheSystemPrefix === true;
+      body['system'] = useCache
+        ? [
+            {
+              type: 'text',
+              text: options.system,
+              cache_control: { type: 'ephemeral' },
+            },
+          ]
+        : options.system;
     }
 
     const res = await fetch(`${this._baseUrl}/v1/messages`, {
@@ -92,5 +103,10 @@ export class LlmClient {
 
   public get model(): string {
     return this._model;
+  }
+
+  /** Last system string passed to complete (for contract tests). */
+  public get lastSystemPrompt(): string {
+    return this._lastSystemPrompt;
   }
 }
