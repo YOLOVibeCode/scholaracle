@@ -109,6 +109,16 @@ export type {
 } from './pipeline';
 export { mapGapKindToRecipeStep, uniqueGapKindsFromCoverage } from './repair/gapKindToRecipeStep';
 export { selectorTableJsonForRecipe } from './repair/selectorTableJson';
+export { replaySelectorPatch } from './repair/replaySelectorPatch';
+export type {
+  IReplaySelectorPatchParams,
+  IReplaySelectorPatchResult,
+} from './repair/replaySelectorPatch';
+export { meetsAeriesCountStandard } from './repair/replayCountStandard';
+export {
+  applySelectorPatchToTableJson,
+  buildPromoteSelectorPatchArtifacts,
+} from './repair/buildPromoteSelectorPatchArtifacts';
 export {
   SyncError,
   runClientScrape,

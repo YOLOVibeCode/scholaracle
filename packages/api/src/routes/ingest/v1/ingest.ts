@@ -82,6 +82,9 @@ import {
   syncStudentDataSourcesAfterIngestSuccess,
 } from './syncStudentDataSourcesFromIngest';
 import { recordRepairCandidatesFromCoverage } from '../../../services/repairCandidates/recordRepairCandidatesFromCoverage';
+import { listServedSelectorPatchesForHost } from '../../../services/selectorPatches/listServedSelectorPatches';
+import { recordSelectorPatchVerification } from '../../../services/selectorPatches/recordSelectorPatchVerification';
+import { ServedSelectorPatchRepository } from '@scholaracle/database';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -1145,6 +1148,20 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     })
   );
 
+  router.get(
+    '/selector-patches',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const portalHost =
+        typeof req.query['portalHost'] === 'string' ? req.query['portalHost'].trim() : '';
+      if (!portalHost) {
+        throw new ValidationError('Missing portalHost query parameter');
+      }
+      const body = await listServedSelectorPatchesForHost(config.database, portalHost);
+      res.status(200).json(body);
+    })
+  );
+
   // Stored credentials never leave the server; portal logins live on the parent's device.
   router.get('/sources/:sourceId/credentials', connectorAuth, (_req, res: Response) => {
     res.status(410).json({
@@ -1459,17 +1476,37 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
         const skeletonHash = parseOptionalSkeletonHash(req.body?.skeletonHash);
         const coverageForRepair = committedRun.coverage ?? undefined;
-        if (skeletonHash && coverageForRepair) {
-          const source = await sourceRepo.findByUserIdAndSourceId(
-            runDataUserId,
-            committedRun.sourceId
-          );
-          if (source?.portalBaseUrl) {
-            await recordRepairCandidatesFromCoverage({
+        const source = await sourceRepo.findByUserIdAndSourceId(
+          runDataUserId,
+          committedRun.sourceId
+        );
+        if (skeletonHash && coverageForRepair && source?.portalBaseUrl) {
+          await recordRepairCandidatesFromCoverage({
+            database: config.database,
+            portalBaseUrl: source.portalBaseUrl,
+            recipeId: source.adapterId,
+            skeletonHash,
+            coverage: coverageForRepair,
+          });
+        }
+        const appliedPatchId =
+          typeof req.body?.appliedSelectorPatchId === 'string'
+            ? req.body.appliedSelectorPatchId.trim()
+            : '';
+        if (appliedPatchId && coverageForRepair) {
+          const servedRepo = new ServedSelectorPatchRepository(config.database);
+          const served = await servedRepo.findByPatchId(appliedPatchId);
+          if (served) {
+            await recordSelectorPatchVerification({
               database: config.database,
-              portalBaseUrl: source.portalBaseUrl,
-              recipeId: source.adapterId,
-              skeletonHash,
+              patchId: appliedPatchId,
+              key: {
+                portalHost: served.portalHost,
+                recipeId: served.recipeId,
+                step: served.step,
+                skeletonHash: served.skeletonHash,
+                gapKind: served.gapKind,
+              },
               coverage: coverageForRepair,
             });
           }

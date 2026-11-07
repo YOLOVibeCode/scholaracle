@@ -215,4 +215,7 @@ export interface IClientScrapeHost {
   readonly onProgress?: SyncProgressCallback;
   /** When true, failed portal steps capture a sanitized DOM skeleton and upload it. */
   readonly captureSkeletons?: boolean;
+  /** Served selector patch applied for this sync only. */
+  readonly selectorPatch?: Readonly<Record<string, string>>;
+  readonly appliedSelectorPatchId?: string;
 }
