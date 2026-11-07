@@ -88,8 +88,11 @@ describe('Worker', () => {
   afterEach(() => {
     process.removeAllListeners('SIGTERM');
     process.removeAllListeners('SIGINT');
-    jest.restoreAllMocks();
+    jest.spyOn(MongoClient.prototype, 'connect').mockRestore();
+    jest.spyOn(MongoClient.prototype, 'close').mockRestore();
+    jest.spyOn(MongoClient.prototype, 'db').mockRestore();
     jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+
     // Restore env vars
     for (const [key, val] of Object.entries(savedEnv)) {
       if (val === undefined) {

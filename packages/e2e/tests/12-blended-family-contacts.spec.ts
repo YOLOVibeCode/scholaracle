@@ -143,29 +143,27 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
       data: { name: 'Christian', grade: 8 },
       headers: { authorization: `Bearer ${rickyToken}` },
     });
+    expect(createC.ok()).toBeTruthy();
     const christian = (await createC.json()) as { id: string };
     const createG = await request.post(`${apiBaseUrl}/api/students`, {
       data: { name: 'Gideon', grade: 6 },
       headers: { authorization: `Bearer ${rickyToken}` },
     });
+    expect(createG.ok()).toBeTruthy();
     const gideon = (await createG.json()) as { id: string };
 
-    await request.post(`${apiBaseUrl}/api/students/${christian.id}/contacts`, {
-      data: { email: jessicaEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${christian.id}/contacts`, {
-      data: { email: jenniferEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${gideon.id}/contacts`, {
-      data: { email: jessicaEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${gideon.id}/contacts`, {
-      data: { email: jenniferEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
+    for (const studentId of [christian.id, gideon.id] as const) {
+      for (const [email, name] of [
+        [jessicaEmail, 'Jessica'],
+        [jenniferEmail, 'Jennifer'],
+      ] as const) {
+        const inviteRes = await request.post(`${apiBaseUrl}/api/students/${studentId}/contacts`, {
+          data: { email, name, role: 'parent' },
+          headers: { authorization: `Bearer ${rickyToken}` },
+        });
+        expect(inviteRes.status()).toBe(201);
+      }
+    }
 
     const regJess = await request.post(`${apiBaseUrl}/api/auth/register`, {
       data: { email: jessicaEmail, password, name: 'Jessica' },
@@ -173,16 +171,16 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
     expect(regJess.ok()).toBeTruthy();
     const jessToken = ((await regJess.json()) as { token?: string }).token;
 
-    const acceptC = await request.post(
-      `${apiBaseUrl}/api/students/${christian.id}/contacts/accept`,
-      { data: { email: jessicaEmail }, headers: { authorization: `Bearer ${jessToken}` } }
-    );
-    expect(acceptC.ok()).toBeTruthy();
-    const acceptG = await request.post(
-      `${apiBaseUrl}/api/students/${gideon.id}/contacts/accept`,
-      { data: { email: jessicaEmail }, headers: { authorization: `Bearer ${jessToken}` } }
-    );
-    expect(acceptG.ok()).toBeTruthy();
+    for (const studentId of [christian.id, gideon.id] as const) {
+      const acceptRes = await request.post(
+        `${apiBaseUrl}/api/students/${studentId}/contacts/accept`,
+        { data: { email: jessicaEmail }, headers: { authorization: `Bearer ${jessToken}` } }
+      );
+      if (!acceptRes.ok()) {
+        throw new Error(`accept failed for ${studentId}: ${await acceptRes.text()}`);
+      }
+      expect(acceptRes.ok()).toBeTruthy();
+    }
 
     const listJess = await request.get(`${apiBaseUrl}/api/students`, {
       headers: { authorization: `Bearer ${jessToken}` },
