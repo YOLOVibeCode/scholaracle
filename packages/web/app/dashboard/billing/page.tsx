@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { billingApi, type ISubscriptionInfo, type IInvoice } from '@/lib/api/billing';
+import { TrialCountdownBanner } from '@/components/billing/TrialCountdownBanner';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
@@ -168,6 +169,13 @@ function BillingPageContent() {
         <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
         <p className="text-gray-600 dark:text-gray-400">Manage your subscription and billing</p>
       </div>
+
+      {subscription?.status === 'trialing' &&
+        (subscription.trialEnd ?? subscription.currentPeriodEnd) && (
+          <TrialCountdownBanner
+            trialEndIso={subscription.trialEnd ?? subscription.currentPeriodEnd ?? ''}
+          />
+        )}
 
       {toast && (
         <div
@@ -334,7 +342,7 @@ function BillingPageContent() {
         </CardHeader>
         <CardContent>
           {invoices.length === 0 ? (
-            <p className="text-sm text-gray-500" data-testid="no-invoices">
+            <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="no-invoices">
               No invoices yet
             </p>
           ) : (
@@ -349,7 +357,7 @@ function BillingPageContent() {
                     <p className="text-sm font-medium">
                       ${invoice.amount.toFixed(2)} {invoice.currency.toUpperCase()}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(invoice.date).toLocaleDateString()}
                     </p>
                   </div>

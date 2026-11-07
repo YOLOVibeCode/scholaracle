@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { authApi } from '@/lib/api/auth';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
+import { FormErrorAlert } from '@/components/common';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -65,11 +66,7 @@ export default function RegisterPage() {
         </CardHeader>
         <form data-testid="form-register" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && (
-              <div data-testid="message-error" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-                {error}
-              </div>
-            )}
+            {error && <FormErrorAlert>{error}</FormErrorAlert>}
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -171,7 +168,7 @@ export default function RegisterPage() {
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <OAuthButtons disabled={isLoading} onError={setError} />
-            <div className="relative text-center text-sm text-gray-500">
+            <div className="relative text-center text-sm text-gray-600 dark:text-gray-400">
               <span className="bg-white px-2 dark:bg-gray-900">or</span>
             </div>
             <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-register">
@@ -183,7 +180,7 @@ export default function RegisterPage() {
                 Sign in
               </Link>
             </div>
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
+            <div className="text-center text-xs text-gray-600 dark:text-gray-400">
               <Link href="/privacy" className="hover:underline">Privacy</Link>
               {' · '}
               <Link href="/terms" className="hover:underline">Terms</Link>

@@ -1,10 +1,12 @@
 import express, { type Request, type Response, type Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
   AuthenticationError,
+  ConflictError,
   NotFoundError,
   ValidationError,
   type ISlcIngestEnvelopeV1,
@@ -17,6 +19,8 @@ import {
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
   type IIngestRunTraceResponse,
+  type IIngestRunSkeletonUploadRequest,
+  type IIngestRunSkeletonUploadResponse,
   type ISlcRunCoverage,
   collectEnvelopeEntityWarnings,
 } from '@scholaracle/contracts';
@@ -33,6 +37,7 @@ import {
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import { parseIngestRunStats, parseIngestRunStep } from './ingestTraceHelpers';
+import { assertIngestRunActor, assertRunStatus } from './ingestRunLifecycle';
 import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
   IngestDeviceAuthRepository,
@@ -67,10 +72,13 @@ import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/schedule
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
 import { runPostIngestIntelligence } from '../../../services/materialMatching/postIngestIntelligence';
 import { createScraperAssistRouter } from './scraperAssist';
+import { encryptRunSkeleton } from '../../../services/runSkeletons/runSkeletonCipher';
+import { RunSkeletonRepository } from '../../../services/runSkeletons/RunSkeletonRepository';
 import {
   syncStudentDataSourcesAfterIngestFailure,
   syncStudentDataSourcesAfterIngestSuccess,
 } from './syncStudentDataSourcesFromIngest';
+import { recordRepairCandidatesFromCoverage } from '../../../services/repairCandidates/recordRepairCandidatesFromCoverage';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -108,18 +116,6 @@ function statsFromEnvelope(envelope: ISlcIngestEnvelopeV1): Record<string, numbe
   };
 }
 
-function assertRunActor(
-  existingRun: IngestRun,
-  actorUserId: string
-): { runActorUserId: string; runDataUserId: string } {
-  const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
-  const runDataUserId = existingRun.userId.toString();
-  if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
-    throw new AuthenticationError('Not authorized for this run');
-  }
-  return { runActorUserId, runDataUserId };
-}
-
 function parseOptionalCoverage(raw: unknown): ISlcRunCoverage | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== 'object' || !Array.isArray((raw as ISlcRunCoverage)['students'])) {
@@ -135,6 +131,13 @@ function parseOptionalStringArray(raw: unknown): readonly string[] | undefined {
     if (typeof x === 'string') out.push(x);
   }
   return out;
+}
+
+function parseOptionalSkeletonHash(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 function randomUserCode(): string {
@@ -1361,7 +1364,8 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (!existingRun) {
         throw new NotFoundError('Run not found');
       }
-      const { runDataUserId } = assertRunActor(existingRun, actorUserId);
+      assertIngestRunActor(existingRun, actorUserId);
+      const runDataUserId = existingRun.userId.toString();
       const traceStats = parseIngestRunStats(req.body?.stats);
       const traceWarnings = parseOptionalStringArray(req.body?.warnings);
       await runRepo.appendTraceStep(runDataUserId, runId, {
@@ -1391,6 +1395,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (envelope.run.runId !== runId) {
         throw new ValidationError('runId mismatch');
       }
+
+      const runRecord = await runRepo.findByRunId(runId);
+      if (!runRecord) {
+        throw new NotFoundError('Run not found');
+      }
+      assertIngestRunActor(runRecord, actorUserId);
+      assertRunStatus(runRecord, ['started']);
 
       // Resolve the owner's userId from the ops' studentExternalId.
       const firstStudentExtId = envelope.ops.find(
@@ -1487,12 +1498,15 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       const coverageSnapshot = computeRunCoverage(prepared.ops);
       const warningLines = warningsFromFullValidation(preparedEnvelope);
       const runStats = statsFromEnvelope(preparedEnvelope);
-      await runRepo.markUploaded(dataUserId, runId, {
+      const markedUploaded = await runRepo.markUploaded(dataUserId, runId, {
         coverage: coverageSnapshot,
         warnings: [...warningLines],
         stats: runStats,
         opCount: prepared.ops.length,
       });
+      if (!markedUploaded) {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
       res
         .status(200)
         .json({ success: true, accepted: true } satisfies IIngestEnvelopeAcceptResponse);
@@ -1515,15 +1529,22 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new NotFoundError('Run not found');
       }
       // Verify the actor initiated this run or is the owner.
-      const { runDataUserId } = assertRunActor(existingRun, actorUserId);
+      assertIngestRunActor(existingRun, actorUserId);
+      const runDataUserId = existingRun.userId.toString();
 
       const status = (req.body?.status as string | undefined) ?? 'success';
       if (status === 'failed') {
+        if (existingRun.status === 'failed' || existingRun.status === 'committed') {
+          throw new ConflictError('Run is not in a valid state for this request');
+        }
         const error =
           typeof req.body?.error === 'string' && req.body.error.length > 0
             ? req.body.error
             : 'Run failed';
-        await runRepo.failRun({ userId: runDataUserId, runId, error });
+        const failed = await runRepo.failRun({ userId: runDataUserId, runId, error });
+        if (!failed) {
+          throw new ConflictError('Run is not in a valid state for this request');
+        }
         const srcId = existingRun.sourceId;
         if (srcId) {
           await syncStudentDataSourcesAfterIngestFailure({
@@ -1538,16 +1559,23 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         return;
       }
 
+      if (existingRun.status !== 'uploaded') {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
+
       const cursor = req.body?.cursor as { type: 'opaque'; value: string } | undefined;
       const bodyCoverage = parseOptionalCoverage(req.body?.coverage);
       const bodyWarnings = parseOptionalStringArray(req.body?.warnings);
-      await runRepo.commitRun({
+      const committed = await runRepo.commitRun({
         userId: runDataUserId,
         runId,
         newCursor: cursor ?? null,
         ...(bodyCoverage !== undefined ? { coverage: bodyCoverage } : {}),
         ...(bodyWarnings !== undefined ? { warnings: bodyWarnings } : {}),
       });
+      if (!committed) {
+        throw new ConflictError('Run is not in a valid state for this request');
+      }
       // Stamp lastSyncedAt on the data source
       const committedRun = await runRepo.findByUserIdAndRunId(runDataUserId, runId);
       if (committedRun?.sourceId) {
@@ -1562,6 +1590,24 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           coverage: committedRun.coverage,
           opCount: committedRun.opCount,
         });
+
+        const skeletonHash = parseOptionalSkeletonHash(req.body?.skeletonHash);
+        const coverageForRepair = committedRun.coverage ?? undefined;
+        if (skeletonHash && coverageForRepair) {
+          const source = await sourceRepo.findByUserIdAndSourceId(
+            runDataUserId,
+            committedRun.sourceId
+          );
+          if (source?.portalBaseUrl) {
+            await recordRepairCandidatesFromCoverage({
+              database: config.database,
+              portalBaseUrl: source.portalBaseUrl,
+              recipeId: source.adapterId,
+              skeletonHash,
+              coverage: coverageForRepair,
+            });
+          }
+        }
       }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({
@@ -1583,6 +1629,87 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
       } satisfies IIngestRunCompleteResponse);
+    })
+  );
+
+  router.post(
+    '/runs/:runId/skeletons',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const actorUserId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        throw new ValidationError('Missing runId');
+      }
+      const body = req.body as IIngestRunSkeletonUploadRequest;
+      if (
+        !body ||
+        typeof body.step !== 'string' ||
+        !body.step ||
+        typeof body.skeleton !== 'string' ||
+        typeof body.sha256 !== 'string' ||
+        typeof body.byteLength !== 'number' ||
+        typeof body.capturedAt !== 'string'
+      ) {
+        throw new ValidationError('Invalid skeleton payload');
+      }
+      if (body.sha256.length < 32) {
+        throw new ValidationError('Invalid skeleton sha256');
+      }
+      const store = config.assetStore;
+      if (!store) {
+        throw new ValidationError('Skeleton storage is not configured');
+      }
+
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      const runDataUserId = existingRun.userId.toString();
+      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
+        throw new AuthenticationError('Not authorized to upload skeleton for this run');
+      }
+
+      const encrypted = encryptRunSkeleton(
+        JSON.stringify({
+          step: body.step,
+          capturedAt: body.capturedAt,
+          pagePath: body.pagePath,
+          skeleton: body.skeleton,
+          byteLength: body.byteLength,
+          sha256: body.sha256,
+          truncated: body.truncated,
+        })
+      );
+      if (!encrypted) {
+        throw new ValidationError('Skeleton encryption is not configured');
+      }
+
+      const safeStep = body.step.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+      const storageKey = `skeletons/${runDataUserId}/${runId}/${safeStep}-${body.sha256.slice(0, 12)}.json.enc`;
+      const blob = JSON.stringify(encrypted);
+      const blobBytes = Buffer.from(blob, 'utf8');
+      await store.put(storageKey, Readable.from(blobBytes), {
+        contentType: 'application/json',
+        contentLength: blobBytes.length,
+      });
+
+      const skeletonRepo = new RunSkeletonRepository(config.database);
+      const saved = await skeletonRepo.insert({
+        userId: runDataUserId,
+        runId,
+        step: body.step,
+        sha256: body.sha256,
+        storageKey,
+        byteLength: body.byteLength,
+      });
+
+      res.status(200).json({
+        success: true,
+        storageKey,
+        expiresAt: saved.expiresAt.toISOString(),
+      } satisfies IIngestRunSkeletonUploadResponse);
     })
   );
 

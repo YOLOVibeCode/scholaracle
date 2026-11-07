@@ -6,7 +6,22 @@
  * models/Ingest.ts.
  */
 
-import type { ISlcIngestRunStep, ISlcIngestRunStats } from '../../models/Ingest';
+import type {
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+} from '../../models/Ingest';
+
+/** Request body of POST /api/ingest/v1/runs/:runId/complete (success path). */
+export interface IIngestRunCompleteRequest {
+  readonly status?: 'success' | 'failed';
+  readonly error?: string;
+  readonly cursor?: { readonly type: 'opaque'; readonly value: string };
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
+  /** SHA-256 hex of sanitized page skeleton for district-level repair dedupe. */
+  readonly skeletonHash?: string;
+}
 
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */
 export interface IIngestSourceRegisterRequest {
@@ -66,4 +81,33 @@ export interface IIngestRunTraceRequest {
 /** Response of POST /api/ingest/v1/runs/:id/trace */
 export interface IIngestRunTraceResponse {
   readonly success: boolean;
+}
+
+/** Sanitized structural DOM snapshot from `common.captureSkeleton` on the device. */
+export interface ISanitizedPageSkeletonCapture {
+  readonly step: string;
+  readonly capturedAt: string;
+  readonly pagePath?: string;
+  readonly skeleton: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly truncated?: boolean;
+}
+
+/** Request body of POST /api/ingest/v1/runs/:runId/skeletons. */
+export interface IIngestRunSkeletonUploadRequest {
+  readonly step: string;
+  readonly capturedAt: string;
+  readonly pagePath?: string;
+  readonly skeleton: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly truncated?: boolean;
+}
+
+/** Response of POST /api/ingest/v1/runs/:runId/skeletons. */
+export interface IIngestRunSkeletonUploadResponse {
+  readonly success: boolean;
+  readonly storageKey: string;
+  readonly expiresAt: string;
 }
