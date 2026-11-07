@@ -225,8 +225,8 @@ describe('Ingest v1 API', () => {
             provider: 'canvas',
             adapterId: 'com.instructure.canvas',
             externalId: 'legacy-a-1',
-            studentExternalId: 'stu-legacy',
-            institutionExternalId: 'inst-legacy',
+            studentExternalId: 'stu-1',
+            institutionExternalId: 'inst-1',
             courseExternalId: 'course-legacy',
           },
           observedAt: now,
@@ -234,10 +234,11 @@ describe('Ingest v1 API', () => {
         },
       ],
     };
-    await request(app)
+    const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
       .send(envelope);
+    expect(upload.status).toBe(200);
     const stored = await database
       .collection('slc_assignments')
       .findOne({ externalId: 'legacy-a-1' });
