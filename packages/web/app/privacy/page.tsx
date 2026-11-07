@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Privacy Policy</CardTitle>
             <CardDescription>
-              Last updated: October 11, 2026 · Scholarmancy is operated by Noctusoft, Inc.
+              Last updated: November 7, 2026 · Scholarmancy is operated by Noctusoft, Inc.
               (https://noctusoft.com)
             </CardDescription>
           </CardHeader>
@@ -78,6 +78,17 @@ export default function PrivacyPage() {
                 <li>Maintain sync history logs</li>
                 <li>Improve reliability and performance of the service</li>
               </ul>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold">Server-side analysis (optional)</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                If you turn this on in account settings, Scholarmancy may send synced course materials and
+                images from your academic data to our secure AI processing service to link files to assignments
+                and extract short descriptions. This is <strong>off by default</strong>; we run it only after you
+                enable it. Turning it off stops new processing. We do not sell this data for advertising or
+                marketing. We do not use it to train public AI models.
+              </p>
             </section>
 
             <section>

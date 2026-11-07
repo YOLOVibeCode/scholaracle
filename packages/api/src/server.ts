@@ -13,6 +13,7 @@ import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
+import { consentsRouter } from './routes/consents/consents';
 import { authMiddleware } from './middleware/auth';
 import { requireParent, requireStudent } from './middleware/requireRole';
 import { studioRouter } from './routes/studio/studio';
@@ -65,8 +66,6 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
-import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
-import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
@@ -442,14 +441,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       createAccountRouter({ database, baseUrl })
     );
     app.use(
-      '/api/scrapers',
-      createScrapersRouter({
-        database,
-        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
-      })
-    );
-
-    app.use(
       '/api/oauth',
       createGoogleOAuthRouter({
         database,
@@ -496,6 +487,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       authMiddleware(authService),
       requireParent,
       settingsRouter({ database, authService })
+    );
+    app.use(
+      '/api/consents',
+      authMiddleware(authService),
+      requireParent,
+      consentsRouter({ database })
     );
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
@@ -632,7 +629,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
-    app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));

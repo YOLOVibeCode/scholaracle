@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('App Store legal pages', () => {
   const read = (relative: string): string =>
@@ -10,6 +10,12 @@ describe('App Store legal pages', () => {
     expect(src).toMatch(
       /We do not share, sell, or provide your mobile phone number or SMS opt-in data to third parties or affiliates for marketing or promotional purposes/
     );
+  });
+
+  it('privacy policy documents opt-in server-side analysis', () => {
+    const src = read('privacy/page.tsx');
+    expect(src).toMatch(/Server-side analysis/);
+    expect(src).toMatch(/off by default/i);
   });
 
   it('privacy policy covers Sign in with Apple, OAuth, and in-app deletion', () => {

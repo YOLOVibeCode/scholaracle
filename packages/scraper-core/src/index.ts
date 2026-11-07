@@ -40,6 +40,8 @@ export { buildAdapterVersion } from './types';
 export { PAGE_FNS } from './page-fns/registry';
 export { resolvePageFn, PageFnUnregisteredError, PAGE_FN_UNREGISTERED } from './page-fns/resolve';
 export { getDocumentOuterHtml, isLoginFormShowing } from './page-fns/common-fns';
+export { captureSkeleton, type ICaptureSkeletonResult } from './page-fns/captureSkeleton';
+export { runPortalStep } from './pipeline/runPortalStep';
 export { fetchAssetInWebView, fetchPageInWebView } from './page-fns/asset-fns';
 export type {
   IFetchedAsset,

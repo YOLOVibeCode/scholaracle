@@ -31,6 +31,8 @@ import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
 import { computeRunCoverage } from './computeRunCoverage';
 import { narrowStudentExtractForTransform } from './narrowStudentExtract';
+import { captureSkeleton } from '../page-fns/captureSkeleton';
+import type { ISanitizedPageSkeletonCapture } from '@scholaracle/contracts';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -43,8 +45,20 @@ function toSyncError(err: unknown, phase: SyncFailurePhase, fallback: string): S
 
 function buildScraperHost(
   host: IClientScrapeHost,
-  onPhaseProgress: (p: ISyncProgress) => void
+  onPhaseProgress: (p: ISyncProgress) => void,
+  runId: string
 ): IScraperHost {
+  const mayCapture =
+    host.captureSkeletons === true && typeof host.uploader.uploadSkeleton === 'function';
+  const captureSkeletonOnFailure = mayCapture
+    ? async (step: string): Promise<void> => {
+        const payload = (await host.driver.evaluate(captureSkeleton, {
+          step,
+        })) as ISanitizedPageSkeletonCapture;
+        await host.uploader.uploadSkeleton?.(runId, host.config.sourceId, payload);
+      }
+    : undefined;
+
   return {
     driver: host.driver,
     config: {
@@ -58,6 +72,7 @@ function buildScraperHost(
         message: scraperProgress.message,
       });
     },
+    captureSkeletonOnFailure,
   };
 }
 
@@ -141,7 +156,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   let raw: Record<string, unknown>;
   try {
-    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p));
+    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p), runId);
     raw = await module.scrape(scraperHost);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'portal', 'Extract failed');

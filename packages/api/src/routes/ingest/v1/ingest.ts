@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
@@ -17,6 +18,8 @@ import {
   type IIngestSourceRegisterResponse,
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
+  type IIngestRunSkeletonUploadRequest,
+  type IIngestRunSkeletonUploadResponse,
   type ISlcRunCoverage,
 } from '@scholaracle/contracts';
 import {
@@ -63,9 +66,10 @@ import { logger } from '../../../logger';
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
-import { runBatchMaterialMatching } from '../../../services/materialMatching/batchMaterialMatcher';
-import { runVisionDescribeByContentHash } from '../../../services/materialMatching/visionDescribeByHash';
+import { runPostIngestIntelligence } from '../../../services/materialMatching/postIngestIntelligence';
 import { createScraperAssistRouter } from './scraperAssist';
+import { encryptRunSkeleton } from '../../../services/runSkeletons/runSkeletonCipher';
+import { RunSkeletonRepository } from '../../../services/runSkeletons/RunSkeletonRepository';
 import {
   syncStudentDataSourcesAfterIngestFailure,
   syncStudentDataSourcesAfterIngestSuccess,
@@ -605,25 +609,6 @@ async function generateAlertsFromIngestedAssignments(params: {
       }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Post-ingest intelligence (batched LLM matching + vision dedupe)
-// ---------------------------------------------------------------------------
-
-async function runPostIngestIntelligence(params: {
-  readonly database: Db;
-  readonly userId: string;
-  readonly assetStore?: IAssetStore;
-}): Promise<void> {
-  if (params.assetStore) {
-    await runVisionDescribeByContentHash({
-      database: params.database,
-      userId: params.userId,
-      assetStore: params.assetStore,
-    });
-  }
-  await runBatchMaterialMatching({ database: params.database, userId: params.userId });
 }
 
 /** Maps entity type to MongoDB collection name. */
@@ -1567,6 +1552,87 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
       } satisfies IIngestRunCompleteResponse);
+    })
+  );
+
+  router.post(
+    '/runs/:runId/skeletons',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const actorUserId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        throw new ValidationError('Missing runId');
+      }
+      const body = req.body as IIngestRunSkeletonUploadRequest;
+      if (
+        !body ||
+        typeof body.step !== 'string' ||
+        !body.step ||
+        typeof body.skeleton !== 'string' ||
+        typeof body.sha256 !== 'string' ||
+        typeof body.byteLength !== 'number' ||
+        typeof body.capturedAt !== 'string'
+      ) {
+        throw new ValidationError('Invalid skeleton payload');
+      }
+      if (body.sha256.length < 32) {
+        throw new ValidationError('Invalid skeleton sha256');
+      }
+      const store = config.assetStore;
+      if (!store) {
+        throw new ValidationError('Skeleton storage is not configured');
+      }
+
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      const runDataUserId = existingRun.userId.toString();
+      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
+        throw new AuthenticationError('Not authorized to upload skeleton for this run');
+      }
+
+      const encrypted = encryptRunSkeleton(
+        JSON.stringify({
+          step: body.step,
+          capturedAt: body.capturedAt,
+          pagePath: body.pagePath,
+          skeleton: body.skeleton,
+          byteLength: body.byteLength,
+          sha256: body.sha256,
+          truncated: body.truncated,
+        })
+      );
+      if (!encrypted) {
+        throw new ValidationError('Skeleton encryption is not configured');
+      }
+
+      const safeStep = body.step.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+      const storageKey = `skeletons/${runDataUserId}/${runId}/${safeStep}-${body.sha256.slice(0, 12)}.json.enc`;
+      const blob = JSON.stringify(encrypted);
+      const blobBytes = Buffer.from(blob, 'utf8');
+      await store.put(storageKey, Readable.from(blobBytes), {
+        contentType: 'application/json',
+        contentLength: blobBytes.length,
+      });
+
+      const skeletonRepo = new RunSkeletonRepository(config.database);
+      const saved = await skeletonRepo.insert({
+        userId: runDataUserId,
+        runId,
+        step: body.step,
+        sha256: body.sha256,
+        storageKey,
+        byteLength: body.byteLength,
+      });
+
+      res.status(200).json({
+        success: true,
+        storageKey,
+        expiresAt: saved.expiresAt.toISOString(),
+      } satisfies IIngestRunSkeletonUploadResponse);
     })
   );
 

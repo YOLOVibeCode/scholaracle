@@ -73,6 +73,9 @@ export async function createIndexes(database: Db): Promise<void> {
   const smsConsents = database.collection('sms_consents');
   await smsConsents.createIndex({ phoneE164: 1, purpose: 1 }, { unique: true });
 
+  const consents = database.collection('consents');
+  await consents.createIndex({ userId: 1, purpose: 1 }, { unique: true });
+
   const smsContactOptInInvites = database.collection('sms_contact_optin_invites');
   await smsContactOptInInvites.createIndex({ token: 1 }, { unique: true });
   await smsContactOptInInvites.createIndex({ studentId: 1, contactEmail: 1, createdAt: -1 });
@@ -106,6 +109,10 @@ export async function createIndexes(database: Db): Promise<void> {
   }
   await slcRuns.createIndex({ runId: 1 }, { unique: true });
   await slcRuns.createIndex({ status: 1, startedAt: 1 });
+
+  const slcRunSkeletons = database.collection('slc_run_skeletons');
+  await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
+  await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });

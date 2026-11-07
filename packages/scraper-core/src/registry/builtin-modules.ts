@@ -13,6 +13,7 @@ import { transformSkywardExtract } from '../transformers/skyward/skyward-transfo
 import { transformAeriesExtract } from '../transformers/aeries/aeries-transformer';
 import type { ITransformContext } from '../types';
 import { parseScraperManifest, type IScraperManifest } from './manifest';
+import { runPortalStep } from '../pipeline/runPortalStep';
 import type { IScraperHost, IScraperModule } from './module';
 
 export { BUILTIN_ALIAS_TO_ADAPTER, BUILTIN_ADAPTER_ID_ALIASES } from './adapter-aliases';
@@ -89,7 +90,9 @@ export const canvasBuiltinModule: IScraperModule = {
       message: 'Running Canvas recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runCanvasRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'canvas.extract', async () =>
+      runCanvasRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {
@@ -105,7 +108,9 @@ export const skywardBuiltinModule: IScraperModule = {
       message: 'Running Skyward recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runSkywardRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'skyward.extract', async () =>
+      runSkywardRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {
@@ -121,7 +126,9 @@ export const aeriesBuiltinModule: IScraperModule = {
       message: 'Running Aeries recipe',
       timestamp: new Date().toISOString(),
     });
-    const extract = await runAeriesRecipe(host.driver, host.config.baseUrl);
+    const extract = await runPortalStep(host, 'aeries.extract', async () =>
+      runAeriesRecipe(host.driver, host.config.baseUrl)
+    );
     return extract as unknown as Record<string, unknown>;
   },
   transform(raw: Record<string, unknown>, ctx: ITransformContext) {

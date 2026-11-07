@@ -6,10 +6,10 @@ import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import { ConnectorDeviceRepository } from '@scholaracle/database';
 import { createScraperAssistRouter } from '../routes/ingest/v1/scraperAssist';
 import { createErrorHandler } from '../middleware/errorHandler';
 import { assertKeys } from './assertExactKeys';
-import { seedActiveConnectorJti } from '../testHelpers/connectorDeviceTestSeed';
 
 jest.mock('@scholaracle/agents', () => ({
   LlmClient: jest.fn().mockImplementation(() => ({
@@ -42,11 +42,17 @@ describe('scraper-assist API contract (CLI client)', () => {
     app.use('/api/ingest/v1/ai', createScraperAssistRouter({ database, jwtSecret }));
     app.use(createErrorHandler());
     const tokenService = new ConnectorTokenService(jwtSecret);
-    const userId = 'contract-cli-user';
-    const jti = 'jti-cli-contract';
-    const deviceId = 'device-contract-cli';
-    await seedActiveConnectorJti(database, userId, deviceId, jti);
-    connectorToken = tokenService.createToken(userId, jti, deviceId);
+    connectorToken = tokenService.createToken(
+      'contract-cli-user',
+      'jti-cli-contract',
+      'contract-device'
+    );
+    // Since per-device tokens (#73), a token is honored only while its device holds that jti.
+    await new ConnectorDeviceRepository(database).upsertActiveToken({
+      userId: 'contract-cli-user',
+      deviceId: 'contract-device',
+      activeJti: 'jti-cli-contract',
+    });
   });
 
   afterAll(async () => {
