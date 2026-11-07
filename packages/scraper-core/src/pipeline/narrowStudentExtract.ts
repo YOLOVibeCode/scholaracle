@@ -11,6 +11,30 @@ function isMultiStudentExtract(raw: Record<string, unknown>): raw is Record<stri
   return Array.isArray(students) && students.length > 0 && typeof students[0] === 'object';
 }
 
+/**
+ * Parents often enter a shorter name in the app ("Casey", "Chris") than the
+ * portal shows ("Casey Vega"). Match exactly first; otherwise accept the one
+ * student whose name has, for every word of the hint, a word starting with it.
+ * No match or more than one candidate returns undefined (the caller fails safe).
+ */
+export function findStudentByHint<T extends { name?: unknown }>(
+  students: readonly T[],
+  hint: string
+): T | undefined {
+  const target = normalizeStudentName(hint);
+  if (!target) return undefined;
+  const nameOf = (s: T): string => (typeof s.name === 'string' ? normalizeStudentName(s.name) : '');
+  const exact = students.filter((s) => nameOf(s) === target);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return undefined;
+  const hintWords = target.split(' ');
+  const partial = students.filter((s) => {
+    const words = nameOf(s).split(' ').filter(Boolean);
+    return hintWords.every((h) => words.some((w) => w.startsWith(h)));
+  });
+  return partial.length === 1 ? partial[0] : undefined;
+}
+
 export function narrowStudentExtractForTransform(
   raw: Record<string, unknown>,
   studentNameHint?: string
@@ -18,11 +42,7 @@ export function narrowStudentExtractForTransform(
   const hint = studentNameHint?.trim();
   if (!hint || !isMultiStudentExtract(raw)) return raw;
 
-  const target = normalizeStudentName(hint);
-  const matched = raw.students.find((s) => {
-    const name = typeof s.name === 'string' ? s.name : '';
-    return normalizeStudentName(name) === target;
-  });
+  const matched = findStudentByHint(raw.students, hint);
   if (!matched) {
     throw new SyncError(STUDENT_MISMATCH_MESSAGE, 'STUDENT_MISMATCH');
   }
