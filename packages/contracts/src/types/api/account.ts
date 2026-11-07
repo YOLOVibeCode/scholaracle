@@ -23,3 +23,12 @@ export interface IPushTokenResponse {
 export interface IPushTokenDeleteRequest {
   readonly deviceId: string;
 }
+
+/** Request body of DELETE /api/account — permanently deletes the parent household. */
+export interface IAccountDeleteRequest {
+  readonly password: string;
+}
+
+export interface IAccountDeleteResponse {
+  readonly success: boolean;
+}

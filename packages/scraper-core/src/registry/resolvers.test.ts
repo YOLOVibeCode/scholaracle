@@ -53,14 +53,14 @@ describe('BuiltinScraperResolver', () => {
   const resolver = new BuiltinScraperResolver();
 
   it.each([
-    ['canvas', 'com.instructure.canvas'],
-    ['com.instructure.canvas', 'com.instructure.canvas'],
-    ['skyward', 'com.skyward.qmlativ'],
-    ['com.skyward.qmlativ', 'com.skyward.qmlativ'],
-    ['com.skyward.iscorp', 'com.skyward.qmlativ'],
-    ['aeries', 'com.aeries.sis'],
-    ['com.aeries.sis', 'com.aeries.sis'],
-    ['com.aeries.portal', 'com.aeries.sis'],
+    ['canvas', 'canvas'],
+    ['com.instructure.canvas', 'canvas'],
+    ['skyward', 'skyward'],
+    ['com.skyward.qmlativ', 'skyward'],
+    ['com.skyward.iscorp', 'skyward'],
+    ['aeries', 'aeries'],
+    ['com.aeries.sis', 'aeries'],
+    ['com.aeries.portal', 'aeries'],
   ] as const)('resolves %s → adapterId %s', async (key, adapterId) => {
     const result = await resolver.resolve(key);
     expect(result.module.metadata.adapterId).toBe(adapterId);
@@ -162,7 +162,7 @@ describe('CompositeScraperResolver', () => {
       new BuiltinScraperResolver()
     );
     const result = await composite.resolve('skyward');
-    expect(result.module.metadata.adapterId).toBe('com.skyward.qmlativ');
+    expect(result.module.metadata.adapterId).toBe('skyward');
     expect(result.canRun).toBe(true);
   });
 
