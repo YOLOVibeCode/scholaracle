@@ -381,7 +381,7 @@ describe('Seed API Routes', () => {
           .findOne({ action: 'system:export' });
 
         expect(auditLog).not.toBeNull();
-        expect(auditLog!['adminEmail']).toBe('admin@scholarmancy.com');
+        expect(auditLog!['adminEmail']).toBe('a***@scholarmancy.com');
         expect(auditLog!['entityType']).toBe('system');
         expect(auditLog!['entityId']).toBe('seed');
         expect(auditLog!['reason']).toBe('Seed baseline audit entry');
