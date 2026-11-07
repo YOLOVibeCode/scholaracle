@@ -449,7 +449,19 @@ describe('students API contract', () => {
     assertKeys(
       res.body[0] as Record<string, unknown>,
       ['runId', 'status', 'startedAt', 'error'],
-      ['uploadedAt', 'committedAt', 'abandonedAt', 'sourceId', 'coverage', 'warnings'],
+      [
+        'uploadedAt',
+        'committedAt',
+        'abandonedAt',
+        'sourceId',
+        'coverage',
+        'warnings',
+        'steps',
+        'stats',
+        'lastCursor',
+        'newCursor',
+        'clientMeta',
+      ],
       'IRunListItem'
     );
     expect(res.body[0].runId).toBe('run-contract-1');
