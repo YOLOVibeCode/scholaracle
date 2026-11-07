@@ -20,6 +20,7 @@ export * from './models/AgendaOverride';
 export * from './models/IngestDeviceAuth';
 export * from './models/IngestSource';
 export * from './models/IngestRun';
+export * from './models/ExternalIdAlias/ExternalIdAlias';
 
 // Repositories
 export * from './repositories/UserRepository';
@@ -48,6 +49,7 @@ export * from './repositories/IngestDeviceAuthRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
 export * from './repositories/SourceInviteRepository';
+export * from './repositories/ExternalIdAliasRepository/ExternalIdAliasRepository';
 
 // Helpers (semester / term filtering)
 export { getCurrentSemesterStart } from './helpers/getCurrentSemesterStart';

@@ -20,6 +20,7 @@ import {
 } from '@scholaracle/contracts';
 import {
   computeRunCoverage,
+  resolveCanonicalAdapterId,
   validateEnvelope as validateEnvelopeFull,
 } from '@scholaracle/scraper-core';
 import { authMiddleware } from '../../../middleware/auth';
@@ -109,6 +110,24 @@ function randomUserCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const pick = (): string => alphabet[Math.floor(Math.random() * alphabet.length)] ?? 'A';
   return `${pick()}${pick()}${pick()}${pick()}-${pick()}${pick()}${pick()}${pick()}`;
+}
+
+function normalizeEnvelopeAdapterIds(envelope: ISlcIngestEnvelopeV1): ISlcIngestEnvelopeV1 {
+  const ops = envelope.ops.map((op) => ({
+    ...op,
+    key: {
+      ...op.key,
+      adapterId: resolveCanonicalAdapterId(op.key.adapterId),
+    },
+  }));
+  return {
+    ...envelope,
+    run: {
+      ...envelope.run,
+      adapterId: resolveCanonicalAdapterId(envelope.run.adapterId),
+    },
+    ops,
+  };
 }
 
 function validateEnvelope(envelope: ISlcIngestEnvelopeV1): { valid: boolean; error?: string } {
@@ -1308,7 +1327,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (!runId) {
         throw new ValidationError('Missing runId');
       }
-      const envelope = req.body as ISlcIngestEnvelopeV1;
+      const envelope = normalizeEnvelopeAdapterIds(req.body as ISlcIngestEnvelopeV1);
 
       const v = validateEnvelope(envelope);
       if (!v.valid) {

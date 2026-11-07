@@ -182,6 +182,68 @@ describe('Ingest v1 API', () => {
     expect(assignmentCount).toBeGreaterThan(0);
   });
 
+  it('normalizes legacy built-in adapterIds to canvas on envelope commit', async () => {
+    const connectorToken = await getConnectorToken();
+    const sourceId = 'src-legacy-adapter';
+    await request(app)
+      .post('/api/ingest/v1/sources')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        displayName: 'Canvas',
+        portalBaseUrl: 'https://school.instructure.com',
+      });
+    const runRes = await request(app)
+      .post('/api/ingest/v1/runs')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({ sourceId });
+    const runId = runRes.body.runId as string;
+    const now = new Date().toISOString();
+    const envelope = {
+      schemaVersion: 'slc.ingest.v1',
+      run: {
+        runId,
+        startedAt: now,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        adapterVersion: '1.0.0',
+        mode: 'delta',
+        timezone: 'America/Los_Angeles',
+      },
+      source: {
+        sourceId,
+        displayName: 'Canvas',
+        portalBaseUrl: 'https://school.instructure.com',
+      },
+      ops: [
+        {
+          op: 'upsert',
+          entity: 'assignment',
+          key: {
+            provider: 'canvas',
+            adapterId: 'com.instructure.canvas',
+            externalId: 'legacy-a-1',
+            studentExternalId: 'stu-legacy',
+            institutionExternalId: 'inst-legacy',
+            courseExternalId: 'course-legacy',
+          },
+          observedAt: now,
+          record: { title: 'Essay', status: 'missing' },
+        },
+      ],
+    };
+    await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send(envelope);
+    const stored = await database
+      .collection('slc_assignments')
+      .findOne({ externalId: 'legacy-a-1' });
+    expect(stored?.['adapterId']).toBe('canvas');
+  });
+
   // ---------------------------------------------------------------------------
   // Helper: perform full device flow and return a connector token
   // ---------------------------------------------------------------------------
@@ -352,7 +414,7 @@ describe('Ingest v1 API', () => {
       .send({
         sourceId: 'src-connector-students',
         provider: 'canvas',
-        adapterId: 'com.instructure.canvas',
+        adapterId: 'canvas',
         displayName: 'Canvas LMS',
         portalBaseUrl: 'https://lincoln.instructure.com',
       });
