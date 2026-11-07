@@ -6,7 +6,7 @@
  * models/Ingest.ts.
  */
 
-import type { ISlcRunCoverage } from '../../models/Ingest';
+import type { ISlcIngestRunStats, ISlcIngestRunStep, ISlcRunCoverage } from '../../models/Ingest';
 
 /** Request body of POST /api/ingest/v1/runs/:runId/complete (success path). */
 export interface IIngestRunCompleteRequest {
@@ -65,6 +65,18 @@ export interface IIngestRunFailedResponse {
   readonly committed: false;
   readonly failed: true;
   readonly error?: string;
+}
+
+/** Request body of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceRequest {
+  readonly step: ISlcIngestRunStep;
+  readonly stats?: ISlcIngestRunStats;
+  readonly warnings?: readonly string[];
+}
+
+/** Response of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceResponse {
+  readonly success: boolean;
 }
 
 /** Sanitized structural DOM snapshot from `common.captureSkeleton` on the device. */

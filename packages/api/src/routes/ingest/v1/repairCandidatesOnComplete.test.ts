@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { AuthService } from '@scholaracle/auth';
+import { SLC_INGEST_SCHEMA_VERSION_V1 } from '@scholaracle/contracts';
 import { ingestV1Router } from './ingest';
 import { createErrorHandler } from '../../../middleware/errorHandler';
 
@@ -104,7 +105,7 @@ describe('repair candidates on ingest complete', () => {
         .post(`/api/ingest/v1/runs/${runId}/envelope`)
         .set('Authorization', `Bearer ${connectorToken}`)
         .send({
-          schemaVersion: 'slc.ingest.v1',
+          schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
           run: {
             runId,
             startedAt: now,
@@ -115,34 +116,23 @@ describe('repair candidates on ingest complete', () => {
             timezone: 'America/Los_Angeles',
           },
           source: { sourceId, displayName: 'Aeries' },
-          ops: [],
+          ops: [
+            {
+              op: 'upsert',
+              entity: 'course',
+              key: {
+                provider: 'aeries',
+                adapterId: 'com.aeries.portal',
+                externalId: `course-${i}`,
+                studentExternalId: 'stu-1',
+                institutionExternalId: 'inst-1',
+              },
+              observedAt: now,
+              record: { title: 'Sample Course' },
+            },
+          ],
         })
         .expect(200);
-
-      // Since the run state machine (#77), a run must be uploaded before it can complete.
-      const now = new Date().toISOString();
-      const upload = await request(app)
-        .post(`/api/ingest/v1/runs/${runId}/envelope`)
-        .set('Authorization', `Bearer ${connectorToken}`)
-        .send({
-          schemaVersion: 'slc.ingest.v1',
-          run: {
-            runId,
-            startedAt: now,
-            provider: 'aeries',
-            adapterId: 'com.aeries.portal',
-            adapterVersion: '1.0.0',
-            mode: 'delta',
-            timezone: 'America/Chicago',
-          },
-          source: {
-            sourceId,
-            displayName: 'Aeries',
-            portalBaseUrl: 'https://district.aeries.net/student/',
-          },
-          ops: [],
-        });
-      expect(upload.status).toBe(200);
 
       const complete = await request(app)
         .post(`/api/ingest/v1/runs/${runId}/complete`)
