@@ -532,8 +532,7 @@ test.describe('@integration Layer 5: Integration Workflows', () => {
     }
 
     await page.goto('/dashboard');
-    await expect(page.locator('[data-testid="student-link"]').first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.locator('body')).toBeVisible();
+    await expect(page.getByText('Student One').first()).toBeVisible({ timeout: 10_000 });
   });
 });
