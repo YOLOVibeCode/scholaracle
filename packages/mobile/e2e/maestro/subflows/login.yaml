@@ -49,7 +49,10 @@ appId: com.scholarmancy.app
     when:
       visible: "Don.t allow"
     commands:
-      - tapOn: "Don.t allow"
+      - tapOn:
+          text: "Don.t allow"
+          # The prompt can vanish between the check and the tap.
+          optional: true
 # A login request can fail on a flaky CI network ("fetch failed ... canceled", API shown
 # as unreachable). If the error shows, tap Sign In again before giving up.
 - retry:
@@ -60,7 +63,10 @@ appId: com.scholarmancy.app
           when:
             visible: "Not Now"
           commands:
-            - tapOn: "Not Now"
+            - tapOn:
+                text: "Not Now"
+                # The prompt can vanish between the check and the tap.
+                optional: true
       - runFlow:
           when:
             visible:
