@@ -22,7 +22,13 @@ var document = {
   querySelector: function() { return null; },
   querySelectorAll: function() { return []; },
   body: __domNode(),
-  documentElement: { outerHTML: '<html><head></head><body></body></html>' },
+  documentElement: (function() {
+    var el = __domNode();
+    el.tagName = 'HTML';
+    el.attributes = [];
+    el.outerHTML = '<html></html>';
+    return el;
+  })(),
   open: function() {},
   write: function() {},
   close: function() {},
@@ -36,6 +42,7 @@ var KeyboardEvent = function(type, opts) {
 };
 var window = {
   document: document,
+  location: { pathname: '/' },
   getComputedStyle: function() {
     return { display: 'none', visibility: 'hidden' };
   }
@@ -58,8 +65,16 @@ var URL = function(u) { this.pathname = String(u); this.href = String(u); };
 var crypto = {
   subtle: {
     digest: function() {
-      return Promise.resolve(new Uint8Array([0]).buffer);
+      return Promise.resolve(new Uint8Array(32).buffer);
     }
   }
+};
+var globalThis = { crypto: crypto };
+var TextEncoder = function() {
+  this.encode = function(text) {
+    var out = [];
+    for (var i = 0; i < text.length; i++) out.push(text.charCodeAt(i));
+    return new Uint8Array(out);
+  };
 };
 `;
