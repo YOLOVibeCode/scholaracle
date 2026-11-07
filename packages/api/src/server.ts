@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
@@ -38,6 +39,7 @@ import {
   SessionRepository,
   StudentRepository,
   SourceInviteRepository,
+  createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
@@ -65,8 +67,6 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
-import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
-import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
@@ -84,6 +84,7 @@ import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
+import { createScrapersRepairRouter } from './routes/scrapers/repair';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -289,7 +290,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       req.path === '/api/webhooks/noctusoft' ||
       req.path.startsWith('/api/webhooks/twilio') ||
       req.path === '/api/ingest/v1/assets/upload-base64' ||
-      req.path === '/api/ingest/v1/ai/scraper-assist'
+      req.path === '/api/ingest/v1/ai/scraper-assist' ||
+      req.path === '/api/scrapers/repair'
     ) {
       next();
       return;
@@ -404,6 +406,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     );
 
     app.use(
+      '/api/portal-accounts',
+      authMiddleware(authService),
+      requireParent,
+      portalAccountsRouter({ database })
+    );
+    app.use(
       '/api/students',
       authMiddleware(authService),
       requireParent,
@@ -441,14 +449,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       authMiddleware(authService),
       createAccountRouter({ database, baseUrl })
     );
-    app.use(
-      '/api/scrapers',
-      createScrapersRouter({
-        database,
-        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
-      })
-    );
-
     app.use(
       '/api/oauth',
       createGoogleOAuthRouter({
@@ -559,6 +559,14 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
     app.use('/api/assets', createAssetServeRouter(assetsConfig));
+    app.use(
+      '/api/scrapers',
+      createScrapersRepairRouter({
+        database,
+        jwtSecret,
+        assetStore,
+      })
+    );
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
@@ -638,7 +646,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
-    app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
@@ -696,6 +703,7 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   installProcessHandlers(logger);
 
   const database = await initializeDatabase(config);
+  await createIndexes(database);
   await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);

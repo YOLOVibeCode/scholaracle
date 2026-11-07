@@ -99,11 +99,38 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcSources.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
   await slcSources.createIndex({ userId: 1, updatedAt: -1 });
 
+  const slcPortalAccounts = database.collection('slc_portal_accounts');
+  await slcPortalAccounts.createIndex({ userId: 1, portalAccountId: 1 }, { unique: true });
+  await slcPortalAccounts.createIndex(
+    { userId: 1, provider: 1, institutionExternalId: 1 },
+    { unique: true }
+  );
+
+  const slcBindings = database.collection('slc_bindings');
+  await slcBindings.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
+  await slcBindings.createIndex({ userId: 1, studentId: 1 });
+  await slcBindings.createIndex({ userId: 1, portalAccountId: 1 });
+
   const slcRuns = database.collection('slc_runs');
   await slcRuns.createIndex({ userId: 1, runId: 1 }, { unique: true });
   await slcRuns.createIndex({ userId: 1, sourceId: 1, committedAt: -1 });
-  await slcRuns.createIndex({ runId: 1 });
+  try {
+    await slcRuns.dropIndex('runId_1');
+  } catch {
+    /* legacy non-unique index may be absent or already replaced */
+  }
+  await slcRuns.createIndex({ runId: 1 }, { unique: true });
   await slcRuns.createIndex({ status: 1, startedAt: 1 });
+
+  const slcRunSkeletons = database.collection('slc_run_skeletons');
+  await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
+  await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  const repairCandidates = database.collection('repair_candidates');
+  await repairCandidates.createIndex(
+    { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+    { unique: true }
+  );
 
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });

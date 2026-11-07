@@ -34,6 +34,11 @@ import type {
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
+  ISanitizedPageSkeletonCapture,
+  IPortalAccountUpsertRequest,
+  IPortalAccountUpsertResponse,
+  IPortalBindingUpsertRequest,
+  IPortalBindingUpsertResponse,
 } from '@scholaracle/contracts';
 import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
@@ -498,6 +503,23 @@ export class ScholarmancyApiClient {
     if (!res.ok) throw await ApiError.fromResponse(res, 'Source registration');
   }
 
+  async upsertPortalAccount(
+    body: IPortalAccountUpsertRequest
+  ): Promise<{ portalAccountId: string }> {
+    const res = await this._put<IPortalAccountUpsertResponse>('/api/portal-accounts', body);
+    return { portalAccountId: res.portalAccount.portalAccountId };
+  }
+
+  async upsertPortalBinding(
+    portalAccountId: string,
+    body: IPortalBindingUpsertRequest
+  ): Promise<void> {
+    await this._put<IPortalBindingUpsertResponse>(
+      `/api/portal-accounts/${portalAccountId}/bindings`,
+      body
+    );
+  }
+
   async redeemSourceInvite(token: string): Promise<ISourceInvitePayload> {
     const res = await this._post<ISourceInviteRedeemResponse>(
       '/api/source-invites/redeem',
@@ -545,6 +567,39 @@ export class ScholarmancyApiClient {
       }),
     });
     if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
+  }
+
+  async uploadRunSkeleton(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly connectorToken: string;
+    readonly payload: ISanitizedPageSkeletonCapture;
+  }): Promise<void> {
+    const runRes = await this._connectorFetch(
+      '/api/ingest/v1/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          runId: params.runId,
+          sourceId: params.sourceId,
+          clientMeta: { clientType: 'mobile' },
+        }),
+      },
+      params.connectorToken
+    );
+    if (!runRes.ok) throw await ApiError.fromResponse(runRes, 'Run registration');
+    const runBody = (await runRes.json()) as Partial<IIngestRunStartResponse>;
+    const serverRunId = runBody.runId ?? params.runId;
+
+    const skeletonRes = await this._connectorFetch(
+      `/api/ingest/v1/runs/${serverRunId}/skeletons`,
+      {
+        method: 'POST',
+        body: JSON.stringify(params.payload),
+      },
+      params.connectorToken
+    );
+    if (!skeletonRes.ok) throw await ApiError.fromResponse(skeletonRes, 'Skeleton upload');
   }
 
   async reportRunFailure(params: {

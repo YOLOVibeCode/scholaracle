@@ -129,6 +129,7 @@ describe('Companion E2E: FakePageDriver → validate → mock ingest', () => {
         uploaded.push(envelope);
       }),
       reportRunFailure: jest.fn(async () => undefined),
+      uploadRunSkeleton: jest.fn(async () => undefined),
     };
   }
 

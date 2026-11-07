@@ -10,3 +10,4 @@ export * from './sourceInvite';
 export * from './materials';
 export * from './studio';
 export * from './studentLogin';
+export * from './household';

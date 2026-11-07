@@ -7,6 +7,7 @@ export type AppNavView =
   | 'course-detail'
   | 'assignment-detail'
   | 'sync'
+  | 'sync-all'
   | 'run-history'
   | 'settings'
   | 'today'
@@ -20,6 +21,7 @@ const PARENT_VIEWS: ReadonlySet<AppNavView> = new Set([
   'course-detail',
   'assignment-detail',
   'sync',
+  'sync-all',
   'run-history',
   'settings',
 ]);
