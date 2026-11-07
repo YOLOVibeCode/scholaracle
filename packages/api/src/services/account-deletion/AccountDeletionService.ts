@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db } from 'mongodb';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Db, type Document, type UpdateFilter } from 'mongodb';
 import {
   ACCOUNT_DELETION_AUDIT_COLLECTION,
   EXTRA_USER_SCOPED_JOB_FILTER,
@@ -64,14 +63,27 @@ async function removeFromOtherFamiliesShares(
   userId: string,
   email: string | undefined
 ): Promise<void> {
-  const match: Record<string, unknown>[] = [{ userId }];
-  if (email) match.push({ email: email.toLowerCase() }, { email });
-  await db.collection('students').updateMany(
-    { sharedWith: { $elemMatch: { $or: match } } },
-    {
-      $pull: { sharedWith: { $or: match } },
-    }
-  );
+  const pullShared = (field: Record<string, string>): UpdateFilter<Document> =>
+    ({ $pull: { sharedWith: field } }) as unknown as UpdateFilter<Document>;
+
+  await db
+    .collection('students')
+    .updateMany({ 'sharedWith.userId': userId }, pullShared({ userId }));
+  if (!email) {
+    return;
+  }
+  const lowerEmail = email.toLowerCase();
+  await db
+    .collection('students')
+    .updateMany(
+      { sharedWith: { $elemMatch: { email: lowerEmail } } },
+      pullShared({ email: lowerEmail })
+    );
+  if (lowerEmail !== email) {
+    await db
+      .collection('students')
+      .updateMany({ sharedWith: { $elemMatch: { email } } }, pullShared({ email }));
+  }
 }
 
 export class AccountDeletionService {
