@@ -1,3 +1,5 @@
+import { isPrivateAddress } from '../../security/isPrivateAddress';
+
 /**
  * Scraper generation pipeline utilities.
  *
@@ -69,6 +71,9 @@ export async function connectStep(loginUrl: string): Promise<IConnectResult> {
     const url = new URL(loginUrl);
     if (!['http:', 'https:'].includes(url.protocol)) {
       return { ok: false, error: 'URL must be http or https' };
+    }
+    if (await isPrivateAddress(url.hostname)) {
+      return { ok: false, error: 'URL must not target a private or internal address' };
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS);

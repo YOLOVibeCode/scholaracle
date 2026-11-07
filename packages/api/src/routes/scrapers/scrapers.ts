@@ -155,7 +155,10 @@ export function createScrapersRouter(config: IScrapersRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
       const allowed = config.publisherUserIds;
-      if (allowed && allowed.length > 0 && !allowed.includes(userId)) {
+      if (!allowed?.length) {
+        throw new ForbiddenError('Scraper publishing is not configured');
+      }
+      if (!allowed.includes(userId)) {
         throw new ForbiddenError('Only Scholaracle may publish to the registry');
       }
 
