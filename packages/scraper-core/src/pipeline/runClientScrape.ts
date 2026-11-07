@@ -73,6 +73,7 @@ function buildScraperHost(
       });
     },
     captureSkeletonOnFailure,
+    ...(host.selectorPatch ? { selectorPatch: host.selectorPatch } : {}),
   };
 }
 
@@ -90,6 +91,9 @@ function buildEnvelopeMeta(
     meta['enrichmentSource'] = enrichment.source;
     meta['enrichmentPatchCount'] = String(enrichment.patchCount);
     meta['enrichmentFailed'] = enrichment.failed ? 'true' : 'false';
+  }
+  if (host.appliedSelectorPatchId) {
+    meta['appliedSelectorPatchId'] = host.appliedSelectorPatchId;
   }
   const snap = rawExtract?.['canvasSnapshotMeta'] as Readonly<Record<string, string>> | undefined;
   if (snap && typeof snap === 'object') {

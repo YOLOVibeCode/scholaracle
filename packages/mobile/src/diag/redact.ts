@@ -14,8 +14,7 @@ const SENSITIVE_KEY =
   /^(token|sessionToken|accessToken|refreshToken|password|authorization|cookie|set-cookie)$/i;
 
 export function fingerprint(value: string): string {
-  if (value.length <= 8) return `tok:****(len ${value.length})`;
-  return `tok:${value.slice(0, 6)}…(len ${value.length})`;
+  return `tok:****(len ${value.length})`;
 }
 
 function redactString(input: string): string {

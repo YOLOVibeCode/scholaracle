@@ -57,7 +57,7 @@ export default function AlertsPage() {
           role="tab"
           aria-selected={activeFilter === 'all'}
           data-testid="filter-all"
-          className="px-3 py-2 rounded border"
+          className="min-h-11 min-w-11 px-3 py-2 rounded border"
           onClick={() => setActiveFilter('all')}
           type="button"
         >
@@ -67,7 +67,7 @@ export default function AlertsPage() {
           role="tab"
           aria-selected={activeFilter === 'critical'}
           data-testid="filter-critical"
-          className="px-3 py-2 rounded border"
+          className="min-h-11 min-w-11 px-3 py-2 rounded border"
           onClick={() => setActiveFilter('critical')}
           type="button"
         >
@@ -77,7 +77,7 @@ export default function AlertsPage() {
           role="tab"
           aria-selected={activeFilter === 'warning'}
           data-testid="filter-warning"
-          className="px-3 py-2 rounded border"
+          className="min-h-11 min-w-11 px-3 py-2 rounded border"
           onClick={() => setActiveFilter('warning')}
           type="button"
         >
@@ -87,7 +87,7 @@ export default function AlertsPage() {
           role="tab"
           aria-selected={activeFilter === 'info'}
           data-testid="filter-info"
-          className="px-3 py-2 rounded border"
+          className="min-h-11 min-w-11 px-3 py-2 rounded border"
           onClick={() => setActiveFilter('info')}
           type="button"
         >

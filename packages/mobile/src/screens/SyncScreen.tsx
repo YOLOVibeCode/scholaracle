@@ -35,6 +35,10 @@ import { runSyncPipeline, SyncError, type ISyncProgress } from '../scraper/SyncO
 import { WebViewAssetHost } from '../scraper/WebViewAssetHost';
 import { apiClient } from '../api/client';
 import { runLedger } from '../ledger/RunLedger';
+import {
+  clearSelectorPatchForHost,
+  pickSelectorPatchForSync,
+} from '../sync/servedSelectorPatchesSession';
 
 interface ISavedCredential {
   readonly username: string;
@@ -146,6 +150,11 @@ export function SyncScreen({
     setSyncState('syncing');
     setShowWebView(false); // Switch to hidden WebView
 
+    const remotePatch = pickSelectorPatchForSync({
+      portalHost: config.institutionExternalId,
+      recipeId: config.provider,
+    });
+
     try {
       const connectorToken = await apiClient.getOrMintConnectorToken();
       // Idempotent upsert: guarantees the source exists server-side so the
@@ -181,7 +190,12 @@ export function SyncScreen({
         (p: ISyncProgress) => {
           if (!cancelledRef.current) setProgress(p);
         },
-        undefined,
+        remotePatch
+          ? {
+              selectorPatch: remotePatch.selectors,
+              appliedSelectorPatchId: remotePatch.patchId,
+            }
+          : undefined,
         new WebViewAssetHost({
           driver: driverRef.current,
           connectorToken,
@@ -205,6 +219,10 @@ export function SyncScreen({
         describeSyncFailure({ phase, message, provider: config.provider, loginFormShowing })
       );
       setSyncState('error');
+    } finally {
+      if (remotePatch) {
+        clearSelectorPatchForHost(config.institutionExternalId);
+      }
     }
   }, [config, checkLoginForm]);
 

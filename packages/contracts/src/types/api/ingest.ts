@@ -17,6 +17,8 @@ export interface IIngestRunCompleteRequest {
   readonly warnings?: readonly string[];
   /** SHA-256 hex of sanitized page skeleton for district-level repair dedupe. */
   readonly skeletonHash?: string;
+  /** Served selector patch the client applied for this sync (verification). */
+  readonly appliedSelectorPatchId?: string;
 }
 
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */
@@ -57,6 +59,8 @@ export interface IIngestRunCompleteResponse {
   readonly committed: boolean;
   readonly newCursor: { readonly type: 'opaque'; readonly value: string } | null;
   readonly derivedAlertsQueued: boolean;
+  /** Present when post-ingest LLM work hit the relay budget cap; sync still committed. */
+  readonly codes?: readonly string[];
 }
 
 /** Response of POST /api/ingest/v1/runs/:id/complete (failed path). */

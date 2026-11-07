@@ -44,6 +44,8 @@ import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore
 import { sourceInviteApplier } from './src/install/applySourceInvite';
 import { apiClient } from './src/api/client';
 import { fetchPendingSyncRequestsOnAppOpen } from './src/sync/pendingSyncOnAppOpen';
+import { fetchServedSelectorPatchesOnAppOpen } from './src/sync/servedSelectorPatchesOnAppOpen';
+import { extractHostname } from './src/utils/urlNormalize';
 import {
   clampNavView,
   homeViewForRole,
@@ -173,6 +175,24 @@ function AppContent(): React.ReactElement {
     void fetchPendingSyncRequestsOnAppOpen(() => apiClient.getPendingSyncRequests()).catch(
       () => undefined
     );
+  }, [isLoggedIn, studentMode, accountEpoch]);
+
+  useEffect(() => {
+    if (!isLoggedIn || studentMode) return;
+    void (async (): Promise<void> => {
+      try {
+        const connectorToken = await apiClient.getOrMintConnectorToken();
+        const sources = await apiClient.listIngestConnectorSources(connectorToken);
+        const hosts = sources
+          .map((s) => (s.portalBaseUrl ? extractHostname(s.portalBaseUrl) : ''))
+          .filter((h) => h.length > 0);
+        await fetchServedSelectorPatchesOnAppOpen(hosts, (portalHost) =>
+          apiClient.getServedSelectorPatches(portalHost, connectorToken)
+        );
+      } catch {
+        // Best-effort: sync still works without remote patches.
+      }
+    })();
   }, [isLoggedIn, studentMode, accountEpoch]);
 
   useEffect(() => {
