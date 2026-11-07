@@ -3,6 +3,48 @@ import { RegisterPage } from '../pages/register.page';
 import { LoginPage } from '../pages/login.page';
 import { generateUniqueEmail } from '../fixtures/test-data';
 import { assertOnDashboard } from '../helpers/assertions';
+import type { APIRequestContext } from '@playwright/test';
+
+function extractMagicLoginUrl(body: string): string | null {
+  const match = body.match(/https?:\/\/[^\s"'<>]+\/(?:magic\?token=|login\?magic=)[^\s"'<>]+/);
+  return match?.[0] ?? null;
+}
+
+async function pollMagicLoginUrl(
+  request: APIRequestContext,
+  mailpitApi: string,
+  recipientEmail: string,
+  timeoutMs = 20_000
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
+    if (mailpitRes.ok()) {
+      interface MailpitMessage {
+        ID: string;
+        To?: Array<{ Address?: string }>;
+      }
+      interface MailpitMessages {
+        messages?: MailpitMessage[];
+      }
+      const mailData = (await mailpitRes.json()) as MailpitMessages;
+      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
+        m.To?.some((r: { Address?: string }) => r.Address === recipientEmail)
+      );
+      if (magicMail) {
+        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
+        if (msgRes.ok()) {
+          const msg = (await msgRes.json()) as { Text?: string; HTML?: string };
+          const loginUrl =
+            extractMagicLoginUrl(msg.Text ?? '') ?? extractMagicLoginUrl(msg.HTML ?? '');
+          if (loginUrl) return loginUrl;
+        }
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
 
 /**
  * Multi-Parent E2E Tests
@@ -446,30 +488,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     );
     expect(sendRes.ok()).toBeTruthy();
 
-    // 5. Capture the login link from Mailpit (if available)
-    let loginUrl: string | null = null;
-    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
-    if (mailpitRes.ok()) {
-      interface MailpitMessage {
-        ID: string;
-        To?: Array<{ Address?: string }>;
-      }
-      interface MailpitMessages {
-        messages?: MailpitMessage[];
-      }
-      const mailData = (await mailpitRes.json()) as MailpitMessages;
-      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
-        m.To?.some((r: { Address?: string }) => r.Address === contactEmail)
-      );
-      if (magicMail) {
-        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
-        if (msgRes.ok()) {
-          const msg = (await msgRes.json()) as { Text?: string };
-          const match = (msg.Text ?? '').match(/http[^\s]+\/login\?magic=[^\s]+/);
-          if (match) loginUrl = match[0];
-        }
-      }
-    }
+    const loginUrl = await pollMagicLoginUrl(request, mailpitApi, contactEmail);
 
     if (!loginUrl) {
       // Mailpit not available — skip browser-click validation but assert the send succeeded
@@ -550,30 +569,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     );
     expect(sendRes.ok()).toBeTruthy();
 
-    // 5. Capture from Mailpit
-    let loginUrl: string | null = null;
-    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
-    if (mailpitRes.ok()) {
-      interface MailpitMessage {
-        ID: string;
-        To?: Array<{ Address?: string }>;
-      }
-      interface MailpitMessages {
-        messages?: MailpitMessage[];
-      }
-      const mailData = (await mailpitRes.json()) as MailpitMessages;
-      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
-        m.To?.some((r: { Address?: string }) => r.Address === studentEmail)
-      );
-      if (magicMail) {
-        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
-        if (msgRes.ok()) {
-          const msg = (await msgRes.json()) as { Text?: string };
-          const match = (msg.Text ?? '').match(/http[^\s]+\/login\?magic=[^\s]+/);
-          if (match) loginUrl = match[0];
-        }
-      }
-    }
+    const loginUrl = await pollMagicLoginUrl(request, mailpitApi, studentEmail);
 
     if (!loginUrl) {
       test.info().annotations.push({

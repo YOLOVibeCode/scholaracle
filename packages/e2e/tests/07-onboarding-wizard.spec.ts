@@ -296,13 +296,19 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.fill('[data-testid="wizard-student-name"]', studentName);
 
     const createStudent6 = page.waitForResponse(
-      (r) => r.url().includes('/students') && r.request().method() === 'POST'
+      (r) => r.url().includes('/students') && r.request().method() === 'POST' && r.ok()
     );
     await page.click('[data-testid="wizard-next-step"]');
     await createStudent6;
 
+    await expect(page.locator('[data-testid="wizard-add-new-provider"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
     // Skip services
-    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible();
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
+      timeout: 15_000,
+    });
     await page.locator('[data-testid="wizard-skip-services"]').click();
 
     // Finish

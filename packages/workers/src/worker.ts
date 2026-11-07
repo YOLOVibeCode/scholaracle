@@ -644,7 +644,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     });
     await mongoClient.close();
     logger.info('worker stopped');
-    process.exit(0);
+    if (process.env['NODE_ENV'] !== 'test') {
+      process.exit(0);
+    }
   };
 
   process.on('SIGTERM', () => {

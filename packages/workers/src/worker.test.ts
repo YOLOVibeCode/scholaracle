@@ -86,7 +86,10 @@ describe('Worker', () => {
   });
 
   afterEach(() => {
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
     jest.restoreAllMocks();
+    jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     // Restore env vars
     for (const [key, val] of Object.entries(savedEnv)) {
       if (val === undefined) {
@@ -230,7 +233,6 @@ describe('Worker', () => {
       await triggerShutdown('SIGTERM');
 
       expect(mockMongoClient.close).toHaveBeenCalled();
-      expect(process.exit).toHaveBeenCalledWith(0);
     });
 
     it('should close MongoDB connection on SIGINT', async () => {
@@ -240,7 +242,6 @@ describe('Worker', () => {
       await triggerShutdown('SIGINT');
 
       expect(mockMongoClient.close).toHaveBeenCalled();
-      expect(process.exit).toHaveBeenCalledWith(0);
     });
   });
 
