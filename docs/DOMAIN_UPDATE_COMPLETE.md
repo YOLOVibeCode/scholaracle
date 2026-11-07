@@ -94,8 +94,8 @@ Created comprehensive domain configuration guide:
 ### Comprehensive Digest Sent ✅
 Successfully sent comprehensive academic digest to all recipients:
 - ✅ rvegajr@noctusoft.com
-- ✅ rmlewis1976@gmail.com
-- ✅ jdenise11@hotmail.com
+- ✅ coparent.one@example.com
+- ✅ coparent.two@example.com
 
 **Digest Contents**:
 - ✅ Grade summary bar (6 courses with color-coded percentages)

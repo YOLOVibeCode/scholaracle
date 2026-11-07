@@ -18,36 +18,36 @@ test.describe('Scraper UX: Multi-student and bundled script', () => {
   let allStudentsScriptPath: string;
 
   test.describe.serial('Multi-student flow', () => {
-    test('Login and add student Ava Lewis', async ({ page, loginAsRole }) => {
+    test('Login and add student Avery Sample', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
       await page.goto('/dashboard/students');
       await page.locator('[data-testid="button-add-student"]').first().click();
       await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
 
-      await page.locator('[data-testid="wizard-student-name"]').fill('Ava Lewis');
+      await page.locator('[data-testid="wizard-student-name"]').fill('Avery Sample');
       await page.locator('[data-testid="wizard-student-grade"]').fill('9');
       await page.locator('[data-testid="wizard-next-step"]').click();
 
       await expect(page.getByRole('heading', { name: /Connect Services/i })).toBeVisible({ timeout: 10000 });
       await page.keyboard.press('Escape');
       await page.waitForTimeout(1000);
-      await expect(page.locator('[data-testid="student-list"]').getByText('Ava Lewis').first()).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('[data-testid="student-list"]').getByText('Avery Sample').first()).toBeVisible({ timeout: 10000 });
     });
 
-    test('Add student Noah Lewis', async ({ page, loginAsRole }) => {
+    test('Add student Noah Sample', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
       await page.goto('/dashboard/students');
       await page.locator('[data-testid="button-add-student"]').first().click();
       await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
 
-      await page.locator('[data-testid="wizard-student-name"]').fill('Noah Lewis');
+      await page.locator('[data-testid="wizard-student-name"]').fill('Noah Sample');
       await page.locator('[data-testid="wizard-student-grade"]').fill('11');
       await page.locator('[data-testid="wizard-next-step"]').click();
 
       await expect(page.getByRole('heading', { name: /Connect Services/i })).toBeVisible({ timeout: 10000 });
       await page.keyboard.press('Escape');
       await page.waitForTimeout(1000);
-      await expect(page.locator('[data-testid="student-list"]').getByText('Noah Lewis').first()).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('[data-testid="student-list"]').getByText('Noah Sample').first()).toBeVisible({ timeout: 10000 });
     });
 
     test('Add Canvas + Skyward to bundle and download', async ({ page, loginAsRole }) => {
@@ -104,8 +104,8 @@ echo "Done"
 
       await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
       await page.getByLabel(/School portal URL/i).fill('https://example.instructure.com');
-      await page.getByLabel(/Student name/i).fill('Ava Lewis');
-      await page.getByLabel(/^Username$/i).fill('ava@example.com');
+      await page.getByLabel(/Student name/i).fill('Avery Sample');
+      await page.getByLabel(/^Username$/i).fill('avery@example.com');
       await page.getByLabel(/^Password$/i).fill('placeholder');
 
       // Canvas is a reference platform → "Continue" adds to bundle immediately
@@ -121,7 +121,7 @@ echo "Done"
 
       await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
       await page.getByLabel(/School portal URL/i).fill('https://skyward.example.com');
-      await page.getByLabel(/Student name/i).fill('Noah Lewis');
+      await page.getByLabel(/Student name/i).fill('Noah Sample');
       await page.getByLabel(/^Username$/i).fill('noah.parent');
       await page.getByLabel(/^Password$/i).fill('placeholder');
 

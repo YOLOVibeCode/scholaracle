@@ -281,9 +281,9 @@ describe('validateEntityRecord — course', () => {
 
 describe('validateEntityRecord — studentProfile', () => {
   const validProfile: ISlcStudentProfile = {
-    name: 'Emma Lewis',
+    name: 'Emma Sample',
     firstName: 'Emma',
-    lastName: 'Lewis',
+    lastName: 'Sample',
     studentId: '12345',
     gradeLevel: '10th',
     school: 'Lake Dallas High School',
@@ -818,9 +818,9 @@ describe('type-level checks (compile-time)', () => {
 
   it('should allow constructing a studentProfile', () => {
     const p: ISlcStudentProfile = {
-      name: 'Emma Lewis',
+      name: 'Emma Sample',
       firstName: 'Emma',
-      lastName: 'Lewis',
+      lastName: 'Sample',
       studentId: '12345',
       gradeLevel: '10th',
       school: 'Lake Dallas High School',
@@ -830,7 +830,7 @@ describe('type-level checks (compile-time)', () => {
       advisor: 'Mr. Thompson',
       homeroom: 'Room 101',
     };
-    expect(p.name).toBe('Emma Lewis');
+    expect(p.name).toBe('Emma Sample');
   });
 
   it('should allow constructing an enriched gradeSnapshot with categories', () => {

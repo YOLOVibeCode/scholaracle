@@ -5,13 +5,13 @@
 import { SOURCE_INVITE_ADAPTER_IDS, type ISourceInvitePayload } from '@scholaracle/contracts';
 import { connectSourceInitialState } from './connectSourceInitialState';
 
-const AVA: ISourceInvitePayload = {
+const AVERY: ISourceInvitePayload = {
   provider: 'skyward',
   adapterId: SOURCE_INVITE_ADAPTER_IDS.skyward,
   portalBaseUrl: 'https://skyward.iscorp.com',
   displayName: 'Skyward Family Access (skyward.iscorp.com)',
   studentId: 'stu-mongo-1',
-  studentExternalId: 'ava-lewis',
+  studentExternalId: 'avery-sample',
   institutionExternalId: 'skyward.iscorp.com',
 };
 
@@ -23,8 +23,8 @@ describe('connectSourceInitialState', () => {
     expect(state.urlLocked).toBe(false);
   });
 
-  it('Ava invite → credentials with locked iscorp URL', () => {
-    const state = connectSourceInitialState(AVA);
+  it('Avery invite → credentials with locked iscorp URL', () => {
+    const state = connectSourceInitialState(AVERY);
     expect(state.step).toBe('credentials');
     expect(state.portalUrl).toBe('https://skyward.iscorp.com');
     expect(state.provider).toBe('skyward');

@@ -44,9 +44,9 @@ describe('WebViewPageDriver (Hermes-safe evaluate)', () => {
     const { driver, injected } = setup();
 
     const pending = driver.evaluate(extractSkywardStudentName, SKYWARD_SELECTORS_V1);
-    reply(driver, '1', 'Ava Lewis');
+    reply(driver, '1', 'Avery Sample');
 
-    await expect(pending).resolves.toBe('Ava Lewis');
+    await expect(pending).resolves.toBe('Avery Sample');
     expect(injected).toHaveLength(1);
     const script = injected[0]!;
     expect(script).toContain('function extractSkywardStudentName(selectors)');

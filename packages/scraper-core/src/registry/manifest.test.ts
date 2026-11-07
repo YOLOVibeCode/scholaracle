@@ -144,7 +144,9 @@ describe('matchHost', () => {
   });
 
   it('matches wildcard *.domain.com', () => {
-    expect(matchHost(['*.instructure.com'], 'https://ldisd.instructure.com/courses')).toBe(true);
+    expect(matchHost(['*.instructure.com'], 'https://exampleisd.instructure.com/courses')).toBe(
+      true
+    );
     expect(matchHost(['*.myschool.edu'], 'https://grades.myschool.edu/')).toBe(true);
   });
 
@@ -153,7 +155,7 @@ describe('matchHost', () => {
   });
 
   it('returns false for empty hosts', () => {
-    expect(matchHost([], 'https://ldisd.instructure.com')).toBe(false);
+    expect(matchHost([], 'https://exampleisd.instructure.com')).toBe(false);
   });
 
   it('returns false for invalid URL', () => {

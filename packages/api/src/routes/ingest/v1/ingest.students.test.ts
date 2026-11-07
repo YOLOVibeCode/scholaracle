@@ -165,7 +165,7 @@ describe('Ingest v1: student matching and plan cap', () => {
     await database.collection('students').insertOne({
       _id: childId,
       userId: new ObjectId(userId),
-      name: 'Ava',
+      name: 'Avery',
       dataSources: [],
       createdAt: new Date(),
       updatedAt: new Date(),

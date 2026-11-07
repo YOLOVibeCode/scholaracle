@@ -1,6 +1,6 @@
 const https = require('https');
 
-// Find Ava's student and trigger digest
+// Find Avery's student and trigger digest
 const apiHost = 'api.scholarmancy.com';
 
 // First, get the student ID (you'll need auth token)

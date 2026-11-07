@@ -60,8 +60,8 @@ describe('source-invites HTTP', () => {
     const students = new StudentRepository(database);
     const created = await students.create({
       userId: a.user.id,
-      name: 'Ava Lewis',
-      studentId: 'ava-lewis',
+      name: 'Avery Sample',
+      studentId: 'avery-sample',
     });
     studentId = created._id!.toString();
 
@@ -150,7 +150,7 @@ describe('source-invites HTTP', () => {
     expect(mailArg.landingUrl).not.toContain('password');
   });
 
-  it('redeem happy → Ava portal URL', async () => {
+  it('redeem happy → Avery portal URL', async () => {
     await request(app)
       .post('/api/source-invites')
       .set('Authorization', `Bearer ${userToken}`)

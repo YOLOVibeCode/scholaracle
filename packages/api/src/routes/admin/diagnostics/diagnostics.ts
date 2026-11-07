@@ -208,7 +208,7 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         {
           userId: new ObjectId(userId),
           studentId: new ObjectId(studentId),
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           type: 'grade_drop',
           severity: 'warning',
           title: 'Grade Drop: English',
@@ -225,7 +225,7 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         {
           userId: new ObjectId(userId),
           studentId: new ObjectId(studentId),
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           type: 'assignment_due',
           severity: 'info',
           title: 'Due Tomorrow: Math Homework Ch. 12',
@@ -241,7 +241,7 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         {
           userId: new ObjectId(userId),
           studentId: new ObjectId(studentId),
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           type: 'missing_assignment',
           severity: 'critical',
           title: 'Missing Assignment: Science Lab Report',
@@ -258,7 +258,7 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         {
           userId: new ObjectId(userId),
           studentId: new ObjectId(studentId),
-          studentName: 'Ava Lewis',
+          studentName: 'Avery Sample',
           type: 'grade_improvement',
           severity: 'positive',
           title: 'Great Work: History Grade Up',
@@ -278,51 +278,32 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
       const alertResults = await config.database.collection('slc_alerts').insertMany(alerts);
       const alertIds = Object.values(alertResults.insertedIds);
 
-      // Create digest pending items for all recipients
+      // Queue the sample digest only for the target user's own email and the student's
+      // real name. Never hardcode recipients: this endpoint must not mail anyone else.
+      const targetUser = await config.database
+        .collection('users')
+        .findOne({ _id: new ObjectId(userId) }, { projection: { email: 1 } });
+      const targetStudent = await config.database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) }, { projection: { name: 1 } });
+      const recipientEmail = typeof targetUser?.['email'] === 'string' ? targetUser['email'] : null;
+      if (!recipientEmail) {
+        throw new ValidationError('userId does not match a user with an email');
+      }
+      const studentName =
+        typeof targetStudent?.['name'] === 'string' ? targetStudent['name'] : 'Sample Student';
       const digestItems = [];
       let alertIndex = 0;
       for (const alertId of alertIds) {
         const alert = alerts[alertIndex];
         alertIndex++;
         if (alert) {
-          // Owner
           digestItems.push({
             userId,
             alertId: alertId.toString(),
             studentId,
-            studentName: 'Ava Lewis',
-            recipientEmail: 'rvegajr@noctusoft.com',
-            recipientType: 'parent',
-            severity: alert.severity,
-            alertType: alert.type,
-            subject: alert.title,
-            body: alert.message,
-            courseName: (alert.metadata as { courseName?: string }).courseName,
-            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
-            createdAt: alert.createdAt,
-          });
-          // Shared parents
-          digestItems.push({
-            userId,
-            alertId: alertId.toString(),
-            studentId,
-            studentName: 'Ava Lewis',
-            recipientEmail: 'rmlewis1976@gmail.com',
-            recipientType: 'parent',
-            severity: alert.severity,
-            alertType: alert.type,
-            subject: alert.title,
-            body: alert.message,
-            courseName: (alert.metadata as { courseName?: string }).courseName,
-            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
-            createdAt: alert.createdAt,
-          });
-          digestItems.push({
-            userId,
-            alertId: alertId.toString(),
-            studentId,
-            studentName: 'Ava Lewis',
-            recipientEmail: 'jdenise11@hotmail.com',
+            studentName,
+            recipientEmail,
             recipientType: 'parent',
             severity: alert.severity,
             alertType: alert.type,

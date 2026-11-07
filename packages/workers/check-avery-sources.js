@@ -6,7 +6,7 @@ async function checkAva() {
   const dbName = 'scholaracle';
   const avaStudentId = '69a4f1b53671c632ca591c7f';
   
-  console.log('Checking Ava Lewis student record...\n');
+  console.log('Checking Avery Sample student record...\n');
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db(dbName);

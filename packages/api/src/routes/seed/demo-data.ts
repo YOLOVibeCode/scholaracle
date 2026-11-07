@@ -140,9 +140,9 @@ export const DEMO_LAB_SAFETY_HASH = sha256Hex(DEMO_LAB_SAFETY_BYTES);
 export const DEMO_LAB_SAFETY_STORAGE_KEY = 'demo/demo-asset-demo-emma-ap-bio-lab-safety';
 
 /** Blended-family demo contacts (emails); create users for accepted ones when seeding. */
-export const DEMO_CONTACT_JESSICA = 'jessica.demo@scholaracle.com';
+export const DEMO_CONTACT_JESSICA = 'jamie.demo@scholaracle.com';
 export const DEMO_CONTACT_RICKY = 'ricky.demo@scholaracle.com';
-export const DEMO_CONTACT_JENNIFER = 'jennifer.demo@scholaracle.com';
+export const DEMO_CONTACT_JENNIFER = 'jordan.demo@scholaracle.com';
 
 /** Default password for demo contact users (accepted contacts need a userId). */
 export const DEMO_CONTACT_PASSWORD = 'DemoPass123!';

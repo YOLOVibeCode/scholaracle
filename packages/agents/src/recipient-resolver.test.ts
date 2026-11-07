@@ -108,12 +108,12 @@ describe('resolveAllAlertRecipients', () => {
     mockUserInstance = { email: 'primary@example.com' };
     mockStudentInstance = {
       userId: { toString: () => 'owner-id' },
-      alertEmail: '29alewis@ldisd.net',
+      alertEmail: 'student.one@exampleisd.net',
       getAllAlertRecipients: () => [
         { email: 'primary@example.com', channels: ['email'], isPrimary: true },
         { email: 'secondary1@example.com', channels: ['email'], isPrimary: false },
         { email: 'secondary2@example.com', channels: ['email'], isPrimary: false },
-        { email: '29alewis@ldisd.net', channels: ['email'], isPrimary: false },
+        { email: 'student.one@exampleisd.net', channels: ['email'], isPrimary: false },
       ],
     };
     const out = await resolveAllAlertRecipients('student-id', db);
@@ -132,7 +132,7 @@ describe('resolveAllAlertRecipients', () => {
       recipientType: 'parent',
     });
     expect(out[3]).toEqual({
-      parentEmail: '29alewis@ldisd.net',
+      parentEmail: 'student.one@exampleisd.net',
       recipientType: 'student',
     });
   });

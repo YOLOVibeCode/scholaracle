@@ -7,13 +7,13 @@ import { SOURCE_INVITE_ADAPTER_IDS, type ISourceInvitePayload } from '@scholarac
 import { ConnectedSourceStore } from '../sources/ConnectedSourceStore';
 import { sourceInviteApplier } from './applySourceInvite';
 
-const AVA: ISourceInvitePayload = {
+const AVERY: ISourceInvitePayload = {
   provider: 'skyward',
   adapterId: SOURCE_INVITE_ADAPTER_IDS.skyward,
   portalBaseUrl: 'https://skyward.iscorp.com',
   displayName: 'Skyward Family Access (skyward.iscorp.com)',
   studentId: 'stu-mongo-1',
-  studentExternalId: 'ava-lewis',
+  studentExternalId: 'avery-sample',
   institutionExternalId: 'skyward.iscorp.com',
 };
 
@@ -26,8 +26,8 @@ describe('applySourceInvite', () => {
 
   it('upserts source without writing SecureStore', async () => {
     const store = new ConnectedSourceStore();
-    const source = await sourceInviteApplier.apply(AVA, store);
-    expect(source.studentExternalId).toBe('ava-lewis');
+    const source = await sourceInviteApplier.apply(AVERY, store);
+    expect(source.studentExternalId).toBe('avery-sample');
     expect(source.studentExternalId).not.toBe('default');
     expect(source.sourceId).toBe('local-skyward-skyward.iscorp.com');
     expect(source.credentialKey).toBe('slc_creds_skyward_skyward.iscorp.com');
@@ -38,8 +38,8 @@ describe('applySourceInvite', () => {
 
   it('second apply same sourceId replaces, list length 1', async () => {
     const store = new ConnectedSourceStore();
-    await sourceInviteApplier.apply(AVA, store);
-    await sourceInviteApplier.apply({ ...AVA, displayName: 'Updated' }, store);
+    await sourceInviteApplier.apply(AVERY, store);
+    await sourceInviteApplier.apply({ ...AVERY, displayName: 'Updated' }, store);
     expect(await store.list()).toHaveLength(1);
   });
 });

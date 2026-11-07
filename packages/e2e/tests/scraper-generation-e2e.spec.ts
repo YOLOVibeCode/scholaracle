@@ -33,13 +33,13 @@ test.describe('Scraper generation and execution E2E', () => {
   let skywardScriptPath: string;
 
   test.describe.serial('Full scraper flow', () => {
-    test('Login and create student Ava Lewis', async ({ page, loginAsRole }) => {
+    test('Login and create student Avery Sample', async ({ page, loginAsRole }) => {
       await loginAsRole('parent');
       await page.goto('/dashboard/students');
       await page.locator('[data-testid="button-add-student"]').first().click();
       await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
 
-      await page.locator('[data-testid="wizard-student-name"]').fill('Ava Lewis');
+      await page.locator('[data-testid="wizard-student-name"]').fill('Avery Sample');
       await page.locator('[data-testid="wizard-student-grade"]').fill('9');
       await page.locator('[data-testid="wizard-next-step"]').click();
 
@@ -47,15 +47,15 @@ test.describe('Scraper generation and execution E2E', () => {
       await page.keyboard.press('Escape');
       await expect(page.locator('[data-testid="add-student-wizard"]')).not.toBeVisible();
 
-      await expect(page.getByText('Ava Lewis')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('Avery Sample')).toBeVisible({ timeout: 5000 });
       const viewLink = page
         .locator('[data-testid="student-list"]')
-        .filter({ hasText: 'Ava Lewis' })
+        .filter({ hasText: 'Avery Sample' })
         .locator('a[href*="/view"]')
         .first();
       const href = await viewLink.getAttribute('href');
       const match = href?.match(/\/students\/([^/]+)\/view/);
-      if (!match?.[1]) throw new Error('Could not get student ID for Ava Lewis');
+      if (!match?.[1]) throw new Error('Could not get student ID for Avery Sample');
       avaStudentId = match[1];
     });
 
@@ -71,7 +71,7 @@ test.describe('Scraper generation and execution E2E', () => {
 
       await expect(page.getByLabel(/School Portal URL/i)).toBeVisible();
       await page.getByLabel(/School Portal URL/i).fill(TEST_CANVAS_URL);
-      await page.getByLabel(/Student Name/i).fill('Ava Lewis');
+      await page.getByLabel(/Student Name/i).fill('Avery Sample');
       await page.getByLabel(/^Username$/i).fill(TEST_CANVAS_EMAIL);
       await page.getByLabel(/^Password/i).fill(TEST_CANVAS_PASSWORD);
 
@@ -99,7 +99,7 @@ test.describe('Scraper generation and execution E2E', () => {
 
       await expect(page.getByLabel(/School Portal URL/i)).toBeVisible();
       await page.getByLabel(/School Portal URL/i).fill(TEST_SKYWARD_URL);
-      await page.getByLabel(/Student Name/i).fill('Ava Lewis');
+      await page.getByLabel(/Student Name/i).fill('Avery Sample');
       await page.getByLabel(/^Username$/i).fill(TEST_SKYWARD_USERNAME);
       await page.getByLabel(/^Password/i).fill(TEST_SKYWARD_PASSWORD);
 

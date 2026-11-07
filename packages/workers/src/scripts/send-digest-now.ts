@@ -1,5 +1,5 @@
 /**
- * Script: send digest now for specific users (e.g. Ava's 3 alert recipients).
+ * Script: send digest now for specific users (e.g. Avery's 3 alert recipients).
  * Usage: npx ts-node src/scripts/send-digest-now.ts --studentId=<id>
  *    or: npx ts-node src/scripts/send-digest-now.ts --userIds=id1,id2,id3
  * Env: MONGODB_URI, SENDGRID_API_KEY (or SMTP_*), BASE_URL

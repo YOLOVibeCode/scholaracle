@@ -17,7 +17,7 @@
 | **AI Insights** | ✅ **IMPLEMENTED** | Anthropic Claude integration |
 | **Semester Filtering** | ✅ **TESTED** | Term detection + Jan/Aug heuristic |
 | **Recipient Routing** | ✅ **CONFIGURED** | Parent/student discrimination working |
-| **Secondary Parents** | ✅ **FIXED** | Names corrected (Robert & Jessica Lewis) |
+| **Secondary Parents** | ✅ **FIXED** | Names corrected (Robin & Jamie Sample) |
 | **Password Reset** | ✅ **AVAILABLE** | Endpoint functional, BASE_URL configured |
 
 ---
@@ -25,11 +25,11 @@
 ## 👥 User Configuration
 
 ### Primary User: rvegajr@noctusoft.com
-- **Student**: Ava Lewis
-- **Student Email**: 29alewis@ldisd.net (student-toned)
+- **Student**: Avery Sample
+- **Student Email**: student.one@exampleisd.net (student-toned)
 - **Secondary Parents**:
-  - ✅ Robert Lewis (rmlewis1976@gmail.com) — parent-toned
-  - ✅ Jessica Lewis (jdenise11@hotmail.com) — parent-toned
+  - ✅ Robin Sample (coparent.one@example.com) — parent-toned
+  - ✅ Jamie Sample (coparent.two@example.com) — parent-toned
 - **Notification Settings**: Proactive, email enabled, digest times: 05:28, 05:29, 05:30
 
 ---

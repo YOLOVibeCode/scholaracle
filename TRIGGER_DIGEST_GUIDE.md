@@ -1,20 +1,20 @@
-# How to Trigger Digest for Ava Lewis
+# How to Trigger Digest for Avery Sample
 
 ## Quick Reference
 
 **Your Email**: rvegajr@noctusoft.com (Primary Account Owner)
 
 **Other Recipients**:
-- rmlewis1976@gmail.com (Robert Lewis - Shared Parent)
-- jdenise11@hotmail.com (Jessica Lewis - Shared Parent)
-- 29alewis@ldisd.net (Ava Lewis - Student)
+- coparent.one@example.com (Robin Sample - Shared Parent)
+- coparent.two@example.com (Jamie Sample - Shared Parent)
+- student.one@exampleisd.net (Avery Sample - Student)
 
 ---
 
 ## Method 1: Via Web Dashboard (Easiest)
 
 1. Login to https://app.scholarmancy.com with your email
-2. Navigate to Ava's student profile
+2. Navigate to Avery's student profile
 3. Click "Send Digest" button
 4. Select recipients (or "all")
 5. Click "Send Now"
@@ -36,7 +36,7 @@
 **Step 2: Get Student ID**
 
 Option A - From Web URL:
-- Navigate to Ava's profile
+- Navigate to Avery's profile
 - URL will be: https://app.scholarmancy.com/students/{STUDENT_ID}
 - Copy the ID from URL
 
@@ -83,7 +83,7 @@ curl -X POST "https://api.scholarmancy.com/api/students/$STUDENT_ID/send-digest"
 
 ## What the Digest Contains
 
-**Subject**: "Daily Digest for Ava Lewis"
+**Subject**: "Daily Digest for Avery Sample"
 
 **Content**:
 1. 📊 Grade Summary Bar
@@ -97,7 +97,7 @@ curl -X POST "https://api.scholarmancy.com/api/students/$STUDENT_ID/send-digest"
    - Message: "Your student's grades now show official Skyward (SIS) grades as the primary grades. Canvas grades remain visible for reference."
 
 3. 🔗 Dashboard Link
-   - Direct link to Ava's profile
+   - Direct link to Avery's profile
 
 **Tone**: Parent-toned (since you're the primary owner)
 
@@ -180,7 +180,7 @@ Based on the last successful sync:
 
 1. **Login** to https://app.scholarmancy.com
 2. **Get your auth token** from browser DevTools
-3. **Get Ava's student ID** from her profile URL
+3. **Get Avery's student ID** from her profile URL
 4. **Run the script** or API call with your credentials
 5. **Check your email** at rvegajr@noctusoft.com
 

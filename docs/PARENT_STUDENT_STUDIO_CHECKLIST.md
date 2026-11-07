@@ -106,7 +106,7 @@ These exist. Later slices **compose** them; they do not replace them unless the 
 - [x] `User` model comment: “parent/guardian account” — **no `role` field**.
 - [x] Web middleware (`packages/web/middleware.ts`) treats any `auth_token` as a parent and redirects logged-in users to `/dashboard`. Studio login will break this until slice 4–5.
 - [x] Demo parent: `demo@scholarmancy.com` / `DemoPass123!` (`DEMO_USER`).
-- [x] Demo contacts Jessica/Ricky are **co-parents**, not students.
+- [x] Demo contacts Jamie/Ricky are **co-parents**, not students.
 
 ### 2.7 Known demo gap for visualization
 

@@ -764,8 +764,8 @@ describe('NotificationService', () => {
         agentType: AgentType.PARENT,
         studentId: 'student-123',
         userId: 'parent-456',
-        subject: 'Ava Lewis - MISSING ASSIGNMENT: Math',
-        body: 'Ava Lewis has a missing assignment in Math.',
+        subject: 'Avery Sample - MISSING ASSIGNMENT: Math',
+        body: 'Avery Sample has a missing assignment in Math.',
         priority: NotificationPriority.HIGH,
         triggerType: AlertType.MISSING_ASSIGNMENT,
         channels: [NotificationChannel.EMAIL],
@@ -804,7 +804,7 @@ describe('NotificationService', () => {
       );
       expect(parentCall).toBeDefined();
       expect(parentCall![2].notificationPayload.agentType).toBe(AgentType.PARENT);
-      expect(parentCall![2].notificationPayload.subject).toContain('Ava Lewis');
+      expect(parentCall![2].notificationPayload.subject).toContain('Avery Sample');
       expect(studentCall).toBeDefined();
       expect(studentCall![2].notificationPayload.agentType).toBe(AgentType.STUDENT);
       expect(studentCall![2].notificationPayload.subject).toBe('MISSING ASSIGNMENT');

@@ -8,7 +8,7 @@ const { MongoClient } = require('mongodb');
     await client.connect();
     const db = client.db();
     
-    const student = await db.collection('students').findOne({ name: 'Ava Lewis' });
+    const student = await db.collection('students').findOne({ name: 'Avery Sample' });
     if (!student) throw new Error('Student not found');
     
     const owner = await db.collection('users').findOne({ _id: student.userId });
@@ -47,7 +47,7 @@ const { MongoClient } = require('mongodb');
       scheduledFor: new Date(),
       attempts: 0,
       maxAttempts: 3,
-      name: 'Manual digest - Ava to primary',
+      name: 'Manual digest - Avery to primary',
       data: { userId: student.userId.toString(), immediate: true }
     };
     

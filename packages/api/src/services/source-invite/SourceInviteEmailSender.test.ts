@@ -17,7 +17,7 @@ describe('SendGridSourceInviteEmailSender', () => {
     await sender.sendInstallLink({
       to: 'parent@example.com',
       providerName: 'Skyward Family Access',
-      studentName: 'Ava Lewis',
+      studentName: 'Avery Sample',
       landingUrl,
       expiresAt: new Date('2026-08-22T00:00:00.000Z'),
     });
@@ -33,7 +33,7 @@ describe('SendGridSourceInviteEmailSender', () => {
     await sender.sendInstallLink({
       to: 'parent@example.com',
       providerName: 'Skyward Family Access',
-      studentName: 'Ava Lewis',
+      studentName: 'Avery Sample',
       landingUrl,
       expiresAt: new Date('2026-08-22T00:00:00.000Z'),
     });

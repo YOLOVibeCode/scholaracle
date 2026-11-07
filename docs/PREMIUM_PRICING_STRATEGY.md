@@ -6,7 +6,7 @@ Research as of early 2025. Products that overlap with Scholaracle: parent-facing
 
 | Product | What it does | Price | Notes |
 |--------|----------------|-------|--------|
-| **Gradey** | AI grade monitoring, text queries (“What did Ava score?”), real-time alerts, multi-kid, grade history. Enhances parent portal access. | **Free for first year**; post-trial not published | Closest direct competitor. Same pitch: one place, AI insights, proactive alerts, multi-child. |
+| **Gradey** | AI grade monitoring, text queries (“What did Avery score?”), real-time alerts, multi-kid, grade history. Enhances parent portal access. | **Free for first year**; post-trial not published | Closest direct competitor. Same pitch: one place, AI insights, proactive alerts, multi-child. |
 | **Gradekit** | Log in once to Skyward/PowerSchool/Aeries/etc.; grade prediction, GPA tracking. 10K+ districts. | Free + **Parent Edition ~\$4.99/year** (IAP) | Very low price; no AI, no cross-portal aggregation—single SIS per login. |
 | **GradePro** | Grade predictions, GPA, attendance, grade-change notifications, multi-student. | Free + in-app purchases | Similar to Gradekit; no published premium price. |
 | **ClassDojo Plus** | Optional parent subscription: progress reports, class stories, memory albums, family accounts (3), premium messaging. | **\$4.99/mo** (\$59.99/yr) | School communication + engagement, not grade-centric. |

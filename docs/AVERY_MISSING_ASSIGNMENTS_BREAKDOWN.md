@@ -1,7 +1,7 @@
-# Ava Lewis — Missing Assignments Breakdown
+# Avery Sample — Missing Assignments Breakdown
 
 **Date**: March 5, 2026  
-**User**: rvegajr@noctusoft.com → Ava Lewis  
+**User**: rvegajr@noctusoft.com → Avery Sample  
 **Total Assignments**: 408  
 **Missing Assignments**: **75**
 

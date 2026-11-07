@@ -432,16 +432,16 @@ describe('Student', () => {
     it('should include student alertEmail as recipient when set', () => {
       const student = new Student({
         userId: 'user-123',
-        name: 'Ava',
+        name: 'Avery',
         sharedWith: [],
         ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['email'] },
-        alertEmail: '29alewis@ldisd.net',
+        alertEmail: 'student.one@exampleisd.net',
       });
       const out = student.getAllAlertRecipients('owner@example.com');
       expect(out).toHaveLength(2);
       expect(out[0]!.email).toBe('owner@example.com');
       expect(out[0]!.isPrimary).toBe(true);
-      expect(out[1]!.email).toBe('29alewis@ldisd.net');
+      expect(out[1]!.email).toBe('student.one@exampleisd.net');
       expect(out[1]!.channels).toEqual(['email']);
       expect(out[1]!.isPrimary).toBe(false);
     });
@@ -449,7 +449,7 @@ describe('Student', () => {
     it('should not add student recipient when alertEmail is empty or whitespace', () => {
       const student = new Student({
         userId: 'user-123',
-        name: 'Ava',
+        name: 'Avery',
         sharedWith: [],
         alertEmail: '   ',
       });

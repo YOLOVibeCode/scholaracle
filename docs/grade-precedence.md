@@ -52,7 +52,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
 ### Example: Skyward vs Canvas Conflict
 
 ```
-Student: Ava Lewis
+Student: Avery Sample
 Course: English 1 (Period 4)
 
 Canvas Grade:  85.84%  (projected from assignments, includes extra credit)

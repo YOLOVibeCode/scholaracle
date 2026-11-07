@@ -8,10 +8,10 @@ import { createInitialOnboardingState, updateChild } from './onboardingMachine';
 
 function householdState(): IOnboardingState {
   let state = createInitialOnboardingState('logged-in');
-  state = updateChild(state, state.children[0]!.key, { name: 'Gideon', grade: '8' });
+  state = updateChild(state, state.children[0]!.key, { name: 'Gabe', grade: '8' });
   state = {
     ...state,
-    children: [...state.children, { key: 'c2', name: 'Christian', grade: '6' }],
+    children: [...state.children, { key: 'c2', name: 'Casey', grade: '6' }],
     provider: 'skyward',
     portalUrl: 'https://skyward.iscorp.com',
     username: 'parent',
@@ -29,8 +29,8 @@ describe('applyOnboarding', () => {
 
   it('creates each named child, shares one Keychain entry, and unique source ids', async () => {
     const created: IStudentListItem[] = [
-      { id: 'mongo-g', userId: 'u1', name: 'Gideon', grade: 8 },
-      { id: 'mongo-c', userId: 'u1', name: 'Christian', grade: 6 },
+      { id: 'mongo-g', userId: 'u1', name: 'Gabe', grade: 8 },
+      { id: 'mongo-c', userId: 'u1', name: 'Casey', grade: 6 },
     ];
     let i = 0;
     const createStudent = jest.fn(async () => created[i++]!);
@@ -44,9 +44,9 @@ describe('applyOnboarding', () => {
     });
 
     expect(createStudent).toHaveBeenCalledTimes(2);
-    expect(createStudent).toHaveBeenNthCalledWith(1, { name: 'Gideon', grade: 8 });
-    expect(createStudent).toHaveBeenNthCalledWith(2, { name: 'Christian', grade: 6 });
-    expect(result.students.map((s) => s.name)).toEqual(['Gideon', 'Christian']);
+    expect(createStudent).toHaveBeenNthCalledWith(1, { name: 'Gabe', grade: 8 });
+    expect(createStudent).toHaveBeenNthCalledWith(2, { name: 'Casey', grade: 6 });
+    expect(result.students.map((s) => s.name)).toEqual(['Gabe', 'Casey']);
 
     const sources = await store.list();
     expect(sources).toHaveLength(2);
@@ -73,7 +73,7 @@ describe('applyOnboarding', () => {
   it('never writes studentExternalId default when SIS id is missing', async () => {
     const store = new ConnectedSourceStore();
     await applyOnboarding(householdState(), {
-      createStudent: async () => ({ id: 'mongo-g', userId: 'u1', name: 'Gideon' }),
+      createStudent: async () => ({ id: 'mongo-g', userId: 'u1', name: 'Gabe' }),
       registerIngestSource: async () => undefined,
       sources: store,
     });
@@ -85,7 +85,7 @@ describe('applyOnboarding', () => {
     const store = new ConnectedSourceStore();
     const createStudent = jest
       .fn()
-      .mockResolvedValueOnce({ id: 'mongo-g', userId: 'u1', name: 'Gideon', grade: 8 })
+      .mockResolvedValueOnce({ id: 'mongo-g', userId: 'u1', name: 'Gabe', grade: 8 })
       .mockRejectedValueOnce(
         new ApiError('Your free plan allows up to 1 student', 403, 'PLAN_LIMIT_REACHED')
       );
@@ -97,7 +97,7 @@ describe('applyOnboarding', () => {
     });
 
     expect(result.students).toHaveLength(1);
-    expect(result.students[0]?.name).toBe('Gideon');
+    expect(result.students[0]?.name).toBe('Gabe');
     expect(result.planLimitReached).toBe(true);
     expect(await store.list()).toHaveLength(1);
   });
