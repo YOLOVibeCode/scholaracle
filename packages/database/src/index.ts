@@ -65,3 +65,11 @@ export * from './repositories/StudentMagicTokenRepository';
 export * from './repositories/MagicLoginTokenRepository';
 
 export { createIndexes } from './indexes';
+
+export {
+  ACCOUNT_DELETION_AUDIT_COLLECTION,
+  EXTRA_USER_SCOPED_JOB_FILTER,
+  STUDENT_SCOPED_DELETION_COLLECTIONS,
+  USER_SCOPED_DELETION_TARGETS,
+  type UserScopedDeletionTarget,
+} from './accountDeletion/accountDeletionCollections';
