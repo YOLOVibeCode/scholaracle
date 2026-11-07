@@ -236,7 +236,7 @@ export default defineConfig({
               stderr: 'pipe',
             },
             {
-              command: 'npx --yes mailpit@latest --smtp 0.0.0.0:2803 --listen 0.0.0.0:2804',
+              command: 'bash ../../scripts/start-mailpit-e2e.sh',
               url: 'http://127.0.0.1:2804/',
               reuseExistingServer: !process.env.CI,
               timeout: 120 * 1000,
