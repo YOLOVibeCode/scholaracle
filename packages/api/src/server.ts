@@ -23,6 +23,7 @@ import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
+import { rekeyAdapterIdsOnBoot } from './bootstrap/rekeyAdapterIdsOnBoot';
 import {
   AuthService,
   AdminAuthService,
@@ -712,6 +713,12 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
 
   const server = app.listen(port, () => {
     logger.info({ port }, 'server running');
+  });
+
+  // One-time data migration, opt-in via REKEY_ADAPTER_IDS (dry-run | apply). Runs after
+  // listen so health checks pass while it works; failures are logged, never fatal.
+  void rekeyAdapterIdsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'rekey-adapter-ids on boot failed');
   });
 
   // Graceful shutdown: stop accepting connections, then exit. Railway sends
