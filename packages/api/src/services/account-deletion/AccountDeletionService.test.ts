@@ -151,4 +151,33 @@ describe('AccountDeletionService', () => {
     const login = await authService.login(email, PASSWORD);
     expect(login.success).toBe(false);
   });
+
+  it("removes a deleted co-parent from another family's student but keeps that student", async () => {
+    const reg = await authService.register('co-parent-delete@test.com', PASSWORD, 'Co Parent');
+    if (!reg.success || !reg.user?.id) {
+      throw new Error('register failed');
+    }
+    const coParentId = reg.user.id;
+    const otherOwner = new ObjectId();
+    const shared = await database.collection('students').insertOne({
+      userId: otherOwner,
+      name: 'Other Family Student',
+      grade: 10,
+      sharedWith: [
+        { userId: coParentId, email: 'co-parent-delete@test.com', role: 'parent' },
+        { email: 'keep-me@test.com', role: 'guardian' },
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await new AccountDeletionService(database).deleteParentAccount(coParentId);
+
+    const student = await database.collection('students').findOne({ _id: shared.insertedId });
+    expect(student).not.toBeNull();
+    const emails = ((student?.['sharedWith'] ?? []) as Array<{ email: string }>).map(
+      (e) => e.email
+    );
+    expect(emails).toEqual(['keep-me@test.com']);
+  });
 });
