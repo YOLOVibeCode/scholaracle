@@ -12,13 +12,18 @@ export type PlanForRateLimit = 'free' | 'starter' | 'premium' | 'family' | 'ente
 /** Per-plan, per-feature limits. -1 = unlimited. */
 export const AI_RATE_LIMITS: Record<
   PlanForRateLimit,
-  { scraper_generation: number; grade_risk: number; agenda: number }
+  {
+    scraper_generation: number;
+    grade_risk: number;
+    agenda: number;
+    scraper_repair: number;
+  }
 > = {
-  free: { scraper_generation: 0, grade_risk: 0, agenda: 0 },
-  starter: { scraper_generation: 2, grade_risk: 1, agenda: 5 },
-  premium: { scraper_generation: 5, grade_risk: 2, agenda: 20 },
-  family: { scraper_generation: 10, grade_risk: 5, agenda: 50 },
-  enterprise: { scraper_generation: -1, grade_risk: -1, agenda: -1 },
+  free: { scraper_generation: 0, grade_risk: 0, agenda: 0, scraper_repair: 0 },
+  starter: { scraper_generation: 2, grade_risk: 1, agenda: 5, scraper_repair: 2 },
+  premium: { scraper_generation: 5, grade_risk: 2, agenda: 20, scraper_repair: 10 },
+  family: { scraper_generation: 10, grade_risk: 5, agenda: 50, scraper_repair: 25 },
+  enterprise: { scraper_generation: -1, grade_risk: -1, agenda: -1, scraper_repair: -1 },
 };
 
 export interface ICheckAiRateLimitResult {

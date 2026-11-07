@@ -41,6 +41,7 @@ import { initSentry } from './sentry';
 import { safeInterval } from './utils/safeInterval';
 import { installProcessHandlers } from './utils/processHandlers';
 import { abandonStaleStartedRuns } from './abandonStaleIngestRuns';
+import { startRepairNightlySchedule } from './repair-nightly/scheduleRepairNightly';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -580,6 +581,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
   stalenessMonitor.start();
 
+  const repairNightlyInterval = startRepairNightlySchedule(database);
+
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
   const healthServer = createServer((req, res) => {
@@ -631,6 +634,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     logger.info('shutting down worker');
     clearInterval(heartbeatInterval);
     clearInterval(staleRunReaperInterval);
+    if (repairNightlyInterval) clearInterval(repairNightlyInterval);
     stalenessMonitor.stop();
     healthServer.close();
     await notificationWorker.stop();
