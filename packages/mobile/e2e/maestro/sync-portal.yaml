@@ -28,7 +28,11 @@ tags: [sync]
 - takeScreenshot: sync-portal-login
 - runFlow:
     when:
-      true: ${MAESTRO_PORTAL_PROVIDER == 'skyward'}
+      true: ${MAESTRO_USE_FAKE_PORTAL == '1'}
+    file: subflows/portal-signin-fake-skyward.yaml
+- runFlow:
+    when:
+      true: ${MAESTRO_PORTAL_PROVIDER == 'skyward' && MAESTRO_USE_FAKE_PORTAL != '1'}
     file: subflows/portal-signin-skyward.yaml
 - runFlow:
     when:

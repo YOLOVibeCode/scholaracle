@@ -31,6 +31,16 @@ credits. The app points at `E2E_API_URL`, which defaults to the UAT API.
 - Maestro CLI in `~/.maestro-cli/maestro/bin`, unpacked from the `maestro.zip`
   asset of a release at https://github.com/mobile-dev-inc/maestro/releases.
 
+## CI (GitHub Actions)
+
+Workflow [`.github/workflows/mobile-e2e.yml`](../../../.github/workflows/mobile-e2e.yml)
+runs `launch` and `smoke` on macOS (iOS Simulator) and Linux (Android emulator).
+`sync-portal` uses the fake portal from
+[`packages/e2e/fake-portal`](../../e2e/fake-portal/README.md) (`demo` / `demo`,
+port **2855**) — never real district logins in CI. Set repository secrets
+`MAESTRO_PARENT_EMAIL`, `MAESTRO_PARENT_PASSWORD`, and `MAESTRO_STUDENT_NAME` for
+smoke/sync parent login against UAT.
+
 ## Logins
 
 Every flow except `launch` needs the variables listed in `e2e.env.example`.
