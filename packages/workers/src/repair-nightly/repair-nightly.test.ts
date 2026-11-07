@@ -1,22 +1,14 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
-import { resolveLlmConfig, runScraperRepairProposal } from '@scholaracle/agents';
+import type { runScraperRepairProposal, resolveLlmConfig } from '@scholaracle/agents';
 import { runRepairNightly } from './repair-nightly';
-
-jest.mock('@scholaracle/agents', () => ({
-  resolveLlmConfig: jest.fn(),
-  runScraperRepairProposal: jest.fn(),
-}));
-
-const mockedResolveLlmConfig = resolveLlmConfig as jest.MockedFunction<typeof resolveLlmConfig>;
-const mockedRunScraperRepairProposal = runScraperRepairProposal as jest.MockedFunction<
-  typeof runScraperRepairProposal
->;
 
 describe('runRepairNightly', () => {
   let mongod: MongoMemoryServer;
   let client: MongoClient;
   let database: Db;
+  let mockResolveLlm: jest.MockedFunction<typeof resolveLlmConfig>;
+  let mockRunProposal: jest.MockedFunction<typeof runScraperRepairProposal>;
 
   beforeAll(async () => {
     mongod = await MongoMemoryServer.create();
@@ -33,25 +25,26 @@ describe('runRepairNightly', () => {
   beforeEach(async () => {
     await database.collection('repair_candidates').deleteMany({});
     await database.collection('repair_proposals').deleteMany({});
-    process.env['LITELLM_API_KEY'] = 'e2e-test-key';
-    process.env['LITELLM_API_BASE'] = 'https://relay.test';
-    mockedResolveLlmConfig.mockImplementation(() => ({
+    mockResolveLlm = jest.fn(() => ({
       apiKey: 'k',
       baseUrl: 'https://x',
       model: 'm',
     }));
-    mockedRunScraperRepairProposal.mockClear();
-    mockedRunScraperRepairProposal.mockResolvedValue({ status: 'proposed' });
+    mockRunProposal = jest.fn().mockResolvedValue({ status: 'proposed' });
+  });
+
+  const baseDeps = () => ({
+    billingUserId: 'platform',
+    loadSkeleton: async () => '{"t":"div"}',
+    resolveLlmConfigFn: mockResolveLlm,
+    runScraperRepairProposalFn: mockRunProposal,
   });
 
   it('skips when LLM is not configured', async () => {
-    mockedResolveLlmConfig.mockReturnValueOnce(null);
-    const n = await runRepairNightly(database, {
-      billingUserId: 'platform',
-      loadSkeleton: async () => '{"t":"div"}',
-    });
+    mockResolveLlm.mockReturnValueOnce(null);
+    const n = await runRepairNightly(database, baseDeps());
     expect(n).toBe(0);
-    expect(mockedRunScraperRepairProposal).not.toHaveBeenCalled();
+    expect(mockRunProposal).not.toHaveBeenCalled();
   });
 
   it('skips when skeleton cannot be loaded', async () => {
@@ -66,11 +59,11 @@ describe('runRepairNightly', () => {
       lastSeenAt: new Date(),
     });
     const n = await runRepairNightly(database, {
-      billingUserId: 'platform',
+      ...baseDeps(),
       loadSkeleton: async () => null,
     });
     expect(n).toBe(0);
-    expect(mockedRunScraperRepairProposal).not.toHaveBeenCalled();
+    expect(mockRunProposal).not.toHaveBeenCalled();
   });
 
   it('invokes repair when skeleton is present', async () => {
@@ -84,14 +77,9 @@ describe('runRepairNightly', () => {
       firstSeenAt: new Date(),
       lastSeenAt: new Date(),
     });
-    const n = await runRepairNightly(database, {
-      billingUserId: 'platform',
-      loadSkeleton: async () => '{"t":"div"}',
-    });
+    const n = await runRepairNightly(database, baseDeps());
     expect(n).toBe(1);
-    expect(mockedRunScraperRepairProposal).toHaveBeenCalledWith(
-      expect.objectContaining({ skipPlanQuota: true })
-    );
+    expect(mockRunProposal).toHaveBeenCalledWith(expect.objectContaining({ skipPlanQuota: true }));
   });
 
   it('does not count proposals that are not accepted', async () => {
@@ -105,12 +93,9 @@ describe('runRepairNightly', () => {
       firstSeenAt: new Date(),
       lastSeenAt: new Date(),
     });
-    mockedRunScraperRepairProposal.mockResolvedValueOnce({ status: 'skipped_not_real' });
-    const n = await runRepairNightly(database, {
-      billingUserId: 'platform',
-      loadSkeleton: async () => '{"t":"div"}',
-    });
+    mockRunProposal.mockResolvedValueOnce({ status: 'skipped_not_real' });
+    const n = await runRepairNightly(database, baseDeps());
     expect(n).toBe(0);
-    expect(mockedRunScraperRepairProposal).toHaveBeenCalled();
+    expect(mockRunProposal).toHaveBeenCalled();
   });
 });
