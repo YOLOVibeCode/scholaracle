@@ -100,6 +100,10 @@ export function maskPiiDeep(value: unknown, depth = 0, parentKey?: string): unkn
   }
 
   if (typeof value === 'object') {
+    // Only plain objects are rebuilt. ObjectId, Buffer, Map and other class instances
+    // would otherwise be flattened into plain data and corrupted on write.
+    const proto = Object.getPrototypeOf(value) as unknown;
+    if (proto !== Object.prototype && proto !== null) return value;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       out[k] = maskPiiDeep(v, depth + 1, k);
