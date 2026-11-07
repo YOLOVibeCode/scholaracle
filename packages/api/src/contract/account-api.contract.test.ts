@@ -209,4 +209,50 @@ describe('account API contract', () => {
 
     expect(res.status).toBe(403);
   });
+
+  it('DELETE /api/account — unauthenticated is 401', async () => {
+    const res = await request(app).delete('/api/account').send({ password: 'password123' });
+    expect(res.status).toBe(401);
+  });
+
+  it('DELETE /api/account — student JWT is 403', async () => {
+    const res = await request(app)
+      .delete('/api/account')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ password: 'password123' });
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE /api/account — wrong password is 401', async () => {
+    const res = await request(app)
+      .delete('/api/account')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ password: 'wrong-password' });
+    expect(res.status).toBe(401);
+  });
+
+  it('DELETE /api/account — returns success envelope', async () => {
+    const authService = new AuthService(database, 'test-secret');
+    const reg = await authService.register(
+      'delete-via-route@test.com',
+      'password123',
+      'Route Delete'
+    );
+    if (!reg.success || !reg.token) {
+      throw new Error('register failed');
+    }
+
+    const res = await request(app)
+      .delete('/api/account')
+      .set('Authorization', `Bearer ${reg.token}`)
+      .send({ password: 'password123' });
+
+    expect(res.status).toBe(200);
+    assertKeys(res.body, ['success']);
+    expect(res.body.success).toBe(true);
+    const remaining = await database.collection('users').countDocuments({
+      email: 'delete-via-route@test.com',
+    });
+    expect(remaining).toBe(0);
+  });
 });

@@ -30,6 +30,7 @@ describe('connector/ingest API contract', () => {
     // The scraper-token mint resolves its secret from env; align it with the
     // secret the ingest router verifies against.
     process.env['JWT_SECRET'] = 'test-secret';
+    const connectorJwtSecret = 'test-secret-connector';
 
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
     const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle_test';
@@ -48,8 +49,15 @@ describe('connector/ingest API contract', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/integrations',
+      authMiddleware(authService),
+      integrationsRouter({ database, connectorJwtSecret })
+    );
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({ database, jwtSecret: 'test-secret', connectorJwtSecret })
+    );
     app.use(createErrorHandler());
   });
 
@@ -61,12 +69,12 @@ describe('connector/ingest API contract', () => {
     const res = await request(app)
       .post('/api/integrations/scraper-token')
       .set('Authorization', `Bearer ${userToken}`)
-      .send({});
+      .send({ deviceId: 'contract-test-device' });
 
     expect(res.status).toBe(200);
     assertKeys(
       res.body as Record<string, unknown>,
-      ['success', 'token', 'jti', 'expiresIn'],
+      ['success', 'token', 'jti', 'deviceId', 'expiresIn'],
       [],
       'IConnectorTokenResponse'
     );

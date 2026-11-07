@@ -1,5 +1,10 @@
+import { resolveCanonicalAdapterId } from '@scholaracle/scraper-core';
 import type { IGeneratedScraper } from './ai-generator';
 import type { IScraperCode } from './scraper-code-resolver';
+
+function adapterIdForGeneratedSource(sourceId: string): string {
+  return resolveCanonicalAdapterId(`${sourceId}-browser`);
+}
 
 export type TargetOS = 'mac' | 'windows';
 
@@ -823,6 +828,7 @@ pause >nul
 
 function generateRunJs(opts: IPackageOptions): string {
   const platformId = opts.platformName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const adapterId = adapterIdForGeneratedSource(platformId);
   return `#!/usr/bin/env node
 /**
  * Scholaracle Scraper Runner for ${opts.platformName}
@@ -841,7 +847,7 @@ const IS_SCHEDULED = process.argv.includes('--scheduled');
 const CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf-8'));
 const CREDS_PATH = path.join(__dirname, 'credentials.json');
 const SOURCE_ID = '${platformId}';
-const ADAPTER_ID = SOURCE_ID + '-browser';
+const ADAPTER_ID = '${adapterId}';
 
 function log(msg) {
   if (IS_SCHEDULED && logStream) {

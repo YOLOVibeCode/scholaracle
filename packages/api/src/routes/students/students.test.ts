@@ -1,53 +1,44 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, ObjectId, type Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
-import { createErrorHandler } from '../../middleware/errorHandler';
+import { closeTestApp, createTestApp } from '../../test-utils/createTestApp';
 
 describe('Students API Routes', () => {
   let app: Express;
   let database: Db;
-  let mongoClient: MongoClient;
   let authService: AuthService;
   let testToken: string;
+  let testHarness: Awaited<ReturnType<typeof createTestApp>>;
 
   beforeAll(async () => {
-    // Connect to test database
-    const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
-    const dbName = process.env['MONGODB_DB_NAME'] ?? 'scholaracle_test';
-
-    try {
-      mongoClient = new MongoClient(mongodbUri);
-      await mongoClient.connect();
-      database = mongoClient.db(dbName);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('MongoDB not available, skipping integration tests');
+    testHarness = await createTestApp({
+      skipOnConnectFailure: true,
+      configure: ({ app: testApp, database: db }) => {
+        database = db;
+        app = testApp;
+        authService = new AuthService(db);
+        const baseUrl = 'http://test.example';
+        testApp.use(
+          '/api/students',
+          authMiddleware(authService),
+          requireParent,
+          studentsRouter({ database: db, baseUrl })
+        );
+      },
+    });
+    if (!testHarness) {
       return;
     }
-
-    authService = new AuthService(database);
-
-    // Setup Express app with routes
-    app = express();
-    app.use(express.json());
-    const baseUrl = 'http://test.example';
-    app.use(
-      '/api/students',
-      authMiddleware(authService),
-      requireParent,
-      studentsRouter({ database, baseUrl })
-    );
-    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
-    if (mongoClient) {
-      await mongoClient.close();
+    if (testHarness) {
+      await closeTestApp(testHarness);
     }
   });
 
@@ -1025,6 +1016,75 @@ describe('Students API Routes', () => {
       expect(row.totalAssignments).toBe(0);
       expect(row.officialGrade).toBe(expectedPercent);
       expect(row.gradeSource).toBe('sis');
+    });
+
+    it('prefers gradeSnapshot percentGrade over zeroed assignment computation', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Snapshot Vs Zero Assignments', grade: 10 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      const courseExternalId = 'm2-08-lms-snap-course';
+      const todayYMD = new Date().toISOString().slice(0, 10);
+      const snapshotPercent = 92.1;
+      const recentDue = new Date().toISOString();
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        externalId: courseExternalId,
+        deletedAt: null,
+        record: { name: 'Algebra', title: 'Algebra' },
+      });
+
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        externalId: 'a-zero-earned',
+        deletedAt: null,
+        record: {
+          title: 'Homework 1',
+          status: 'graded',
+          pointsPossible: 100,
+          pointsEarned: 0,
+          dueAt: recentDue,
+        },
+      });
+
+      await database.collection('slc_grade_snapshots').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        provider: 'canvas',
+        deletedAt: null,
+        record: {
+          courseExternalId,
+          percentGrade: snapshotPercent,
+          asOfDate: todayYMD,
+          sourceType: 'lms',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/grades`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courseGrades).toHaveLength(1);
+      const row = res.body.courseGrades[0] as {
+        officialGrade: number;
+        gradeSource: string;
+      };
+      expect(row.officialGrade).toBe(snapshotPercent);
+      expect(row.officialGrade).not.toBe(0);
+      expect(row.gradeSource).toBe('lms');
     });
   });
 

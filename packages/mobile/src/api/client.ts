@@ -27,6 +27,7 @@ import type {
   IWorkPackView,
   IPushTokenRequest,
   IConnectorTokenResponse,
+  IPendingSyncRequestsResponse,
   IIngestSourceRegisterRequest,
   IIngestRunStartResponse,
   ISourceInviteIssueRequest,
@@ -231,9 +232,10 @@ export class ScholarmancyApiClient {
       if (cached) return cached;
     }
 
+    const deviceId = await getDeviceId();
     const res = await this._post<IConnectorTokenResponse>(
       '/api/integrations/scraper-token',
-      {},
+      { deviceId },
       true
     );
     const stored: IStoredConnectorToken = { token: res.token, mintedAt: Date.now() };
@@ -288,6 +290,13 @@ export class ScholarmancyApiClient {
       res = await doFetch(fresh);
     }
     return res;
+  }
+
+  async getPendingSyncRequests(): Promise<IPendingSyncRequestsResponse['pending']> {
+    const res = await this._get<IPendingSyncRequestsResponse>(
+      '/api/integrations/sync-requests/pending'
+    );
+    return res.pending;
   }
 
   // ---------------------------------------------------------------------------

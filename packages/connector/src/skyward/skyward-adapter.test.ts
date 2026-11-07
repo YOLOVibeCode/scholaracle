@@ -17,7 +17,7 @@ describe('SkywardAdapter', () => {
   describe('meta', () => {
     it('should have correct provider and adapterId', () => {
       expect(adapter.meta.provider).toBe('skyward-qmlativ');
-      expect(adapter.meta.adapterId).toBe('com.skyward.qmlativ');
+      expect(adapter.meta.adapterId).toBe('skyward');
       expect(adapter.meta.adapterVersion).toBe('0.1.0');
       expect(adapter.meta.displayName).toBe('Skyward Qmlativ');
     });
@@ -140,7 +140,7 @@ describe('SkywardAdapter', () => {
 
       expect(envelope.schemaVersion).toBe(SLC_INGEST_SCHEMA_VERSION_V1);
       expect(envelope.run.provider).toBe('skyward-qmlativ');
-      expect(envelope.run.adapterId).toBe('com.skyward.qmlativ');
+      expect(envelope.run.adapterId).toBe('skyward');
       expect(envelope.source.sourceId).toBe('src-1');
 
       // 1 class + 1 assignment + 1 gradeSnapshot = 3 ops

@@ -18,8 +18,10 @@ export * from './models/AgendaOverride';
 
 // Connector / ingestion models
 export * from './models/IngestDeviceAuth';
+export * from './models/ConnectorDevice';
 export * from './models/IngestSource';
 export * from './models/IngestRun';
+export * from './models/ExternalIdAlias/ExternalIdAlias';
 
 // Repositories
 export * from './repositories/UserRepository';
@@ -46,9 +48,11 @@ export * from './repositories/SmsContactOptInInviteRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';
+export * from './repositories/ConnectorDeviceRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
 export * from './repositories/SourceInviteRepository';
+export * from './repositories/ExternalIdAliasRepository/ExternalIdAliasRepository';
 
 // Helpers (semester / term filtering)
 export { getCurrentSemesterStart } from './helpers/getCurrentSemesterStart';
@@ -66,3 +70,11 @@ export * from './repositories/StudentMagicTokenRepository';
 export * from './repositories/MagicLoginTokenRepository';
 
 export { createIndexes } from './indexes';
+
+export {
+  ACCOUNT_DELETION_AUDIT_COLLECTION,
+  EXTRA_USER_SCOPED_JOB_FILTER,
+  STUDENT_SCOPED_DELETION_COLLECTIONS,
+  USER_SCOPED_DELETION_TARGETS,
+  type UserScopedDeletionTarget,
+} from './accountDeletion/accountDeletionCollections';
