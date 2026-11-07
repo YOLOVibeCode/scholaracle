@@ -19,6 +19,8 @@ export interface IScraperHost {
   readonly config: IScraperRuntimeConfig;
   /** When set, portal recipe steps invoke this on failure only (never on success). */
   readonly captureSkeletonOnFailure?: (step: string) => Promise<void>;
+  /** Remote selector overrides (served patch), merged into v1 recipe tables. */
+  readonly selectorPatch?: Readonly<Record<string, string>>;
 }
 
 export interface IScraperModule {

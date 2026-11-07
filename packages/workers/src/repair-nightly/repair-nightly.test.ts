@@ -50,6 +50,26 @@ describe('runRepairNightly', () => {
     expect(runScraperRepairProposal).not.toHaveBeenCalled();
   });
 
+  it('invokes verifyAndServe after a proposal when configured', async () => {
+    await database.collection('repair_candidates').insertOne({
+      portalHost: 'h.example',
+      recipeId: 'aeries',
+      step: 'aeries.gradebook.assignments',
+      skeletonHash: 'f'.repeat(64),
+      gapKind: 'no_grade_no_assignments',
+      seenCount: 1,
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+    });
+    const verifyAndServe = jest.fn().mockResolvedValue('served');
+    await runRepairNightly(database, {
+      billingUserId: 'platform',
+      loadSkeleton: async () => '{"t":"div"}',
+      verifyAndServe,
+    });
+    expect(verifyAndServe).toHaveBeenCalled();
+  });
+
   it('invokes repair when skeleton is present', async () => {
     await database.collection('repair_candidates').insertOne({
       portalHost: 'h.example',

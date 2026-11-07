@@ -115,7 +115,11 @@ describe('repair candidates on ingest complete', () => {
             mode: 'delta',
             timezone: 'America/Los_Angeles',
           },
-          source: { sourceId, displayName: 'Aeries' },
+          source: {
+            sourceId,
+            displayName: 'Aeries',
+            portalBaseUrl: 'https://district.aeries.net/student/',
+          },
           ops: [
             {
               op: 'upsert',

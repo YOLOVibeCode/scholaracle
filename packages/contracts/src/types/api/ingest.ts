@@ -17,6 +17,8 @@ export interface IIngestRunCompleteRequest {
   readonly warnings?: readonly string[];
   /** SHA-256 hex of sanitized page skeleton for district-level repair dedupe. */
   readonly skeletonHash?: string;
+  /** Served selector patch the client applied for this sync (verification). */
+  readonly appliedSelectorPatchId?: string;
 }
 
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */

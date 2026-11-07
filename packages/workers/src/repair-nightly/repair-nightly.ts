@@ -1,4 +1,5 @@
 import type { Db } from 'mongodb';
+import type { ISlcRepairCandidateKey } from '@scholaracle/contracts';
 import { runScraperRepairProposal, resolveLlmConfig } from '@scholaracle/agents';
 import { RepairCandidateRepository, RepairProposalRepository } from '@scholaracle/database';
 import { selectorTableJsonForRecipe } from './selectorTableJson';
@@ -10,6 +11,10 @@ const MAX_PROPOSALS_PER_WEEK = 3;
 export interface IRepairNightlyDeps {
   readonly loadSkeleton: (key: { step: string; skeletonHash: string }) => Promise<string | null>;
   readonly billingUserId: string;
+  readonly verifyAndServe?: (
+    key: ISlcRepairCandidateKey,
+    selectors: Record<string, string>
+  ) => Promise<'served' | 'replay_failed' | 'no_proposal'>;
 }
 
 export async function runRepairNightly(database: Db, deps: IRepairNightlyDeps): Promise<number> {
@@ -49,8 +54,11 @@ export async function runRepairNightly(database: Db, deps: IRepairNightlyDeps): 
       billingUserId: deps.billingUserId,
       skipPlanQuota: true,
     });
-    if (result.status === 'proposed') {
+    if (result.status === 'proposed' && result.patch) {
       processed += 1;
+      if (deps.verifyAndServe) {
+        await deps.verifyAndServe(key, result.patch.selectors);
+      }
     }
   }
   return processed;
