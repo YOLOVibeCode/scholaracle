@@ -27,6 +27,8 @@ export interface IIngestRunData {
   readonly clientMeta?: Readonly<Record<string, string>> | null;
   readonly coverage?: ISlcRunCoverage | null;
   readonly warnings?: readonly string[] | null;
+  /** Set when the envelope is accepted; total delta ops in that upload. */
+  readonly opCount?: number;
 }
 
 export class IngestRun {
@@ -48,6 +50,7 @@ export class IngestRun {
   public readonly clientMeta?: Readonly<Record<string, string>> | null;
   public readonly coverage?: ISlcRunCoverage | null;
   public readonly warnings?: readonly string[] | null;
+  public readonly opCount?: number;
 
   constructor(data: IIngestRunData, id?: ObjectId) {
     this._id = id;
@@ -68,5 +71,6 @@ export class IngestRun {
     this.clientMeta = data.clientMeta ?? null;
     this.coverage = data.coverage ?? null;
     this.warnings = data.warnings ?? null;
+    this.opCount = data.opCount;
   }
 }

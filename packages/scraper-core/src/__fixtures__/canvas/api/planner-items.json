@@ -1,0 +1,12 @@
+[
+  {
+    "plannable_id": 100,
+    "plannable_type": "assignment",
+    "course_id": 10,
+    "context_name": "Spanish 2",
+    "plannable": {
+      "title": "Homework 1",
+      "due_at": "2026-09-04T23:59:59Z"
+    }
+  }
+]

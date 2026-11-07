@@ -36,6 +36,7 @@ export interface IIngestRunWriter {
     extras?: {
       readonly coverage?: ISlcRunCoverage | null;
       readonly warnings?: readonly string[] | null;
+      readonly opCount?: number;
     }
   ): Promise<void>;
   commitRun(params: {
@@ -91,6 +92,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     extras?: {
       readonly coverage?: ISlcRunCoverage | null;
       readonly warnings?: readonly string[] | null;
+      readonly opCount?: number;
     }
   ): Promise<void> {
     const setDoc: Record<string, unknown> = {
@@ -102,6 +104,9 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
     }
     if (extras?.warnings !== undefined) {
       setDoc['warnings'] = extras.warnings;
+    }
+    if (extras?.opCount !== undefined) {
+      setDoc['opCount'] = extras.opCount;
     }
     await this._collection.updateOne({ userId, runId }, { $set: setDoc });
   }
@@ -121,6 +126,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
       params.coverage !== undefined ? params.coverage : (existing?.coverage ?? null);
     const warningsToSet =
       params.warnings !== undefined ? params.warnings : (existing?.warnings ?? null);
+    const opCountToSet = existing?.opCount;
 
     await this._collection.updateOne(
       { userId: params.userId, runId: params.runId },
@@ -131,6 +137,7 @@ export class IngestRunRepository implements IIngestRunReader, IIngestRunWriter {
           newCursor: params.newCursor ?? null,
           coverage: coverageToSet,
           warnings: warningsToSet,
+          ...(opCountToSet !== undefined ? { opCount: opCountToSet } : {}),
         },
       }
     );

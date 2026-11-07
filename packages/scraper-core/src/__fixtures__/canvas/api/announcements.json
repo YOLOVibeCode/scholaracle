@@ -1,7 +1,9 @@
 [
   {
+    "id": 9001,
     "title": "Welcome",
     "context_code": "course_10",
-    "posted_at": "2026-09-01T12:00:00Z"
+    "posted_at": "2026-09-01T12:00:00Z",
+    "message": "<p>Hello</p>"
   }
 ]

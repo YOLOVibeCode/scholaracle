@@ -68,8 +68,8 @@ describe('native IDs — Canvas', () => {
     expect(assignOps).toHaveLength(2);
     expect(assignOps[0]?.key.externalId).toBe('canvas-assignment-987');
     expect(assignOps[1]?.key.externalId).toBe('canvas-assignment-988');
-    // must NOT look like an index-based ID
-    expect(assignOps[0]?.key.externalId).not.toMatch(/-assignment-\d$/);
+    // must NOT be course+numeric-index fallback (only used when Canvas id missing)
+    expect(assignOps[0]?.key.externalId).not.toMatch(/^canvas-assignment-101-\d+$/);
   });
 
   it('assignment externalId falls back to course+index when id absent', () => {
@@ -254,5 +254,67 @@ describe('upcoming events and to-do items', () => {
       (o) => o.entity === 'assignment' && o.record?.['status'] === 'not_started'
     );
     expect(todoOp).toBeDefined();
+  });
+});
+
+describe('stable externalIds for planner snapshot entities', () => {
+  it('uses Canvas announcement id and legacy alias', () => {
+    const extract = makeExtract({
+      courses: [makeCourse()],
+      announcements: [
+        {
+          id: '881',
+          title: 'Reminder',
+          course: '101',
+          date: '2026-01-10T00:00:00Z',
+        },
+      ],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const msg = ops.find((o) => o.entity === 'message');
+    expect(msg?.key.externalId).toBe('canvas-announcement-881');
+    expect(msg?.key.aliasExternalIds).toEqual(['canvas-announcement-0']);
+  });
+
+  it('uses Canvas plannable id for todo-derived assignments', () => {
+    const extract = makeExtract({
+      courses: [makeCourse()],
+      toDoItems: [
+        {
+          id: '7001',
+          title: 'Reading',
+          course: 'Spanish 2',
+          courseId: '101',
+          dueDate: '2026-09-04T23:59:59Z',
+        },
+      ],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const todo = ops.find(
+      (o) => o.entity === 'assignment' && o.record?.['status'] === 'not_started'
+    );
+    expect(todo?.key.externalId).toBe('canvas-todo-7001');
+    expect(todo?.key.courseExternalId).toBe('canvas-course-101');
+    expect(todo?.key.aliasExternalIds).toEqual(['canvas-todo-0']);
+  });
+
+  it('uses Canvas event id for upcoming event series', () => {
+    const extract = makeExtract({
+      courses: [makeCourse()],
+      upcomingEvents: [
+        {
+          id: '9100',
+          title: 'Open House',
+          date: '2026-09-10T14:00:00Z',
+          course: 'Sample Unified SD',
+          courseId: '101',
+        },
+      ],
+    });
+    const ops = transformCanvasExtract(extract, ctx);
+    const ev = ops.find((o) => o.entity === 'eventSeries');
+    expect(ev?.key.externalId).toBe('canvas-event-9100');
+    expect(ev?.key.aliasExternalIds).toEqual(['canvas-event-0']);
+    expect(ev?.record?.['recurrence']).toEqual({ rrule: 'FREQ=DAILY;COUNT=1' });
   });
 });

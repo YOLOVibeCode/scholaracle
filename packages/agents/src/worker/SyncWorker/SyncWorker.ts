@@ -337,6 +337,7 @@ export class SyncWorker {
       };
       if (result.success) {
         studentUpdate[`${dsPrefix}.lastSuccess`] = now;
+        studentUpdate[`${dsPrefix}.lastSuccessAt`] = now;
       } else {
         studentUpdate[`${dsPrefix}.lastError`] = result.error;
       }

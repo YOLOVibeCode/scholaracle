@@ -141,6 +141,8 @@ describe('Ingest v1: student matching and plan cap', () => {
     expect(students).toHaveLength(1);
     expect(students[0]!['studentId']).toBe(childId.toHexString());
     expect((students[0]!['dataSources'] as unknown[]).length).toBe(1);
+    const ds = (students[0]!['dataSources'] as Array<{ lastSuccessAt?: Date }>)[0]!;
+    expect(ds.lastSuccessAt).toBeInstanceOf(Date);
   });
 
   it('does not create students beyond the plan cap on a free account', async () => {

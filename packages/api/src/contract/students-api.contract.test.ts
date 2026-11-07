@@ -413,7 +413,16 @@ describe('students API contract', () => {
     assertKeys(
       res.body[0] as Record<string, unknown>,
       ['id', 'pluginId', 'provider', 'displayName', 'enabled', 'schedule', 'dataTypes', 'status'],
-      ['portalBaseUrl', 'hasCredentials', 'lastScraped', 'lastSuccess', 'lastError'],
+      [
+        'portalBaseUrl',
+        'hasCredentials',
+        'lastScraped',
+        'lastSuccess',
+        'lastSuccessAt',
+        'lastRunId',
+        'lastCounts',
+        'lastError',
+      ],
       'ISourceListItem'
     );
     expect(res.body[0].id).toBe(SOURCE_ID);

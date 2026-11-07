@@ -52,6 +52,8 @@ export interface ISlcEntityKey {
   readonly provider: string;
   readonly adapterId: string;
   readonly externalId: string;
+  /** Prior externalIds for the same row (e.g. legacy index-based Canvas keys). */
+  readonly aliasExternalIds?: readonly string[];
   readonly studentExternalId?: string;
   readonly institutionExternalId?: string;
   readonly courseExternalId?: string;
@@ -90,6 +92,12 @@ export interface ISlcStudentSyncCoverage {
 /** Snapshot attached to `run` for parent-facing sync diagnostics. */
 export interface ISlcRunCoverage {
   readonly students: readonly ISlcStudentSyncCoverage[];
+}
+
+/** Denormalized onto `Student.dataSources[]` after ingest completes. */
+export interface ISourceIngestLastCounts {
+  readonly opsTotal: number;
+  readonly coverage: ISlcRunCoverage;
 }
 
 export interface ISlcRunMeta {
