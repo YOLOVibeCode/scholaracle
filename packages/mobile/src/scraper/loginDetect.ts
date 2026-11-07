@@ -47,7 +47,7 @@ export function shouldTreatAsLoginSuccess(params: ILoginSuccessParams): boolean 
   return true;
 }
 
-export type SyncFailureKind = 'signed-out' | 'portal' | 'upload' | 'local';
+export type SyncFailureKind = 'signed-out' | 'portal' | 'upload' | 'local' | 'student-mismatch';
 
 export interface ISyncFailureView {
   readonly kind: SyncFailureKind;
@@ -69,7 +69,7 @@ const PROVIDER_LABEL: Record<string, string> = {
  * failure shows the real reason instead of a blanket "Session Expired".
  */
 export function describeSyncFailure(params: {
-  readonly phase: 'portal' | 'upload' | 'local' | undefined;
+  readonly phase: 'portal' | 'upload' | 'local' | 'STUDENT_MISMATCH' | undefined;
   readonly message: string;
   readonly provider: string;
   readonly loginFormShowing: boolean;
@@ -97,6 +97,14 @@ export function describeSyncFailure(params: {
       kind: 'upload',
       title: 'Couldn’t save to Scholarmancy',
       message: `${reason} Your portal data was read; try again when you’re online.`,
+      canSignInAgain: false,
+    };
+  }
+  if (params.phase === 'STUDENT_MISMATCH') {
+    return {
+      kind: 'student-mismatch',
+      title: 'Student name does not match the portal',
+      message: reason,
       canSignInAgain: false,
     };
   }
