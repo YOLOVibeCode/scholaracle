@@ -49,4 +49,19 @@ describe('maskPii', () => {
       expect((out['metadata'] as Record<string, unknown>)['cardNumber']).toBe('•••• 1111');
     });
   });
+
+  it('leaves class instances such as ids and dates intact', () => {
+    class FakeObjectId {
+      constructor(readonly hex: string) {}
+    }
+    const id = new FakeObjectId('6aeed3fc42768a11e4086657');
+    const at = new Date(0);
+    const out = maskPiiDeep({ userId: id, sentAt: at, meta: { email: 'a@b.co' } }) as Record<
+      string,
+      unknown
+    >;
+    expect(out['userId']).toBe(id);
+    expect(out['sentAt']).toBe(at);
+    expect((out['meta'] as Record<string, unknown>)['email']).not.toBe('a@b.co');
+  });
 });
