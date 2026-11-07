@@ -3,6 +3,9 @@ import { SKYWARD_SELECTORS_V1 } from '../selectors/skywardV1';
 
 /** Minimal arguments for Hermes VM smoke runs (empty portal page; no network). */
 export function smokeArgsForPageFn(id: string): unknown {
+  if (id === 'common.captureSkeleton') {
+    return { step: 'hermes.smoke', redact: [] };
+  }
   if (id.startsWith('common.')) {
     return [];
   }

@@ -3,8 +3,6 @@
  * All helpers are nested so Hermes can inject this file's source without imports.
  */
 
-const SKELETON_MAX_BYTES = 200 * 1024;
-
 export interface ICaptureSkeletonResult {
   readonly step: string;
   readonly capturedAt: string;
@@ -26,6 +24,7 @@ export async function captureSkeleton(opts: {
   step: string;
   redact?: readonly string[];
 }): Promise<ICaptureSkeletonResult> {
+  const SKELETON_MAX_BYTES = 200 * 1024;
   const SKIP_TAGS = new Set(['script', 'style', 'noscript']);
 
   function isAttrAllowlisted(name: string): boolean {
