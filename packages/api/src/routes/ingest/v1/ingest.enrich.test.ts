@@ -46,7 +46,12 @@ describe('Ingest v1 envelope enrichment', () => {
     app.use(express.json());
     app.use(
       '/api/ingest/v1',
-      ingestV1Router({ database, jwtSecret: 'test-secret', enrichOpsMode: mode })
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+        enrichOpsMode: mode,
+      })
     );
     app.use(createErrorHandler());
     return app;

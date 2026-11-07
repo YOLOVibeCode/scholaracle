@@ -88,7 +88,7 @@ export function SettingsScreen({
   const handleDeleteAccount = (): void => {
     Alert.alert(
       'Delete account?',
-      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data within 30 days. School portal passwords stay on this device until you uninstall.',
+      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data. School portal passwords stay on this device until you uninstall.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

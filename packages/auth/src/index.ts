@@ -23,4 +23,9 @@ export type { IMFAService, IMFASetupResult } from './MFAService/MFAService';
 export { ConnectorTokenService } from './ConnectorTokenService/ConnectorTokenService';
 export type { IConnectorTokenPayload } from './ConnectorTokenService/ConnectorTokenService';
 
+export {
+  assertConnectorJwtSecretDistinctFromUserSecret,
+  resolveConnectorJwtSecret,
+} from './connectorJwtSecrets';
+
 export { qrPngDataUrl } from './qrPngDataUrl';

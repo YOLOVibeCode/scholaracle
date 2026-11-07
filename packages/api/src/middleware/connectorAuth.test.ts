@@ -14,7 +14,7 @@ describe('connectorAuthMiddleware', () => {
   it('should allow request with valid connector token', () => {
     const userId = 'user-123';
     const jti = 'token-jti-456';
-    const token = connectorTokenService.createToken(userId, jti);
+    const token = connectorTokenService.createToken(userId, jti, 'test-device');
 
     const req = {
       headers: {
@@ -84,7 +84,7 @@ describe('connectorAuthMiddleware', () => {
 
   it('should reject request with token from different secret', () => {
     const otherService = new ConnectorTokenService('different-secret', '1h');
-    const token = otherService.createToken('user-123', 'jti-789');
+    const token = otherService.createToken('user-123', 'jti-789', 'test-device');
 
     const req = {
       headers: {

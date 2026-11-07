@@ -615,7 +615,14 @@ describe('Packager E2E', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
 
     await new Promise<void>((resolve, reject) => {
       server = app.listen(0, '127.0.0.1', () => resolve());
