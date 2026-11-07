@@ -233,6 +233,7 @@ export function StudentLoginsCard({
                     <div className="flex gap-2 flex-wrap">
                       <select
                         className="h-9 rounded-md border bg-background px-2 text-sm"
+                        aria-label="Send login link channel"
                         value={sendLinkStudent.channel}
                         onChange={(e) =>
                           setSendLinkStudent((s) =>
