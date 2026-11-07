@@ -88,6 +88,10 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcDeviceAuth.createIndex({ userCode: 1 }, { unique: true });
   await slcDeviceAuth.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+  const slcDevices = database.collection('slc_devices');
+  await slcDevices.createIndex({ userId: 1, deviceId: 1 }, { unique: true });
+  await slcDevices.createIndex({ activeJti: 1 });
+
   const slcSources = database.collection('slc_sources');
   await slcSources.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
   await slcSources.createIndex({ userId: 1, updatedAt: -1 });
@@ -106,6 +110,7 @@ export async function createIndexes(database: Db): Promise<void> {
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
+  await syncRequests.createIndex({ requestedByUserId: 1, fulfilledAt: 1, createdAt: -1 });
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
@@ -223,6 +228,9 @@ export async function createIndexes(database: Db): Promise<void> {
     'payload.institutionExternalId': 1,
     consumedAt: 1,
   });
+
+  const slcExternalIdAliases = database.collection('slc_external_id_aliases');
+  await slcExternalIdAliases.createIndex({ alias: 1, kind: 1 }, { unique: true });
 
   const studentMagicTokens = database.collection('student_magic_tokens');
   await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });

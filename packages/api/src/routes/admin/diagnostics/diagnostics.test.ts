@@ -47,7 +47,11 @@ describe('Admin diagnostics routes', () => {
   });
 
   it('rejects a connector token', async () => {
-    const connectorToken = new ConnectorTokenService(JWT_SECRET).createToken('user-1', 'jti-1');
+    const connectorToken = new ConnectorTokenService(JWT_SECRET).createToken(
+      'user-1',
+      'jti-1',
+      'diag-device'
+    );
     const res = await request(app)
       .get('/api/admin/diagnostics/student-data/abc123')
       .set('Authorization', `Bearer ${connectorToken}`);

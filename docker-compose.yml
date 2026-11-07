@@ -143,7 +143,7 @@ services:
       MONGODB_URI: mongodb://mongodb:27017/scholaracle
       MONGODB_DB_NAME: scholaracle
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      CONNECTOR_JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      CONNECTOR_JWT_SECRET: ${CONNECTOR_JWT_SECRET:-${JWT_SECRET:-dev-jwt-secret-change-in-production}-connector}
       API_BASE_URL: http://api:3002
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
       # Email configuration (SendGrid)

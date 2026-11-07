@@ -8,7 +8,7 @@ describe('detectPlatformFromUrl', () => {
     const r = detectPlatformFromUrl('https://school.instructure.com/login');
     expect(r.detected).toBe(true);
     expect(r.provider).toBe('canvas');
-    expect(r.adapterId).toBe('com.instructure.canvas');
+    expect(r.adapterId).toBe('canvas');
     expect(r.confidence).toBe('high');
     expect(r.signals.some((s) => s.includes('instructure'))).toBe(true);
   });
@@ -24,7 +24,7 @@ describe('detectPlatformFromUrl', () => {
     const r = detectPlatformFromUrl('https://myschool.skyward.com/portal');
     expect(r.detected).toBe(true);
     expect(r.provider).toBe('skyward-qmlativ');
-    expect(r.adapterId).toBe('com.skyward.qmlativ');
+    expect(r.adapterId).toBe('skyward');
     expect(r.confidence).toBe('high');
   });
 

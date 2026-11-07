@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scholarmancy.com/schemas/scraper-core/skyward.selectors.v1.json",
+  "title": "Skyward selector table v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "selectors"],
+  "properties": {
+    "version": { "const": 1 },
+    "selectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "student_name_primary",
+        "student_name_header_fallback",
+        "student_name_topnav",
+        "school_name",
+        "grade_info_dialog",
+        "table",
+        "tr",
+        "td",
+        "td_th",
+        "nav_links",
+        "grade_cell_anchor",
+        "dialog_wrap",
+        "dialog_close",
+        "missing_cell_img"
+      ],
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    }
+  }
+}

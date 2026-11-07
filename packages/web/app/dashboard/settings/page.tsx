@@ -1085,6 +1085,24 @@ export default function SettingsPage() {
         </Card>
       </form>
 
+      <Card data-testid="card-delete-account">
+        <CardHeader>
+          <CardTitle>Danger zone</CardTitle>
+          <CardDescription>
+            Permanently delete your Scholarmancy account and all household data on our servers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/delete-account"
+            className="text-sm font-semibold text-red-600 hover:underline dark:text-red-400"
+            data-testid="link-delete-account"
+          >
+            Delete account
+          </Link>
+        </CardContent>
+      </Card>
+
       <Card data-testid="notification-history">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

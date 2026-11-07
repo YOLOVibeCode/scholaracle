@@ -23,9 +23,9 @@ export interface ConnectSourceWizardProps {
 }
 
 const PROVIDERS = [
-  { id: 'canvas', name: 'Canvas LMS', adapterId: 'com.instructure.canvas', available: true },
-  { id: 'skyward', name: 'Skyward', adapterId: 'com.skyward', available: true },
-  { id: 'aeries', name: 'Aeries', adapterId: 'com.aeries', available: true },
+  { id: 'canvas', name: 'Canvas LMS', adapterId: 'canvas', available: true },
+  { id: 'skyward', name: 'Skyward', adapterId: 'skyward', available: true },
+  { id: 'aeries', name: 'Aeries', adapterId: 'aeries', available: true },
   { id: 'google', name: 'Google Classroom', adapterId: 'com.google.classroom', available: true },
 ] as const;
 
@@ -126,11 +126,17 @@ export function ConnectSourceWizard({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent className="sm:max-w-md" data-testid="connect-source-wizard">
-        <SheetHeader>
+      <SheetContent
+        className="flex h-full max-h-dvh w-full flex-col gap-0 p-0 sm:max-w-md"
+        data-testid="connect-source-wizard"
+      >
+        <SheetHeader className="shrink-0 px-4 pt-4">
           <SheetTitle>Connect a Data Source</SheetTitle>
         </SheetHeader>
-        <div className="py-4 space-y-4">
+        <div
+          className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto overscroll-contain px-4 pb-4 pt-2"
+          data-testid="connect-source-scroll-body"
+        >
           {step === 1 && (
             <>
               <p className="text-sm text-gray-600 dark:text-gray-400">Choose your LMS provider</p>
