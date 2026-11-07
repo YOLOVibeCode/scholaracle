@@ -4,7 +4,7 @@ import { RepairProposalRepository, ServedSelectorPatchRepository } from '@schola
 import { verifyAndServeProposal } from './verifyAndServeProposal';
 import { recordSelectorPatchVerification } from './recordSelectorPatchVerification';
 
-jest.mock('@scholaracle/scraper-core', () => ({
+jest.mock('@scholaracle/scraper-core/dist/node', () => ({
   replaySelectorPatch: jest.fn(async () => ({ ok: true as const, counts: {} })),
 }));
 

@@ -5,7 +5,7 @@ import {
   RepairProposalRepository,
   ServedSelectorPatchRepository,
 } from '@scholaracle/database';
-import { replaySelectorPatch } from '@scholaracle/scraper-core';
+import { replaySelectorPatch } from '@scholaracle/scraper-core/dist/node';
 import { createLogger } from '@scholaracle/logger';
 
 const logger = createLogger('selector-patch-verify');

@@ -109,16 +109,9 @@ export type {
 } from './pipeline';
 export { mapGapKindToRecipeStep, uniqueGapKindsFromCoverage } from './repair/gapKindToRecipeStep';
 export { selectorTableJsonForRecipe } from './repair/selectorTableJson';
-export { replaySelectorPatch } from './repair/replaySelectorPatch';
-export type {
-  IReplaySelectorPatchParams,
-  IReplaySelectorPatchResult,
-} from './repair/replaySelectorPatch';
 export { meetsAeriesCountStandard } from './repair/replayCountStandard';
-export {
-  applySelectorPatchToTableJson,
-  buildPromoteSelectorPatchArtifacts,
-} from './repair/buildPromoteSelectorPatchArtifacts';
+// Replay and promote helpers use node:fs and jsdom: import them from
+// '@scholaracle/scraper-core/dist/node' (see node.ts). The mobile app bundles this index.
 export {
   SyncError,
   runClientScrape,
