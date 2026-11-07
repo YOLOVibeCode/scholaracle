@@ -108,6 +108,10 @@ export type {
   IClassifyResourceParams,
 } from './pipeline';
 export {
+  mapGapKindToRecipeStep,
+  uniqueGapKindsFromCoverage,
+} from './repair/gapKindToRecipeStep';
+export {
   SyncError,
   runClientScrape,
   buildClientScrapeConfig,
