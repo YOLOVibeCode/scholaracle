@@ -5,8 +5,10 @@ import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
+  AiBudgetError,
   AuthenticationError,
   ConflictError,
+  ERROR_CODES,
   NotFoundError,
   ValidationError,
   type ISlcIngestEnvelopeV1,
@@ -1531,19 +1533,26 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         userId: runDataUserId,
         queue: config.queue,
       });
-      // LLM-based material matching (Layer 3) — fire-and-forget
-      void runPostIngestIntelligence({
-        database: config.database,
-        userId: runDataUserId,
-        assetStore: config.assetStore,
-      }).catch((err: unknown) => {
-        logger.error({ err, runId }, 'MaterialMatcher post-ingest intelligence failed');
-      });
+      let budgetNotice: readonly string[] | undefined;
+      try {
+        await runPostIngestIntelligence({
+          database: config.database,
+          userId: runDataUserId,
+          assetStore: config.assetStore,
+        });
+      } catch (err: unknown) {
+        if (err instanceof AiBudgetError) {
+          budgetNotice = [ERROR_CODES.AI_BUDGET];
+        } else {
+          logger.error({ err, runId }, 'MaterialMatcher post-ingest intelligence failed');
+        }
+      }
       res.status(200).json({
         success: true,
         committed: true,
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
+        ...(budgetNotice !== undefined ? { codes: budgetNotice } : {}),
       } satisfies IIngestRunCompleteResponse);
     })
   );
