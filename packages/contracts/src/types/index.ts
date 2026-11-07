@@ -4,3 +4,4 @@ export type { IStudentContact, IAlertRecipientResolved } from './StudentContact'
 export * from './smsCompliance';
 export * from './serverAiConsent';
 export * from './api';
+export * from './scraperRepair';

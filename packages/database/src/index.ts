@@ -53,6 +53,7 @@ export * from './repositories/ConnectorDeviceRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
 export * from './repositories/RepairCandidateRepository';
+export * from './repositories/RepairProposalRepository';
 export * from './repositories/SourceInviteRepository';
 export * from './repositories/ExternalIdAliasRepository/ExternalIdAliasRepository';
 
