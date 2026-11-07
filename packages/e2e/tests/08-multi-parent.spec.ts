@@ -85,7 +85,11 @@ test.describe('@feature Multi-Parent Sharing', () => {
     await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
 
     // Click edit on the student
-    await page.locator('[data-testid="student-link"]', { hasText: studentName }).click();
+    await page
+      .locator('[data-testid="student-list"]')
+      .filter({ hasText: studentName })
+      .getByTestId('button-edit-student')
+      .click();
     await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 15_000 });
 
     // Click Parents tab

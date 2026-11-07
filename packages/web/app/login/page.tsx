@@ -158,7 +158,7 @@ function LoginForm() {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={isLoading}
-                    className="rounded border-gray-300"
+                    className="h-6 w-6 shrink-0 rounded border-gray-300"
                     data-testid="input-remember-me"
                   />
                   <span>Remember me</span>

@@ -620,6 +620,7 @@ export default function SettingsPage() {
               </p>
               <select
                 data-testid="select-timezone"
+                aria-label="Timezone"
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
@@ -1063,6 +1064,7 @@ export default function SettingsPage() {
                       <Label htmlFor={`alert-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
                       <select
                         value={val.severity}
+                        aria-label={`${key.replace('_', ' ')} alert severity`}
                         onChange={(e) => setAlertType(key, val.enabled, e.target.value)}
                         disabled={isSaving || !isLoaded}
                         className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"
