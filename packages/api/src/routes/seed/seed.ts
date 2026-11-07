@@ -41,7 +41,11 @@ import {
 } from './demo-data';
 import type { ISharedParent, IStudentLogin } from '@scholaracle/database';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
-import { SEED_TEST_PARENT_PASSWORD } from './seed-constants';
+import {
+  SEED_DEFAULT_ADMIN_MFA_SECRET,
+  SEED_DEFAULT_ADMIN_PASSWORD,
+  SEED_TEST_PARENT_PASSWORD,
+} from './seed-constants';
 
 export interface ISeedRouterConfig {
   readonly database: Db;
@@ -112,9 +116,21 @@ function requireSeedAccess(req: Request, _res: Response, next: NextFunction): vo
 }
 
 function adminSeedSecrets(): { password: string; mfaSecret: string } | null {
-  const password = process.env['SEED_ADMIN_PASSWORD'] ?? '';
-  const mfaSecret = process.env['SEED_ADMIN_MFA_SECRET'] ?? '';
-  if (password.length >= 12 && mfaSecret.length >= 16) return { password, mfaSecret };
+  const fromEnvPassword = process.env['SEED_ADMIN_PASSWORD'] ?? '';
+  const fromEnvMfaSecret = process.env['SEED_ADMIN_MFA_SECRET'] ?? '';
+  if (fromEnvPassword.length >= 12 && fromEnvMfaSecret.length >= 16) {
+    return { password: fromEnvPassword, mfaSecret: fromEnvMfaSecret };
+  }
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDeployed = Boolean(
+    process.env['RAILWAY_ENVIRONMENT_ID'] ?? process.env['RAILWAY_ENVIRONMENT_NAME']
+  );
+  if ((nodeEnv === 'test' || nodeEnv === 'development') && !isDeployed) {
+    return {
+      password: SEED_DEFAULT_ADMIN_PASSWORD,
+      mfaSecret: SEED_DEFAULT_ADMIN_MFA_SECRET,
+    };
+  }
   return null;
 }
 
