@@ -246,8 +246,11 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto" data-testid="add-student-wizard">
-        <SheetHeader>
+      <SheetContent
+        className="flex h-full max-h-dvh w-full flex-col gap-0 p-0 sm:max-w-lg"
+        data-testid="add-student-wizard"
+      >
+        <SheetHeader className="shrink-0 px-4 pt-4">
           <SheetTitle>
             {step === 'student-info' && 'Add Student'}
             {step === 'connect-services' && 'Connect Services'}
@@ -257,9 +260,12 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           </SheetTitle>
         </SheetHeader>
 
-        <div className="py-4 space-y-4">
+        <div
+          className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto overscroll-contain px-4 pb-4 pt-2"
+          data-testid="wizard-scroll-body"
+        >
           {/* ── Progress indicator ── */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span
               className={
                 step === 'student-info'
