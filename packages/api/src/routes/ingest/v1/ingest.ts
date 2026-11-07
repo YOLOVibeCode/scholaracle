@@ -72,6 +72,7 @@ import {
   syncStudentDataSourcesAfterIngestFailure,
   syncStudentDataSourcesAfterIngestSuccess,
 } from './syncStudentDataSourcesFromIngest';
+import { recordRepairCandidatesFromCoverage } from '../../../services/repairCandidates/recordRepairCandidatesFromCoverage';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -109,6 +110,13 @@ function parseOptionalStringArray(raw: unknown): readonly string[] | undefined {
     if (typeof x === 'string') out.push(x);
   }
   return out;
+}
+
+function parseOptionalSkeletonHash(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 function randomUserCode(): string {
@@ -1506,6 +1514,24 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           coverage: committedRun.coverage,
           opCount: committedRun.opCount,
         });
+
+        const skeletonHash = parseOptionalSkeletonHash(req.body?.skeletonHash);
+        const coverageForRepair = committedRun.coverage ?? undefined;
+        if (skeletonHash && coverageForRepair) {
+          const source = await sourceRepo.findByUserIdAndSourceId(
+            runDataUserId,
+            committedRun.sourceId
+          );
+          if (source?.portalBaseUrl) {
+            await recordRepairCandidatesFromCoverage({
+              database: config.database,
+              portalBaseUrl: source.portalBaseUrl,
+              recipeId: source.adapterId,
+              skeletonHash,
+              coverage: coverageForRepair,
+            });
+          }
+        }
       }
       // Generate user-facing alerts from ingested tasks (value loop)
       await generateAlertsFromIngestedAssignments({

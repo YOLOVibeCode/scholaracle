@@ -7,5 +7,6 @@ export {
 export { DeliveryResult } from './DeliveryResult';
 export { Alert, type AlertData } from './Alert';
 export * from './Ingest';
+export * from './RepairCandidate';
 export * from './Connector';
 export * from './Strategy';
