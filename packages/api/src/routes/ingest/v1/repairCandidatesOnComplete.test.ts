@@ -91,6 +91,42 @@ describe('repair candidates on ingest complete', () => {
     await database.collection('slc_runs').deleteMany({});
   });
 
+  function minimalEnvelope(runId: string) {
+    const now = new Date().toISOString();
+    return {
+      schemaVersion: 'slc.ingest.v1',
+      run: {
+        runId,
+        startedAt: now,
+        provider: 'aeries',
+        adapterId: 'com.aeries.portal',
+        adapterVersion: '1.0.0',
+        mode: 'delta',
+        timezone: 'America/Los_Angeles',
+      },
+      source: {
+        sourceId,
+        displayName: 'Aeries',
+        portalBaseUrl: 'https://district.aeries.net/student/',
+      },
+      ops: [
+        {
+          op: 'upsert',
+          entity: 'course',
+          key: {
+            provider: 'aeries',
+            adapterId: 'com.aeries.portal',
+            externalId: 'course-repair-1',
+            studentExternalId: 'stu-1',
+            institutionExternalId: 'district.aeries.net',
+          },
+          observedAt: now,
+          record: { title: 'Entrepreneurship' },
+        },
+      ],
+    };
+  }
+
   it('dedupes two completes with the same skeleton hash into seenCount 2', async () => {
     for (let i = 0; i < 2; i++) {
       const run = await request(app)
@@ -99,6 +135,12 @@ describe('repair candidates on ingest complete', () => {
         .send({ sourceId });
       expect(run.status).toBe(200);
       const runId = run.body.runId as string;
+
+      await request(app)
+        .post(`/api/ingest/v1/runs/${runId}/envelope`)
+        .set('Authorization', `Bearer ${connectorToken}`)
+        .send(minimalEnvelope(runId))
+        .expect(200);
 
       const complete = await request(app)
         .post(`/api/ingest/v1/runs/${runId}/complete`)
