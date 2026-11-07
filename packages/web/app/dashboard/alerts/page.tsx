@@ -1,27 +1,13 @@
 'use client';
 
-import { Bell, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { Bell, CheckCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { alertsApi, type IAlert } from '@/lib/api/alerts';
 import { useAsyncData } from '@/lib/hooks';
-import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
-
-const severityColors = {
-  critical: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-200',
-  warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200',
-  info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-200',
-  positive: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200',
-};
-
-const severityIcons = {
-  critical: AlertCircle,
-  warning: AlertCircle,
-  info: Info,
-  positive: CheckCircle,
-};
+import { AlertSeverityBadge, ErrorDisplay, LoadingSkeleton } from '@/components/common';
 
 type AlertSeverityFilter = 'all' | 'critical' | 'warning' | 'info' | 'positive';
 
@@ -119,23 +105,15 @@ export default function AlertsPage() {
           {unacknowledgedAlerts.length > 0 && (
             <div className="space-y-4" data-testid="alerts-list">
               <h2 className="text-xl font-semibold">Active Alerts</h2>
-              {unacknowledgedAlerts.map((alert) => {
-                const Icon = severityIcons[alert.severity as keyof typeof severityIcons] ?? Bell;
-                const colorClass =
-                  severityColors[alert.severity as keyof typeof severityColors] ?? severityColors.info;
-
-                return (
+              {unacknowledgedAlerts.map((alert) => (
                   <Card key={alert.id} data-testid="alert-item">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
-                          <Icon className={`h-5 w-5 mt-0.5 ${colorClass.split(' ')[0]}`} />
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <CardTitle className="text-lg">{alert.type}</CardTitle>
-                              <Badge className={colorClass} data-testid="alert-severity">
-                                {alert.severity}
-                              </Badge>
+                              <AlertSeverityBadge severity={alert.severity} />
                             </div>
                             <CardDescription>{alert.message}</CardDescription>
                           </div>
@@ -157,30 +135,21 @@ export default function AlertsPage() {
                       </p>
                     </CardContent>
                   </Card>
-                );
-              })}
+              ))}
             </div>
           )}
 
           {acknowledgedAlerts.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold">Acknowledged Alerts</h2>
-              {acknowledgedAlerts.map((alert) => {
-                const Icon = severityIcons[alert.severity as keyof typeof severityIcons] ?? Bell;
-                const colorClass =
-                  severityColors[alert.severity as keyof typeof severityColors] ?? severityColors.info;
-
-                return (
+              {acknowledgedAlerts.map((alert) => (
                   <Card key={alert.id} className="opacity-60" data-testid="alert-item">
                     <CardHeader>
                       <div className="flex items-start gap-3">
-                        <Icon className={`h-5 w-5 mt-0.5 ${colorClass.split(' ')[0]}`} />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <CardTitle className="text-lg">{alert.type}</CardTitle>
-                            <Badge className={colorClass} data-testid="alert-severity">
-                              {alert.severity}
-                            </Badge>
+                            <AlertSeverityBadge severity={alert.severity} />
                             <Badge variant="outline">Acknowledged</Badge>
                           </div>
                           <CardDescription>{alert.message}</CardDescription>
@@ -193,8 +162,7 @@ export default function AlertsPage() {
                       </p>
                     </CardContent>
                   </Card>
-                );
-              })}
+              ))}
             </div>
           )}
 
