@@ -13,6 +13,7 @@ import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
+import { consentsRouter } from './routes/consents/consents';
 import { authMiddleware } from './middleware/auth';
 import { requireParent, requireStudent } from './middleware/requireRole';
 import { studioRouter } from './routes/studio/studio';
@@ -495,6 +496,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       authMiddleware(authService),
       requireParent,
       settingsRouter({ database, authService })
+    );
+    app.use(
+      '/api/consents',
+      authMiddleware(authService),
+      requireParent,
+      consentsRouter({ database })
     );
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
