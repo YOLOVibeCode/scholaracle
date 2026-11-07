@@ -338,11 +338,13 @@ export function SyncScreen({
           {syncState === 'done' && (
             <>
               <Text style={styles.successIcon}>✓</Text>
-              <Text style={styles.statusText}>Sync complete!</Text>
+              <Text style={styles.statusText} testID="text-sync-complete">
+                Sync complete!
+              </Text>
               {progress?.opCount !== undefined && (
                 <Text style={styles.subText}>{progress.opCount} records updated</Text>
               )}
-              <TouchableOpacity style={styles.button} onPress={onDone}>
+              <TouchableOpacity style={styles.button} onPress={onDone} testID="button-sync-done">
                 <Text style={styles.buttonText}>Done</Text>
               </TouchableOpacity>
             </>

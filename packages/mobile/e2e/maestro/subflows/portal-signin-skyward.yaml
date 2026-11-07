@@ -1,0 +1,17 @@
+# Skyward Family Access sign-in page inside the app's WebView.
+# Field labels differ by district; tune these on the first live run.
+appId: com.scholarmancy.app
+---
+- extendedWaitUntil:
+    visible: 'Login ID|Username|User Name'
+    timeout: 60000
+- tapOn: 'Login ID|Username|User Name'
+- inputText:
+    text: ${MAESTRO_PORTAL_USERNAME}
+    label: Type portal username
+- tapOn: 'Password'
+- inputText:
+    text: ${MAESTRO_PORTAL_PASSWORD}
+    label: Type portal password
+- hideKeyboard
+- tapOn: 'Sign In|Sign in|Log In|Login'
