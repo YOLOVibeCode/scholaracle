@@ -79,6 +79,7 @@ jobs:
 
       - name: Maestro sync-portal fake (iOS)
         continue-on-error: true
+        timeout-minutes: 15
         working-directory: packages/mobile
         env:
           E2E_ARTIFACTS_DIR: ${{ github.workspace }}/mobile-maestro-artifacts/ios-sync
@@ -166,6 +167,8 @@ jobs:
 
       - name: Maestro sync-portal fake (Android)
         continue-on-error: true
+        # Optional flow: never let it hold the job until the 90-minute limit.
+        timeout-minutes: 15
         uses: reactivecircus/android-emulator-runner@v2
         env:
           MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}

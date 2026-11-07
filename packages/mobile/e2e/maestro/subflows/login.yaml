@@ -21,13 +21,23 @@ appId: com.scholarmancy.app
           visible:
             id: input-email
           timeout: 40000
-- tapOn:
-    id: input-email
-- inputText:
-    text: ${MAESTRO_PARENT_EMAIL}
-    label: Type parent email
+# iOS simulator typing sometimes drops characters (one run typed only the first letter).
+# Type, confirm the whole address is in the field, and retry if not.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: input-email
+      - waitForAnimationToEnd
+      - eraseText: 80
+      - inputText:
+          text: ${MAESTRO_PARENT_EMAIL}
+          label: Type parent email
+      - assertVisible:
+          text: ${MAESTRO_PARENT_EMAIL}
 - tapOn:
     id: input-password
+- waitForAnimationToEnd
 - inputText:
     text: ${MAESTRO_PARENT_PASSWORD}
     label: Type parent password
