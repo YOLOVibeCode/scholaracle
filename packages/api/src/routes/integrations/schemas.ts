@@ -34,6 +34,14 @@ export const assignStudentSchema = z.object({
 
 export type IAssignStudentBody = z.infer<typeof assignStudentSchema>;
 
+export const connectorTokenMintSchema = z.object({
+  deviceId: z.string().min(1, 'deviceId is required').max(256),
+});
+
+export type IConnectorTokenMintBody = z.infer<typeof connectorTokenMintSchema>;
+
+export const connectorTokenRevokeSchema = connectorTokenMintSchema;
+
 export const testConnectionSchema = z.object({
   provider: z.string().min(1, 'provider is required'),
   adapterId: z.string().min(1, 'adapterId is required'),

@@ -3717,6 +3717,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         requestedByUserId: userId,
         reason: 'parent_web_trigger',
         createdAt,
+        fulfilledAt: null,
       });
 
       const body: ITriggerSyncResponse = {

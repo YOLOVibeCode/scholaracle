@@ -24,7 +24,14 @@ describe('Ingest v1: student matching and plan cap', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
     app.use(createErrorHandler());
   });
 
@@ -41,6 +48,8 @@ describe('Ingest v1: student matching and plan cap', () => {
       'slc_sources',
       'slc_runs',
       'slc_device_auth',
+      'slc_devices',
+      'revoked_connector_tokens',
       'slc_assignments',
     ]) {
       await database.collection(name).deleteMany({});

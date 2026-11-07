@@ -40,6 +40,7 @@ describe('Ingest v1 API', () => {
     await database.collection('slc_student_profiles').deleteMany({});
     await database.collection('students').deleteMany({});
 
+    process.env['CONNECTOR_JWT_SECRET'] = 'test-secret-connector';
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
     if (!reg.success || !reg.token) throw new Error('Failed to register test user');
@@ -47,7 +48,14 @@ describe('Ingest v1 API', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
     app.use(createErrorHandler());
   });
 

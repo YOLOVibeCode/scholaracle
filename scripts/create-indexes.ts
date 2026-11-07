@@ -71,6 +71,10 @@ async function createIndexes(): Promise<void> {
   await db.collection('slc_device_auth').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   console.log('  slc_device_auth.deviceCode (unique), expiresAt (TTL)');
 
+  await db.collection('slc_devices').createIndex({ userId: 1, deviceId: 1 }, { unique: true });
+  await db.collection('slc_devices').createIndex({ activeJti: 1 });
+  console.log('  slc_devices.userId+deviceId (unique), activeJti');
+
   // SLC sources
   await db.collection('slc_sources').createIndex({ userId: 1 });
   console.log('  slc_sources.userId');
