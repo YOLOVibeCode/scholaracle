@@ -79,6 +79,7 @@ jobs:
 
       - name: Maestro sync-portal fake (iOS)
         continue-on-error: true
+        timeout-minutes: 15
         working-directory: packages/mobile
         env:
           E2E_ARTIFACTS_DIR: ${{ github.workspace }}/mobile-maestro-artifacts/ios-sync
@@ -137,6 +138,12 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      - name: Enable KVM for the Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Maestro launch and smoke (Android)
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -151,13 +158,7 @@ jobs:
           force-avd-creation: true
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            set -euo pipefail
-            cd packages/mobile
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-launch"
-            pnpm e2e:android launch
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-smoke"
-            pnpm e2e:android smoke --no-build
+          script: bash packages/mobile/scripts/ci-android-maestro.sh launch-smoke
 
       - name: Build fake portal deps
         run: |
@@ -166,6 +167,8 @@ jobs:
 
       - name: Maestro sync-portal fake (Android)
         continue-on-error: true
+        # Optional flow: never let it hold the job until the 90-minute limit.
+        timeout-minutes: 15
         uses: reactivecircus/android-emulator-runner@v2
         env:
           MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}
@@ -179,18 +182,7 @@ jobs:
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            set -euo pipefail
-            FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node scripts/fake-portal-server.mjs &
-            sleep 3
-            cd packages/mobile
-            export E2E_ARTIFACTS_DIR="$GITHUB_WORKSPACE/mobile-maestro-artifacts/android-sync"
-            export MAESTRO_PORTAL_PROVIDER=skyward
-            export MAESTRO_PORTAL_URL=http://10.0.2.2:2855/skyward/login?csp=strict
-            export MAESTRO_PORTAL_USERNAME=demo
-            export MAESTRO_PORTAL_PASSWORD=demo
-            export MAESTRO_USE_FAKE_PORTAL=1
-            pnpm e2e:android sync --no-build
+          script: bash packages/mobile/scripts/ci-android-maestro.sh sync
 
       - name: Upload Maestro artifacts (Android)
         if: always()

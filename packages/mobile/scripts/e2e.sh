@@ -35,6 +35,12 @@ export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}${maestro_path:+$maestro_path:}$PATH:$
 export MAESTRO_CLI_NO_ANALYTICS=1
 api_url="${E2E_API_URL:-https://api-uat.scholarmancy.com}"
 ios_device="${E2E_IOS_DEVICE:-iPhone 17 Pro}"
+# expo run:ios treats an unmatched name as a physical device and demands code signing;
+# resolve a simulator name to its UDID so the build always targets the simulator.
+if [[ "$platform" == ios && ! "$ios_device" =~ ^[0-9A-F-]{36}$ ]]; then
+  udid="$(xcrun simctl list devices available | grep -F "    $ios_device (" | head -1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' || true)"
+  [[ -n "$udid" ]] && ios_device="$udid"
+fi
 avd="${E2E_ANDROID_AVD:-scholarmancy-e2e}"
 env_file="${E2E_ENV_FILE:-$HOME/.config/scholarmancy/e2e.env}"
 if [[ -n "${E2E_ARTIFACTS_DIR:-}" ]]; then
@@ -66,7 +72,20 @@ build_app() {
   cd "$here"
   export EXPO_PUBLIC_API_URL="$api_url"
   if [[ "$platform" == ios ]]; then
-    npx expo run:ios --configuration Release --device "$ios_device" --no-bundler
+    # Build for the simulator with xcodebuild, ad-hoc signed ("Sign to Run Locally", no
+    # certificate): `expo run:ios` demands a certificate on CI, and an unsigned build loses
+    # the keychain entitlement SecureStore needs to save the session.
+    npx expo prebuild --platform ios --no-install >/dev/null
+    (cd ios && pod install >/dev/null)
+    local ws scheme app
+    ws="$(ls -d ios/*.xcworkspace | head -1)"
+    scheme="$(basename "$ws" .xcworkspace)"
+    xcodebuild -quiet -workspace "$ws" -scheme "$scheme" -configuration Release \
+      -sdk iphonesimulator -destination "id=$ios_device" -derivedDataPath build/e2e-ios \
+      CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+      CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES
+    app="$(ls -d build/e2e-ios/Build/Products/Release-iphonesimulator/*.app | head -1)"
+    xcrun simctl install "$ios_device" "$app"
   else
     export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=2g"
     npx expo run:android --variant release --no-bundler
