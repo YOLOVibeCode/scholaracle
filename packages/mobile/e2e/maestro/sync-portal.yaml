@@ -16,7 +16,13 @@ tags: [sync]
     timeout: 30000
 - tapOn:
     id: button-sync
-# A fresh install has no saved portal: the app asks to connect one first.
+# A fresh install has no saved portal: the app asks to connect one first. The alert
+# appears after an async lookup, so wait for it instead of checking once.
+- extendedWaitUntil:
+    visible: "No portal connected"
+    timeout: 15000
+    optional: true
+- takeScreenshot: after-sync-tap
 - runFlow:
     when:
       visible: "No portal connected"
