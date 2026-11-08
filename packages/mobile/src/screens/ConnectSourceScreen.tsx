@@ -228,7 +228,12 @@ export function ConnectSourceScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      // Without this the first tap on Next/Save only dismisses the keyboard.
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel}>
           <Text style={styles.cancelText}>Cancel</Text>
