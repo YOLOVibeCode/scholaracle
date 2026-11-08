@@ -131,12 +131,29 @@ export interface IServerConfig {
  * @param config - Server configuration
  * @returns SendGrid configuration
  */
-/** Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay). */
+/**
+ * Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay).
+ * The library resets its base URL to api.sendgrid.com on every setApiKey call, and each
+ * email sender calls setApiKey in its constructor (and some routes per request), so a
+ * one-time setDefaultRequest is silently undone. Re-apply it after every setApiKey.
+ */
 export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined): void {
   if (!baseUrl) return;
-  const client = (mail as { client?: { setDefaultRequest(key: 'baseUrl', value: string): void } })
-    .client;
-  client?.setDefaultRequest('baseUrl', baseUrl);
+  const m = mail as {
+    client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+    setApiKey?: (key: string) => void;
+  };
+  const client = m.client;
+  if (!client) return;
+  const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
+  const original = m.setApiKey?.bind(m);
+  if (original) {
+    m.setApiKey = (key: string): void => {
+      original(key);
+      apply();
+    };
+  }
+  apply();
 }
 
 function getSendGridConfig(config: IServerConfig): {
