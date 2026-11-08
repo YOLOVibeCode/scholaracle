@@ -12,6 +12,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 import { COMPANION_DEV_SEED } from './companionDevSeed.generated';
+import { buildCredentialKey } from '../sources/ConnectedSourceStore';
 
 const DEV_SEED_FLAG = 'slc_dev_creds_seeded_v1';
 
@@ -25,8 +26,8 @@ export interface ICompanionDevPortalSeed {
 }
 
 function credentialKey(provider: string, baseUrl: string): string {
-  const domain = baseUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
-  return `slc_creds_${provider}_${domain}`;
+  // Same rules as buildCredentialKey in ConnectedSourceStore: SecureStore-safe.
+  return buildCredentialKey(provider, baseUrl);
 }
 
 function seedFromProcessEnv(): ICompanionDevPortalSeed | null {
