@@ -180,7 +180,7 @@ export default defineConfig({
     // Fake Aeries/Skyward portal + scraper recipes (no app stack; needs e2e-fake-portal on 2855)
     {
       name: 'fake-portal',
-      testMatch: /fake-portal-recipes\.spec\.ts/,
+      testMatch: /fake-portal-recipes.*\.spec\.ts/,
       dependencies: [],
       fullyParallel: false,
       workers: 1,
@@ -196,7 +196,7 @@ export default defineConfig({
       ? [
           {
             command:
-              'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
+              'pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/logger build && pnpm --filter @scholaracle/scraper-core build && SCHOLARMANCY_EXTENSION_E2E=1 pnpm --filter @scholaracle/browser-extension build && FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
             url: 'http://127.0.0.1:2855/',
             reuseExistingServer: !process.env.CI,
             timeout: 120 * 1000,
@@ -208,10 +208,10 @@ export default defineConfig({
         ? [
             {
               command:
-                'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
+                'pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/logger build && pnpm --filter @scholaracle/scraper-core build && SCHOLARMANCY_EXTENSION_E2E=1 pnpm --filter @scholaracle/browser-extension build && FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
               url: 'http://127.0.0.1:2855/',
               reuseExistingServer: !process.env.CI,
-              timeout: 120 * 1000,
+              timeout: 180 * 1000,
               stdout: 'pipe',
               stderr: 'pipe',
             },
