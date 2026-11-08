@@ -9,7 +9,7 @@ appId: com.scholarmancy.app
 # kills the new process and leaves the app on its splash screen. Relaunch until the
 # sign-in screen shows.
 - retry:
-    maxRetries: 2
+    maxRetries: 3
     commands:
       - launchApp:
           clearState: true
