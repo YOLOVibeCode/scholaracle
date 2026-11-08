@@ -331,6 +331,18 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
   const bindingRepository = new SlcBindingRepository(config.database);
+  // Sources are listed from portal-account bindings (#93), but a binding can exist
+  // before the first ingest adds the source to student.dataSources. Accept either, or
+  // the runs routes 404 a source the list just returned and the app dashboard fails.
+  const studentHasSource = async (
+    student: { dataSources: readonly { id?: string }[]; dataUserId(): string },
+    studentId: string,
+    sourceId: string
+  ): Promise<boolean> => {
+    if (student.dataSources.some((ds) => ds.id === sourceId)) return true;
+    const bindings = await bindingRepository.findByStudentId(student.dataUserId(), studentId);
+    return bindings.some((b) => b.sourceId === sourceId);
+  };
   const portalAccountRepository = new PortalAccountRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
@@ -3578,7 +3590,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3616,7 +3628,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3692,7 +3704,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
