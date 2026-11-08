@@ -88,6 +88,11 @@ build_app() {
     xcrun simctl install "$ios_device" "$app"
   else
     export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=2g"
+    # E2E builds only: the fake portal is plain http (10.0.2.2:2855), which Android
+    # blocks by default (ERR_CLEARTEXT_NOT_PERMITTED). Shipped builds never get this.
+    npx expo prebuild --platform android --no-install >/dev/null
+    sed -i.bak 's/<application /<application android:usesCleartextTraffic="true" /' \
+      android/app/src/main/AndroidManifest.xml && rm -f android/app/src/main/AndroidManifest.xml.bak
     npx expo run:android --variant release --no-bundler
   fi
 }

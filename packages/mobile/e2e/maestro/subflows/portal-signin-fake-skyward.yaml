@@ -12,5 +12,8 @@ appId: com.scholarmancy.app
 - inputText:
     text: ${MAESTRO_PORTAL_PASSWORD}
     label: Type portal password
-- hideKeyboard
+# hideKeyboard fails inside a WebView on iOS; tap the page title to dismiss it instead.
+- tapOn:
+    text: 'Fake Skyward'
+    optional: true
 - tapOn: 'Sign in'
