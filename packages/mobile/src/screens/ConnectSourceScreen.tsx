@@ -266,8 +266,12 @@ export function ConnectSourceScreen({
               setUrlError(null);
             }}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="url"
             returnKeyType="next"
+            // The field starts as a template URL; select it so typing replaces it
+            // instead of leaving the template's tail after the cursor.
+            selectTextOnFocus
             onSubmitEditing={handleUrlNext}
             testID="input-connect-url"
           />

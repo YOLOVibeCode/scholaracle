@@ -6,8 +6,11 @@ appId: com.scholarmancy.app
     id: button-provider-${MAESTRO_PORTAL_PROVIDER}
 - tapOn:
     id: input-connect-url
-- eraseText: 200
+# The field selects its template URL on focus; erase clears it before typing.
+- eraseText: 300
 - inputText: ${MAESTRO_PORTAL_URL}
+- assertVisible:
+    text: ${MAESTRO_PORTAL_URL}
 - tapOn:
     id: button-connect-url-next
 - tapOn:
