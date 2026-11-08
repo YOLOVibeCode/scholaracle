@@ -11,12 +11,15 @@ import { describeSyncFailure, type ISyncFailureView } from '../scraper/loginDete
 import { WebViewPageDriver } from '../scraper/WebViewPageDriver';
 import { WebViewAssetHost } from '../scraper/WebViewAssetHost';
 import { apiClient } from '../api/client';
+import type { IConnectedSource } from '../sources/ConnectedSourceStore';
+import { ensureBindingAfterSync } from '../sources/ensureBindingAfterSync';
 import { runLedger } from '../ledger/RunLedger';
 import type { ISyncOrchestratorConfig } from '../scraper/SyncOrchestrator';
 
 interface ISyncAllItem {
   readonly config: ISyncOrchestratorConfig;
   readonly studentNameHint: string;
+  readonly connectedSource: IConnectedSource;
 }
 
 interface ISyncAllScreenProps {
@@ -109,6 +112,14 @@ export function SyncAllScreen({
             apiBaseUrl: apiClient.baseUrlValue,
           })
         );
+        try {
+          await ensureBindingAfterSync({
+            source: item.connectedSource,
+            registrar: apiClient,
+          });
+        } catch {
+          // Binding registration is best-effort after a successful sync.
+        }
         hasPortalSession.current = true;
         if (index < items.length - 1) {
           setQueueIndex(index + 1);

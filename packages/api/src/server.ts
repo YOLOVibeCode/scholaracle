@@ -23,6 +23,7 @@ import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
+import { backfillBindingsOnBoot } from './bootstrap/backfillBindingsOnBoot';
 import { rekeyAdapterIdsOnBoot } from './bootstrap/rekeyAdapterIdsOnBoot';
 import {
   AuthService,
@@ -719,6 +720,9 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   // listen so health checks pass while it works; failures are logged, never fatal.
   void rekeyAdapterIdsOnBoot(database, logger).catch((err: unknown) => {
     logger.error({ err }, 'rekey-adapter-ids on boot failed');
+  });
+  void backfillBindingsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'backfill-bindings on boot failed');
   });
 
   // Graceful shutdown: stop accepting connections, then exit. Railway sends
