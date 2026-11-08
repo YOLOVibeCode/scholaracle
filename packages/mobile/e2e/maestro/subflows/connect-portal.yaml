@@ -26,6 +26,11 @@ appId: com.scholarmancy.app
 - hideKeyboard
 - tapOn:
     id: button-connect-save
+# Saving shows a "Connected!" confirmation before returning to the dashboard.
+- extendedWaitUntil:
+    visible: "Connected!"
+    timeout: 20000
+- tapOn: "OK"
 - extendedWaitUntil:
     visible:
       id: button-sync
