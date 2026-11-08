@@ -1,14 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../../pages/login.page';
 import { TEST_USERS } from '../../fixtures/test-data';
+import { backendApiRoutePattern } from '../../fixtures/api-base';
 
 /**
  * Session expired: when API returns 401, client clears token and redirects to login with reason.
  */
 test.describe('Session Expired', () => {
-  test('SESSION-001: 401 redirects to login with session-expired message @local-only', async ({
-    page,
-  }) => {
+  test('SESSION-001: 401 redirects to login with session-expired message', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     const user = TEST_USERS.parent;
@@ -23,7 +22,7 @@ test.describe('Session Expired', () => {
 
     // Simulate expired session: first data request and every refresh return 401 so client redirects to login
     let firstDataRequestDone = false;
-    await page.route('**/api/**', async (route) => {
+    await page.route(backendApiRoutePattern(), async (route) => {
       const url = route.request().url();
       const isRefresh = url.includes('/auth/refresh');
       if (isRefresh) {
