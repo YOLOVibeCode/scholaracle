@@ -98,12 +98,18 @@ export function StudentsScreen({
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={students.length === 0 ? styles.emptyContainer : undefined}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => onSelectStudent(item)}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => onSelectStudent(item)}
+            testID="card-student"
+          >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={styles.cardInfo}>
-              <Text style={styles.cardName}>{item.name}</Text>
+              <Text style={styles.cardName} testID="text-student-name">
+                {item.name}
+              </Text>
               <Text style={styles.cardGrade}>
                 {item.grade != null ? `Grade ${item.grade}` : ''}
                 {item.grade != null && item.stats?.currentGPA != null ? '  ·  ' : ''}

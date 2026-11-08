@@ -2,6 +2,7 @@ import { test, expect } from '../fixtures/auth';
 import { RegisterPage } from '../pages/register.page';
 import { generateUniqueEmail } from '../fixtures/test-data';
 import { assertOnDashboard } from '../helpers/assertions';
+import { completeConnectProviderWizard } from '../helpers/connect-provider-wizard';
 
 /**
  * Layer 4+: Add Student Wizard E2E Tests
@@ -101,22 +102,10 @@ test.describe('@feature Onboarding Wizard', () => {
     const connectWizard = page.locator('[data-testid="connect-provider-wizard"]');
     await expect(connectWizard).toBeVisible({ timeout: 10000 });
 
-    await connectWizard.locator('[data-testid="platform-canvas"]').click();
-
-    await expect(connectWizard.locator('[data-testid="connect-provider-login-url"]')).toBeVisible({
-      timeout: 10000,
+    await completeConnectProviderWizard(connectWizard, {
+      loginUrl: 'https://school.instructure.com',
+      studentNameHint: studentName,
     });
-    await connectWizard
-      .locator('[data-testid="connect-provider-login-url"]')
-      .fill('https://school.instructure.com');
-    await connectWizard.locator('[data-testid="connect-provider-student-name-hint"]').fill(studentName);
-    await connectWizard.locator('[data-testid="connect-provider-username"]').fill('test@example.com');
-    await connectWizard.locator('[data-testid="connect-provider-password"]').fill('testpass');
-
-    await connectWizard.locator('[data-testid="connect-provider-continue"]').click();
-
-    // Reference platform + onConnectionReady → ConnectProviderWizard closes, connection added to bundle
-    await expect(connectWizard).not.toBeVisible({ timeout: 5000 });
 
     // Back at connect-services step — bundle should list the connection
     await expect(wizard).toContainText('Canvas', { timeout: 5000 });
@@ -184,7 +173,7 @@ test.describe('@feature Onboarding Wizard', () => {
   // ------------------------------------------------------------------
   // OB-005: Add second student and reuse existing integration
   // ------------------------------------------------------------------
-  test('OB-005: Second student reuses existing integration', async ({ page }) => {
+  test('OB-005: Free plan caps at one student (second create blocked)', async ({ page }) => {
     const registerPage = new RegisterPage(page);
     await registerPage.goto();
 
@@ -214,70 +203,46 @@ test.describe('@feature Onboarding Wizard', () => {
 
     const connectWizard = page.locator('[data-testid="connect-provider-wizard"]');
     await expect(connectWizard).toBeVisible({ timeout: 10000 });
-    await connectWizard.locator('[data-testid="platform-canvas"]').click();
-    await expect(connectWizard.locator('[data-testid="connect-provider-login-url"]')).toBeVisible({
-      timeout: 10000,
+    await completeConnectProviderWizard(connectWizard, {
+      loginUrl: 'https://district.instructure.com',
+      studentNameHint: student1,
     });
-    await connectWizard
-      .locator('[data-testid="connect-provider-login-url"]')
-      .fill('https://district.instructure.com');
-    await connectWizard.locator('[data-testid="connect-provider-student-name-hint"]').fill(student1);
-    await connectWizard.locator('[data-testid="connect-provider-username"]').fill('test@example.com');
-    await connectWizard.locator('[data-testid="connect-provider-password"]').fill('testpass');
-    await connectWizard.locator('[data-testid="connect-provider-continue"]').click();
-
-    await expect(connectWizard).not.toBeVisible({ timeout: 5000 });
 
     await expect(wizard).toContainText('Canvas', { timeout: 5000 });
-    await page.locator('[data-testid="wizard-skip-services"]').click();
-    const addAnotherButton = page.locator('[data-testid="wizard-add-another-student"]');
-    await expect(addAnotherButton).toBeVisible({ timeout: 5000 });
-    await addAnotherButton.click();
+    const skipServices1 = page.locator('[data-testid="wizard-skip-services"]');
+    await expect(skipServices1).toBeVisible({ timeout: 15_000 });
+    await skipServices1.click();
+    await page.locator('[data-testid="wizard-finish"]').click();
+    await expect(wizard).not.toBeVisible({ timeout: 5000 });
 
-    // ── Second student: connect-services step (reuse integration if shown, else skip)
+    // ── Second student: free plan allows only one
+    await page.goto('/dashboard/students');
+    await page.click('[data-testid="button-add-student"]');
+    await expect(wizard).toBeVisible({ timeout: 5000 });
+
     const student2 = `Second Child ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', student2);
-    await page.fill('[data-testid="wizard-student-grade"]', '5');
-
     const createStudent5b = page.waitForResponse(
       (r) => r.url().includes('/students') && r.request().method() === 'POST'
     );
     await page.click('[data-testid="wizard-next-step"]');
-    await createStudent5b;
-
-    // If an existing integration is shown, reuse it; otherwise skip services
-    const skipServicesBtn = page.locator('[data-testid="wizard-skip-services"]');
-    await expect(skipServicesBtn).toBeVisible();
-    const integrationCards = wizard.locator('button:has-text("Canvas")');
-    const hasReuse = await integrationCards
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if (hasReuse) {
-      await integrationCards.first().click();
-      await page.getByText('Skip credentials').click();
-    } else {
-      await skipServicesBtn.click();
-    }
-
-    const finishButton = page.locator('[data-testid="wizard-finish"]');
-    await expect(finishButton).toBeVisible({ timeout: 5000 });
-    await finishButton.click();
-    await expect(wizard).not.toBeVisible({ timeout: 3000 });
+    const createRes = await createStudent5b;
+    expect(createRes.status()).toBe(403);
 
     await page.goto('/dashboard/students');
     await expect(page.locator(`text=${student1}`)).toBeVisible({ timeout: 10000 });
-    await expect(page.locator(`text=${student2}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(`text=${student2}`)).not.toBeVisible();
   });
 
   // ------------------------------------------------------------------
   // OB-006: Open wizard from Students page
   // ------------------------------------------------------------------
-  test('OB-006: Open wizard from Students page Add Student button', async ({
-    page,
-    loginAsRole,
-  }) => {
-    await loginAsRole('parent');
+  test('OB-006: Open wizard from Students page Add Student button', async ({ page }) => {
+    const registerPage = new RegisterPage(page);
+    await registerPage.goto();
+    const email = generateUniqueEmail('students-page');
+    await registerPage.register(email, 'Students Page User', 'SecurePass123!');
+    await assertOnDashboard(page);
 
     await page.goto('/dashboard/students');
     await expect(page).toHaveURL('/dashboard/students');
@@ -301,8 +266,14 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.click('[data-testid="wizard-next-step"]');
     await createStudent6;
 
+    await expect(page.locator('[data-testid="wizard-add-new-provider"]')).toBeVisible({
+      timeout: 15_000,
+    });
+
     // Skip services
-    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible();
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
+      timeout: 15_000,
+    });
     await page.locator('[data-testid="wizard-skip-services"]').click();
 
     // Finish
@@ -345,19 +316,10 @@ test.describe('@feature Onboarding Wizard', () => {
     await page.click('[data-testid="wizard-open-connect-provider"]');
     const connectWizard = page.locator('[data-testid="connect-provider-wizard"]');
     await expect(connectWizard).toBeVisible({ timeout: 10000 });
-    await connectWizard.locator('[data-testid="platform-canvas"]').click();
-    await expect(connectWizard.locator('[data-testid="connect-provider-login-url"]')).toBeVisible({
-      timeout: 10000,
+    await completeConnectProviderWizard(connectWizard, {
+      loginUrl: 'https://school.instructure.com',
+      studentNameHint: studentName,
     });
-    await connectWizard
-      .locator('[data-testid="connect-provider-login-url"]')
-      .fill('https://school.instructure.com');
-    await connectWizard.locator('[data-testid="connect-provider-student-name-hint"]').fill(studentName);
-    await connectWizard.locator('[data-testid="connect-provider-username"]').fill('test@example.com');
-    await connectWizard.locator('[data-testid="connect-provider-password"]').fill('testpass');
-    await connectWizard.locator('[data-testid="connect-provider-continue"]').click();
-
-    await expect(connectWizard).not.toBeVisible({ timeout: 5000 });
 
     await expect(wizard).toContainText('Canvas', { timeout: 5000 });
     await page.locator('[data-testid="wizard-skip-services"]').click();

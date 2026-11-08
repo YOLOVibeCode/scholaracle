@@ -44,6 +44,8 @@ import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore
 import { sourceInviteApplier } from './src/install/applySourceInvite';
 import { apiClient } from './src/api/client';
 import { fetchPendingSyncRequestsOnAppOpen } from './src/sync/pendingSyncOnAppOpen';
+import { fetchServedSelectorPatchesOnAppOpen } from './src/sync/servedSelectorPatchesOnAppOpen';
+import { extractHostname } from './src/utils/urlNormalize';
 import {
   clampNavView,
   homeViewForRole,
@@ -176,6 +178,24 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn, studentMode, accountEpoch]);
 
   useEffect(() => {
+    if (!isLoggedIn || studentMode) return;
+    void (async (): Promise<void> => {
+      try {
+        const connectorToken = await apiClient.getOrMintConnectorToken();
+        const sources = await apiClient.listIngestConnectorSources(connectorToken);
+        const hosts = sources
+          .map((s) => (s.portalBaseUrl ? extractHostname(s.portalBaseUrl) : ''))
+          .filter((h) => h.length > 0);
+        await fetchServedSelectorPatchesOnAppOpen(hosts, (portalHost) =>
+          apiClient.getServedSelectorPatches(portalHost, connectorToken)
+        );
+      } catch {
+        // Best-effort: sync still works without remote patches.
+      }
+    })();
+  }, [isLoggedIn, studentMode, accountEpoch]);
+
+  useEffect(() => {
     if (!isLoggedIn) {
       setStudentCount(null);
       return;
@@ -222,7 +242,18 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn, accountEpoch, role]);
 
   const startSync = useCallback(async (student: IStudentListItem) => {
-    const source = await connectedSourceStore.getForStudentRecord(student);
+    // Never fail silently: this runs from a button as `void startSync()`, so a lookup
+    // that hangs or throws used to leave the parent tapping Sync with no response.
+    let source: IConnectedSource | null;
+    try {
+      source = await withTimeout(connectedSourceStore.getForStudentRecord(student), 5000);
+    } catch (err) {
+      Alert.alert(
+        'Could not start sync',
+        err instanceof Error ? err.message : 'Reading saved portals failed.'
+      );
+      return;
+    }
     if (!source) {
       Alert.alert(
         'No portal connected',
@@ -385,6 +416,10 @@ function AppContent(): React.ReactElement {
     return (
       <SyncScreen
         credentialKey={nav.syncSource.credentialKey}
+        connectedSource={{
+          ...nav.syncSource,
+          studentId: nav.syncSource.studentId ?? nav.student.id,
+        }}
         config={{
           provider: nav.syncSource.provider,
           adapterId: nav.syncSource.adapterId,
@@ -438,6 +473,7 @@ function AppContent(): React.ReactElement {
             adapterVersion: source.adapterVersion,
           },
           studentNameHint: source.studentExternalId,
+          connectedSource: source,
         }))}
         onDone={() => setNav({ view: 'settings' })}
         onCancel={() => setNav({ view: 'settings' })}
@@ -454,6 +490,22 @@ function AppContent(): React.ReactElement {
       onOpenSettings={() => setNav({ view: 'settings' })}
     />
   );
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out reading saved portals.')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    );
+  });
 }
 
 export default function App(): React.ReactElement {

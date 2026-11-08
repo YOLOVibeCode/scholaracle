@@ -65,6 +65,13 @@ export class RateLimitError extends AppError {
   }
 }
 
+/** 402 — LLM relay monthly budget exhausted. */
+export class AiBudgetError extends AppError {
+  constructor(message = 'LLM relay budget exceeded', details?: unknown) {
+    super(message, { status: 402, code: ERROR_CODES.AI_BUDGET, details });
+  }
+}
+
 /** 502 — an upstream service (Noctusoft store, SendGrid, Canvas, ...) failed. */
 export class ExternalServiceError extends AppError {
   constructor(message = 'External service error', details?: unknown, cause?: unknown) {

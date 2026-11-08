@@ -144,7 +144,9 @@ describe('matchHost', () => {
   });
 
   it('matches wildcard *.domain.com', () => {
-    expect(matchHost(['*.instructure.com'], 'https://exampleisd.instructure.com/courses')).toBe(true);
+    expect(matchHost(['*.instructure.com'], 'https://exampleisd.instructure.com/courses')).toBe(
+      true
+    );
     expect(matchHost(['*.myschool.edu'], 'https://grades.myschool.edu/')).toBe(true);
   });
 

@@ -4,12 +4,11 @@
 
 export type CanonicalBuiltinAdapterId = 'canvas' | 'skyward' | 'aeries';
 
-export const CANONICAL_BUILTIN_ADAPTER_IDS: Readonly<Record<string, CanonicalBuiltinAdapterId>> =
-  {
-    canvas: 'canvas',
-    skyward: 'skyward',
-    aeries: 'aeries',
-  };
+export const CANONICAL_BUILTIN_ADAPTER_IDS: Readonly<Record<string, CanonicalBuiltinAdapterId>> = {
+  canvas: 'canvas',
+  skyward: 'skyward',
+  aeries: 'aeries',
+};
 
 /** Alias key → canonical adapterId. Includes canonicals as identity entries. */
 export const BUILTIN_ADAPTER_ID_ALIASES: Readonly<Record<string, CanonicalBuiltinAdapterId>> = {

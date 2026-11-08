@@ -17,7 +17,11 @@ export interface IAiUsageCostRecord extends IAiUsageRecord {
   readonly repairCandidateId?: string;
 }
 
+import { summarizeAiUsageForAdmin, type IAiUsageAdminSummary } from './aiUsageAdminSummary';
+
 const COLLECTION_NAME = 'ai_usage';
+
+export type { IAiUsageAdminSummary, IAiUsageDistrictRepairCount } from './aiUsageAdminSummary';
 
 /**
  * Tracks per-user AI feature usage for rate limiting by plan tier.
@@ -47,5 +51,14 @@ export class AiUsageRepository {
       at: { $gte: windowStart },
     });
     return n;
+  }
+
+  /** Month-to-date spend and scraper-repair stats for the admin dashboard. */
+  async getAdminCostSummary(monthStartUtc: Date): Promise<IAiUsageAdminSummary> {
+    const rows = await this._collection
+      .find({ at: { $gte: monthStartUtc } })
+      .project({ feature: 1, at: 1, costUsd: 1, repairCandidateId: 1 })
+      .toArray();
+    return summarizeAiUsageForAdmin(rows, monthStartUtc);
   }
 }

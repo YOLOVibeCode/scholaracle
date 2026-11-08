@@ -47,7 +47,6 @@ describe('scraper-assist API contract (CLI client)', () => {
       'jti-cli-contract',
       'contract-device'
     );
-    // Since per-device tokens (#73), a token is honored only while its device holds that jti.
     await new ConnectorDeviceRepository(database).upsertActiveToken({
       userId: 'contract-cli-user',
       deviceId: 'contract-device',

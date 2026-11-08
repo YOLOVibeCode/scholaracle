@@ -23,6 +23,8 @@ import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
+import { backfillBindingsOnBoot } from './bootstrap/backfillBindingsOnBoot';
+import { rekeyAdapterIdsOnBoot } from './bootstrap/rekeyAdapterIdsOnBoot';
 import {
   AuthService,
   AdminAuthService,
@@ -68,6 +70,7 @@ import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
+import { createAdminAiRouter } from './routes/admin/ai';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
@@ -128,6 +131,31 @@ export interface IServerConfig {
  * @param config - Server configuration
  * @returns SendGrid configuration
  */
+/**
+ * Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay).
+ * The library resets its base URL to api.sendgrid.com on every setApiKey call, and each
+ * email sender calls setApiKey in its constructor (and some routes per request), so a
+ * one-time setDefaultRequest is silently undone. Re-apply it after every setApiKey.
+ */
+export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined): void {
+  if (!baseUrl) return;
+  const m = mail as {
+    client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+    setApiKey?: (key: string) => void;
+  };
+  const client = m.client;
+  if (!client) return;
+  const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
+  const original = m.setApiKey?.bind(m);
+  if (original) {
+    m.setApiKey = (key: string): void => {
+      original(key);
+      apply();
+    };
+  }
+  apply();
+}
+
 function getSendGridConfig(config: IServerConfig): {
   readonly apiKey: string;
   readonly fromEmail: string;
@@ -351,6 +379,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       );
     }
     const sendGrid = sgMail as unknown as MailService;
+    // Invite, password-reset and password-changed emails share this client. Point it at
+    // the Noctusoft relay here; it was only set inside initializeNotificationService, so
+    // these senders called api.sendgrid.com directly and every relay key got a 401.
+    applySendGridBaseUrl(sgMail, process.env['SENDGRID_BASE_URL']);
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
     const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
     const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(
@@ -646,6 +678,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
+    app.use('/api/admin/ai', createAdminAiRouter({ database, jwtSecret }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
@@ -710,6 +743,15 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
 
   const server = app.listen(port, () => {
     logger.info({ port }, 'server running');
+  });
+
+  // One-time data migration, opt-in via REKEY_ADAPTER_IDS (dry-run | apply). Runs after
+  // listen so health checks pass while it works; failures are logged, never fatal.
+  void rekeyAdapterIdsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'rekey-adapter-ids on boot failed');
+  });
+  void backfillBindingsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'backfill-bindings on boot failed');
   });
 
   // Graceful shutdown: stop accepting connections, then exit. Railway sends
