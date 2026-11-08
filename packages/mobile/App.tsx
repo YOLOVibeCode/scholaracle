@@ -405,6 +405,10 @@ function AppContent(): React.ReactElement {
     return (
       <SyncScreen
         credentialKey={nav.syncSource.credentialKey}
+        connectedSource={{
+          ...nav.syncSource,
+          studentId: nav.syncSource.studentId ?? nav.student.id,
+        }}
         config={{
           provider: nav.syncSource.provider,
           adapterId: nav.syncSource.adapterId,
@@ -458,6 +462,7 @@ function AppContent(): React.ReactElement {
             adapterVersion: source.adapterVersion,
           },
           studentNameHint: source.studentExternalId,
+          connectedSource: source,
         }))}
         onDone={() => setNav({ view: 'settings' })}
         onCancel={() => setNav({ view: 'settings' })}

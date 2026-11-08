@@ -34,6 +34,8 @@ import { WebViewPageDriver } from '../scraper/WebViewPageDriver';
 import { runSyncPipeline, SyncError, type ISyncProgress } from '../scraper/SyncOrchestrator';
 import { WebViewAssetHost } from '../scraper/WebViewAssetHost';
 import { apiClient } from '../api/client';
+import type { IConnectedSource } from '../sources/ConnectedSourceStore';
+import { ensureBindingAfterSync } from '../sources/ensureBindingAfterSync';
 import { runLedger } from '../ledger/RunLedger';
 import {
   clearSelectorPatchForHost,
@@ -61,6 +63,7 @@ interface ISyncConfig {
 interface ISyncScreenProps {
   readonly credentialKey: string;
   readonly config: ISyncConfig;
+  readonly connectedSource: IConnectedSource;
   onDone(): void;
   onCancel?(): void;
 }
@@ -85,6 +88,7 @@ function localFailure(message: string): ISyncFailureView {
 export function SyncScreen({
   credentialKey,
   config,
+  connectedSource,
   onDone,
   onCancel,
 }: ISyncScreenProps): React.ReactElement {
@@ -207,6 +211,15 @@ export function SyncScreen({
         })
       );
       if (cancelledRef.current) return;
+      try {
+        await ensureBindingAfterSync({
+          source: connectedSource,
+          registrar: apiClient,
+        });
+      } catch {
+        // Binding registration is best-effort after a successful sync.
+      }
+      if (cancelledRef.current) return;
       setSyncState('done');
     } catch (err: unknown) {
       if (cancelledRef.current) return;
@@ -224,7 +237,7 @@ export function SyncScreen({
         clearSelectorPatchForHost(config.institutionExternalId);
       }
     }
-  }, [config, checkLoginForm]);
+  }, [config, checkLoginForm, connectedSource]);
 
   /** A finished navigation on the portal: start only if no sign-in form is showing. */
   const handleLoginCandidate = useCallback(
