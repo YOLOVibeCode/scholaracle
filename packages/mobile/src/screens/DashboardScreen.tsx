@@ -68,7 +68,8 @@ export function DashboardScreen({
         const [assignmentsRes, gradesRes, runsRes, materialsRes] = await Promise.all([
           apiClient.getStudentAssignments(studentId),
           apiClient.getStudentGrades(studentId),
-          apiClient.getStudentRuns(studentId),
+          // Sync history is secondary: a failing runs request must not blank the dashboard.
+          apiClient.getStudentRuns(studentId).catch(() => []),
           apiClient.getStudentMaterials(studentId),
         ]);
         setData({
