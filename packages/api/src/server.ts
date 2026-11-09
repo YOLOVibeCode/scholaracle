@@ -88,6 +88,7 @@ import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
 import { createScrapersRepairRouter } from './routes/scrapers/repair';
+import { createScrapersRouter } from './routes/scrapers/registry';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -591,14 +592,21 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
     app.use('/api/assets', createAssetServeRouter(assetsConfig));
-    app.use(
-      '/api/scrapers',
+    const scrapersRoutes = express.Router();
+    scrapersRoutes.use(
+      createScrapersRouter({
+        database,
+        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
+      })
+    );
+    scrapersRoutes.use(
       createScrapersRepairRouter({
         database,
         jwtSecret,
         assetStore,
       })
     );
+    app.use('/api/scrapers', scrapersRoutes);
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
