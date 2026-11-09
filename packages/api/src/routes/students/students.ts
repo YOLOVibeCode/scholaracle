@@ -15,6 +15,7 @@ import {
   type IDataSource,
   type IDataSourceCredentials,
   type IStudentData,
+  type IOwnerAlertPrefs,
   type SharedAlertChannel,
   type Student,
 } from '@scholaracle/database';
@@ -69,6 +70,7 @@ import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing
 import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
 import { toIsoDate } from '../studio/studioTaskClassify';
 import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
+import { listStudentAlerts } from '../../services/alerts/alertInbox';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -1101,10 +1103,10 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       const body = req.body as {
         receiveAlerts?: boolean;
-        alertChannels?: readonly ('email' | 'sms')[];
+        alertChannels?: readonly SharedAlertChannel[];
         alertTypes?: readonly string[];
       };
-      const prefs = {
+      const prefs: IOwnerAlertPrefs = {
         receiveAlerts: body.receiveAlerts ?? true,
         alertChannels: body.alertChannels ?? ['email'],
         alertTypes: body.alertTypes,
@@ -3707,21 +3709,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
-      const allAlerts = await alertRepository.findByUserId(userId);
-      const alerts = allAlerts.filter((a) => a.studentId === studentId);
-
-      res.status(200).json(
-        alerts.map((a) => ({
-          id: (a as { id?: string }).id ?? '',
-          studentId: a.studentId,
-          type: a.type,
-          severity: a.severity,
-          message: a.message,
-          acknowledged: a.acknowledged ?? false,
-          acknowledgedAt: a.acknowledgedAt?.toISOString(),
-          createdAt: a.createdAt?.toISOString?.() ?? new Date().toISOString(),
-        }))
-      );
+      // Owner and accepted adults see the same rows; acknowledgement is the caller's (spec §4.5).
+      res.status(200).json(await listStudentAlerts(student, userId, { alertRepository }));
     })
   );
 

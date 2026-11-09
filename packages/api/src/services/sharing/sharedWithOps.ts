@@ -1,4 +1,4 @@
-import type { ISharedParent, Student } from '@scholaracle/database';
+import type { ISharedParent, SharedAlertChannel, Student } from '@scholaracle/database';
 
 /**
  * Pure helpers over `Student.sharedWith`. Every route that changes an entry goes through these so
@@ -13,6 +13,9 @@ export function findPendingEntry(student: Student, email: string): ISharedParent
   const target = normalizeEmail(email);
   return student.sharedWith.find((sp) => sp.email === target && sp.status === 'pending');
 }
+
+/** Channels a newly accepted adult gets when the invitation did not choose any (spec §8 Q4). */
+export const DEFAULT_ACCEPTED_ALERT_CHANNELS: readonly SharedAlertChannel[] = ['email', 'push'];
 
 /** Accepts the pending entry for `email`, binding it to `userId`. Null when nothing is pending. */
 export function acceptedSharedWith(
@@ -32,7 +35,7 @@ export function acceptedSharedWith(
     status: 'accepted',
     acceptedAt,
     receiveAlerts: current.receiveAlerts !== false,
-    alertChannels: current.alertChannels ?? ['email'],
+    alertChannels: current.alertChannels ?? DEFAULT_ACCEPTED_ALERT_CHANNELS,
   };
   return next;
 }

@@ -153,7 +153,8 @@ describe('POST /api/auth/magic with an invite-group token', () => {
       expect(s?.sharedWith[0]).toMatchObject({
         status: 'accepted',
         userId: user!['_id']!.toString(),
-        alertChannels: ['email'],
+        // Spec §8 Q4: a newly accepted adult defaults to email + push.
+        alertChannels: ['email', 'push'],
       });
     }
     expect((await students.findById(other))?.sharedWith[0]?.status).toBe('pending');
