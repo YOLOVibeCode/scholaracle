@@ -445,6 +445,11 @@ describe('/api/sharing (S1)', () => {
         .send({ inviteGroupId: inv.body.inviteGroupId });
       expect(accept.status).toBe(200);
       expect(accept.body.studentIds.sort()).toEqual([ava, christian].sort());
+      // The invitation chose no channels, so accepting applies the S3 default (spec §8 Q4).
+      for (const id of [ava, christian]) {
+        const [entry] = await sharedWithOf(id);
+        expect(entry).toMatchObject({ status: 'accepted', alertChannels: ['email', 'push'] });
+      }
 
       const list = await request(app)
         .get('/api/students')

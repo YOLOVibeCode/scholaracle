@@ -1,4 +1,10 @@
-import { Student } from './Student';
+import {
+  Student,
+  DEFAULT_OWNER_ALERT_CHANNELS,
+  DEFAULT_SHARED_ALERT_CHANNELS,
+  effectiveOwnerAlertPrefs,
+  effectiveSharedAlertPrefs,
+} from './Student';
 import type { ObjectId } from 'mongodb';
 
 describe('Student', () => {
@@ -505,10 +511,11 @@ describe('Student', () => {
       expect(new Student({ userId: 'solo', name: 'Solo' }).peopleCount()).toBe(1);
     });
 
-    it('getAllAlertRecipients drops the push channel until S3 delivers it', () => {
+    it("getAllAlertRecipients keeps the push channel and carries each adult's userId (S3)", () => {
       const withPush = new Student({
         userId: 'owner-1',
         name: 'Ava',
+        ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['email', 'push'] },
         sharedWith: [
           {
             userId: 'u',
@@ -520,8 +527,118 @@ describe('Student', () => {
           },
         ],
       });
-      const shared = withPush.getAllAlertRecipients('owner@example.com').find((r) => !r.isPrimary);
-      expect(shared?.channels).toEqual(['email']);
+      const out = withPush.getAllAlertRecipients('owner@example.com');
+      expect(out.find((r) => r.isPrimary)).toMatchObject({
+        userId: 'owner-1',
+        channels: ['email', 'push'],
+      });
+      expect(out.find((r) => !r.isPrimary)).toMatchObject({
+        userId: 'u',
+        channels: ['email', 'push'],
+      });
+    });
+  });
+
+  describe('alertPrefsFor (sharing-spec §4.5)', () => {
+    const student = new Student({
+      userId: 'owner-1',
+      name: 'Ava',
+      ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['sms'], alertTypes: ['grade_drop'] },
+      sharedWith: [
+        {
+          userId: 'admin-1',
+          email: 'admin@example.com',
+          role: 'guardian',
+          status: 'accepted',
+          invitedAt: new Date(),
+          receiveAlerts: false,
+          alertChannels: ['email', 'push'],
+        },
+        {
+          userId: 'member-1',
+          email: 'member@example.com',
+          role: 'parent',
+          status: 'accepted',
+          invitedAt: new Date(),
+        },
+        {
+          email: 'pending@example.com',
+          role: 'parent',
+          status: 'pending',
+          invitedAt: new Date(),
+        },
+      ],
+    });
+
+    it('returns the owner prefs for the owner', () => {
+      expect(student.alertPrefsFor('owner-1')).toEqual({
+        receiveAlerts: true,
+        alertChannels: ['sms'],
+        alertTypes: ['grade_drop'],
+      });
+    });
+
+    it('returns the accepted row prefs, defaulting channels to email + push', () => {
+      expect(student.alertPrefsFor('admin-1')).toMatchObject({
+        receiveAlerts: false,
+        alertChannels: ['email', 'push'],
+      });
+      expect(student.alertPrefsFor('member-1')).toMatchObject({
+        receiveAlerts: true,
+        alertChannels: ['email', 'push'],
+      });
+    });
+
+    it('returns null for pending invitees and strangers', () => {
+      expect(student.alertPrefsFor('stranger')).toBeNull();
+      expect(new Student({ userId: 'o', name: 'X' }).alertPrefsFor('nobody')).toBeNull();
+    });
+  });
+
+  describe('effective alert prefs (one default for storage, delivery and display)', () => {
+    it('owner defaults to email only unless set', () => {
+      expect(effectiveOwnerAlertPrefs(undefined)).toEqual({
+        receiveAlerts: true,
+        alertChannels: DEFAULT_OWNER_ALERT_CHANNELS,
+      });
+      expect(
+        effectiveOwnerAlertPrefs({
+          receiveAlerts: false,
+          alertChannels: ['sms', 'push'],
+          alertTypes: ['test'],
+        })
+      ).toEqual({ receiveAlerts: false, alertChannels: ['sms', 'push'], alertTypes: ['test'] });
+    });
+
+    it('a shared adult with no stored channels reads as email + push (spec §8 Q4)', () => {
+      expect(effectiveSharedAlertPrefs({})).toEqual({
+        receiveAlerts: true,
+        alertChannels: DEFAULT_SHARED_ALERT_CHANNELS,
+      });
+      expect(DEFAULT_SHARED_ALERT_CHANNELS).toEqual(['email', 'push']);
+      expect(
+        effectiveSharedAlertPrefs({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] })
+      ).toEqual({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] });
+    });
+
+    it('getAllAlertRecipients and alertPrefsFor read the same defaults', () => {
+      const student = new Student({
+        userId: 'owner-1',
+        name: 'Ava',
+        sharedWith: [
+          {
+            userId: 'm',
+            email: 'm@example.com',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+          },
+        ],
+      });
+      const shared = student.getAllAlertRecipients('o@example.com').find((r) => !r.isPrimary);
+      expect(shared?.channels).toEqual(['email', 'push']);
+      expect(student.alertPrefsFor('m')?.alertChannels).toEqual(['email', 'push']);
+      expect(student.alertPrefsFor('owner-1')?.alertChannels).toEqual(['email']);
     });
   });
 });

@@ -12,10 +12,13 @@ import {
   UserRepository,
   CourseTutorialOverrideRepository,
   PLAN_FEATURES,
+  DEFAULT_OWNER_ALERT_CHANNELS,
+  effectiveOwnerAlertPrefs,
+  effectiveSharedAlertPrefs,
   type IDataSource,
   type IDataSourceCredentials,
   type IStudentData,
-  type SharedAlertChannel,
+  type IOwnerAlertPrefs,
   type Student,
 } from '@scholaracle/database';
 import { GradeRiskService, resolveLlmConfig } from '@scholaracle/agents';
@@ -63,12 +66,17 @@ import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
 import { noopSink, registerNudgeRoutes } from './nudge';
 import type { ISharingEmailSender } from '../../services/sharing/SharingInviteEmailSender';
-import { SharingService, parseSharingInviteBody } from '../../services/sharing/SharingService';
+import {
+  SharingService,
+  parseChannels,
+  parseSharingInviteBody,
+} from '../../services/sharing/SharingService';
 import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
 import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing/sharingIdentity';
 import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
 import { toIsoDate } from '../studio/studioTaskClassify';
 import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
+import { listStudentAlerts } from '../../services/alerts/alertInbox';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -509,6 +517,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
     const smsStatuses = await Promise.all(
       student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
     );
+    // Defaults come from the Student model so what people see is what delivery uses.
     const contacts: ISharingPerson[] = [
       {
         userId: student.userId.toString(),
@@ -516,9 +525,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         status: 'accepted',
         isOwner: true,
         isAdmin: true,
-        receiveAlerts: student.ownerAlertPrefs?.receiveAlerts !== false,
-        alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
-        alertTypes: student.ownerAlertPrefs?.alertTypes,
+        ...effectiveOwnerAlertPrefs(student.ownerAlertPrefs),
       },
       ...student.sharedWith.map((sp, i): ISharingPerson => ({
         userId: sp.userId,
@@ -531,9 +538,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         invitedAt: sp.invitedAt?.toISOString?.(),
         acceptedAt: sp.acceptedAt?.toISOString?.(),
         isOwner: false,
-        receiveAlerts: sp.receiveAlerts !== false,
-        alertChannels: sp.alertChannels ?? ['email'],
-        alertTypes: sp.alertTypes,
+        ...effectiveSharedAlertPrefs(sp),
         smsStatus: smsStatuses[i],
         inviteGroupId: sp.inviteGroupId,
         invitedByUserId: sp.invitedByUserId,
@@ -716,9 +721,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         phone?: string;
         role?: string;
         receiveAlerts?: boolean;
-        alertChannels?: readonly SharedAlertChannel[];
+        alertChannels?: unknown;
         alertTypes?: readonly string[];
       };
+      // Reject unknown channels and deduplicate before anything is stored.
+      const alertChannels = parseChannels(body.alertChannels);
       const updatedShared = [...student.sharedWith];
       const current = updatedShared[idx]!;
       if (isOwnerOrAdmin) {
@@ -731,14 +738,14 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
               'parent' | 'guardian' | 'caregiver',
           }),
           ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
-          ...(body.alertChannels !== undefined && { alertChannels: body.alertChannels }),
+          ...(alertChannels !== undefined && { alertChannels }),
           ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
         };
       } else if (isSelf) {
         updatedShared[idx] = {
           ...current,
           ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
-          ...(body.alertChannels !== undefined && { alertChannels: body.alertChannels }),
+          ...(alertChannels !== undefined && { alertChannels }),
           ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
         };
       } else {
@@ -1101,12 +1108,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
       const body = req.body as {
         receiveAlerts?: boolean;
-        alertChannels?: readonly ('email' | 'sms')[];
+        alertChannels?: unknown;
         alertTypes?: readonly string[];
       };
-      const prefs = {
+      // Same validation as the sharing routes: only email | sms | push, deduplicated.
+      const prefs: IOwnerAlertPrefs = {
         receiveAlerts: body.receiveAlerts ?? true,
-        alertChannels: body.alertChannels ?? ['email'],
+        alertChannels: parseChannels(body.alertChannels) ?? DEFAULT_OWNER_ALERT_CHANNELS,
         alertTypes: body.alertTypes,
       };
       await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
@@ -3707,21 +3715,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Student not found');
       }
 
-      const allAlerts = await alertRepository.findByUserId(userId);
-      const alerts = allAlerts.filter((a) => a.studentId === studentId);
-
-      res.status(200).json(
-        alerts.map((a) => ({
-          id: (a as { id?: string }).id ?? '',
-          studentId: a.studentId,
-          type: a.type,
-          severity: a.severity,
-          message: a.message,
-          acknowledged: a.acknowledged ?? false,
-          acknowledgedAt: a.acknowledgedAt?.toISOString(),
-          createdAt: a.createdAt?.toISOString?.() ?? new Date().toISOString(),
-        }))
-      );
+      // Owner and accepted adults see the same rows; acknowledgement is the caller's (spec §4.5).
+      res.status(200).json(await listStudentAlerts(student, userId, { alertRepository }));
     })
   );
 

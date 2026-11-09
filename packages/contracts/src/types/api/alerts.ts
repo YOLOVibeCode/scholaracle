@@ -4,7 +4,11 @@
  * Server is source of truth: packages/api/src/routes/alerts-api/alerts-api.ts.
  */
 
-/** One alert row in GET /api/alerts-api (an array; no pagination or filters server-side). */
+/**
+ * One alert row in GET /api/alerts-api (an array; no pagination or filters server-side).
+ * The list holds alerts for every student the caller owns or has accepted a share of, trimmed
+ * to the caller's own `alertTypes` for that student when set.
+ */
 export interface IAlertListItem {
   readonly id: string;
   readonly studentId: string;
@@ -14,7 +18,9 @@ export interface IAlertListItem {
   /** 'critical' | 'warning' | 'info' | 'positive' in practice; open string on the wire. */
   readonly severity: string;
   readonly message: string;
+  /** Computed for the caller: acknowledgement is per person (sharing-spec §4.5). */
   readonly acknowledged: boolean;
+  /** When the caller acknowledged it. */
   readonly acknowledgedAt?: string;
   readonly createdAt: string;
 }

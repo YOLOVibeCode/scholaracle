@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { UserRepository } from '@scholaracle/database';
+import { AlertRepository, UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
@@ -1351,6 +1351,106 @@ describe('Students API Routes', () => {
     });
   });
 
+  describe('GET /api/students/:id/alerts for shared adults (sharing S3)', () => {
+    const MEMBER = 'member-alerts-s3@example.com';
+    let memberToken: string;
+    let memberUserId: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: MEMBER });
+      const member = await authService.register(MEMBER, 'password123', 'Member');
+      if (!member.token || !member.user) {
+        throw new Error('Failed to register member');
+      }
+      memberToken = member.token;
+      memberUserId = member.user.id;
+    });
+
+    it("an accepted adult sees the student's alerts (incl. ingest rows keyed by portal id), filtered by their alertTypes, acknowledged per person; a removed adult gets 404", async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Ava', grade: 10, studentId: 'skyward:12345' });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+      const ownerUserId = (
+        await database.collection('students').findOne({ _id: new ObjectId(studentId) })
+      )?.['userId'];
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            sharedWith: [
+              {
+                userId: memberUserId,
+                email: MEMBER,
+                role: 'parent',
+                status: 'accepted',
+                invitedAt: new Date(),
+                acceptedAt: new Date(),
+                alertTypes: ['grade_drop'],
+              },
+            ],
+          },
+        }
+      );
+      const alerts = new AlertRepository(database);
+      const owner = String(ownerUserId);
+      const gradeDrop = await alerts.create({
+        userId: owner,
+        studentId,
+        type: 'grade_drop',
+        severity: 'warning',
+        message: 'Math fell',
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+      });
+      await alerts.create({
+        userId: owner,
+        studentId,
+        type: 'missing_assignment',
+        severity: 'critical',
+        message: 'Lab 4 missing',
+      });
+      // A legacy row still keyed by the portal id: not part of the per-student view (it stays
+      // in the owner's inbox only until ALERT_STUDENT_ID_MIGRATION rewrites it).
+      await alerts.create({
+        userId: owner,
+        studentId: '12345',
+        type: 'missing_assignment',
+        severity: 'critical',
+        message: 'Legacy row',
+      });
+
+      const ownerRes = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ownerRes.status).toBe(200);
+      expect(ownerRes.body).toHaveLength(2);
+      expect(ownerRes.body.map((a: { message: string }) => a.message)).not.toContain('Legacy row');
+      expect(ownerRes.body.find((a: { id: string }) => a.id === gradeDrop.id)).toMatchObject({
+        acknowledged: true,
+      });
+
+      const memberRes = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(memberRes.status).toBe(200);
+      // alertTypes narrows the member to grade drops; the owner's legacy ack is not theirs.
+      expect(memberRes.body).toEqual([
+        expect.objectContaining({ id: gradeDrop.id, type: 'grade_drop', acknowledged: false }),
+      ]);
+
+      await database
+        .collection('students')
+        .updateOne({ _id: new ObjectId(studentId) }, { $set: { sharedWith: [] } });
+      const revoked = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(revoked.status).toBe(404);
+    });
+  });
+
   describe('GET /api/students/invites/pending', () => {
     it('should return 401 without token', async () => {
       const res = await request(app).get('/api/students/invites/pending');
@@ -1671,6 +1771,43 @@ describe('Students API Routes', () => {
         receiveAlerts: true,
         alertChannels: ['email', 'sms'],
       });
+    });
+
+    it('validates alertChannels like the sharing routes: unknown channels are rejected, duplicates collapse', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'fax'] });
+      expect(bad.status).toBe(400);
+      const notArray = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: 'email' });
+      expect(notArray.status).toBe(400);
+      expect(
+        (await database.collection('students').findOne({ _id: new ObjectId(studentId) }))?.[
+          'ownerAlertPrefs'
+        ]
+      ).toBeUndefined();
+
+      const deduped = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'email', 'push'] });
+      expect(deduped.status).toBe(200);
+      expect(deduped.body.ownerAlertPrefs.alertChannels).toEqual(['email', 'push']);
+
+      const defaulted = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true });
+      expect(defaulted.body.ownerAlertPrefs.alertChannels).toEqual(['email']);
     });
   });
 

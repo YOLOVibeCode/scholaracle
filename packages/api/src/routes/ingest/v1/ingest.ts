@@ -383,17 +383,26 @@ async function generateAlertsFromIngestedAssignments(params: {
     userId: params.userId,
   });
 
-  /** Map assignment studentExternalId -> Student MongoDB _id for notify job payloads. */
-  let studentIdByExternal: Map<string, string> | undefined;
-  if (params.queue) {
+  /**
+   * Map assignment studentExternalId -> Student MongoDB _id. Used for notify job payloads and
+   * for the `studentId` written on alert rows, so the inbox can match rows to students by
+   * Mongo id alone (sharing-spec §4.5). Keys: the student's raw portal id (`provider:ext` or
+   * bare), the bare id without its provider prefix, and the Mongo id itself.
+   */
+  const studentIdByExternal = new Map<string, string>();
+  {
     const students = await studentRepo.findOwnedByUserId(params.userId);
-    studentIdByExternal = new Map<string, string>();
     for (const s of students) {
       if (!s._id) continue;
-      // Map by external studentId when available
-      if (s.studentId) studentIdByExternal.set(s.studentId, s._id.toString());
+      const mongoId = s._id.toString();
+      const raw = s.studentId?.trim();
+      if (raw) {
+        studentIdByExternal.set(raw, mongoId);
+        const parts = raw.split(':', 2);
+        if (parts.length === 2 && parts[1]) studentIdByExternal.set(parts[1], mongoId);
+      }
       // Also map by MongoDB _id so lookups work even when external studentId is null
-      studentIdByExternal.set(s._id.toString(), s._id.toString());
+      studentIdByExternal.set(mongoId, mongoId);
     }
     // Wildcard: when only one student has data sources, use it as the default
     const studentsWithSources = students.filter(
@@ -405,7 +414,6 @@ async function generateAlertsFromIngestedAssignments(params: {
   }
 
   function resolveStudentIdForJob(studentExternalId: string): string | undefined {
-    if (!studentIdByExternal) return undefined;
     return (
       studentIdByExternal.get(studentExternalId) ??
       (studentIdByExternal.has('*') ? studentIdByExternal.get('*') : undefined)
@@ -548,16 +556,18 @@ async function generateAlertsFromIngestedAssignments(params: {
         institutionExternalId: doc['institutionExternalId'],
         termExternalId: doc['termExternalId'],
       };
+      // Alert rows carry the student's Mongo id whenever it resolves (the portal id only as a
+      // last resort), so the inbox matches them to students by Mongo id alone.
+      const jobStudentId = resolveStudentIdForJob(studentExtId);
       await alertRepo.create({
         userId: params.userId,
-        studentId: studentExtId,
+        studentId: jobStudentId ?? studentExtId,
         type: AlertType.MISSING_ASSIGNMENT,
         severity: 'critical',
         message: `Missing assignment: ${title}`,
         relatedData: enrichedMissingData,
       });
       if (params.queue) {
-        const jobStudentId = resolveStudentIdForJob(studentExtId);
         if (jobStudentId) {
           void params.queue
             .add(
@@ -615,16 +625,16 @@ async function generateAlertsFromIngestedAssignments(params: {
       institutionExternalId: doc['institutionExternalId'],
       termExternalId: doc['termExternalId'],
     };
+    const jobStudentId = resolveStudentIdForJob(studentExtId);
     await alertRepo.create({
       userId: params.userId,
-      studentId: studentExtId,
+      studentId: jobStudentId ?? studentExtId,
       type: AlertType.DEADLINE,
       severity: 'warning',
       message: `Due soon: ${title}`,
       relatedData: enrichedDeadlineData,
     });
     if (params.queue) {
-      const jobStudentId = resolveStudentIdForJob(studentExtId);
       if (jobStudentId) {
         void params.queue
           .add(

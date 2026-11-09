@@ -1,4 +1,8 @@
-import type { ISharedParent, Student } from '@scholaracle/database';
+import {
+  DEFAULT_SHARED_ALERT_CHANNELS,
+  type ISharedParent,
+  type Student,
+} from '@scholaracle/database';
 
 /**
  * Pure helpers over `Student.sharedWith`. Every route that changes an entry goes through these so
@@ -14,7 +18,11 @@ export function findPendingEntry(student: Student, email: string): ISharedParent
   return student.sharedWith.find((sp) => sp.email === target && sp.status === 'pending');
 }
 
-/** Accepts the pending entry for `email`, binding it to `userId`. Null when nothing is pending. */
+/**
+ * Accepts the pending entry for `email`, binding it to `userId`. Null when nothing is pending.
+ * Channels the invitation did not choose default to email + push (spec §8 Q4), the same value
+ * `effectiveSharedAlertPrefs` reads, so storage, delivery and display agree.
+ */
 export function acceptedSharedWith(
   student: Student,
   email: string,
@@ -32,7 +40,7 @@ export function acceptedSharedWith(
     status: 'accepted',
     acceptedAt,
     receiveAlerts: current.receiveAlerts !== false,
-    alertChannels: current.alertChannels ?? ['email'],
+    alertChannels: current.alertChannels ?? DEFAULT_SHARED_ALERT_CHANNELS,
   };
   return next;
 }
