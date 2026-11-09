@@ -18,6 +18,8 @@ export interface IAuthUserPayload {
   readonly name: string;
   readonly role: UserRole;
   readonly studentId?: string;
+  /** Present (true) only for an invitation-created account that has not set a password yet. */
+  readonly mustSetPassword?: boolean;
 }
 
 export interface IAuthTokenPayload {
@@ -126,6 +128,7 @@ function publicUserFromUser(user: User): IAuthUserPayload {
     name: user.name,
     role,
     ...(role === 'student' && user.studentId ? { studentId: user.studentId } : {}),
+    ...(user.mustSetPassword === true ? { mustSetPassword: true } : {}),
   };
 }
 
@@ -635,6 +638,8 @@ export class AuthService implements IAuthService {
       await this._userRepository.update(valid.userId, {
         passwordHash,
         forcePasswordReset: false,
+        // An invitation-created account has now chosen its own password.
+        mustSetPassword: false,
       });
       await this._passwordResetTokenStore.invalidateForUser(valid.userId);
       return { success: true };

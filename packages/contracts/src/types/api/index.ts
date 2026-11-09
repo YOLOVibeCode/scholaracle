@@ -14,3 +14,4 @@ export * from './household';
 export * from './billing';
 export * from './alerts';
 export * from './settings';
+export * from './sharing';

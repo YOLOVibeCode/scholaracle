@@ -228,9 +228,16 @@ describe('students API contract', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     const item = res.body[0] as Record<string, unknown>;
-    // IStudentListItem: id/userId/name required; grade/studentId/stats optional
-    assertKeys(item, ['id', 'userId', 'name'], ['grade', 'studentId', 'stats'], 'IStudentListItem');
+    // IStudentListItem: id/userId/name/access/peopleCount required; grade/studentId/stats optional
+    assertKeys(
+      item,
+      ['id', 'userId', 'name', 'access', 'peopleCount'],
+      ['grade', 'studentId', 'stats'],
+      'IStudentListItem'
+    );
     expect(item['id']).toBe(studentDbId);
+    expect(item['access']).toBe('owner');
+    expect(item['peopleCount']).toBe(1);
     expect(typeof item['grade']).toBe('number');
     expect(item['studentId']).toBe('contract-stu-1');
     assertKeys(

@@ -26,7 +26,9 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Sends contact-invitation emails via SendGrid.
+ * Legacy notification mail, now used only by the email-transfer confirmation flow
+ * (`baseUrl` there is the confirmation link). Sharing invitations are sent by
+ * services/sharing/SharingInviteEmailSender.ts, whose button opens the /magic route.
  * When apiKey is empty, sendInvite no-ops (for dev/test without SendGrid).
  */
 export class SendGridInviteEmailSender implements IInviteEmailSender {
@@ -51,12 +53,12 @@ export class SendGridInviteEmailSender implements IInviteEmailSender {
     if (!this._config.apiKey) {
       return;
     }
-    const registerLink = `${opts.baseUrl.replace(/\/$/, '')}/register?invite=${opts.studentId}&email=${encodeURIComponent(opts.inviteEmail)}`;
-    const dashboardLink = `${opts.baseUrl.replace(/\/$/, '')}/dashboard/invites`;
+    // The old /register?invite= and /dashboard/invites links pointed at pages that do not exist
+    // (sharing-spec D5); the one link offered here is the caller's own.
+    const link = escapeHtml(opts.baseUrl);
     const bodyHtml = `
-      <p>You've been invited to receive alerts for <strong>${escapeHtml(opts.studentName)}</strong> on Scholaracle.</p>
-      <p>If you already have an account, <a href="${dashboardLink}">log in and accept the invite</a>.</p>
-      <p>If you don't have an account yet, <a href="${registerLink}">create one here</a> to accept the invite.</p>
+      <p>You've been invited to receive alerts for <strong>${escapeHtml(opts.studentName)}</strong> on Scholarmancy.</p>
+      <p><a href="${link}">Open Scholarmancy</a> to continue.</p>
       <p>Once you accept, you can choose how you'd like to receive alerts (email, SMS, or both).</p>
     `.trim();
     const html = buildBrandedEmail({

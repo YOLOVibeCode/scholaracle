@@ -105,4 +105,17 @@ describe('User', () => {
       expect(user.studentId).toBeUndefined();
     });
   });
+
+  describe('mustSetPassword', () => {
+    const base = { email: 'invitee@example.com', passwordHash: 'random', name: 'Invitee' };
+
+    it('defaults to false', () => {
+      expect(new User(base).mustSetPassword).toBe(false);
+    });
+
+    it('is true only when stored as true', () => {
+      expect(new User({ ...base, mustSetPassword: true }).mustSetPassword).toBe(true);
+      expect(new User({ ...base, mustSetPassword: false }).mustSetPassword).toBe(false);
+    });
+  });
 });

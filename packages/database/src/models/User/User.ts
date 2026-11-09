@@ -115,6 +115,11 @@ export interface IUserData {
   readonly suspendedBy?: string;
   /** When true, client should redirect to reset-password on next login. */
   readonly forcePasswordReset?: boolean;
+  /**
+   * True for an account created by accepting a sharing invitation (random password the person
+   * never saw). Cleared wherever a password is set. Clients prompt "Set a password" once.
+   */
+  readonly mustSetPassword?: boolean;
   /** Email transfer request. When populated, a transfer is pending for this account. */
   readonly emailTransferRequest?: {
     readonly newEmail: string;
@@ -155,6 +160,8 @@ export class User {
   public readonly suspendedBy?: string;
   /** When true, client should redirect to reset-password on next login. */
   public readonly forcePasswordReset: boolean;
+  /** True until an invitation-created account sets its first password. */
+  public readonly mustSetPassword: boolean;
   /** Email transfer request. When populated, a transfer is pending for this account. */
   public readonly emailTransferRequest?: {
     readonly newEmail: string;
@@ -199,6 +206,7 @@ export class User {
     this.suspendedAt = data.suspendedAt;
     this.suspendedBy = data.suspendedBy;
     this.forcePasswordReset = data.forcePasswordReset ?? false;
+    this.mustSetPassword = data.mustSetPassword === true;
     this.emailTransferRequest = data.emailTransferRequest;
     this.createdAt = data.createdAt ?? new Date();
     this.updatedAt = data.updatedAt ?? new Date();

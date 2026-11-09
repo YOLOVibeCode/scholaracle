@@ -141,6 +141,23 @@ export class StudentRepository implements IStudentRepository {
   }
 
   /**
+   * Students that still hold a pending invitation of one invite group (one invitation across
+   * several students shares an `inviteGroupId`; sharing-spec §4.3).
+   */
+  public async findPendingByInviteGroupId(inviteGroupId: string): Promise<readonly Student[]> {
+    const documents = await this._collection
+      .find({ sharedWith: { $elemMatch: { inviteGroupId, status: 'pending' } } })
+      .toArray();
+
+    return documents.map((doc) => {
+      if (!doc._id) {
+        throw new Error('Document missing _id');
+      }
+      return new Student(doc, doc._id);
+    });
+  }
+
+  /**
    * Update student.
    *
    * @param id - Student ID

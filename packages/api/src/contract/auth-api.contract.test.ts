@@ -73,7 +73,7 @@ describe('auth API contract', () => {
     assertKeys(
       res.body.user as Record<string, unknown>,
       ['id', 'email', 'name', 'role'],
-      ['studentId'],
+      ['studentId', 'mustSetPassword'],
       'IAuthLoginResponse.user'
     );
     expect(res.body.user.role).toBe('parent');

@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { sharingRouter } from './routes/sharing/sharing';
 import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
@@ -46,6 +47,7 @@ import {
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridInviteEmailSender } from './services/InviteEmailSender';
 import { MagicLinkSender } from './services/provision/MagicLinkSender';
+import { SharingInviteEmailSender } from './services/sharing/SharingInviteEmailSender';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
 import { SourceInviteService } from './services/source-invite/SourceInviteService';
@@ -436,6 +438,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       { fromEmail: magicFromEmail, fromName: magicFromName },
       guardedSmsSender
     );
+    // Sharing invitations ride the same transport as magic links, so the accept button in the
+    // mail points at the /magic route this server actually serves (sharing-spec D5).
+    const sharingEmailSender = new SharingInviteEmailSender(magicEmailTransport, {
+      fromEmail: magicFromEmail,
+      fromName: magicFromName,
+    });
 
     app.use(
       '/api/portal-accounts',
@@ -452,8 +460,16 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl: baseUrl ?? '',
         jwtSecret,
         sendInviteEmail: inviteEmailSender,
+        sharingEmailSender,
         magicLinkSender,
       })
+    );
+    // Sharing across students (invite several at once, pending list, accept/decline, leave, mine).
+    app.use(
+      '/api/sharing',
+      authMiddleware(authService),
+      requireParent,
+      sharingRouter({ database, baseUrl, sharingEmailSender })
     );
     // Public: a co-parent opts in to texts themselves from a link the inviting parent shares.
     app.use('/api/sms/optin', smsOptInRouter({ database, guardedSmsSender }));

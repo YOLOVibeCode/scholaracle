@@ -6,6 +6,8 @@
  * packages/web/lib/api/students.ts — update it manually if this changes.
  */
 
+import type { StudentAccess } from './sharing';
+
 /** Student stats as serialized over JSON (dates become ISO strings). */
 export interface IStudentStatsWire {
   readonly currentGPA?: number;
@@ -25,6 +27,10 @@ export interface IStudentListItem {
   /** External (SIS/portal) student id — used only for ingest-op matching, never as a URL param. */
   readonly studentId?: string;
   readonly stats?: IStudentStatsWire;
+  /** What the caller may do with this student (owner / admin / member). */
+  readonly access: StudentAccess;
+  /** Adults who can see this student: the owner plus every accepted shared adult. */
+  readonly peopleCount: number;
 }
 
 /** Request body of POST /api/students. */
