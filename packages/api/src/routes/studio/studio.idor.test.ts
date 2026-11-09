@@ -13,7 +13,7 @@ import type { Db } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { parseTodayView } from '@scholaracle/contracts';
+import { parseTodayView, parseWeekView } from '@scholaracle/contracts';
 import { StudentRepository } from '@scholaracle/database';
 import { seedRouter } from '../seed/seed';
 import { studentsRouter } from '../students/students';
@@ -239,6 +239,43 @@ describe('student JWT — IDOR / COPPA leftovers', () => {
     expect(ids).toContain(CELL_DIVISION_ID);
     expect(ids).not.toContain(DECOY_ASSIGNMENT_ID);
     expect(ids).not.toContain(OTHER_ASSIGNMENT_ID);
+  });
+
+  it('Emma This week uses the owner partition: no login-userId decoy, no other household, no sibling', async () => {
+    const res = await request(app)
+      .get('/api/studio/week')
+      .set('Authorization', `Bearer ${emmaToken}`);
+    expect(res.status).toBe(200);
+    const view = parseWeekView(res.body);
+    const json = JSON.stringify(view);
+    expect(view.owed.map((i) => i.assignmentExternalId)).toContain(CELL_DIVISION_ID);
+    expect(json).not.toContain(DECOY_ASSIGNMENT_ID);
+    expect(json).not.toContain(OTHER_ASSIGNMENT_ID);
+    expect(json).not.toContain(LIAM_ASSIGNMENT_ID);
+    expect(json).not.toContain('demo-liam-');
+  });
+
+  it('a forged studentId claim for Liam is 403 on This week too', async () => {
+    const forged = jwt.sign(
+      {
+        userId: emmaUserId,
+        email: DEMO_STUDENT_USER_EMMA.email,
+        role: 'student',
+        studentId: liamMongoId,
+      },
+      JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+    const res = await request(app).get('/api/studio/week').set('Authorization', `Bearer ${forged}`);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+  });
+
+  it('a parent JWT is refused on This week', async () => {
+    const res = await request(app)
+      .get('/api/studio/week')
+      .set('Authorization', `Bearer ${parentToken}`);
+    expect(res.status).toBe(403);
   });
 
   it('Emma cannot read Liam’s assignment (same owner, different student) — 404', async () => {

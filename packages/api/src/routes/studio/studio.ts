@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { StudentRepository } from '@scholaracle/database';
-import { NotFoundError, ValidationError } from '@scholaracle/contracts';
-import { TodayGuide, WorkPack } from '@scholaracle/studio-core';
+import { StudentRepository, UserRepository, type Student } from '@scholaracle/database';
+import { NotFoundError, STUDENT_STATUSES, ValidationError } from '@scholaracle/contracts';
+import { TodayGuide, WeekGuide, WorkPack } from '@scholaracle/studio-core';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { resolveStudioStudent, slcStudentFilter, toStudentSession } from './studioScope';
 import { createMongoTodaySource } from './mongoTodaySource';
@@ -13,14 +13,34 @@ export interface IStudioRouterConfig {
   readonly database: Db;
   readonly baseUrl?: string;
   readonly jwtSecret?: string;
+  /** Request clock; one instant per request feeds both the adapter and the composer. Tests inject it. */
+  readonly clock?: () => Date;
 }
 
-const VALID_STUDENT_STATUSES = new Set(['not_started', 'working_on_it', 'need_help', 'done']);
+const VALID_STUDENT_STATUSES = new Set<string>(STUDENT_STATUSES);
+
+/**
+ * Day bucketing follows the household owner's zone (students carry none yet).
+ * Unknown owner or zone → undefined, and WeekGuide falls back to UTC.
+ */
+async function ownerTimeZone(
+  userRepository: UserRepository,
+  student: Student
+): Promise<string | undefined> {
+  try {
+    const owner = await userRepository.findById(student.userId);
+    return owner?.timezone;
+  } catch {
+    return undefined;
+  }
+}
 
 export function studioRouter(config: IStudioRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
+  const userRepository = new UserRepository(config.database);
   const baseUrl = config.baseUrl ?? '';
+  const clock = config.clock ?? ((): Date => new Date());
 
   router.get(
     '/today',
@@ -33,9 +53,33 @@ export function studioRouter(config: IStudioRouterConfig): Router {
           student,
           baseUrl,
           jwtSecret: config.jwtSecret,
+          now: clock(),
         })
       );
       const view = await guide.load(session);
+      res.status(200).json(view);
+    })
+  );
+
+  router.get(
+    '/week',
+    asyncHandler(async (req: Request, res: Response) => {
+      const student = await resolveStudioStudent(req, studentRepository);
+      const session = toStudentSession(student);
+      const timeZone = await ownerTimeZone(userRepository, student);
+      // One instant for the whole request: classification and day slots agree at midnight.
+      const now = clock();
+      const guide = new WeekGuide(
+        createMongoTodaySource({
+          database: config.database,
+          student,
+          baseUrl,
+          jwtSecret: config.jwtSecret,
+          now,
+        }),
+        { ...(timeZone !== undefined ? { timeZone } : {}) }
+      );
+      const view = await guide.load(session, now);
       res.status(200).json(view);
     })
   );
