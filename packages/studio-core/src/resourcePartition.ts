@@ -16,6 +16,16 @@ export interface IMaterialPartition {
   readonly courseMaterials: ICourseMaterial[];
 }
 
+/**
+ * A material with a file we host (cacheable by assetId + contentHash, or
+ * already carrying a signed downloadUrl). One definition for WorkPack, the
+ * week needs, and the API adapters.
+ */
+export function isHostedMaterial(material: ICourseMaterial): boolean {
+  if (material.downloadUrl != null && material.downloadUrl !== '') return true;
+  return Boolean(material.assetId) && Boolean(material.contentHash);
+}
+
 export function partitionMaterials(
   res: IStudentMaterialsResponse,
   assignmentExternalId: string

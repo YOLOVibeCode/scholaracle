@@ -19,6 +19,14 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentsCollection.createIndex({ userId: 1, studentId: 1 }, { unique: true, sparse: true });
   await studentsCollection.createIndex({ 'dataSources.id': 1 });
   await studentsCollection.createIndex({ 'dataSources.pluginId': 1 });
+  // Sharing (sharing-spec §4.3): pending invitations by email, and the students of one invite group.
+  await studentsCollection.createIndex({ 'sharedWith.email': 1 });
+  await studentsCollection.createIndex({ 'sharedWith.inviteGroupId': 1 }, { sparse: true });
+
+  // Sharing rate-limit counters: one row per (scope, UTC day); rows expire an hour after the day ends.
+  const sharingRateLimits = database.collection('sharing_rate_limits');
+  await sharingRateLimits.createIndex({ key: 1 }, { unique: true });
+  await sharingRateLimits.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
 
   // Grades collection indexes (if exists)
   const gradesCollection = database.collection('grades');
@@ -131,6 +139,9 @@ export async function createIndexes(database: Db): Promise<void> {
     { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
     { unique: true }
   );
+
+  const repairProposals = database.collection('repair_proposals');
+  await repairProposals.createIndex({ candidateId: 1, createdAt: -1 });
 
   const servedSelectorPatches = database.collection('served_selector_patches');
   await servedSelectorPatches.createIndex({ patchId: 1 }, { unique: true });
@@ -265,6 +276,13 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });
   await studentMagicTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   await studentMagicTokens.createIndex({ userId: 1, usedAt: 1 });
+
+  // Student "Need help": one student_needs_help alert per assignment per 24 h (student review §3.2)
+  const studentHelpRequests = database.collection('student_help_requests');
+  await studentHelpRequests.createIndex(
+    { studentId: 1, assignmentExternalId: 1 },
+    { unique: true }
+  );
 
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');

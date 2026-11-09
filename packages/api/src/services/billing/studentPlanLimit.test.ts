@@ -66,4 +66,38 @@ describe('studentPlanLimit', () => {
       maxStudents: 1,
     });
   });
+
+  it('does not count students shared with the account (sharing-spec §4.6)', async () => {
+    const coParent = new ObjectId().toHexString();
+    const owner = new ObjectId().toHexString();
+    const repo = new StudentRepository(database);
+    // Three students owned by someone else and shared with the free-plan co-parent.
+    for (const name of ['Ava', 'Christian', 'Gideon']) {
+      await repo.create({
+        userId: owner,
+        name,
+        studentId: name.toLowerCase(),
+        dataSources: [],
+        sharedWith: [
+          {
+            userId: coParent,
+            email: 'co@example.com',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+          },
+        ],
+      });
+    }
+
+    // Her own first child fits in the free cap of one.
+    await expect(
+      assertIngestWithinStudentPlanLimit(database, coParent, [assignmentOp('own-kid')])
+    ).resolves.toBeUndefined();
+
+    // Shared students are not "hers" for the newness check either.
+    expect(
+      await countNewStudentsRequiredByIngestOps(database, coParent, [assignmentOp('own-kid')])
+    ).toBe(1);
+  });
 });

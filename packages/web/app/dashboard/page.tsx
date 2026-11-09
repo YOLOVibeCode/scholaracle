@@ -124,7 +124,7 @@ export default function DashboardPage() {
                 {[1, 2, 3].map((i) => (
                   <StudentGradeStripRow
                     key={i}
-                    student={{ id: '', userId: '', name: '…', grade: '' }}
+                    student={{ id: '', userId: '', name: '…', grade: '', access: 'owner', peopleCount: 1 }}
                     grades={null}
                     loading
                     displayMode={gradeDisplayMode}

@@ -15,6 +15,9 @@ import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
   IStudentCreateRequest,
+  IStudentUpdateRequest,
+  ISubscriptionWire,
+  ISubscriptionResponse,
   IStudentGradesResponse,
   IStudentMaterialsResponse,
   IActionBoardResponse,
@@ -24,7 +27,10 @@ import type {
   IAuthRefreshResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
+  StudentStatus,
   IPushTokenRequest,
   IConnectorTokenResponse,
   IPendingSyncRequestsResponse,
@@ -40,8 +46,18 @@ import type {
   IPortalAccountUpsertResponse,
   IPortalBindingUpsertRequest,
   IPortalBindingUpsertResponse,
+  IAlertListItem,
+  IAlertActionResponse,
+  IUserSettingsResponse,
+  IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
-import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
+import {
+  parseStudentStatusUpdateResponse,
+  parseTodayView,
+  parseWeekView,
+  parseWorkPackView,
+  studioStatusPatchBody,
+} from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
@@ -185,6 +201,32 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  /**
+   * Sign in with Apple. No shared secret: the server verifies the identity token itself and
+   * takes the account id and email from it, so only the token and its raw nonce are sent.
+   */
+  async loginWithApple(
+    identityToken: string,
+    nonce: string,
+    name?: string
+  ): Promise<IAuthLoginResponse> {
+    const body: Record<string, unknown> = { appleIdentityToken: identityToken, appleNonce: nonce };
+    if (name !== undefined && name.trim() !== '') body['name'] = name.trim();
+    const res = await this._post<IAuthLoginResponse>('/api/auth/oauth/apple', body, false);
+    await this._persistSession(res, 'AppleLogin');
+    return res;
+  }
+
+  /**
+   * Permanently delete the signed-in parent account. Pass the password, or for accounts
+   * created with Apple (no known password) a fresh Apple identity token + nonce.
+   */
+  async deleteAccount(
+    proof: { password: string } | { appleIdentityToken: string; appleNonce: string }
+  ): Promise<void> {
+    await this._delete<{ success: boolean }>('/api/account', proof);
+  }
+
   async loginWithMagicToken(token: string): Promise<IAuthLoginResponse> {
     const res = await this._post<IAuthLoginResponse>('/api/auth/magic', { token }, false);
     await this._persistSession(res, 'MagicLogin');
@@ -313,6 +355,30 @@ export class ScholarmancyApiClient {
     return this._get<IStudentListItem[]>('/api/students');
   }
 
+  /** PUT /api/students/:id — the same name / grade / student-id edit the web makes. */
+  async updateStudent(id: string, request: IStudentUpdateRequest): Promise<IStudentListItem> {
+    return this._put<IStudentListItem>(`/api/students/${encodeURIComponent(id)}`, request);
+  }
+
+  /** DELETE /api/students/:id — removes the student record from the account. */
+  async deleteStudent(id: string): Promise<void> {
+    await this._delete<unknown>(`/api/students/${encodeURIComponent(id)}`, {});
+  }
+
+  /** DELETE /api/students/:id/sources/:sourceId — removes the source from the account. */
+  async deleteStudentSource(studentId: string, sourceId: string): Promise<void> {
+    await this._delete<unknown>(
+      `/api/students/${encodeURIComponent(studentId)}/sources/${encodeURIComponent(sourceId)}`,
+      {}
+    );
+  }
+
+  /** GET /api/billing/subscription — read-only plan info (no in-app purchase). */
+  async getSubscription(): Promise<ISubscriptionWire> {
+    const res = await this._get<ISubscriptionResponse>('/api/billing/subscription');
+    return res.subscription;
+  }
+
   async getConsents(): Promise<{ readonly serverAi: boolean }> {
     return this._get<{ readonly serverAi: boolean }>('/api/consents');
   }
@@ -326,11 +392,46 @@ export class ScholarmancyApiClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Alerts + notification preferences (parent account)
+  // ---------------------------------------------------------------------------
+
+  /** GET /api/alerts-api — all alerts for the user (no server-side filters or paging). */
+  async getAlerts(): Promise<IAlertListItem[]> {
+    return this._get<IAlertListItem[]>('/api/alerts-api');
+  }
+
+  /** POST /api/alerts-api/:id/acknowledge. */
+  async acknowledgeAlert(alertId: string): Promise<IAlertActionResponse> {
+    return this._post<IAlertActionResponse>(
+      `/api/alerts-api/${encodeURIComponent(alertId)}/acknowledge`,
+      {},
+      true
+    );
+  }
+
+  /** GET /api/settings — notification + alert preferences (server defaults filled in). */
+  async getNotificationSettings(): Promise<IUserSettingsResponse> {
+    return this._get<IUserSettingsResponse>('/api/settings');
+  }
+
+  /** PUT /api/settings — partial update; the server merges and returns the new settings. */
+  async updateNotificationSettings(
+    update: IUserSettingsUpdateRequest
+  ): Promise<IUserSettingsResponse> {
+    return this._put<IUserSettingsResponse>('/api/settings', update);
+  }
+
+  // ---------------------------------------------------------------------------
   // Student studio (IStudioApi — student JWT only)
   // ---------------------------------------------------------------------------
 
   async getStudioToday(): Promise<ITodayView> {
     return parseTodayView(await this._get<unknown>('/api/studio/today'));
+  }
+
+  /** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+  async getStudioWeek(): Promise<IWeekView> {
+    return parseWeekView(await this._get<unknown>('/api/studio/week'));
   }
 
   async getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView> {
@@ -341,13 +442,21 @@ export class ScholarmancyApiClient {
     );
   }
 
+  /**
+   * PATCH /api/studio/assignments/:id/status. The body comes from the shared
+   * builder (a non-empty note rides along with need_help); the answer says
+   * whether the adults were told, when the server is new enough to know.
+   */
   async patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-  ): Promise<void> {
-    await this._patch(
-      `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-      { status }
+    status: StudentStatus | null,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse> {
+    return parseStudentStatusUpdateResponse(
+      await this._patch<unknown>(
+        `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+        studioStatusPatchBody(status, note)
+      )
     );
   }
 

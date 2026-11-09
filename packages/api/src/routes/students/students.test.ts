@@ -533,6 +533,144 @@ describe('Students API Routes', () => {
         needsAttention?.items.some((i) => i.assignmentExternalId === 'a-expired-missing')
       ).toBe(false);
     });
+
+    it('puts a need_help item in needs_attention even when only due soon, with askedForHelpAt and the note (R3)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Help Student', grade: 8 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      const now = Date.now();
+      const dueIn24h = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+      const askedAt = new Date(now - 2 * 60 * 60 * 1000);
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'test',
+        adapterId: 'com.test',
+        externalId: 'course-help',
+        deletedAt: null,
+        record: { name: 'Math' },
+      });
+      await database.collection('slc_assignments').insertMany([
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          studentNote: "I don't get #7",
+          record: { title: 'Ch. 5 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-plain',
+          deletedAt: null,
+          studentStatus: 'working_on_it',
+          record: { title: 'Ch. 6 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help-turned-in',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          record: { title: 'Old ask', status: 'submitted', dueAt: dueIn24h },
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/action-board`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      const buckets = res.body.buckets as Array<{
+        id: string;
+        items: Array<{
+          assignmentExternalId: string;
+          studentStatus?: string;
+          askedForHelpAt?: string;
+          studentNote?: string;
+        }>;
+      }>;
+      const byId = (id: string) => buckets.find((b) => b.id === id)!;
+      const help = byId('needs_attention').items.find((i) => i.assignmentExternalId === 'a-help');
+      expect(help).toBeDefined();
+      expect(help!.studentStatus).toBe('need_help');
+      expect(help!.askedForHelpAt).toBe(askedAt.toISOString());
+      expect(help!.studentNote).toBe("I don't get #7");
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-help')).toBe(false);
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-plain')).toBe(true);
+      // Once the portal shows the work in, a stale ask no longer demands attention.
+      expect(
+        byId('needs_attention').items.some((i) => i.assignmentExternalId === 'a-help-turned-in')
+      ).toBe(false);
+    });
+  });
+
+  describe('PUT /api/students/:id/assignments/:externalId/status (parent side, R3)', () => {
+    async function seedAsk(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Put Student', grade: 7 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      await database.collection('slc_assignments').deleteMany({ externalId: 'a-put' });
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId: 'course-put',
+        externalId: 'a-put',
+        deletedAt: null,
+        studentStatus: 'need_help',
+        studentHelpRequestedAt: new Date(),
+        studentNote: 'stuck on #3',
+        studentNoteAt: new Date(),
+        record: { title: 'Put HW', status: 'not_started' },
+      });
+      return studentId;
+    }
+
+    it('rejects need_help with 400: only the student can ask for help', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'need_help' });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(JSON.stringify(res.body)).toMatch(/Only the student can ask for help/);
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentNote']).toBe('stuck on #3');
+    });
+
+    it('any other status is accepted and ends the ask (note and ask time cleared)', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'working_on_it' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, studentStatus: 'working_on_it' });
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentStatus']).toBe('working_on_it');
+      expect(doc?.['studentNote']).toBeUndefined();
+      expect(doc?.['studentNoteAt']).toBeUndefined();
+      expect(doc?.['studentHelpRequestedAt']).toBeUndefined();
+    });
   });
 
   describe('GET /api/students/:id/grade-history', () => {
@@ -1306,8 +1444,9 @@ describe('Students API Routes', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('should call sendInviteEmail when configured after successful invite', async () => {
-      const mockSendInvite = jest.fn().mockResolvedValue(undefined);
+    it('sends ONE sharing email with a working /magic link (single-student invite group)', async () => {
+      const sendInvite = jest.fn().mockResolvedValue(undefined);
+      const sendLeftNotice = jest.fn().mockResolvedValue(undefined);
       const appWithInvite = express();
       appWithInvite.use(express.json());
       appWithInvite.use(
@@ -1316,7 +1455,7 @@ describe('Students API Routes', () => {
         studentsRouter({
           database,
           baseUrl: 'http://test.example',
-          sendInviteEmail: { sendInvite: mockSendInvite },
+          sharingEmailSender: { sendInvite, sendLeftNotice },
         })
       );
 
@@ -1333,14 +1472,35 @@ describe('Students API Routes', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(mockSendInvite).toHaveBeenCalledTimes(1);
-      expect(mockSendInvite).toHaveBeenCalledWith({
-        to: 'parent@example.com',
-        studentName: 'Invite Email Student',
-        studentId,
-        inviteEmail: 'parent@example.com',
-        baseUrl: 'http://test.example',
+      expect(res.body.message).toBe('Invitation sent to parent@example.com');
+      expect(res.body.invite).toEqual({
+        email: 'parent@example.com',
+        role: 'parent',
+        status: 'pending',
       });
+      expect(typeof res.body.inviteGroupId).toBe('string');
+      expect(sendInvite).toHaveBeenCalledTimes(1);
+      const mail = sendInvite.mock.calls[0]![0] as {
+        to: string;
+        studentNames: string[];
+        inviteUrl: string;
+        baseUrl: string;
+        inviterName: string;
+      };
+      expect(mail.to).toBe('parent@example.com');
+      expect(mail.studentNames).toEqual(['Invite Email Student']);
+      expect(mail.inviteUrl).toMatch(/^http:\/\/test\.example\/magic\?token=/);
+      expect(mail.baseUrl).toBe('http://test.example');
+      expect(mail.inviterName).toBe('Students User');
+      // The entry carries the group and the inviter.
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const entry = (
+        stored?.['sharedWith'] as { inviteGroupId?: string; invitedByUserId?: string }[]
+      )[0]!;
+      expect(entry.inviteGroupId).toBe(res.body.inviteGroupId);
+      expect(entry.invitedByUserId).toBeDefined();
     });
   });
 
@@ -1515,17 +1675,22 @@ describe('Students API Routes', () => {
   });
 
   describe('POST /api/students/:id/contacts/accept', () => {
-    it('should return 404 when no pending invite for email', async () => {
+    it("refuses an email that is not the caller's, and returns 404 when the caller has no pending invite", async () => {
       const createRes = await request(app)
         .post('/api/students')
         .set('Authorization', `Bearer ${testToken}`)
         .send({ name: 'Student', grade: 9 });
       const studentId = createRes.body.id as string;
-      const res = await request(app)
+      const foreign = await request(app)
         .post(`/api/students/${studentId}/contacts/accept`)
         .set('Authorization', `Bearer ${testToken}`)
         .send({ email: 'nopending@example.com' });
-      expect(res.status).toBe(404);
+      expect(foreign.status).toBe(403);
+      const own = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+      expect(own.status).toBe(404);
     });
   });
 
@@ -1807,6 +1972,176 @@ describe('Students API Routes', () => {
       expect(second.status).toBe(403);
       expect(second.body.code).toBe('PLAN_LIMIT_REACHED');
       expect(second.body.currentPlan).toBe('free');
+    });
+  });
+
+  describe('sharing security (S0)', () => {
+    const CO = 'coparent-s0@example.com';
+    const STRANGER = 'stranger-s0@example.com';
+    let coToken: string;
+    let strangerToken: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: { $in: [CO, STRANGER] } });
+      await database.collection('audit_logs').deleteMany({ entityType: 'student_sharing' });
+      const co = await authService.register(CO, 'password123', 'Co Parent');
+      const stranger = await authService.register(STRANGER, 'password123', 'Stranger');
+      if (!co.token || !stranger.token) {
+        throw new Error('Failed to register sharing test users');
+      }
+      coToken = co.token;
+      strangerToken = stranger.token;
+    });
+
+    async function ownerCreatesStudentAndInvites(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Shared Kid', grade: 8 });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+      const inviteRes = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO, name: 'Co Parent', role: 'parent' });
+      expect(inviteRes.status).toBe(201);
+      return studentId;
+    }
+
+    it('nobody can accept an invitation addressed to someone else', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const hijack = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ email: CO });
+      expect(hijack.status).toBe(403);
+      const ownerTries = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO });
+      expect(ownerTries.status).toBe(403);
+      // A stranger with no invitation of their own gets "nothing pending", not someone else's invite.
+      const strangerOwn = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(strangerOwn.status).toBe(404);
+      const stillPending = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      expect((stillPending?.['sharedWith'] as { status: string }[])[0]?.status).toBe('pending');
+    });
+
+    it('the invitee accepts with no email in the body, sees the student, and an audit row is written', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const accept = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      expect(accept.status).toBe(200);
+      const list = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(list.status).toBe(200);
+      expect((list.body as { id: string }[]).map((s) => s.id)).toContain(studentId);
+      const audit = await database
+        .collection('audit_logs')
+        .find({ entityType: 'student_sharing', entityId: studentId })
+        .toArray();
+      expect(audit.map((a) => a['action']).sort()).toEqual(['sharing:accept', 'sharing:invite']);
+      // The audit store masks addresses; the actor is still identifiable by its first letter + domain.
+      expect(audit.find((a) => a['action'] === 'sharing:accept')?.['adminEmail']).toMatch(
+        /^c\*+@example\.com$/
+      );
+    });
+
+    it('pending invites are listed for the caller only; a query email is ignored', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const mine = await request(app)
+        .get('/api/students/invites/pending')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(mine.status).toBe(200);
+      expect((mine.body as { studentId: string }[]).map((i) => i.studentId)).toEqual([studentId]);
+      const peek = await request(app)
+        .get(`/api/students/invites/pending?email=${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`);
+      expect(peek.status).toBe(200);
+      expect(peek.body).toEqual([]);
+    });
+
+    it('a member cannot edit, remove, or manage sources; an admin can edit; only the owner removes', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      const asMember = (): request.Test => request(app).put(`/api/students/${studentId}`);
+      expect(
+        (await asMember().set('Authorization', `Bearer ${coToken}`).send({ name: 'X' })).status
+      ).toBe(403);
+      const removeAsMember = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsMember.status).toBe(403);
+      const addSource = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'canvas',
+          displayName: 'Canvas',
+          dataTypes: ['grades'],
+        });
+      expect(addSource.status).toBe(403);
+      // Someone with no access at all gets 404, not 403 (no existence leak).
+      const strangerEdit = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ name: 'X' });
+      expect(strangerEdit.status).toBe(404);
+      // Promote to admin: edit works, remove still does not.
+      const promote = await request(app)
+        .put(`/api/students/${studentId}/parents/${encodeURIComponent(CO)}/admin`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ isAdmin: true });
+      expect(promote.status).toBe(200);
+      const editAsAdmin = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ name: 'Renamed Kid' });
+      expect(editAsAdmin.status).toBe(200);
+      expect(editAsAdmin.body.name).toBe('Renamed Kid');
+      const removeAsAdmin = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsAdmin.status).toBe(403);
+      const removeAsOwner = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(removeAsOwner.status).toBe(200);
+    });
+
+    it('/parents/accept applies the same identity rule', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Parents Route Kid', grade: 5 });
+      const studentId = createRes.body.id as string;
+      const invite = await request(app)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: STRANGER, role: 'guardian' });
+      expect(invite.status).toBe(201);
+      const wrongPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ email: STRANGER });
+      expect(wrongPerson.status).toBe(403);
+      const rightPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(rightPerson.status).toBe(200);
     });
   });
 });

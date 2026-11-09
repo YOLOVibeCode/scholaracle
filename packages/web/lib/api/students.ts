@@ -4,6 +4,10 @@ export interface IStudent {
   readonly id: string;
   readonly userId: string;
   readonly name: string;
+  /** What the signed-in parent may do with this student (mirrors IStudentListItem.access). */
+  readonly access: 'owner' | 'admin' | 'member';
+  /** The owner plus every accepted shared adult (mirrors IStudentListItem.peopleCount). */
+  readonly peopleCount: number;
   readonly grade: string;
   readonly school?: string;
   readonly studentId?: string;
@@ -174,6 +178,10 @@ export interface IActionItem {
   readonly materials: readonly IActionAsset[];
   readonly studentStatus?: string;
   readonly lastNudgedAt?: string;
+  /** While studentStatus is need_help: when the student asked (ISO). */
+  readonly askedForHelpAt?: string;
+  /** While studentStatus is need_help: the student's optional note (at most 140 chars). */
+  readonly studentNote?: string;
 }
 
 export interface IActionBucket {

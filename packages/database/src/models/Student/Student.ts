@@ -48,6 +48,9 @@ export interface IStudentStats {
   readonly lastUpdated?: Date;
 }
 
+/** Alert channels a shared adult may choose. Delivery for `push` lands in sharing S3. */
+export type SharedAlertChannel = 'email' | 'sms' | 'push';
+
 /** A parent/guardian who has shared access to a student. */
 export interface ISharedParent {
   /** The user ID of the shared parent. Null if invite is still pending. */
@@ -70,10 +73,14 @@ export interface ISharedParent {
   readonly phone?: string;
   /** Whether to receive alerts (default true when accepted). */
   readonly receiveAlerts?: boolean;
-  /** Channels for alert delivery (default ['email']). */
-  readonly alertChannels?: readonly ('email' | 'sms')[];
+  /** Channels for alert delivery (default ['email']). `push` delivery arrives with sharing S3. */
+  readonly alertChannels?: readonly SharedAlertChannel[];
   /** Alert types to receive (undefined = all). */
   readonly alertTypes?: readonly string[];
+  /** Groups the entries one invitation created across several students (sharing-spec §4.3). */
+  readonly inviteGroupId?: string;
+  /** The owner or admin who sent the invitation. */
+  readonly invitedByUserId?: string;
   /** Email transfer request. When populated, a transfer is pending for this account. */
   readonly transferRequest?: {
     readonly newEmail: string;
@@ -209,7 +216,10 @@ export class Student {
     for (const sp of this.sharedWith) {
       if (sp.status !== 'accepted') continue;
       if (sp.receiveAlerts === false) continue;
-      const channels = sp.alertChannels ?? ['email'];
+      // Push fan-out to shared adults is S3; until then only email/SMS are deliverable channels.
+      const channels = (sp.alertChannels ?? ['email']).filter(
+        (c): c is 'email' | 'sms' => c === 'email' || c === 'sms'
+      );
       out.push({
         email: sp.email,
         phone: sp.phone,
@@ -266,5 +276,18 @@ export class Student {
     return this.sharedWith.some(
       (sp) => sp.status === 'accepted' && sp.userId === userId && sp.isAdmin === true
     );
+  }
+
+  /** The caller's level of access, or null when they have none (sharing-spec §4.1). */
+  public accessFor(userId: string): 'owner' | 'admin' | 'member' | null {
+    if (this.isOwner(userId)) return 'owner';
+    const row = this.sharedWith.find((sp) => sp.status === 'accepted' && sp.userId === userId);
+    if (!row) return null;
+    return row.isAdmin === true ? 'admin' : 'member';
+  }
+
+  /** Adults who can see this student: the owner plus every accepted shared adult. */
+  public peopleCount(): number {
+    return 1 + this.sharedWith.filter((sp) => sp.status === 'accepted').length;
   }
 }

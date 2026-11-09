@@ -14,8 +14,9 @@ import {
   PLAN_FEATURES,
   type IDataSource,
   type IDataSourceCredentials,
-  type ISharedParent,
   type IStudentData,
+  type SharedAlertChannel,
+  type Student,
 } from '@scholaracle/database';
 import { GradeRiskService, resolveLlmConfig } from '@scholaracle/agents';
 import {
@@ -29,6 +30,8 @@ import {
   type IActionBucket,
   type IActionBoardResponse,
   type IStudentListItem,
+  type ISharingPendingInvite,
+  type ISharingPerson,
   type IStudentGradesResponse,
   type ISourceListItem,
   type ITriggerSyncResponse,
@@ -37,7 +40,7 @@ import {
 } from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import type { IInviteEmailSender } from '../../services/InviteEmailSender';
+import type { IEmailTransferConfirmationSender } from '../../services/EmailTransferConfirmationSender';
 import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import {
@@ -56,19 +59,31 @@ import { buildMergedCourseScheduleMaps } from '../../services/courses/courseSche
 import { StudentProvisioner } from '../../services/provision/StudentProvisioner';
 import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLoginAudit';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
-import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
-import { createContactSmsOptIn } from '../../services/sms/contactSmsOptIn';
 import { noopSink, registerNudgeRoutes } from './nudge';
+import type { ISharingEmailSender } from '../../services/sharing/SharingInviteEmailSender';
+import { SharingService, parseSharingInviteBody } from '../../services/sharing/SharingService';
+import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
+import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing/sharingIdentity';
+import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
+import { toIsoDate } from '../studio/studioTaskClassify';
+import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
   readonly baseUrl?: string;
   /** JWT secret for signing asset download URLs. */
   readonly jwtSecret?: string;
-  /** Optional sender for contact-invitation emails. */
-  readonly sendInviteEmail?: IInviteEmailSender;
+  /** Sender for the two confirmation mails of a shared adult's email transfer. */
+  readonly emailTransferConfirmation?: IEmailTransferConfirmationSender;
+  /**
+   * The process-wide SharingService (built once in server.ts and shared with /api/sharing).
+   * When absent (tests), the router builds one from `sharingEmailSender` and `baseUrl`.
+   */
+  readonly sharing?: SharingService;
+  /** Sender for sharing invitations and owner notices; used only when `sharing` is absent. */
+  readonly sharingEmailSender?: ISharingEmailSender;
   /** Optional sink for parent nudges (student-only). Defaults to no-op. */
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
   /** Optional sender for magic login links (email + SMS). */
@@ -176,8 +191,23 @@ export interface IActivityTimelineResponse {
   readonly hasMore: boolean;
 }
 
-function getUserId(req: Request): string | null {
-  return (req as IAuthenticatedRequest).userId ?? null;
+// Identity helpers (getUserId / getUserEmail / requireOwnEmail) live in
+// services/sharing/sharingIdentity.ts and are shared with /api/sharing.
+
+/** Projection of a student for the list, create and update responses. */
+function toStudentListItem(student: Student, userId: string): IStudentListItem {
+  return {
+    id: student._id?.toString() ?? '',
+    userId: student.userId.toString(),
+    name: student.name,
+    grade: student.grade,
+    studentId: student.studentId,
+    stats: student.stats
+      ? { ...student.stats, lastUpdated: student.stats.lastUpdated?.toISOString() }
+      : undefined,
+    access: student.accessFor(userId) ?? 'member',
+    peopleCount: student.peopleCount(),
+  };
 }
 
 function percentToLetter(pct: number): string {
@@ -278,6 +308,13 @@ function buildActionAsset(
   };
 }
 
+/** need_help is an open ask; once the portal shows the work in, it is history. */
+function asksForHelp(item: IActionItem): boolean {
+  return (
+    item.studentStatus === 'need_help' && item.status !== 'submitted' && item.status !== 'graded'
+  );
+}
+
 function determineActionBucket(
   item: IActionItem,
   assignmentDocs: ActionBoardAssignmentDoc[],
@@ -304,6 +341,8 @@ function determineActionBucket(
     return 'needs_attention';
   }
   if (item.status === 'late') return 'needs_attention';
+  // A student who tapped "Need help" lands here even if the item is merely due soon (R3).
+  if (asksForHelp(item)) return 'needs_attention';
   if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
   if (
     dueAt != null &&
@@ -328,22 +367,40 @@ function determineActionBucket(
 // eslint-disable-next-line max-lines-per-function, complexity
 export function studentsRouter(config: IStudentsRouterConfig): Router {
   const router = Router();
+  const recordSharingEvent = createSharingAuditRecorder(config.database);
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
   const bindingRepository = new SlcBindingRepository(config.database);
+  // Sources are listed from portal-account bindings (#93), but a binding can exist
+  // before the first ingest adds the source to student.dataSources. Accept either, or
+  // the runs routes 404 a source the list just returned and the app dashboard fails.
+  const studentHasSource = async (
+    student: { dataSources: readonly { id?: string }[]; dataUserId(): string },
+    studentId: string,
+    sourceId: string
+  ): Promise<boolean> => {
+    if (student.dataSources.some((ds) => ds.id === sourceId)) return true;
+    const bindings = await bindingRepository.findByStudentId(student.dataUserId(), studentId);
+    return bindings.some((b) => b.sourceId === sourceId);
+  };
   const portalAccountRepository = new PortalAccountRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
   const subscriptionRepository = new SubscriptionRepository(config.database);
   const userRepository = new UserRepository(config.database);
-  const magicLoginLink = new MagicLoginLink({
-    database: config.database,
-    baseUrl: config.baseUrl ?? 'http://localhost:2800',
-  });
-  const contactSmsOptIn = createContactSmsOptIn(
-    config.database,
-    config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800'
-  );
+  const webOrigin = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+  // One sharing graph for /contacts, /parents and /api/sharing: server.ts builds it and injects
+  // it; a router created without it (tests) builds its own from the same inputs.
+  const sharing =
+    config.sharing ??
+    new SharingService({
+      database: config.database,
+      baseUrl: webOrigin,
+      emailSender: config.sharingEmailSender,
+      audit: recordSharingEvent,
+    });
+  const magicLoginLink = sharing.magicLoginLink;
+  const contactSmsOptIn = sharing.contactSmsOptIn;
   registerStudentLoginRoutes(router, {
     studentRepository,
     provisioner: new StudentProvisioner({
@@ -381,18 +438,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       const students = await studentRepository.findByUserId(userId);
 
-      res.status(200).json(
-        students.map((student): IStudentListItem => ({
-          id: student._id?.toString() ?? '',
-          userId: student.userId.toString(),
-          name: student.name,
-          grade: student.grade,
-          studentId: student.studentId,
-          stats: student.stats
-            ? { ...student.stats, lastUpdated: student.stats.lastUpdated?.toISOString() }
-            : undefined,
-        }))
-      );
+      res.status(200).json(students.map((student) => toStudentListItem(student, userId)));
     })
   );
 
@@ -409,238 +455,237 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const { email } = req.query as { email?: string };
-      if (!email) {
+      // The caller's own email only (from the JWT). A query `email` is ignored: it used to let any
+      // signed-in user list someone else's invitations and the students' names.
+      const email = getUserEmail(req);
+      if (email === null) {
         res.status(200).json([]);
         return;
       }
 
-      const students = await studentRepository.findPendingInvites(email.toLowerCase().trim());
-      const invites = students.map((s) => ({
-        studentId: s._id?.toString(),
-        studentName: s.name,
-        invitedBy: s.userId.toString(),
-        invite: s.sharedWith.find(
-          (sp) => sp.email === email.toLowerCase().trim() && sp.status === 'pending'
-        ),
-      }));
+      const students = await studentRepository.findPendingInvites(email);
+      const invites = students.flatMap((s): ISharingPendingInvite[] => {
+        const sp = s.sharedWith.find((e) => e.email === email && e.status === 'pending');
+        if (!sp) return [];
+        return [
+          {
+            studentId: s._id?.toString() ?? '',
+            studentName: s.name,
+            invitedBy: sp.invitedByUserId ?? s.userId.toString(),
+            ...(sp.inviteGroupId ? { inviteGroupId: sp.inviteGroupId } : {}),
+            invite: {
+              email: sp.email,
+              role: sp.role,
+              status: 'pending',
+              invitedAt: sp.invitedAt.toISOString(),
+              isAdmin: sp.isAdmin === true,
+            },
+          },
+        ];
+      });
 
       res.status(200).json(invites);
     })
   );
 
+  // =========================================================================
+  // Family & guardians: /:id/contacts is canonical (sharing-spec §4.3).
+  // /:id/parents/* further down are thin aliases of these handlers for one release.
+  // =========================================================================
+
   /**
    * GET /api/students/:id/contacts
    * List owner + all contacts with status (consent-first contact list).
    */
-  router.get(
-    '/:id/contacts',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student || !student.hasAccess(userId)) {
-        throw new NotFoundError('Student not found');
-      }
-      const smsStatuses = await Promise.all(
-        student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
-      );
-      const contacts = [
-        {
-          userId: student.userId.toString(),
-          role: 'parent' as const,
-          status: 'accepted' as const,
-          isOwner: true,
-          isAdmin: true,
-          receiveAlerts: student.ownerAlertPrefs?.receiveAlerts !== false,
-          alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
-          alertTypes: student.ownerAlertPrefs?.alertTypes,
-        },
-        ...student.sharedWith.map((sp, i) => ({
-          userId: sp.userId,
-          email: sp.email,
-          name: sp.name,
-          phone: sp.phone,
-          role: sp.role,
-          status: sp.status,
-          isAdmin: sp.isAdmin ?? false,
-          invitedAt: sp.invitedAt?.toISOString?.(),
-          acceptedAt: sp.acceptedAt?.toISOString?.(),
-          isOwner: false,
-          receiveAlerts: sp.receiveAlerts !== false,
-          alertChannels: sp.alertChannels ?? ['email'],
-          alertTypes: sp.alertTypes,
-          smsStatus: smsStatuses[i],
-        })),
-      ];
-      res.status(200).json(contacts);
-    })
-  );
+  const listContacts = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student || !student.hasAccess(userId)) {
+      throw new NotFoundError('Student not found');
+    }
+    const smsStatuses = await Promise.all(
+      student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
+    );
+    const contacts: ISharingPerson[] = [
+      {
+        userId: student.userId.toString(),
+        role: 'parent',
+        status: 'accepted',
+        isOwner: true,
+        isAdmin: true,
+        receiveAlerts: student.ownerAlertPrefs?.receiveAlerts !== false,
+        alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
+        alertTypes: student.ownerAlertPrefs?.alertTypes,
+      },
+      ...student.sharedWith.map((sp, i): ISharingPerson => ({
+        userId: sp.userId,
+        email: sp.email,
+        name: sp.name,
+        phone: sp.phone,
+        role: sp.role,
+        status: sp.status,
+        isAdmin: sp.isAdmin ?? false,
+        invitedAt: sp.invitedAt?.toISOString?.(),
+        acceptedAt: sp.acceptedAt?.toISOString?.(),
+        isOwner: false,
+        receiveAlerts: sp.receiveAlerts !== false,
+        alertChannels: sp.alertChannels ?? ['email'],
+        alertTypes: sp.alertTypes,
+        smsStatus: smsStatuses[i],
+        inviteGroupId: sp.inviteGroupId,
+        invitedByUserId: sp.invitedByUserId,
+      })),
+    ];
+    res.status(200).json(contacts);
+  });
+  router.get('/:id/contacts', listContacts);
 
   /**
    * POST /api/students/:id/contacts
-   * Invite a new contact. Sends invitation email when sendInviteEmail is configured.
+   * Invite one adult to this student: a single-student invite group with one email that carries
+   * a working 7-day accept link. An email already invited or accepted here is a 409 (the
+   * cross-student POST /api/sharing/invites reports it per student instead).
    */
-  router.post(
-    '/:id/contacts',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student) {
-        throw new NotFoundError('Student not found');
-      }
-      if (!student.canAdmin(userId)) {
-        throw new ForbiddenError('Only an admin can add contacts');
-      }
-      const body = req.body as {
-        email?: string;
-        name?: string;
-        phone?: string;
-        role?: string;
-        alertChannels?: readonly ('email' | 'sms')[];
-        alertTypes?: readonly string[];
-      };
-      if (!body.email || typeof body.email !== 'string' || !body.email.includes('@')) {
-        throw new ValidationError('Valid email is required');
-      }
-      const normalizedEmail = body.email.toLowerCase().trim();
-      const role =
-        body.role === 'guardian' || body.role === 'caregiver' ? body.role : ('parent' as const);
-      if (student.hasContact(normalizedEmail)) {
-        throw new ConflictError('This email is already a contact');
-      }
-      const newContact: ISharedParent = {
-        email: normalizedEmail,
-        name: body.name?.trim(),
-        phone: body.phone?.trim(),
-        role,
+  const addContact = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student) {
+      throw new NotFoundError('Student not found');
+    }
+    if (!student.canAdmin(userId)) {
+      throw new ForbiddenError('Only an admin can add contacts');
+    }
+    const studentId = student._id!.toString();
+    const input = parseSharingInviteBody(req.body, [studentId]);
+    const outcome = await sharing.invite(req, userId, input);
+    const status = outcome.perStudent[0]?.status;
+    if (status === 'already_invited' || status === 'already_accepted' || !outcome.contact) {
+      throw new ConflictError('This email is already a contact');
+    }
+    const contact = outcome.contact;
+    res.status(201).json({
+      success: true,
+      message: `Invitation sent to ${input.email}`,
+      inviteGroupId: outcome.inviteGroupId,
+      invite: { email: contact.email, role: contact.role, status: 'pending' },
+      contact: {
+        email: contact.email,
+        name: contact.name,
+        phone: contact.phone,
+        role: contact.role,
         status: 'pending',
-        invitedAt: new Date(),
-        // eslint-disable-next-line @typescript-eslint/naming-convention
+        isAdmin: contact.isAdmin === true,
+        invitedAt: contact.invitedAt.toISOString(),
         receiveAlerts: true,
-        alertChannels: body.alertChannels ?? ['email'],
-        alertTypes: body.alertTypes,
-      };
-      const newShared: readonly ISharedParent[] = [...student.sharedWith, newContact];
-      await studentRepository.update(student._id!, { sharedWith: newShared });
-      const inviter = await new UserRepository(config.database).findById(userId);
-      // No text to the contact: they opt in themselves from a link the inviter shares.
-      const smsOptInUrl = await contactSmsOptIn.issueIfTexting({
-        studentId: student._id!.toString(),
-        contactEmail: normalizedEmail,
-        inviterName: inviter?.name ?? 'A parent',
-        phone: newContact.phone,
-        alertChannels: newContact.alertChannels,
-      });
-      const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
-      try {
-        await config.sendInviteEmail?.sendInvite({
-          to: normalizedEmail,
-          studentName: student.name,
-          studentId: student._id!.toString(),
-          inviteEmail: normalizedEmail,
-          baseUrl,
-        });
-      } catch {
-        // Log but do not fail the request
-      }
-      res.status(201).json({
-        success: true,
-        contact: {
-          email: normalizedEmail,
-          name: newContact.name,
-          phone: newContact.phone,
-          role,
-          status: 'pending',
-          invitedAt: newContact.invitedAt.toISOString(),
-          receiveAlerts: true,
-          alertChannels: newContact.alertChannels,
-          alertTypes: newContact.alertTypes,
-          smsStatus: smsOptInUrl ? 'invited' : 'none',
-        },
-        ...(smsOptInUrl ? { smsOptInUrl } : {}),
-      });
-    })
-  );
+        alertChannels: contact.alertChannels,
+        alertTypes: contact.alertTypes,
+        smsStatus: outcome.smsOptInUrl ? 'invited' : 'none',
+        inviteGroupId: outcome.inviteGroupId,
+      },
+      ...(outcome.smsOptInUrl ? { smsOptInUrl: outcome.smsOptInUrl } : {}),
+    });
+  });
+  router.post('/:id/contacts', addContact);
 
   /**
    * POST /api/students/:id/contacts/accept
-   * Accept a pending invite (authenticated user; email must match).
+   * Accept a pending invite (authenticated user; the JWT email must be the invited one).
    */
-  router.post(
-    '/:id/contacts/accept',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-      const normalizedEmail = (email as string).toLowerCase().trim();
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student) {
-        throw new NotFoundError('Student not found');
-      }
-      const inviteIdx = student.sharedWith.findIndex(
-        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
-      );
-      if (inviteIdx === -1) {
-        throw new NotFoundError('No pending invite found for this email');
-      }
-      const updatedShared = [...student.sharedWith];
-      const current = updatedShared[inviteIdx]!;
-      updatedShared[inviteIdx] = {
-        ...current,
-        userId,
-        status: 'accepted',
-        acceptedAt: new Date(),
-        receiveAlerts: current.receiveAlerts !== false,
-        alertChannels: current.alertChannels ?? ['email'],
-      };
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-      res.status(200).json({ success: true, message: 'Invite accepted' });
-    })
-  );
+  const acceptContact = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const normalizedEmail = requireOwnEmail(req, (req.body as { email?: unknown }).email);
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student) {
+      throw new NotFoundError('Student not found');
+    }
+    const updatedShared = acceptedSharedWith(student, normalizedEmail, userId);
+    if (!updatedShared) {
+      throw new NotFoundError('No pending invite found for this email');
+    }
+    await studentRepository.update(student._id!, { sharedWith: updatedShared });
+    await sharing.invalidateTokens(normalizedEmail, student._id!.toString());
+    await recordSharingEvent(req, 'sharing:accept', student._id!.toString(), normalizedEmail);
+    res.status(200).json({ success: true, message: 'Invite accepted' });
+  });
+  router.post('/:id/contacts/accept', acceptContact);
 
   /**
    * POST /api/students/:id/contacts/decline
-   * Decline a pending invite (authenticated user; email must match).
+   * Decline a pending invite (authenticated user; the JWT email must be the invited one).
    */
-  router.post(
-    '/:id/contacts/decline',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-      const normalizedEmail = (email as string).toLowerCase().trim();
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student) {
-        throw new NotFoundError('Student not found');
-      }
-      const inviteIdx = student.sharedWith.findIndex(
-        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
-      );
-      if (inviteIdx === -1) {
-        throw new NotFoundError('No pending invite found for this email');
-      }
-      const updatedShared = [...student.sharedWith];
-      updatedShared[inviteIdx] = { ...updatedShared[inviteIdx]!, status: 'declined' };
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-      res.status(200).json({ success: true, message: 'Invite declined' });
-    })
-  );
+  const declineContact = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const normalizedEmail = requireOwnEmail(req, (req.body as { email?: unknown }).email);
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student) {
+      throw new NotFoundError('Student not found');
+    }
+    const updatedShared = declinedSharedWith(student, normalizedEmail);
+    if (!updatedShared) {
+      throw new NotFoundError('No pending invite found for this email');
+    }
+    await studentRepository.update(student._id!, { sharedWith: updatedShared });
+    await sharing.invalidateTokens(normalizedEmail, student._id!.toString());
+    await recordSharingEvent(req, 'sharing:decline', student._id!.toString(), normalizedEmail);
+    res.status(200).json({ success: true, message: 'Invite declined' });
+  });
+  router.post('/:id/contacts/decline', declineContact);
+
+  /**
+   * PUT /api/students/:id/contacts/:email/admin
+   * Promote or demote an accepted adult. Owner or admin only.
+   */
+  const setContactAdmin = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student || !student.hasAccess(userId)) {
+      throw new NotFoundError('Student not found');
+    }
+    if (!student.canAdmin(userId)) {
+      throw new ForbiddenError('Only an admin parent can change admin rights');
+    }
+    const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+      .toLowerCase()
+      .trim();
+    const { isAdmin } = req.body as { isAdmin?: boolean };
+    if (typeof isAdmin !== 'boolean') {
+      throw new ValidationError('isAdmin (boolean) is required');
+    }
+    const idx = student.sharedWith.findIndex(
+      (sp) => sp.email === targetEmail && sp.status === 'accepted'
+    );
+    if (idx === -1) {
+      throw new NotFoundError('Accepted shared parent not found with that email');
+    }
+    const updatedShared = [...student.sharedWith];
+    updatedShared[idx] = { ...updatedShared[idx]!, isAdmin };
+    await studentRepository.update(student._id!, { sharedWith: updatedShared });
+    await recordSharingEvent(req, 'sharing:admin_changed', student._id!.toString(), targetEmail, {
+      isAdmin,
+    });
+    res.status(200).json({
+      success: true,
+      message: isAdmin
+        ? `${targetEmail} has been promoted to admin`
+        : `${targetEmail} has been demoted from admin`,
+    });
+  });
+  router.put('/:id/contacts/:email/admin', setContactAdmin);
 
   /**
    * PUT /api/students/:id/contacts/:email
@@ -671,7 +716,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         phone?: string;
         role?: string;
         receiveAlerts?: boolean;
-        alertChannels?: readonly ('email' | 'sms')[];
+        alertChannels?: readonly SharedAlertChannel[];
         alertTypes?: readonly string[];
       };
       const updatedShared = [...student.sharedWith];
@@ -787,39 +832,31 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
   /**
    * DELETE /api/students/:id/contacts/:email
-   * Remove a contact. Only admin/owner can remove contacts - shared parents cannot remove themselves.
+   * Remove a contact (pending or accepted); their invitation and sign-in links die with it.
+   * Owner or admin only. An adult who wants to stop following a student uses
+   * POST /api/sharing/leave (owner decision 2026-11-09).
    */
-  router.delete(
-    '/:id/contacts/:email',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student || !student.hasAccess(userId)) {
-        throw new NotFoundError('Student not found');
-      }
-      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
-        .toLowerCase()
-        .trim();
-      const isAdmin = student.canAdmin(userId);
-
-      // NEW: Shared parents cannot remove themselves - only admin/owner can remove them
-      if (!isAdmin) {
-        throw new ForbiddenError(
-          'Only the account owner or admin can remove contacts. Shared parents cannot remove themselves.'
-        );
-      }
-
-      const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
-      if (updatedShared.length === student.sharedWith.length) {
-        throw new NotFoundError('Contact not found');
-      }
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-      res.status(200).json({ success: true });
-    })
-  );
+  const removeContact = asyncHandler(async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new AuthenticationError('Unauthorized');
+    }
+    const student = await studentRepository.findById(req.params['id'] ?? '');
+    if (!student || !student.hasAccess(userId)) {
+      throw new NotFoundError('Student not found');
+    }
+    const targetEmail = decodeURIComponent(req.params['email'] ?? '')
+      .toLowerCase()
+      .trim();
+    if (!student.canAdmin(userId)) {
+      throw new ForbiddenError(
+        'Only the account owner or admin can remove contacts. To stop following a student yourself, use Leave.'
+      );
+    }
+    await sharing.removeByAdmin(req, student, targetEmail);
+    res.status(200).json({ success: true });
+  });
+  router.delete('/:id/contacts/:email', removeContact);
 
   /**
    * POST /api/students/:id/contacts/:email/transfer-email
@@ -891,26 +928,25 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
 
-      // Send confirmation emails (if email service is configured)
-      if (config.sendInviteEmail) {
-        const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+      // Both addresses get a confirmation mail (if a sender is configured)
+      if (config.emailTransferConfirmation) {
         const studentId = student._id!.toString();
-        const confirmBaseUrl = `${baseUrl}/dashboard/students/${studentId}/contacts/transfer-confirm`;
+        const confirmBaseUrl = `${webOrigin}/dashboard/students/${studentId}/contacts/transfer-confirm`;
+        const confirmUrl = (token: string, email: string): string =>
+          `${confirmBaseUrl}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 
         try {
-          await config.sendInviteEmail.sendInvite({
+          await config.emailTransferConfirmation.sendConfirmation({
             to: currentEmail,
             studentName: student.name,
-            studentId,
-            inviteEmail: currentEmail,
-            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(oldEmailToken)}&email=${encodeURIComponent(currentEmail)}`,
+            confirmUrl: confirmUrl(oldEmailToken, currentEmail),
+            expiresInHours: 48,
           });
-          await config.sendInviteEmail.sendInvite({
+          await config.emailTransferConfirmation.sendConfirmation({
             to: normalizedNewEmail,
             studentName: student.name,
-            studentId,
-            inviteEmail: normalizedNewEmail,
-            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(newEmailToken)}&email=${encodeURIComponent(normalizedNewEmail)}`,
+            confirmUrl: confirmUrl(newEmailToken, normalizedNewEmail),
+            expiresInHours: 48,
           });
         } catch {
           // Best-effort: transfer is recorded in DB even if emails fail
@@ -1102,11 +1138,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       res.status(200).json({
-        id: student._id?.toString(),
-        userId: student.userId.toString(),
-        name: student.name,
-        grade: student.grade,
-        studentId: student.studentId,
+        ...toStudentListItem(student, userId),
         stats: student.stats,
         dataSources: student.dataSources,
         alertPreferences: student.alertPreferences,
@@ -2211,13 +2243,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
 
         const studentStatus = (doc['studentStatus'] as string) ?? undefined;
-        const lastNudgedRaw = doc['lastNudgedAt'];
-        const lastNudgedAt =
-          lastNudgedRaw instanceof Date
-            ? lastNudgedRaw.toISOString()
-            : typeof lastNudgedRaw === 'string'
-              ? lastNudgedRaw
-              : undefined;
+        const lastNudgedAt = toIsoDate(doc['lastNudgedAt']);
+        const asking = studentStatus === 'need_help';
+        const askedForHelpAt = asking ? toIsoDate(doc['studentHelpRequestedAt']) : undefined;
+        const noteRaw = doc['studentNote'];
+        const studentNote =
+          asking && typeof noteRaw === 'string' && noteRaw !== '' ? noteRaw : undefined;
 
         items.push({
           assignmentExternalId: externalId,
@@ -2239,6 +2270,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           materials: courseMaterials,
           ...(studentStatus !== undefined ? { studentStatus } : {}),
           ...(lastNudgedAt !== undefined ? { lastNudgedAt } : {}),
+          ...(askedForHelpAt !== undefined ? { askedForHelpAt } : {}),
+          ...(studentNote !== undefined ? { studentNote } : {}),
         });
       }
 
@@ -2872,6 +2905,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`
         );
       }
+      // "Need help" is the student's own ask (it alerts the adults and stamps the ask time);
+      // a parent setting it would show "Asked for help" that nobody asked for.
+      if (status === 'need_help') {
+        throw new ValidationError(
+          'Only the student can ask for help. need_help is set from the student studio.'
+        );
+      }
 
       const studentExternalId = student.studentId ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
@@ -2883,7 +2923,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           deletedAt: null,
           $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
         },
-        { $set: { studentStatus: status, updatedAt: new Date() } }
+        {
+          $set: { studentStatus: status, updatedAt: new Date() },
+          // Any status a parent sets ends the ask: drop the student's note and ask time.
+          $unset: HELP_FIELDS_UNSET,
+        }
       );
 
       if (result.matchedCount === 0) {
@@ -3121,7 +3165,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const maxStudents = planFeatures.maxStudents;
 
       if (maxStudents !== -1) {
-        const existingStudents = await studentRepository.findByUserId(userId);
+        // Owned only (sharing-spec §4.6): students shared with this account are on their owner's plan.
+        const existingStudents = await studentRepository.findOwnedByUserId(userId);
         if (existingStudents.length >= maxStudents) {
           res.status(403).json({
             success: false,
@@ -3151,10 +3196,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       res.status(201).json({
-        id: student._id?.toString() ?? '',
-        userId: student.userId.toString(),
-        name: student.name,
-        grade: student.grade,
+        ...toStudentListItem(student, userId),
         studentId: resolvedStudentId,
         stats: student.stats,
       });
@@ -3177,8 +3219,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new ValidationError('Missing student ID');
       }
       const existing = await studentRepository.findById(id);
-      if (!existing || existing.userId.toString() !== userId) {
+      if (!existing || !existing.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!existing.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can edit this student');
       }
 
       const updates = req.body as Partial<IStudentData>;
@@ -3189,11 +3234,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       res.status(200).json({
-        id: student._id?.toString(),
-        userId: student.userId.toString(),
-        name: student.name,
-        grade: student.grade,
-        studentId: student.studentId,
+        ...toStudentListItem(student, userId),
         stats: student.stats,
         dataSources: student.dataSources,
         alertPreferences: student.alertPreferences,
@@ -3220,6 +3261,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const student = await studentRepository.findById(id);
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!student.isOwner(userId)) {
+        throw new ForbiddenError('Only the owner can remove a student');
       }
       const deleted = await studentRepository.delete(id);
       if (!deleted) {
@@ -3310,6 +3354,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
       }
 
       const sourceId = randomUUID();
@@ -3496,6 +3543,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
+      }
 
       const idx = student.dataSources.findIndex((ds) => ds.id === sourceId);
       if (idx === -1) {
@@ -3545,6 +3595,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
+      }
 
       const newDataSources = student.dataSources.filter((ds) => ds.id !== sourceId);
       if (newDataSources.length === student.dataSources.length) {
@@ -3578,7 +3631,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3616,7 +3669,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3692,7 +3745,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3722,273 +3775,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   );
 
   // =========================================================================
-  // Parent sharing routes
+  // DEPRECATED: /:id/parents/* are thin aliases of /:id/contacts/* (sharing-spec §4.3, D9).
+  // Kept for one release while the web moves to /contacts (S2); then remove. Same handlers,
+  // same rules: invites create a single-student invite group with a working email link,
+  // accept/decline use the JWT email, removal is owner/admin only (self-removal = /api/sharing/leave).
   // =========================================================================
-
-  /**
-   * GET /api/students/:id/parents
-   * List all parents (owner + shared) for a student.
-   */
-  router.get(
-    '/:id/parents',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student || !student.hasAccess(userId)) {
-        throw new NotFoundError('Student not found');
-      }
-
-      const parents = [
-        {
-          userId: student.userId.toString(),
-          role: 'parent' as const,
-          status: 'accepted' as const,
-          isOwner: true,
-          isAdmin: true,
-        },
-        ...student.sharedWith.map((sp) => ({
-          userId: sp.userId,
-          email: sp.email,
-          name: sp.name,
-          phone: sp.phone,
-          role: sp.role,
-          status: sp.status,
-          isAdmin: sp.isAdmin ?? false,
-          invitedAt: sp.invitedAt?.toISOString(),
-          acceptedAt: sp.acceptedAt?.toISOString(),
-          isOwner: false,
-          receiveAlerts: sp.receiveAlerts !== false,
-          alertChannels: sp.alertChannels ?? ['email'],
-          alertTypes: sp.alertTypes,
-        })),
-      ];
-
-      res.status(200).json(parents);
-    })
-  );
-
-  /**
-   * POST /api/students/:id/parents/invite
-   * Invite another parent/guardian to share access to this student.
-   * Only the primary owner can invite.
-   */
-  router.post(
-    '/:id/parents/invite',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student) {
-        throw new NotFoundError('Student not found');
-      }
-      if (!student.canAdmin(userId)) {
-        throw new ForbiddenError('Only an admin parent can invite others');
-      }
-
-      const { email, role } = req.body as { email?: string; role?: string };
-      if (!email || typeof email !== 'string' || !email.includes('@')) {
-        throw new ValidationError('Valid email is required');
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const parentRole = role === 'guardian' || role === 'caregiver' ? role : 'parent';
-
-      // Check if already invited or shared
-      const existing = student.sharedWith.find(
-        (sp) => sp.email === normalizedEmail && sp.status !== 'declined'
-      );
-      if (existing) {
-        throw new ConflictError('This person has already been invited');
-      }
-
-      // Check if inviting yourself
-      // (would need user lookup, but for now just check if userId matches)
-
-      const newShared = [
-        ...student.sharedWith,
-        {
-          email: normalizedEmail,
-          role: parentRole as 'parent' | 'guardian' | 'caregiver',
-          status: 'pending' as const,
-          invitedAt: new Date(),
-        },
-      ];
-
-      await studentRepository.update(student._id!, { sharedWith: newShared });
-
-      const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
-      if (config.sendInviteEmail) {
-        void config.sendInviteEmail
-          .sendInvite({
-            to: normalizedEmail,
-            studentName: student.name,
-            studentId: student._id!.toString(),
-            inviteEmail: normalizedEmail,
-            baseUrl,
-          })
-          .catch((err: unknown) => {
-            console.error('[students] invite email failed', err);
-          });
-      }
-
-      res.status(201).json({
-        success: true,
-        message: `Invitation sent to ${normalizedEmail}`,
-        invite: {
-          email: normalizedEmail,
-          role: parentRole,
-          status: 'pending',
-        },
-      });
-    })
-  );
-
-  /**
-   * POST /api/students/:id/parents/accept
-   * Accept a pending invite (called by the invited user after login/register).
-   */
-  router.post(
-    '/:id/parents/accept',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student) {
-        throw new NotFoundError('Student not found');
-      }
-
-      const inviteIdx = student.sharedWith.findIndex(
-        (sp) => sp.email === normalizedEmail && sp.status === 'pending'
-      );
-      if (inviteIdx === -1) {
-        throw new NotFoundError('No pending invite found for this email');
-      }
-
-      const updatedShared = [...student.sharedWith];
-      updatedShared[inviteIdx] = {
-        ...updatedShared[inviteIdx]!,
-        userId,
-        status: 'accepted',
-        acceptedAt: new Date(),
-      };
-
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-
-      res.status(200).json({ success: true, message: 'Invite accepted' });
-    })
-  );
-
-  /**
-   * PUT /api/students/:id/parents/:email/admin
-   * Promote or demote a shared parent to/from admin.
-   * Only existing admins (owner or promoted) can do this.
-   */
-  router.put(
-    '/:id/parents/:email/admin',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student || !student.hasAccess(userId)) {
-        throw new NotFoundError('Student not found');
-      }
-
-      if (!student.canAdmin(userId)) {
-        throw new ForbiddenError('Only an admin parent can change admin rights');
-      }
-
-      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
-        .toLowerCase()
-        .trim();
-      const { isAdmin } = req.body as { isAdmin?: boolean };
-
-      if (typeof isAdmin !== 'boolean') {
-        throw new ValidationError('isAdmin (boolean) is required');
-      }
-
-      const idx = student.sharedWith.findIndex(
-        (sp) => sp.email === targetEmail && sp.status === 'accepted'
-      );
-      if (idx === -1) {
-        throw new NotFoundError('Accepted shared parent not found with that email');
-      }
-
-      const updatedShared = [...student.sharedWith];
-      updatedShared[idx] = { ...updatedShared[idx]!, isAdmin };
-
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-
-      res.status(200).json({
-        success: true,
-        message: isAdmin
-          ? `${targetEmail} has been promoted to admin`
-          : `${targetEmail} has been demoted from admin`,
-      });
-    })
-  );
-
-  /**
-   * DELETE /api/students/:id/parents/:email
-   * Remove a shared parent. Admin can remove anyone; shared parent can remove themselves.
-   */
-  router.delete(
-    '/:id/parents/:email',
-    asyncHandler(async (req: Request, res: Response) => {
-      const userId = getUserId(req);
-      if (!userId) {
-        throw new AuthenticationError('Unauthorized');
-      }
-
-      const student = await studentRepository.findById(req.params['id'] ?? '');
-      if (!student || !student.hasAccess(userId)) {
-        throw new NotFoundError('Student not found');
-      }
-
-      const targetEmail = decodeURIComponent(req.params['email'] ?? '')
-        .toLowerCase()
-        .trim();
-      const isAdmin = student.canAdmin(userId);
-
-      // Non-admin shared parents can only remove themselves
-      if (!isAdmin) {
-        const selfEntry = student.sharedWith.find(
-          (sp) => sp.userId === userId && sp.email === targetEmail
-        );
-        if (!selfEntry) {
-          throw new ForbiddenError('You can only remove yourself');
-        }
-      }
-
-      const updatedShared = student.sharedWith.filter((sp) => sp.email !== targetEmail);
-
-      if (updatedShared.length === student.sharedWith.length) {
-        throw new NotFoundError('Shared parent not found');
-      }
-
-      await studentRepository.update(student._id!, { sharedWith: updatedShared });
-
-      res.status(200).json({ success: true });
-    })
-  );
+  router.get('/:id/parents', listContacts);
+  router.post('/:id/parents/invite', addContact);
+  router.post('/:id/parents/accept', acceptContact);
+  router.post('/:id/parents/decline', declineContact);
+  router.put('/:id/parents/:email/admin', setContactAdmin);
+  router.delete('/:id/parents/:email', removeContact);
 
   /**
    * POST /api/students/:id/send-digest

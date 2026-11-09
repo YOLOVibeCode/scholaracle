@@ -457,4 +457,71 @@ describe('Student', () => {
       expect(out).toHaveLength(1);
     });
   });
+
+  describe('sharing access (sharing-spec §4.1)', () => {
+    const student = new Student({
+      userId: 'owner-1',
+      name: 'Ava',
+      sharedWith: [
+        {
+          userId: 'admin-1',
+          email: 'jessica@example.com',
+          role: 'parent',
+          status: 'accepted',
+          isAdmin: true,
+          invitedAt: new Date(),
+        },
+        {
+          userId: 'member-1',
+          email: 'robert@example.com',
+          role: 'guardian',
+          status: 'accepted',
+          invitedAt: new Date(),
+        },
+        {
+          email: 'pending@example.com',
+          role: 'caregiver',
+          status: 'pending',
+          invitedAt: new Date(),
+        },
+        {
+          email: 'declined@example.com',
+          role: 'parent',
+          status: 'declined',
+          invitedAt: new Date(),
+        },
+      ],
+    });
+
+    it('accessFor reports owner, admin, member, or null', () => {
+      expect(student.accessFor('owner-1')).toBe('owner');
+      expect(student.accessFor('admin-1')).toBe('admin');
+      expect(student.accessFor('member-1')).toBe('member');
+      expect(student.accessFor('stranger')).toBeNull();
+    });
+
+    it('peopleCount is the owner plus accepted adults only', () => {
+      expect(student.peopleCount()).toBe(3);
+      expect(new Student({ userId: 'solo', name: 'Solo' }).peopleCount()).toBe(1);
+    });
+
+    it('getAllAlertRecipients drops the push channel until S3 delivers it', () => {
+      const withPush = new Student({
+        userId: 'owner-1',
+        name: 'Ava',
+        sharedWith: [
+          {
+            userId: 'u',
+            email: 'push@example.com',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+            alertChannels: ['email', 'push'],
+          },
+        ],
+      });
+      const shared = withPush.getAllAlertRecipients('owner@example.com').find((r) => !r.isPrimary);
+      expect(shared?.channels).toEqual(['email']);
+    });
+  });
 });

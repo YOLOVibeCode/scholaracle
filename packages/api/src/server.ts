@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { sharingRouter } from './routes/sharing/sharing';
 import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
@@ -44,8 +45,10 @@ import {
   createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
-import { SendGridInviteEmailSender } from './services/InviteEmailSender';
+import { SendGridEmailTransferConfirmationSender } from './services/EmailTransferConfirmationSender';
 import { MagicLinkSender } from './services/provision/MagicLinkSender';
+import { SharingInviteEmailSender } from './services/sharing/SharingInviteEmailSender';
+import { SharingService } from './services/sharing/SharingService';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
 import { SourceInviteService } from './services/source-invite/SourceInviteService';
@@ -88,6 +91,7 @@ import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
 import { createScrapersRepairRouter } from './routes/scrapers/repair';
+import { createScrapersRouter } from './routes/scrapers/registry';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -131,6 +135,31 @@ export interface IServerConfig {
  * @param config - Server configuration
  * @returns SendGrid configuration
  */
+/**
+ * Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay).
+ * The library resets its base URL to api.sendgrid.com on every setApiKey call, and each
+ * email sender calls setApiKey in its constructor (and some routes per request), so a
+ * one-time setDefaultRequest is silently undone. Re-apply it after every setApiKey.
+ */
+export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined): void {
+  if (!baseUrl) return;
+  const m = mail as {
+    client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+    setApiKey?: (key: string) => void;
+  };
+  const client = m.client;
+  if (!client) return;
+  const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
+  const original = m.setApiKey?.bind(m);
+  if (original) {
+    m.setApiKey = (key: string): void => {
+      original(key);
+      apply();
+    };
+  }
+  apply();
+}
+
 function getSendGridConfig(config: IServerConfig): {
   readonly apiKey: string;
   readonly fromEmail: string;
@@ -354,8 +383,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       );
     }
     const sendGrid = sgMail as unknown as MailService;
+    // Invite, password-reset and password-changed emails share this client. Point it at
+    // the Noctusoft relay here; it was only set inside initializeNotificationService, so
+    // these senders called api.sendgrid.com directly and every relay key got a 401.
+    applySendGridBaseUrl(sgMail, process.env['SENDGRID_BASE_URL']);
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
-    const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
+    const emailTransferConfirmation = new SendGridEmailTransferConfirmationSender(
+      sendGridConfig,
+      sendGrid
+    );
     const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(
       sendGridConfig,
       sendGrid
@@ -407,6 +443,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       { fromEmail: magicFromEmail, fromName: magicFromName },
       guardedSmsSender
     );
+    // Sharing invitations ride the same transport as magic links, so the accept button in the
+    // mail points at the /magic route this server actually serves (sharing-spec D5).
+    const sharingEmailSender = new SharingInviteEmailSender(magicEmailTransport, {
+      fromEmail: magicFromEmail,
+      fromName: magicFromName,
+    });
+    // ONE sharing graph for the process: /api/students/:id/contacts*, /parents* and /api/sharing
+    // share the magic-link issuer, SMS opt-in, rate limiter, audit trail and web origin.
+    const sharing = new SharingService({ database, baseUrl, emailSender: sharingEmailSender });
 
     app.use(
       '/api/portal-accounts',
@@ -420,11 +465,19 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       requireParent,
       studentsRouter({
         database,
-        baseUrl: baseUrl ?? '',
+        baseUrl,
         jwtSecret,
-        sendInviteEmail: inviteEmailSender,
+        emailTransferConfirmation,
+        sharing,
         magicLinkSender,
       })
+    );
+    // Sharing across students (invite several at once, pending list, accept/decline, leave, mine).
+    app.use(
+      '/api/sharing',
+      authMiddleware(authService),
+      requireParent,
+      sharingRouter({ database, sharing })
     );
     // Public: a co-parent opts in to texts themselves from a link the inviting parent shares.
     app.use('/api/sms/optin', smsOptInRouter({ database, guardedSmsSender }));
@@ -436,6 +489,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         database,
         baseUrl: baseUrl ?? '',
         jwtSecret,
+        // A student's "Need help" tap enqueues a notify job the same way ingest alerts do.
+        alertQueue: notificationQueue,
       })
     );
     app.use(
@@ -562,14 +617,21 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
     app.use('/api/assets', createAssetServeRouter(assetsConfig));
-    app.use(
-      '/api/scrapers',
+    const scrapersRoutes = express.Router();
+    scrapersRoutes.use(
+      createScrapersRouter({
+        database,
+        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
+      })
+    );
+    scrapersRoutes.use(
       createScrapersRepairRouter({
         database,
         jwtSecret,
         assetStore,
       })
     );
+    app.use('/api/scrapers', scrapersRoutes);
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
