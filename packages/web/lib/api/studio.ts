@@ -1,8 +1,12 @@
 import {
   parseTodayView,
+  parseWeekView,
   parseWorkPackView,
+  type IStudioStatusPatchRequest,
   type ITodayView,
+  type IWeekView,
   type IWorkPackView,
+  type StudentStatus,
 } from '@scholaracle/contracts';
 import type { IOfflinePackApiResponse } from '@scholaracle/studio-core';
 
@@ -51,6 +55,16 @@ export async function fetchStudioToday(token: string): Promise<ITodayView> {
   return parseTodayView(await res.json());
 }
 
+/** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+export async function fetchStudioWeek(token: string): Promise<IWeekView> {
+  const res = await studioFetch('/studio/week', token);
+  throwIfAuthFailed(res);
+  if (!res.ok) {
+    throw new Error(`Studio week failed: ${res.status}`);
+  }
+  return parseWeekView(await res.json());
+}
+
 export async function fetchStudioWorkPack(
   token: string,
   assignmentExternalId: string
@@ -87,18 +101,25 @@ export async function fetchOfflinePack(
   return res.json() as Promise<IOfflinePackApiResponse>;
 }
 
+/**
+ * PATCH /api/studio/assignments/:id/status. `note` travels with need_help
+ * (≤140 chars); the server ignores it until the need-help alert lands (R3).
+ */
 export async function patchStudioAssignmentStatus(
   token: string,
   assignmentExternalId: string,
-  status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
+  status: StudentStatus | null,
+  note?: string
 ): Promise<void> {
+  const body: IStudioStatusPatchRequest =
+    note !== undefined && note !== '' ? { status, note } : { status };
   const res = await studioFetch(
     `/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
     token,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     }
   );
   throwIfAuthFailed(res);

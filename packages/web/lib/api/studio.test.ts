@@ -1,5 +1,6 @@
 import {
   fetchStudioToday,
+  fetchStudioWeek,
   fetchStudioWorkPack,
   patchStudioAssignmentStatus,
   StudioAuthError,
@@ -91,6 +92,66 @@ describe('studio API client', () => {
     await expect(fetchStudioWorkPack('emma-jwt', 'demo-liam-math7-a0')).rejects.toBeInstanceOf(
       StudioNotFoundError
     );
+  });
+
+  const WEEK = {
+    encouragement: 'Nice work on Reading response 8.',
+    owed: [
+      {
+        assignmentExternalId: 'demo-emma-alg2-missing-1',
+        title: 'Missing assignment 1',
+        courseName: 'Algebra II',
+        dueAt: '2026-11-05T16:00:00.000Z',
+        humanStatus: 'Not turned in',
+        studentStatus: 'not_started',
+        needs: ['saved_file'],
+        primaryCtaLabel: 'Open worksheet',
+      },
+    ],
+    days: [{ date: '2026-11-09', label: 'Today', items: [] }],
+    doneThisWeek: [],
+    counts: { owed: 1, due: 0, done: 0 },
+  };
+
+  it('loads This week with the student bearer token and parses it', async () => {
+    global.fetch = jest.fn().mockResolvedValue(fakeResponse(WEEK));
+    const view = await fetchStudioWeek('emma-jwt');
+    expect(view.owed[0]?.assignmentExternalId).toBe('demo-emma-alg2-missing-1');
+    expect(view.counts).toEqual({ owed: 1, due: 0, done: 0 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:2801/api/studio/week',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer emma-jwt' }),
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('This week rejects a score on an item and 403 as StudioAuthError', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(fakeResponse({ ...WEEK, owed: [{ ...WEEK.owed[0], percent: '92%' }] }));
+    await expect(fetchStudioWeek('emma-jwt')).rejects.toThrow(/unexpected percent/);
+    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ error: 'no' }, 403));
+    await expect(fetchStudioWeek('parent-jwt')).rejects.toBeInstanceOf(StudioAuthError);
+  });
+
+  it('PATCHes need_help with a note, and omits an empty note', async () => {
+    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ success: true }, 200));
+    await patchStudioAssignmentStatus(
+      'emma-jwt',
+      'demo-emma-ap-bio-a5',
+      'need_help',
+      "I don't get #7"
+    );
+    await patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'need_help', '');
+    const bodies = (global.fetch as jest.Mock).mock.calls.map((c: [string, RequestInit]) =>
+      JSON.parse(c[1].body as string)
+    );
+    expect(bodies).toEqual([
+      { status: 'need_help', note: "I don't get #7" },
+      { status: 'need_help' },
+    ]);
   });
 
   it('PATCHes working_on_it', async () => {

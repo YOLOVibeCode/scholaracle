@@ -62,6 +62,13 @@ describe('TodayView', () => {
     expect(screen.queryByTestId('studio-grades')).not.toBeInTheDocument();
   });
 
+  it('offers a This week link beside Today', () => {
+    render(<TodayView view={VIEW} />);
+    expect(screen.getByTestId('studio-tab-week')).toHaveAttribute('href', '/studio/week');
+    expect(screen.getByRole('link', { name: 'This week' })).toBeInTheDocument();
+    expect(screen.getByTestId('studio-tab-today')).toHaveAttribute('aria-current', 'page');
+  });
+
   it('does not render extra grade fields from a poisoned fixture', () => {
     const poisoned = {
       ...VIEW,
@@ -75,11 +82,7 @@ describe('TodayView', () => {
   });
 
   it('with next null still shows positive copy and no primary button', () => {
-    render(
-      <TodayView
-        view={{ encouragement: "You're caught up.", next: null, alsoToday: [] }}
-      />
-    );
+    render(<TodayView view={{ encouragement: "You're caught up.", next: null, alsoToday: [] }} />);
     expect(screen.getByTestId('studio-encouragement')).toHaveTextContent(/caught up/i);
     expect(screen.queryByTestId('studio-primary-cta')).not.toBeInTheDocument();
     expect(screen.queryByTestId('studio-also-today')).not.toBeInTheDocument();
