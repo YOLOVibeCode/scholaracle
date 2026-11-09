@@ -36,7 +36,7 @@ export class RepairProposalRepository {
       IRepairProposalRecord,
       keyof ISlcRepairCandidateKey | 'candidateId' | 'createdAt'
     >
-  ): Promise<void> {
+  ): Promise<{ readonly createdAt: Date }> {
     const createdAt = new Date();
     await this._collection.insertOne({
       ...key,
@@ -44,5 +44,11 @@ export class RepairProposalRepository {
       ...proposal,
       createdAt,
     });
+    return { createdAt };
+  }
+
+  async findLatestProposal(key: ISlcRepairCandidateKey): Promise<IRepairProposalRecord | null> {
+    const candidateId = repairCandidateId(key);
+    return this._collection.find({ candidateId }).sort({ createdAt: -1 }).limit(1).next();
   }
 }

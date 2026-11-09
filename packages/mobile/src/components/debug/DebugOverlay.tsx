@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,7 +11,6 @@ import {
   openDiagPanel,
   subscribeGate,
   subscribePanel,
-  unlockDiag,
 } from '../../diag';
 import { LogPanel } from './LogPanel';
 import { EnvPanel } from './EnvPanel';
@@ -38,8 +37,6 @@ function AuthTrace(): null {
 
 export function DebugOverlay(): React.ReactElement {
   const insets = useSafeAreaInsets();
-  const taps = useRef(0);
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, bump] = useState(0);
   const [tab, setTab] = useState<Tab>('log');
 
@@ -53,32 +50,13 @@ export function DebugOverlay(): React.ReactElement {
     };
   }, []);
 
-  const onSecretTap = (): void => {
-    taps.current += 1;
-    if (tapTimer.current) clearTimeout(tapTimer.current);
-    tapTimer.current = setTimeout(() => {
-      taps.current = 0;
-    }, 2000);
-    if (taps.current >= 7) {
-      taps.current = 0;
-      void unlockDiag().then(() => openDiagPanel());
-    }
-  };
-
   const unlocked = isUnlocked();
   const panelOpen = isDiagPanelOpen();
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <AuthTrace />
-      {/* Invisible 7-tap unlock target — top-right corner */}
-      <Pressable
-        testID="btn-diag-unlock"
-        onPress={onSecretTap}
-        style={[styles.hit, { top: insets.top + 4, right: 4 }]}
-        accessibilityLabel="Diagnostics unlock"
-        accessibilityElementsHidden
-      />
+      {/* Unlock: 7 taps on the deploy stamp footer (see diag/secretTap). */}
       {unlocked ? (
         <Pressable
           testID="btn-diag-open"
@@ -126,12 +104,6 @@ export function DebugOverlay(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  hit: {
-    position: 'absolute',
-    width: 44,
-    height: 44,
-    zIndex: 9999,
-  },
   bubble: {
     position: 'absolute',
     zIndex: 9999,

@@ -1,9 +1,0 @@
-# Maestro: open the fake portal (start server first).
-# Aeries: build scraper-core then: FAKE_PORTAL_STRICT_CSP=1 node scripts/fake-portal-server.mjs (repo root)
-# iOS Simulator: use http://127.0.0.1:2855 — Android emulator may need http://10.0.2.2:2855
-appId: com.scholarmancy.app
----
-- openLink: "${FAKE_PORTAL_BASE_URL=http://127.0.0.1:2855}/fake-aeries/student/LoginParent.aspx?csp=strict"
-- assertVisible: "Fake Aeries"
-- openLink: "${FAKE_PORTAL_BASE_URL=http://127.0.0.1:2855}/skyward/login?next=%2Fscripts%2Fwsisa.dll%2FWService%3Dfake-portal%2Fsfgradebook001.w&csp=strict"
-- assertVisible: "Fake Skyward"

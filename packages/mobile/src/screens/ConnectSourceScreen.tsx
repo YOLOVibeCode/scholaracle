@@ -228,7 +228,12 @@ export function ConnectSourceScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      // Without this the first tap on Next/Save only dismisses the keyboard.
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -245,6 +250,7 @@ export function ConnectSourceScreen({
               key={p.id}
               style={styles.providerCard}
               onPress={() => handleSelectProvider(p)}
+              testID={`button-provider-${p.id}`}
             >
               <Text style={styles.providerName}>{p.name}</Text>
               <Text style={styles.chevron}>›</Text>
@@ -265,16 +271,25 @@ export function ConnectSourceScreen({
               setUrlError(null);
             }}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="url"
             returnKeyType="next"
+            // The field starts as a template URL; select it so typing replaces it
+            // instead of leaving the template's tail after the cursor.
+            selectTextOnFocus
             onSubmitEditing={handleUrlNext}
+            testID="input-connect-url"
           />
           {urlError && (
             <Text style={styles.urlError} testID="url-error">
               {urlError}
             </Text>
           )}
-          <TouchableOpacity style={styles.button} onPress={handleUrlNext}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleUrlNext}
+            testID="button-connect-url-next"
+          >
             <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.back} onPress={() => setStep('provider')}>
@@ -337,6 +352,7 @@ export function ConnectSourceScreen({
             returnKeyType="next"
             placeholder="your.email@school.edu"
             placeholderTextColor="#999"
+            testID="input-connect-username"
           />
 
           <Text style={styles.label}>Password</Text>
@@ -349,12 +365,14 @@ export function ConnectSourceScreen({
             onSubmitEditing={handleSaveCredentials}
             placeholder="••••••••"
             placeholderTextColor="#999"
+            testID="input-connect-password"
           />
 
           <TouchableOpacity
             style={[styles.button, isSaving && styles.buttonDisabled]}
             onPress={handleSaveCredentials}
             disabled={isSaving}
+            testID="button-connect-save"
           >
             {isSaving ? (
               <ActivityIndicator color="#fff" />

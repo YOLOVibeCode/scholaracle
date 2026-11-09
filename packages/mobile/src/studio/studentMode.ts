@@ -10,6 +10,10 @@ export type AppNavView =
   | 'sync-all'
   | 'run-history'
   | 'settings'
+  | 'plan'
+  | 'student-edit'
+  | 'alerts'
+  | 'notification-settings'
   | 'today'
   | 'work-pack';
 
@@ -24,6 +28,10 @@ const PARENT_VIEWS: ReadonlySet<AppNavView> = new Set([
   'sync-all',
   'run-history',
   'settings',
+  'plan',
+  'student-edit',
+  'alerts',
+  'notification-settings',
 ]);
 
 export function isStudentSession(role?: UserRole | null): boolean {

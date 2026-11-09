@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from '../../fixtures/test-data';
 import { login } from '../../fixtures/auth';
+import { backendApiRoutePattern } from '../../fixtures/api-base';
 
 /**
  * Refresh token: on 401, client calls POST /auth/refresh and retries the request.
@@ -11,10 +12,14 @@ test.describe('Refresh Token', () => {
     const user = TEST_USERS.parent;
     await login(page, user.email, user.password);
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:2801/api';
     let callCount = 0;
 
-    await page.route('**/api/students**', async (route) => {
+    await page.route(backendApiRoutePattern(), async (route) => {
+      const url = route.request().url();
+      if (!url.includes('/students')) {
+        await route.continue();
+        return;
+      }
       callCount += 1;
       if (callCount === 1) {
         await route.fulfill({
@@ -30,7 +35,11 @@ test.describe('Refresh Token', () => {
     await page.goto('/dashboard/students');
     await expect(page).toHaveURL(/\/dashboard\/students/);
     await expect(
-      page.locator('[data-testid="student-list"], [data-testid="empty-state"], [data-testid="dashboard-header"]').first()
+      page
+        .locator(
+          '[data-testid="student-list"], [data-testid="empty-state"], [data-testid="dashboard-header"]'
+        )
+        .first()
     ).toBeVisible({ timeout: 10000 });
   });
 });
