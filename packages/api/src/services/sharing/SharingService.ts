@@ -83,7 +83,8 @@ function parseStudentIds(raw: unknown, fallback?: readonly string[]): readonly s
   return ids;
 }
 
-function parseChannels(raw: unknown): readonly SharingAlertChannel[] | undefined {
+/** Validates an `alertChannels` body field: array of email | sms | push, deduplicated. */
+export function parseChannels(raw: unknown): readonly SharingAlertChannel[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
     throw new ValidationError('alertChannels must be an array');
@@ -453,7 +454,9 @@ export class SharingService {
       status: 'pending',
       invitedAt: this._now(),
       receiveAlerts: true,
-      alertChannels: input.alertChannels ?? ['email'],
+      // Left unset when the inviter did not choose: the accept-time default (email + push,
+      // spec §8 Q4) is applied by acceptedSharedWith and read via effectiveSharedAlertPrefs.
+      ...(input.alertChannels !== undefined ? { alertChannels: input.alertChannels } : {}),
       inviteGroupId,
       invitedByUserId: actorUserId,
       ...(input.name !== undefined ? { name: input.name } : {}),

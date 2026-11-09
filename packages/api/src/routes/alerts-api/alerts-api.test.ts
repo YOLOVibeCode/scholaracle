@@ -247,7 +247,8 @@ describe('Alerts API Routes', () => {
     let sharedStudentId: string;
     let privateStudentId: string;
     let sharedAlertId: string;
-    let ingestAlertId: string;
+    let missingAlertId: string;
+    let legacyPortalAlertId: string;
     let privateAlertId: string;
 
     async function setMemberRow(patch: Record<string, unknown>): Promise<void> {
@@ -299,8 +300,9 @@ describe('Alerts API Routes', () => {
       sharedStudentId = shared._id!.toString();
       privateStudentId = priv._id!.toString();
 
-      // Seed/job-shaped row (Mongo id), ingest-shaped row (portal student id), and an
-      // alert for a student the member was never given.
+      // Two rows keyed by the shared student's Mongo id (what ingest writes), one legacy row
+      // still carrying a portal id (owner-only fallback until ALERT_STUDENT_ID_MIGRATION), and
+      // an alert for a student the member was never given.
       sharedAlertId = (
         await alertRepo.create({
           userId: testUserId,
@@ -310,13 +312,22 @@ describe('Alerts API Routes', () => {
           message: 'Ava: Math fell to 72',
         })
       ).id!;
-      ingestAlertId = (
+      missingAlertId = (
+        await alertRepo.create({
+          userId: testUserId,
+          studentId: sharedStudentId,
+          type: 'missing_assignment',
+          severity: 'critical',
+          message: 'Ava: Lab 4 missing',
+        })
+      ).id!;
+      legacyPortalAlertId = (
         await alertRepo.create({
           userId: testUserId,
           studentId: '12345',
           type: 'missing_assignment',
           severity: 'critical',
-          message: 'Ava: Lab 4 missing',
+          message: 'Ava (legacy row): Lab 3 missing',
         })
       ).id!;
       privateAlertId = (
@@ -330,26 +341,62 @@ describe('Alerts API Routes', () => {
       ).id!;
     });
 
-    it('owner sees every alert; member sees only the shared student, incl. ingest rows keyed by portal id', async () => {
+    it('owner sees every alert incl. legacy portal-id rows; member sees only the shared student by Mongo id', async () => {
       const ownerIds = (await inbox(testToken)).map((a) => a['id']);
-      expect(ownerIds).toEqual(
-        expect.arrayContaining([sharedAlertId, ingestAlertId, privateAlertId])
+      expect(ownerIds.sort()).toEqual(
+        [sharedAlertId, missingAlertId, legacyPortalAlertId, privateAlertId].sort()
       );
-      expect(ownerIds).toHaveLength(3);
 
+      // Documented fallback: a row still carrying a portal id is the owner's only.
       const memberRows = await inbox(memberToken);
-      expect(memberRows.map((a) => a['id']).sort()).toEqual([sharedAlertId, ingestAlertId].sort());
+      expect(memberRows.map((a) => a['id']).sort()).toEqual([sharedAlertId, missingAlertId].sort());
       expect(memberRows.every((a) => a['acknowledged'] === false)).toBe(true);
 
       expect(await inbox(strangerToken)).toEqual([]);
     });
 
-    it("trims the inbox to the member's own alertTypes for that student", async () => {
+    it("trims the inbox to the member's own alertTypes, and hides the same alerts on detail and acknowledge (404)", async () => {
       await setMemberRow({ alertTypes: ['missing_assignment'] });
       const rows = await inbox(memberToken);
-      expect(rows.map((a) => a['id'])).toEqual([ingestAlertId]);
+      expect(rows.map((a) => a['id'])).toEqual([missingAlertId]);
       // The owner's inbox is untouched by someone else's filter.
-      expect(await inbox(testToken)).toHaveLength(3);
+      expect(await inbox(testToken)).toHaveLength(4);
+
+      const hiddenDetail = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(hiddenDetail.status).toBe(404);
+      const hiddenAck = await request(app)
+        .post(`/api/alerts-api/${sharedAlertId}/acknowledge`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(hiddenAck.status).toBe(404);
+      expect(
+        (await database.collection('alerts').findOne({ _id: new ObjectId(sharedAlertId) }))?.[
+          'acknowledgedBy'
+        ]
+      ).toBeUndefined();
+
+      const visibleDetail = await request(app)
+        .get(`/api/alerts-api/${missingAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(visibleDetail.status).toBe(200);
+      // The owner's own alertTypes trim applies to the owner the same way.
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(sharedStudentId) },
+        {
+          $set: {
+            ownerAlertPrefs: {
+              receiveAlerts: true,
+              alertChannels: ['email'],
+              alertTypes: ['deadline'],
+            },
+          },
+        }
+      );
+      const ownerHidden = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ownerHidden.status).toBe(404);
     });
 
     it('a revoked adult loses the alerts at once (list, single, acknowledge)', async () => {

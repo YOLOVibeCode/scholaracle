@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb';
 import type { IAlertData, IAlertVisibilityScope } from '@scholaracle/interfaces';
 import type { AlertRepository, Student, StudentRepository } from '@scholaracle/database';
 import { ForbiddenError, NotFoundError, type IAlertListItem } from '@scholaracle/contracts';
@@ -5,11 +6,15 @@ import { ForbiddenError, NotFoundError, type IAlertListItem } from '@scholaracle
 /**
  * Alert inbox by access, acknowledgement per person (docs/sharing-spec.md §4.5).
  *
- * Alert rows carry the owner's `userId` and a `studentId` that is the student's Mongo id
- * (seed, queued jobs) or the portal's student id (ingest). A viewer sees an alert when they
- * own it or when it belongs to a student they can access; `acknowledged` is computed for the
- * viewer from `acknowledgedBy`, with the legacy fields standing in for the owner until the
- * ALERT_ACK_BY_MIGRATION boot step has copied them.
+ * Alert rows carry the owner's `userId` and the student's Mongo id in `studentId` (ingest
+ * writes it; ALERT_STUDENT_ID_MIGRATION rewrote legacy portal ids). A viewer sees an alert
+ * when they own it or when it belongs to a student shared with them; `acknowledged` is
+ * computed for the viewer from `acknowledgedBy`, with the legacy fields standing in for the
+ * owner until ALERT_ACK_BY_MIGRATION has copied them.
+ *
+ * Fallback: a legacy row whose `studentId` could not be resolved to a student (unknown or
+ * ambiguous portal id) is still visible to its owner through the owner's `userId`, without
+ * an alertTypes trim; it is never visible to a shared adult.
  */
 
 export type StoredAlert = IAlertData & { id?: string };
@@ -19,23 +24,24 @@ export interface IViewerAckState {
   readonly acknowledgedAt?: string;
 }
 
-/** The students a viewer can see, indexed by every id an alert row may carry for them. */
+/** The students a viewer can see, indexed by owner + Mongo id (what alert rows carry). */
 export class AlertAccess {
   private readonly _byKey = new Map<string, Student>();
+  /** Students shared with the viewer; owned students are covered by the viewer's own rows. */
   public readonly scopes: readonly IAlertVisibilityScope[];
 
-  constructor(students: readonly Student[]) {
-    this.scopes = students.map((student) => AlertAccess.scopeFor(student));
+  constructor(students: readonly Student[], viewerUserId: string) {
+    const shared: IAlertVisibilityScope[] = [];
     for (const student of students) {
-      const owner = student.dataUserId();
-      for (const id of student.alertStudentIds()) {
-        this._byKey.set(`${owner}|${id}`, student);
-      }
+      const scope = AlertAccess.scopeFor(student);
+      this._byKey.set(`${scope.ownerUserId}|${scope.studentId}`, student);
+      if (!student.isOwner(viewerUserId)) shared.push(scope);
     }
+    this.scopes = shared;
   }
 
   public static scopeFor(student: Student): IAlertVisibilityScope {
-    return { ownerUserId: student.dataUserId(), studentIds: student.alertStudentIds() };
+    return { ownerUserId: student.dataUserId(), studentId: student._id?.toString() ?? '' };
   }
 
   /** The accessible student an alert row belongs to, if any. */
@@ -84,7 +90,7 @@ export function viewerWantsAlert(
 }
 
 export interface IAlertInboxRepos {
-  readonly studentRepository: Pick<StudentRepository, 'findByUserId'>;
+  readonly studentRepository: Pick<StudentRepository, 'findByUserId' | 'findById'>;
   readonly alertRepository: Pick<
     AlertRepository,
     'findVisibleTo' | 'findByStudentScope' | 'findById'
@@ -97,7 +103,7 @@ export async function listVisibleAlerts(
   repos: IAlertInboxRepos
 ): Promise<IAlertListItem[]> {
   const students = await repos.studentRepository.findByUserId(viewerUserId);
-  const access = new AlertAccess(students);
+  const access = new AlertAccess(students, viewerUserId);
   const alerts = await repos.alertRepository.findVisibleTo(viewerUserId, access.scopes);
   return alerts
     .filter((alert) => viewerWantsAlert(access.studentFor(alert), viewerUserId, alert.type))
@@ -116,9 +122,20 @@ export async function listStudentAlerts(
     .map((alert) => toAlertListItem(alert, viewerUserId));
 }
 
+/** The student an alert row belongs to, when its `studentId` is a Mongo id; else undefined. */
+async function studentOfAlert(
+  alert: IAlertData,
+  repos: Pick<IAlertInboxRepos, 'studentRepository'>
+): Promise<Student | null> {
+  if (!ObjectId.isValid(alert.studentId)) return null;
+  const student = await repos.studentRepository.findById(alert.studentId);
+  return student && student.dataUserId() === alert.userId ? student : null;
+}
+
 /**
- * Load one alert the viewer may see. 404 when it does not exist, 403 when it belongs to a
- * student the viewer cannot access (a revoked adult loses it at once).
+ * Load one alert the viewer may see, applying the same predicate as the list: 404 when it
+ * does not exist or the viewer's alertTypes hide it, 403 when it belongs to a student the
+ * viewer cannot access (a revoked adult loses it at once). Loads only that alert's student.
  */
 export async function findAccessibleAlert(
   alertId: string,
@@ -129,8 +146,13 @@ export async function findAccessibleAlert(
   if (!alert) {
     throw new NotFoundError('Alert not found');
   }
-  if (alert.userId === viewerUserId) return alert;
-  const students = await repos.studentRepository.findByUserId(viewerUserId);
-  if (new AlertAccess(students).studentFor(alert)) return alert;
-  throw new ForbiddenError('Forbidden');
+  const student = await studentOfAlert(alert, repos);
+  const isOwnRow = alert.userId === viewerUserId;
+  if (!isOwnRow && !(student?.hasAccess(viewerUserId) ?? false)) {
+    throw new ForbiddenError('Forbidden');
+  }
+  if (!viewerWantsAlert(student ?? undefined, viewerUserId, alert.type)) {
+    throw new NotFoundError('Alert not found');
+  }
+  return alert;
 }

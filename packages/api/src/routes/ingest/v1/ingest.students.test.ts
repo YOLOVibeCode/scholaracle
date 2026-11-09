@@ -53,6 +53,7 @@ describe('Ingest v1: student matching and plan cap', () => {
       'slc_devices',
       'revoked_connector_tokens',
       'slc_assignments',
+      'alerts',
     ]) {
       await database.collection(name).deleteMany({});
     }
@@ -184,6 +185,11 @@ describe('Ingest v1: student matching and plan cap', () => {
       .toArray();
     expect(students).toHaveLength(1);
     expect((students[0]!['dataSources'] as unknown[]).length).toBe(1);
+
+    // The missing assignment became an alert row keyed by the student's Mongo id (S3).
+    const alerts = await database.collection('alerts').find({ userId }).toArray();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ studentId: hex, type: 'missing_assignment' });
   });
 
   it('rejects ingest without a binding with 422 when INGEST_REQUIRE_BINDINGS=true', async () => {
@@ -282,5 +288,11 @@ describe('Ingest v1: student matching and plan cap', () => {
     expect(committed.length).toBe(2);
     const bindings = await database.collection('slc_bindings').find({ userId }).toArray();
     expect(bindings.map((b) => b['studentExternalId']).sort()).toEqual(['kid-a', 'kid-b']);
+
+    // Alert rows carry each kid's Mongo id, never the bare portal id (S3 root-cause fix).
+    const alertStudentIds = (await database.collection('alerts').find({ userId }).toArray()).map(
+      (a) => a['studentId']
+    );
+    expect(alertStudentIds.sort()).toEqual([kidA.toHexString(), kidB.toHexString()].sort());
   });
 });

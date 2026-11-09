@@ -9,7 +9,12 @@ import {
   type ISharingInviteSelectionResult,
   type ISharingPendingInvite,
 } from '@scholaracle/contracts';
-import { StudentRepository, UserRepository, type Student } from '@scholaracle/database';
+import {
+  StudentRepository,
+  UserRepository,
+  effectiveSharedAlertPrefs,
+  type Student,
+} from '@scholaracle/database';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import {
   parseSharingInviteBody,
@@ -54,19 +59,10 @@ function myStudentView(
   const access = student.accessFor(userId);
   if (access === null) return null;
   const studentId = student._id?.toString() ?? '';
+  // One source of truth for defaults (Student model) so display matches delivery.
+  const alerts = student.alertPrefsFor(userId) ?? effectiveSharedAlertPrefs({});
   if (access === 'owner') {
-    return {
-      studentId,
-      name: student.name,
-      access,
-      alerts: {
-        receiveAlerts: student.ownerAlertPrefs?.receiveAlerts !== false,
-        alertChannels: student.ownerAlertPrefs?.alertChannels ?? ['email'],
-        ...(student.ownerAlertPrefs?.alertTypes
-          ? { alertTypes: student.ownerAlertPrefs.alertTypes }
-          : {}),
-      },
-    };
+    return { studentId, name: student.name, access, alerts };
   }
   const row = student.sharedWith.find((sp) => sp.status === 'accepted' && sp.userId === userId);
   const inviterId = row?.invitedByUserId ?? student.userId.toString();
@@ -76,11 +72,7 @@ function myStudentView(
     name: student.name,
     access,
     invitedBy: { userId: inviterId, ...(inviterName ? { name: inviterName } : {}) },
-    alerts: {
-      receiveAlerts: row?.receiveAlerts !== false,
-      alertChannels: row?.alertChannels ?? ['email'],
-      ...(row?.alertTypes ? { alertTypes: row.alertTypes } : {}),
-    },
+    alerts,
   };
 }
 

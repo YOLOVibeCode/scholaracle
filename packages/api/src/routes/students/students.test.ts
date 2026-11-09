@@ -1407,10 +1407,19 @@ describe('Students API Routes', () => {
       });
       await alerts.create({
         userId: owner,
-        studentId: '12345',
+        studentId,
         type: 'missing_assignment',
         severity: 'critical',
         message: 'Lab 4 missing',
+      });
+      // A legacy row still keyed by the portal id: not part of the per-student view (it stays
+      // in the owner's inbox only until ALERT_STUDENT_ID_MIGRATION rewrites it).
+      await alerts.create({
+        userId: owner,
+        studentId: '12345',
+        type: 'missing_assignment',
+        severity: 'critical',
+        message: 'Legacy row',
       });
 
       const ownerRes = await request(app)
@@ -1418,6 +1427,7 @@ describe('Students API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`);
       expect(ownerRes.status).toBe(200);
       expect(ownerRes.body).toHaveLength(2);
+      expect(ownerRes.body.map((a: { message: string }) => a.message)).not.toContain('Legacy row');
       expect(ownerRes.body.find((a: { id: string }) => a.id === gradeDrop.id)).toMatchObject({
         acknowledged: true,
       });
@@ -1761,6 +1771,43 @@ describe('Students API Routes', () => {
         receiveAlerts: true,
         alertChannels: ['email', 'sms'],
       });
+    });
+
+    it('validates alertChannels like the sharing routes: unknown channels are rejected, duplicates collapse', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'fax'] });
+      expect(bad.status).toBe(400);
+      const notArray = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: 'email' });
+      expect(notArray.status).toBe(400);
+      expect(
+        (await database.collection('students').findOne({ _id: new ObjectId(studentId) }))?.[
+          'ownerAlertPrefs'
+        ]
+      ).toBeUndefined();
+
+      const deduped = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'email', 'push'] });
+      expect(deduped.status).toBe(200);
+      expect(deduped.body.ownerAlertPrefs.alertChannels).toEqual(['email', 'push']);
+
+      const defaulted = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true });
+      expect(defaulted.body.ownerAlertPrefs.alertChannels).toEqual(['email']);
     });
   });
 
