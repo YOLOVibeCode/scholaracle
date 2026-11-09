@@ -51,6 +51,8 @@ export interface ISyncPipelineOverrides {
   readonly resolver?: IScraperResolver;
   readonly enricher?: IAIEnricher;
   readonly enricherTimeoutMs?: number;
+  readonly selectorPatch?: Readonly<Record<string, string>>;
+  readonly appliedSelectorPatchId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,5 +154,9 @@ export async function runSyncPipeline(
     enricher: overrides?.enricher,
     enricherTimeoutMs: overrides?.enricherTimeoutMs,
     assets,
+    ...(overrides?.selectorPatch ? { selectorPatch: overrides.selectorPatch } : {}),
+    ...(overrides?.appliedSelectorPatchId
+      ? { appliedSelectorPatchId: overrides.appliedSelectorPatchId }
+      : {}),
   });
 }

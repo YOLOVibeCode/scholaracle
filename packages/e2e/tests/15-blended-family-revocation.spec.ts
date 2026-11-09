@@ -231,4 +231,83 @@ test.describe('@security Blended-family revocation ACL', () => {
     const heading = page.getByRole('heading');
     await expect(heading.first()).toBeVisible();
   });
+
+  test('BFR-006 negative: a stranger cannot accept or see an invitation; a member cannot edit, remove, or add sources', async ({
+    request,
+  }) => {
+    const ts = Date.now();
+    const ownerToken = await registerUser(request, `owner-bfr6-${ts}@example.com`, 'Owner');
+    const coEmail = `co-bfr6-${ts}@example.com`;
+    const coToken = await registerUser(request, coEmail, 'Co-Parent');
+    const strangerToken = await registerUser(
+      request,
+      `stranger-bfr6-${ts}@example.com`,
+      'Stranger'
+    );
+
+    const studentRes = await request.post(`${apiBaseUrl}/api/students`, {
+      data: { name: 'Ada', grade: 9 },
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(studentRes.ok()).toBeTruthy();
+    const student = (await studentRes.json()) as { id: string };
+
+    const inviteRes = await request.post(`${apiBaseUrl}/api/students/${student.id}/contacts`, {
+      data: { email: coEmail, name: 'Co-Parent', role: 'parent' },
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(inviteRes.status()).toBe(201);
+
+    // A stranger cannot accept the co-parent's invitation, nor list it.
+    const hijack = await request.post(`${apiBaseUrl}/api/students/${student.id}/contacts/accept`, {
+      data: { email: coEmail },
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
+    expect(hijack.status()).toBe(403);
+    const peek = await request.get(
+      `${apiBaseUrl}/api/students/invites/pending?email=${encodeURIComponent(coEmail)}`,
+      { headers: { authorization: `Bearer ${strangerToken}` } }
+    );
+    expect(peek.ok()).toBeTruthy();
+    expect(await peek.json()).toEqual([]);
+
+    // The co-parent accepts; identity comes from the session, not the body.
+    const accept = await request.post(`${apiBaseUrl}/api/students/${student.id}/contacts/accept`, {
+      data: {},
+      headers: { authorization: `Bearer ${coToken}` },
+    });
+    expect(accept.ok()).toBeTruthy();
+
+    // A member reads, but cannot edit, remove, or add a portal source.
+    const read = await request.get(`${apiBaseUrl}/api/students/${student.id}`, {
+      headers: { authorization: `Bearer ${coToken}` },
+    });
+    expect(read.ok()).toBeTruthy();
+    const edit = await request.put(`${apiBaseUrl}/api/students/${student.id}`, {
+      data: { name: 'Hacked' },
+      headers: { authorization: `Bearer ${coToken}` },
+    });
+    expect(edit.status()).toBe(403);
+    const addSource = await request.post(`${apiBaseUrl}/api/students/${student.id}/sources`, {
+      data: {
+        provider: 'canvas',
+        adapterId: 'canvas',
+        displayName: 'Canvas',
+        dataTypes: ['grades'],
+      },
+      headers: { authorization: `Bearer ${coToken}` },
+    });
+    expect(addSource.status()).toBe(403);
+    const remove = await request.delete(`${apiBaseUrl}/api/students/${student.id}`, {
+      headers: { authorization: `Bearer ${coToken}` },
+    });
+    expect(remove.status()).toBe(403);
+
+    // The student is untouched for the owner.
+    const still = await request.get(`${apiBaseUrl}/api/students/${student.id}`, {
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(still.ok()).toBeTruthy();
+    expect(((await still.json()) as { name: string }).name).toBe('Ada');
+  });
 });

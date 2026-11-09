@@ -11,9 +11,11 @@ import { DEMO_USER } from './demo-data';
 const SEED_TOKEN = 'seed-token-for-tests-0123456789';
 const ENV_KEYS = [
   'RAILWAY_ENVIRONMENT_ID',
+  'RAILWAY_ENVIRONMENT_NAME',
   'SEED_TOKEN',
   'SEED_ADMIN_PASSWORD',
   'SEED_ADMIN_MFA_SECRET',
+  'NODE_ENV',
 ] as const;
 
 describe('Seed route access', () => {
@@ -179,6 +181,7 @@ describe('Seed route access', () => {
 
     it('skips admin accounts when no admin credentials are configured', async () => {
       process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['RAILWAY_ENVIRONMENT_ID'] = 'deployed-sim-no-admin-secrets';
       delete process.env['SEED_ADMIN_PASSWORD'];
       delete process.env['SEED_ADMIN_MFA_SECRET'];
       const res = await request(app)

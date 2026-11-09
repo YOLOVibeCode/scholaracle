@@ -83,13 +83,13 @@ test.describe('@navigation Layer 3: Admin Navigation', () => {
     await loginAsRole('admin');
     await page.goto('/admin/dashboard');
 
-    const auditLink = page.locator('a[href="/admin/audit-logs"], [data-testid="audit-logs-link"]');
-    const count = await auditLink.count();
-
-    if (count > 0) {
-      await auditLink.click();
-      await expect(page).toHaveURL('/admin/audit-logs');
-    }
+    const auditLink = page.getByTestId('audit-logs-link');
+    await expect(auditLink).toBeVisible({ timeout: 15_000 });
+    await expect(auditLink).toHaveAttribute('href', '/admin/audit-logs');
+    // Programmatic click avoids Next dev overlay intercepting pointer events in local E2E.
+    await auditLink.evaluate((el) => (el as HTMLAnchorElement).click());
+    await expect(page).toHaveURL('/admin/audit-logs');
+    await expect(page.getByTestId('audit-logs-page')).toBeVisible();
   });
 
   test('NAV-A-009: Customer detail navigation', async ({ page, loginAsRole }) => {

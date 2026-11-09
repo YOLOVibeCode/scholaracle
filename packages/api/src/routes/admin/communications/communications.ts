@@ -353,7 +353,14 @@ export function communicationsRouter(config: ICommunicationsRouterConfig): Route
 
       const filter: Record<string, unknown> = {};
       if (userId) filter['userId'] = userId;
-      if (recipientEmail) filter['recipientEmail'] = recipientEmail;
+      if (recipientEmail && !userId) {
+        const user = await userRepository.findByEmail(recipientEmail);
+        if (user?._id) {
+          filter['userId'] = user._id.toString();
+        } else {
+          filter['recipientEmail'] = recipientEmail;
+        }
+      }
       if (status) filter['status'] = status;
       if (channel) filter['channel'] = channel;
       if (type) filter['type'] = type;

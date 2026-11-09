@@ -7,8 +7,10 @@ export function userLocalHhmm(utcDate: Date, timezone: string): string {
     minute: '2-digit',
     hour12: false,
   }).formatToParts(utcDate);
-  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  let hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
   const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  // Intl on some Node/ICU builds uses 24:00 for midnight instead of 00:00.
+  if (hour === '24') hour = '00';
   return `${hour}:${minute}`;
 }
 

@@ -28,6 +28,7 @@ describe('RunsPageClient', () => {
           status: 'committed',
           startedAt: '2026-01-15T10:00:00.000Z',
           error: null,
+          clientMeta: { clientType: 'mobile', coreVersion: '0.2.0' },
           coverage: {
             students: [
               {
@@ -41,6 +42,11 @@ describe('RunsPageClient', () => {
               },
             ],
           },
+          steps: [
+            { name: 'starting', startedAt: '2026-01-15T09:59:00.000Z', ms: 0, ok: true },
+            { name: 'extracting', startedAt: '2026-01-15T10:00:00.000Z', ms: 3200, ok: true },
+          ],
+          warnings: ['assignment[asn-1]: assignment.title is required'],
         },
       ]);
 
@@ -51,5 +57,9 @@ describe('RunsPageClient', () => {
     });
     expect(screen.getByTestId('list-gaps')).toBeInTheDocument();
     expect(screen.getByText(/Entrepreneurship: grade none, assignments 0/)).toBeInTheDocument();
+    expect(screen.getByTestId('list-run-steps')).toBeInTheDocument();
+    expect(screen.getByTestId('run-step-extracting')).toBeInTheDocument();
+    expect(screen.getByTestId('list-run-warnings')).toBeInTheDocument();
+    expect(screen.getByText(/assignment\.title is required/)).toBeInTheDocument();
   });
 });

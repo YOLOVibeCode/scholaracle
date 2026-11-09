@@ -5,8 +5,10 @@ import type { Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import {
   SLC_INGEST_SCHEMA_VERSION_V1,
+  AiBudgetError,
   AuthenticationError,
   ConflictError,
+  ERROR_CODES,
   NotFoundError,
   ValidationError,
   type ISlcIngestEnvelopeV1,
@@ -18,9 +20,11 @@ import {
   type IIngestSourceRegisterResponse,
   type IIngestRunCompleteResponse,
   type IIngestEnvelopeAcceptResponse,
+  type IIngestRunTraceResponse,
   type IIngestRunSkeletonUploadRequest,
   type IIngestRunSkeletonUploadResponse,
   type ISlcRunCoverage,
+  collectEnvelopeEntityWarnings,
 } from '@scholaracle/contracts';
 import {
   computeRunCoverage,
@@ -34,6 +38,7 @@ import {
   type IConnectorAuthenticatedRequest,
 } from '../../../middleware/connectorAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { parseIngestRunStats, parseIngestRunStep } from './ingestTraceHelpers';
 import { assertIngestRunActor, assertRunStatus } from './ingestRunLifecycle';
 import { mintConnectorTokenForDevice } from '../../../services/connectorDeviceTokens';
 import {
@@ -41,10 +46,8 @@ import {
   IngestRunRepository,
   IngestSourceRepository,
   StudentRepository,
-  SubscriptionRepository,
   UserRepository,
   AlertRepository,
-  PLAN_FEATURES,
   getCurrentSemesterStart,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
@@ -53,6 +56,10 @@ import {
   IngestStudentPlanLimitError,
   assertIngestWithinStudentPlanLimit,
 } from '../../../services/billing/studentPlanLimit';
+import { assertIngestBindingsForOps } from '../../../services/ingest/assertIngestBindings';
+import { attachStudentDataSourcesFromBindings } from '../../../services/ingest/attachStudentDataSourcesFromBindings';
+import { IngestMissingBindingError } from '../../../services/ingest/IngestMissingBindingError';
+import { INGEST_MISSING_BINDING_CODE } from '@scholaracle/contracts';
 import type { MongoQueue } from '@scholaracle/agents';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
 import {
@@ -63,6 +70,11 @@ import {
   type ISourceCourse,
 } from '@scholaracle/connector';
 import { logger } from '../../../logger';
+
+/** Reject ingest that lacks a portal-account binding only once bindings are backfilled. */
+function ingestRequiresBindings(): boolean {
+  return process.env['INGEST_REQUIRE_BINDINGS'] === 'true';
+}
 import { prepareIngestOps, resolveEnrichOpsMode, type EnrichOpsMode } from './enrichOps';
 import { scheduleGuidanceJobsFromOps } from '../../../services/guidance/scheduleFromIngest';
 import type { IAssetStore } from '../../../services/assets/IAssetStore';
@@ -75,6 +87,9 @@ import {
   syncStudentDataSourcesAfterIngestSuccess,
 } from './syncStudentDataSourcesFromIngest';
 import { recordRepairCandidatesFromCoverage } from '../../../services/repairCandidates/recordRepairCandidatesFromCoverage';
+import { listServedSelectorPatchesForHost } from '../../../services/selectorPatches/listServedSelectorPatches';
+import { recordSelectorPatchVerification } from '../../../services/selectorPatches/recordSelectorPatchVerification';
+import { ServedSelectorPatchRepository } from '@scholaracle/database';
 
 export interface IIngestV1RouterConfig {
   readonly database: Db;
@@ -92,9 +107,24 @@ export interface IIngestV1RouterConfig {
 }
 
 function warningsFromFullValidation(envelope: ISlcIngestEnvelopeV1): readonly string[] {
-  return validateEnvelopeFull(envelope)
+  const joinWarnings = validateEnvelopeFull(envelope)
     .checks.filter((c) => c.severity === 'warning')
     .map((c) => c.message);
+  return [...joinWarnings, ...collectEnvelopeEntityWarnings(envelope)];
+}
+
+function statsFromEnvelope(envelope: ISlcIngestEnvelopeV1): Record<string, number> {
+  const report = validateEnvelopeFull(envelope);
+  const fromEnvelope = envelope.stats ?? {};
+  const fromCounts: Record<string, number> = {};
+  for (const [entity, count] of Object.entries(report.entityCounts)) {
+    fromCounts[`entity_${entity}`] = count;
+  }
+  return {
+    ...fromEnvelope,
+    ...fromCounts,
+    opsTotal: envelope.ops.length,
+  };
 }
 
 function parseOptionalCoverage(raw: unknown): ISlcRunCoverage | undefined {
@@ -677,124 +707,6 @@ async function resolveDataUserId(
   return actorUserId;
 }
 
-/** Auto-create Student records for new studentExternalId values encountered in ops.
- *  Matches by studentExternalId (not composite key) so that the same student
- *  from different platforms (Canvas, Skyward) merges into ONE record. */
-async function autoCreateStudentsFromOps(params: {
-  readonly database: Db;
-  readonly userId: string;
-  readonly sourceId: string;
-  readonly ops: readonly ISlcDeltaOp[];
-  readonly provider: string;
-  readonly adapterId: string;
-  readonly portalBaseUrl?: string;
-}): Promise<void> {
-  // Extract unique studentExternalId values (with their institutionExternalId)
-  const studentExtIds = new Map<string, string | undefined>();
-  for (const op of params.ops) {
-    const studentExtId = op.key?.studentExternalId;
-    const institutionExtId = op.key?.institutionExternalId;
-    if (typeof studentExtId === 'string' && studentExtId.trim()) {
-      if (!studentExtIds.has(studentExtId)) {
-        studentExtIds.set(
-          studentExtId,
-          typeof institutionExtId === 'string' ? institutionExtId : undefined
-        );
-      }
-    }
-  }
-  if (studentExtIds.size === 0) return;
-
-  const studentRepo = new StudentRepository(params.database);
-  const students = await studentRepo.findByUserId(params.userId);
-
-  // Build lookup by studentExternalId — handle both new format ("avery-sample")
-  // and legacy composite ("institution:student") stored in studentId.
-  const studentsByExtId = new Map<string, (typeof students)[0]>();
-  // The phone keys a student it created by that student's own id, since such
-  // students have no external id yet. Match those too, so the first phone sync
-  // fills the child's record instead of creating a duplicate.
-  const studentsById = new Map<string, (typeof students)[0]>();
-  for (const s of students) {
-    if (s._id) studentsById.set(s._id.toString(), s);
-    if (!s.studentId) continue;
-    const parts = s.studentId.split(':', 2);
-    const extId = parts.length === 2 ? parts[1]! : s.studentId;
-    studentsByExtId.set(extId, s);
-  }
-
-  // New students count against the plan's cap, the same as POST /api/students.
-  const subscription = await new SubscriptionRepository(params.database).findByUserId(
-    params.userId
-  );
-  const maxStudents = PLAN_FEATURES[subscription?.effectivePlan() ?? 'free'].maxStudents;
-  let studentCount = students.length;
-
-  // Extract student profile names from ops (keyed by studentExternalId)
-  const profileNames = new Map<string, string>();
-  for (const op of params.ops) {
-    if (op.entity === 'studentProfile' && op.op === 'upsert') {
-      const studentExtId = op.key?.studentExternalId;
-      const name = (op.record?.['name'] as string | undefined) ?? '';
-      if (studentExtId && name) {
-        profileNames.set(studentExtId, name);
-      }
-    }
-  }
-
-  for (const [studentExtId, institutionExtId] of studentExtIds) {
-    const newDataSource = {
-      id: params.sourceId,
-      pluginId: params.adapterId,
-      enabled: true,
-      provider: params.provider,
-      baseUrl: params.portalBaseUrl,
-      institutionExternalId: institutionExtId,
-    };
-
-    const byOwnId = studentsByExtId.has(studentExtId) ? undefined : studentsById.get(studentExtId);
-    if (byOwnId && !byOwnId.studentId) {
-      // Give the student its external id, so read routes (which filter slc_* by
-      // studentId) find the data this sync writes.
-      await studentRepo.update(byOwnId._id!, { studentId: studentExtId });
-    }
-    const existing = studentsByExtId.get(studentExtId) ?? byOwnId;
-
-    if (existing) {
-      const hasSource = existing.dataSources.some((ds) => ds.id === params.sourceId);
-      if (!hasSource) {
-        await studentRepo.update(existing._id!, {
-          dataSources: [...existing.dataSources, newDataSource],
-        });
-      }
-      // Migrate legacy composite studentId to plain studentExternalId
-      if (existing.studentId && existing.studentId.includes(':')) {
-        await studentRepo.update(existing._id!, { studentId: studentExtId });
-      }
-    } else {
-      // Guard: do not create a new student under a co-parent userId when a student
-      // with this externalId already exists under a different owner.  resolveDataUserId
-      // should have already returned the owner's userId, so params.userId IS the owner.
-      // But if we're still seeing "not found" it means this is a brand-new student.
-      if (maxStudents !== -1 && studentCount >= maxStudents) {
-        throw new IngestStudentPlanLimitError({
-          currentPlan: subscription?.effectivePlan() ?? 'free',
-          maxStudents,
-          currentCount: studentCount,
-        });
-      }
-      studentCount += 1;
-      const studentName = profileNames.get(studentExtId) ?? studentExtId;
-      await studentRepo.create({
-        userId: params.userId,
-        name: studentName,
-        studentId: studentExtId,
-        dataSources: [newDataSource],
-      });
-    }
-  }
-}
-
 const ENTITIES_WITH_ASSETS = ['course', 'courseMaterial', 'assignment', 'message'] as const;
 
 async function logDataQuality(params: {
@@ -1256,6 +1168,20 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
     })
   );
 
+  router.get(
+    '/selector-patches',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const portalHost =
+        typeof req.query['portalHost'] === 'string' ? req.query['portalHost'].trim() : '';
+      if (!portalHost) {
+        throw new ValidationError('Missing portalHost query parameter');
+      }
+      const body = await listServedSelectorPatchesForHost(config.database, portalHost);
+      res.status(200).json(body);
+    })
+  );
+
   // Stored credentials never leave the server; portal logins live on the parent's device.
   router.get('/sources/:sourceId/credentials', connectorAuth, (_req, res: Response) => {
     res.status(410).json({
@@ -1308,6 +1234,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         clientMeta && typeof clientMeta === 'object' && !Array.isArray(clientMeta)
           ? (clientMeta as Record<string, string>)
           : null;
+      const initialStep = parseIngestRunStep(req.body?.step);
       await runRepo.startRun({
         userId: dataUserId,
         actorUserId,
@@ -1315,6 +1242,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         runId,
         lastCursor,
         clientMeta: meta,
+        ...(initialStep !== null ? { initialStep } : {}),
       });
 
       res.status(200).json({
@@ -1323,6 +1251,36 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         mode: 'delta',
         lastCursor,
       } satisfies IIngestRunStartResponse);
+    })
+  );
+
+  router.post(
+    '/runs/:runId/trace',
+    connectorAuth,
+    asyncHandler(async (req: IConnectorAuthenticatedRequest, res: Response) => {
+      const actorUserId = req.connectorUserId ?? '';
+      const runId = req.params['runId'];
+      if (!runId) {
+        throw new ValidationError('Missing runId');
+      }
+      const step = parseIngestRunStep(req.body?.step);
+      if (step === null) {
+        throw new ValidationError('Invalid trace step');
+      }
+      const existingRun = await runRepo.findByRunId(runId);
+      if (!existingRun) {
+        throw new NotFoundError('Run not found');
+      }
+      assertIngestRunActor(existingRun, actorUserId);
+      const runDataUserId = existingRun.userId.toString();
+      const traceStats = parseIngestRunStats(req.body?.stats);
+      const traceWarnings = parseOptionalStringArray(req.body?.warnings);
+      await runRepo.appendTraceStep(runDataUserId, runId, {
+        step,
+        ...(traceStats !== undefined ? { stats: traceStats } : {}),
+        ...(traceWarnings !== undefined ? { warnings: traceWarnings } : {}),
+      });
+      res.status(200).json({ success: true } satisfies IIngestRunTraceResponse);
     })
   );
 
@@ -1362,6 +1320,34 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         envelope.source?.sourceId,
         firstStudentExtId
       );
+
+      const envelopeSourceId = envelope.source?.sourceId ?? '';
+      try {
+        await assertIngestBindingsForOps({
+          database: config.database,
+          userId: dataUserId,
+          sourceId: envelopeSourceId,
+          ops: envelope.ops,
+        });
+      } catch (err) {
+        if (err instanceof IngestMissingBindingError && !ingestRequiresBindings()) {
+          // Existing sources have no bindings yet (no backfill), and installed app builds
+          // and the desktop CLI do not create them. Warn until INGEST_REQUIRE_BINDINGS=true.
+          logger.warn(
+            { runId: req.params['runId'], sourceId: envelopeSourceId },
+            'Ingest without a portal-account binding (allowed: INGEST_REQUIRE_BINDINGS off)'
+          );
+        } else if (err instanceof IngestMissingBindingError) {
+          res.status(422).json({
+            success: false,
+            error: err.message,
+            code: INGEST_MISSING_BINDING_CODE,
+          });
+          return;
+        } else {
+          throw err;
+        }
+      }
 
       try {
         await assertIngestWithinStudentPlanLimit(config.database, dataUserId, envelope.ops);
@@ -1420,7 +1406,7 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
       const sourceId = envelope.source?.sourceId ?? '';
       if (sourceId) {
-        await autoCreateStudentsFromOps({
+        await attachStudentDataSourcesFromBindings({
           database: config.database,
           userId: dataUserId,
           sourceId,
@@ -1443,11 +1429,14 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
           });
         }
       }
+      const preparedEnvelope = { ...envelope, ops: prepared.ops };
       const coverageSnapshot = computeRunCoverage(prepared.ops);
-      const warningLines = warningsFromFullValidation({ ...envelope, ops: prepared.ops });
+      const warningLines = warningsFromFullValidation(preparedEnvelope);
+      const runStats = statsFromEnvelope(preparedEnvelope);
       const markedUploaded = await runRepo.markUploaded(dataUserId, runId, {
         coverage: coverageSnapshot,
         warnings: [...warningLines],
+        stats: runStats,
         opCount: prepared.ops.length,
       });
       if (!markedUploaded) {
@@ -1475,11 +1464,8 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         throw new NotFoundError('Run not found');
       }
       // Verify the actor initiated this run or is the owner.
-      const runActorUserId = existingRun.actorUserId?.toString() ?? existingRun.userId.toString();
+      assertIngestRunActor(existingRun, actorUserId);
       const runDataUserId = existingRun.userId.toString();
-      if (runActorUserId !== actorUserId && runDataUserId !== actorUserId) {
-        throw new AuthenticationError('Not authorized to complete this run');
-      }
 
       const status = (req.body?.status as string | undefined) ?? 'success';
       if (status === 'failed') {
@@ -1542,17 +1528,37 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
 
         const skeletonHash = parseOptionalSkeletonHash(req.body?.skeletonHash);
         const coverageForRepair = committedRun.coverage ?? undefined;
-        if (skeletonHash && coverageForRepair) {
-          const source = await sourceRepo.findByUserIdAndSourceId(
-            runDataUserId,
-            committedRun.sourceId
-          );
-          if (source?.portalBaseUrl) {
-            await recordRepairCandidatesFromCoverage({
+        const source = await sourceRepo.findByUserIdAndSourceId(
+          runDataUserId,
+          committedRun.sourceId
+        );
+        if (skeletonHash && coverageForRepair && source?.portalBaseUrl) {
+          await recordRepairCandidatesFromCoverage({
+            database: config.database,
+            portalBaseUrl: source.portalBaseUrl,
+            recipeId: source.adapterId,
+            skeletonHash,
+            coverage: coverageForRepair,
+          });
+        }
+        const appliedPatchId =
+          typeof req.body?.appliedSelectorPatchId === 'string'
+            ? req.body.appliedSelectorPatchId.trim()
+            : '';
+        if (appliedPatchId && coverageForRepair) {
+          const servedRepo = new ServedSelectorPatchRepository(config.database);
+          const served = await servedRepo.findByPatchId(appliedPatchId);
+          if (served) {
+            await recordSelectorPatchVerification({
               database: config.database,
-              portalBaseUrl: source.portalBaseUrl,
-              recipeId: source.adapterId,
-              skeletonHash,
+              patchId: appliedPatchId,
+              key: {
+                portalHost: served.portalHost,
+                recipeId: served.recipeId,
+                step: served.step,
+                skeletonHash: served.skeletonHash,
+                gapKind: served.gapKind,
+              },
               coverage: coverageForRepair,
             });
           }
@@ -1564,19 +1570,26 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
         userId: runDataUserId,
         queue: config.queue,
       });
-      // LLM-based material matching (Layer 3) — fire-and-forget
-      void runPostIngestIntelligence({
-        database: config.database,
-        userId: runDataUserId,
-        assetStore: config.assetStore,
-      }).catch((err: unknown) => {
-        logger.error({ err, runId }, 'MaterialMatcher post-ingest intelligence failed');
-      });
+      let budgetNotice: readonly string[] | undefined;
+      try {
+        await runPostIngestIntelligence({
+          database: config.database,
+          userId: runDataUserId,
+          assetStore: config.assetStore,
+        });
+      } catch (err: unknown) {
+        if (err instanceof AiBudgetError) {
+          budgetNotice = [ERROR_CODES.AI_BUDGET];
+        } else {
+          logger.error({ err, runId }, 'MaterialMatcher post-ingest intelligence failed');
+        }
+      }
       res.status(200).json({
         success: true,
         committed: true,
         newCursor: cursor ?? null,
         derivedAlertsQueued: true,
+        ...(budgetNotice !== undefined ? { codes: budgetNotice } : {}),
       } satisfies IIngestRunCompleteResponse);
     })
   );

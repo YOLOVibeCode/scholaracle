@@ -33,3 +33,10 @@ export interface IStudentCreateRequest {
   readonly grade?: number;
   readonly studentId?: string;
 }
+
+/** Request body of PUT /api/students/:id (fields the web edit form sends). */
+export interface IStudentUpdateRequest {
+  readonly name?: string;
+  readonly grade?: number;
+  readonly studentId?: string;
+}

@@ -1,0 +1,17 @@
+# Canvas sign-in page inside the app's WebView (direct Canvas login, not SSO).
+# Districts that use Google or Clever sign-in need their own subflow.
+appId: com.scholarmancy.app
+---
+- extendedWaitUntil:
+    visible: 'Email|Username|Login'
+    timeout: 60000
+- tapOn: 'Email|Username|Login'
+- inputText:
+    text: ${MAESTRO_PORTAL_USERNAME}
+    label: Type portal username
+- tapOn: 'Password'
+- inputText:
+    text: ${MAESTRO_PORTAL_PASSWORD}
+    label: Type portal password
+- hideKeyboard
+- tapOn: 'Log In|Sign In|Login'
