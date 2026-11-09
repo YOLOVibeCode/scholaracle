@@ -42,7 +42,10 @@ interface IDashboardScreenProps {
   onOpenCourse(course: ICourseGrade): void;
   onOpenAssignmentFromTab(assignment: ICourseGradeAssignment, course: ICourseGrade): void;
   onRunHistory?(): void;
+  /** Hidden for members: only the owner and admins may edit (sharing-spec §4.2). */
   onEditStudent?(): void;
+  /** Opens "Family & guardians" for this student (every adult may look). */
+  onOpenFamily?(): void;
 }
 
 export function DashboardScreen({
@@ -54,6 +57,7 @@ export function DashboardScreen({
   onOpenAssignmentFromTab,
   onRunHistory,
   onEditStudent,
+  onOpenFamily,
 }: IDashboardScreenProps): React.ReactElement {
   const [data, setData] = useState<IDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -133,6 +137,17 @@ export function DashboardScreen({
         </TouchableOpacity>
         <Text style={styles.title}>{studentName}</Text>
         <View style={styles.headerActions}>
+          {onOpenFamily && (
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={onOpenFamily}
+              accessibilityRole="button"
+              accessibilityLabel={`Family and guardians for ${studentName}`}
+              testID="button-family"
+            >
+              <Text style={styles.historyText}>Family</Text>
+            </TouchableOpacity>
+          )}
           {onEditStudent && (
             <TouchableOpacity
               style={styles.historyBtn}

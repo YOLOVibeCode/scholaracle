@@ -33,6 +33,7 @@ import {
   timezoneMismatch,
   type INotificationDraft,
 } from '../alerts/notificationSettingsModel';
+import { SharedStudentAlertsSection } from '../components/SharedStudentAlertsSection';
 
 interface INotificationSettingsScreenProps {
   onBack(): void;
@@ -201,6 +202,9 @@ export function NotificationSettingsScreen({
             </View>
           ))}
         </View>
+
+        {/* Students shared with this adult: their own channels / types per student, with Silence. */}
+        <SharedStudentAlertsSection />
 
         <Text style={styles.sectionHeader}>Quiet hours</Text>
         <View style={styles.card}>

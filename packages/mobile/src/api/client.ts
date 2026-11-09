@@ -50,6 +50,24 @@ import type {
   IAlertActionResponse,
   IUserSettingsResponse,
   IUserSettingsUpdateRequest,
+  IMySharingView,
+  ISharingContactAdminRequest,
+  ISharingContactUpdateRequest,
+  ISharingContactUpdateResult,
+  ISharingInviteRequest,
+  ISharingInviteResult,
+  ISharingInviteSelection,
+  ISharingInviteSelectionResult,
+  ISharingLeaveRequest,
+  ISharingLeaveResult,
+  ISharingLoginLinkRequest,
+  ISharingLoginLinkResult,
+  ISharingOwnerAlertPrefsRequest,
+  ISharingOwnerAlertPrefsResult,
+  ISharingPendingInvite,
+  ISharingPerson,
+  ISharingResendResult,
+  ISharingSuccessResult,
 } from '@scholaracle/contracts';
 import {
   parseStudentStatusUpdateResponse,
@@ -62,6 +80,14 @@ import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
 export type { IStudentListItem } from '@scholaracle/contracts';
+
+/**
+ * The signed-in user as this device remembers it. `forcePasswordReset` is true for an account
+ * the server created from a sharing invitation (random password): the app shows "Set a password".
+ */
+export interface ISessionUser extends IAuthUser {
+  readonly forcePasswordReset?: boolean;
+}
 
 const ACCESS_TOKEN_KEY = 'slc_access_token';
 const REFRESH_TOKEN_KEY = 'slc_refresh_token';
@@ -246,11 +272,11 @@ export class ScholarmancyApiClient {
     await SecureStore.deleteItemAsync(SESSION_USER_KEY).catch(() => undefined);
   }
 
-  async getSessionUser(): Promise<IAuthUser | null> {
+  async getSessionUser(): Promise<ISessionUser | null> {
     const raw = await SecureStore.getItemAsync(SESSION_USER_KEY);
     if (raw != null && raw !== '') {
       try {
-        const parsed = JSON.parse(raw) as Partial<IAuthUser>;
+        const parsed = JSON.parse(raw) as Partial<ISessionUser>;
         const user = sessionUserFromPartial(parsed);
         if (user) return user;
       } catch {
@@ -415,6 +441,123 @@ export class ScholarmancyApiClient {
   }
 
   /** PUT /api/settings — partial update; the server merges and returns the new settings. */
+  // ---------------------------------------------------------------------------
+  // Sharing: Family & guardians (docs/sharing-spec.md §4.3). Cross-student calls live under
+  // /api/sharing; per-student people management under /api/students/:id/contacts*.
+  // Identity is always the JWT email: no call sends "whose" invitation it is.
+  // ---------------------------------------------------------------------------
+
+  /** Pending invitations addressed to the signed-in user. */
+  async getPendingSharingInvites(): Promise<ISharingPendingInvite[]> {
+    return this._get<ISharingPendingInvite[]>('/api/sharing/invites/pending');
+  }
+
+  /** One person, one or more students, one email. Duplicates are reported per student. */
+  async sendSharingInvite(request: ISharingInviteRequest): Promise<ISharingInviteResult> {
+    return this._post<ISharingInviteResult>('/api/sharing/invites', request, true);
+  }
+
+  async acceptSharingInvites(
+    selection: ISharingInviteSelection
+  ): Promise<ISharingInviteSelectionResult> {
+    return this._post<ISharingInviteSelectionResult>(
+      '/api/sharing/invites/accept',
+      selection,
+      true
+    );
+  }
+
+  async declineSharingInvites(
+    selection: ISharingInviteSelection
+  ): Promise<ISharingInviteSelectionResult> {
+    return this._post<ISharingInviteSelectionResult>(
+      '/api/sharing/invites/decline',
+      selection,
+      true
+    );
+  }
+
+  /** Re-sends the invitation email for a group (owner / admin on every student in it). */
+  async resendSharingInvite(inviteGroupId: string): Promise<ISharingResendResult> {
+    return this._post<ISharingResendResult>(
+      `/api/sharing/invites/${encodeURIComponent(inviteGroupId)}/resend`,
+      {},
+      true
+    );
+  }
+
+  /** The signed-in adult stops following a student (admins and members; never the owner). */
+  async leaveStudent(studentId: string): Promise<ISharingLeaveResult> {
+    const body: ISharingLeaveRequest = { studentId };
+    return this._post<ISharingLeaveResult>('/api/sharing/leave', body, true);
+  }
+
+  /** Every accessible student with the caller's access, inviter and own alert prefs. */
+  async getMySharing(): Promise<IMySharingView> {
+    return this._get<IMySharingView>('/api/sharing/mine');
+  }
+
+  /** Owner + every invited adult for one student, with texting consent status. */
+  async getStudentContacts(studentId: string): Promise<ISharingPerson[]> {
+    return this._get<ISharingPerson[]>(`/api/students/${encodeURIComponent(studentId)}/contacts`);
+  }
+
+  /** Owner / admin: any field. The person themself: only their alert preferences. */
+  async updateStudentContact(
+    studentId: string,
+    email: string,
+    patch: ISharingContactUpdateRequest
+  ): Promise<ISharingContactUpdateResult> {
+    return this._put<ISharingContactUpdateResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}`,
+      patch
+    );
+  }
+
+  async setStudentContactAdmin(
+    studentId: string,
+    email: string,
+    isAdmin: boolean
+  ): Promise<ISharingSuccessResult> {
+    const body: ISharingContactAdminRequest = { isAdmin };
+    return this._put<ISharingSuccessResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}/admin`,
+      body
+    );
+  }
+
+  /** Owner / admin removes a pending or accepted adult; their links die with it. */
+  async removeStudentContact(studentId: string, email: string): Promise<void> {
+    await this._delete<ISharingSuccessResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}`,
+      {}
+    );
+  }
+
+  /** Owner / admin sends a 24 h sign-in link to a contact by email or text. */
+  async sendStudentContactLoginLink(
+    studentId: string,
+    email: string,
+    request: ISharingLoginLinkRequest
+  ): Promise<ISharingLoginLinkResult> {
+    return this._post<ISharingLoginLinkResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}/magic-link/send`,
+      request,
+      true
+    );
+  }
+
+  /** The owner's own alert preferences for a student (owner only). */
+  async updateOwnerAlertPrefs(
+    studentId: string,
+    prefs: ISharingOwnerAlertPrefsRequest
+  ): Promise<ISharingOwnerAlertPrefsResult> {
+    return this._put<ISharingOwnerAlertPrefsResult>(
+      `/api/students/${encodeURIComponent(studentId)}/owner-alert-prefs`,
+      prefs
+    );
+  }
+
   async updateNotificationSettings(
     update: IUserSettingsUpdateRequest
   ): Promise<IUserSettingsResponse> {
@@ -978,7 +1121,7 @@ function isOfflineLike(err: unknown): boolean {
   );
 }
 
-function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
+function sessionUserFromLogin(res: IAuthLoginResponse): ISessionUser {
   const raw = res.user;
   const role = raw?.role === 'student' ? 'student' : 'parent';
   return {
@@ -987,10 +1130,11 @@ function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
     name: raw?.name ?? '',
     role,
     ...(role === 'student' && raw?.studentId ? { studentId: raw.studentId } : {}),
+    ...(res.forcePasswordReset === true ? { forcePasswordReset: true } : {}),
   };
 }
 
-function sessionUserFromPartial(parsed: Partial<IAuthUser>): IAuthUser | null {
+function sessionUserFromPartial(parsed: Partial<ISessionUser>): ISessionUser | null {
   if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') return null;
   const role = parsed.role === 'student' ? 'student' : 'parent';
   return {
@@ -1001,6 +1145,7 @@ function sessionUserFromPartial(parsed: Partial<IAuthUser>): IAuthUser | null {
     ...(role === 'student' && typeof parsed.studentId === 'string' && parsed.studentId !== ''
       ? { studentId: parsed.studentId }
       : {}),
+    ...(parsed.forcePasswordReset === true ? { forcePasswordReset: true } : {}),
   };
 }
 

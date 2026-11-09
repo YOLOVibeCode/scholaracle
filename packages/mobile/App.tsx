@@ -26,6 +26,15 @@ import { NotificationSettingsScreen } from './src/screens/NotificationSettingsSc
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { InvitationsScreen } from './src/screens/InvitationsScreen';
+import { ShareStudentScreen } from './src/screens/ShareStudentScreen';
+import { FamilyScreen } from './src/screens/FamilyScreen';
+import {
+  canEditStudent,
+  canManagePortals,
+  connectPortalBlockedMessage,
+} from './src/sharing/accessMatrix';
+import { loadHomeCounts, showOnboardingGate } from './src/sharing/studentsHome';
 import { registerForPushNotifications } from './src/notifications/pushSetup';
 import { usePushTapNavigation } from './src/notifications/usePushTapNavigation';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
@@ -78,6 +87,8 @@ interface INavState {
   readonly editReturn?: 'dashboard' | 'students';
   /** Which studio tab the work pack returns to. */
   readonly studioReturn?: 'today' | 'week';
+  /** Where the Share screen returns to (Family & guardians preselects `student`). */
+  readonly shareReturn?: 'students' | 'family';
 }
 
 function AppContent(): React.ReactElement {
@@ -86,6 +97,10 @@ function AppContent(): React.ReactElement {
   const [loggedOutSurface, setLoggedOutSurface] = useState<'login' | 'onboarding'>('login');
   const [nav, setNav] = useState<INavState>({ view: 'students' });
   const [studentCount, setStudentCount] = useState<number | null>(null);
+  // Sharing: an invitee with no students of their own sees the Students screen (banner), not
+  // onboarding, until they tap "Get started" (setupRequested).
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
+  const [setupRequested, setSetupRequested] = useState(false);
   const linkingUrl = useLinkingURL();
   const handledDemoUrl = useRef<string | null>(null);
   const handledDiagUrl = useRef<string | null>(null);
@@ -207,20 +222,31 @@ function AppContent(): React.ReactElement {
     })();
   }, [isLoggedIn, studentMode, accountEpoch]);
 
+  const refreshHomeCounts = useCallback((): void => {
+    void loadHomeCounts(apiClient)
+      .then((counts) => {
+        setStudentCount(counts.students);
+        setPendingInviteCount(counts.pendingInvites);
+      })
+      .catch(() => {
+        setStudentCount(0);
+        setPendingInviteCount(0);
+      });
+  }, []);
+
   useEffect(() => {
     if (!isLoggedIn) {
       setStudentCount(null);
+      setPendingInviteCount(0);
+      setSetupRequested(false);
       return;
     }
     if (studentMode) {
       setStudentCount(0);
       return;
     }
-    void apiClient
-      .getStudents()
-      .then((rows) => setStudentCount(rows.length))
-      .catch(() => setStudentCount(0));
-  }, [isLoggedIn, studentMode, accountEpoch]);
+    refreshHomeCounts();
+  }, [isLoggedIn, studentMode, accountEpoch, refreshHomeCounts]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -269,6 +295,11 @@ function AppContent(): React.ReactElement {
       return;
     }
     if (!source) {
+      // Members may request a sync but not connect a portal (sharing-spec §4.2).
+      if (!canManagePortals(student.access)) {
+        Alert.alert('No portal connected', connectPortalBlockedMessage(student.name));
+        return;
+      }
       Alert.alert(
         'No portal connected',
         `Connect a school portal for ${student.name} first, then sync.`,
@@ -363,7 +394,10 @@ function AppContent(): React.ReactElement {
     return <View style={styles.loading} />;
   }
 
-  if (studentCount === 0 && nav.view === 'students') {
+  if (
+    showOnboardingGate({ studentCount, pendingInviteCount, setupRequested }) &&
+    nav.view === 'students'
+  ) {
     return (
       <OnboardingScreen
         entry="logged-in"
@@ -393,9 +427,52 @@ function AppContent(): React.ReactElement {
           })
         }
         onRunHistory={() => setNav({ view: 'run-history', student: nav.student })}
-        onEditStudent={() =>
-          setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+        onEditStudent={
+          canEditStudent(nav.student.access)
+            ? (): void =>
+                setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+            : undefined
         }
+        onOpenFamily={() => setNav({ view: 'family', student: nav.student })}
+      />
+    );
+  }
+
+  if (nav.view === 'family' && nav.student) {
+    return (
+      <FamilyScreen
+        student={nav.student}
+        onBack={() => setNav({ view: 'dashboard', student: nav.student })}
+        onShare={() => setNav({ view: 'share', student: nav.student, shareReturn: 'family' })}
+        onLeft={() => {
+          setNav({ view: 'students' });
+          refreshHomeCounts();
+        }}
+      />
+    );
+  }
+
+  if (nav.view === 'share') {
+    const back = (): void =>
+      setNav(
+        nav.shareReturn === 'family' && nav.student
+          ? { view: 'family', student: nav.student }
+          : { view: 'students' }
+      );
+    return (
+      <ShareStudentScreen
+        preselectStudentId={nav.shareReturn === 'family' ? nav.student?.id : undefined}
+        onBack={back}
+        onDone={back}
+      />
+    );
+  }
+
+  if (nav.view === 'invitations') {
+    return (
+      <InvitationsScreen
+        onBack={() => setNav({ view: 'students' })}
+        onChanged={refreshHomeCounts}
       />
     );
   }
@@ -490,10 +567,7 @@ function AppContent(): React.ReactElement {
         }
         onRemoved={() => {
           setNav({ view: 'students' });
-          void apiClient
-            .getStudents()
-            .then((rows) => setStudentCount(rows.length))
-            .catch(() => undefined);
+          refreshHomeCounts();
         }}
       />
     );
@@ -550,10 +624,15 @@ function AppContent(): React.ReactElement {
       key={accountEpoch}
       onSelectStudent={(student) => setNav({ view: 'dashboard', student })}
       onAddSource={() => setNav({ view: 'connect-source' })}
-      onStartSetup={() => setNav({ view: 'students' })}
+      onStartSetup={() => {
+        setSetupRequested(true);
+        setNav({ view: 'students' });
+      }}
       onOpenSettings={() => setNav({ view: 'settings' })}
       onEditStudent={(student) => setNav({ view: 'student-edit', student, editReturn: 'students' })}
       onOpenAlerts={() => setNav({ view: 'alerts' })}
+      onOpenInvitations={() => setNav({ view: 'invitations' })}
+      onShare={() => setNav({ view: 'share', shareReturn: 'students' })}
     />
   );
 }

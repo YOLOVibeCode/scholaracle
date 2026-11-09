@@ -32,6 +32,9 @@ import {
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
+import { apiClient } from '../api/client';
+import { accessMapFromStudents, canDisconnectOnServerAs } from '../sharing/accessMatrix';
+import type { StudentAccess } from '@scholaracle/contracts';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -59,6 +62,8 @@ export function SettingsScreen({
   const [serverAiEnabled, setServerAiEnabled] = useState(false);
   const [isServerAiLoading, setIsServerAiLoading] = useState(true);
   const [isServerAiSaving, setIsServerAiSaving] = useState(false);
+  // Student id -> the viewer's access: members may only disconnect "this phone only".
+  const [accessById, setAccessById] = useState<ReadonlyMap<string, StudentAccess>>(new Map());
 
   const loadSources = useCallback(async () => {
     if (hideHousehold) {
@@ -66,7 +71,15 @@ export function SettingsScreen({
       return;
     }
     setSources(await connectedSourceStore.list());
+    void apiClient
+      .getStudents()
+      .then((rows) => setAccessById(accessMapFromStudents(rows)))
+      .catch(() => undefined);
   }, [hideHousehold]);
+
+  const serverDisconnectAllowed = (source: IConnectedSource): boolean =>
+    canDisconnectOnServer(source) &&
+    canDisconnectOnServerAs(accessById.get(source.studentId ?? ''));
 
   useEffect(() => {
     void loadSources();
@@ -103,15 +116,16 @@ export function SettingsScreen({
   };
 
   const handleDisconnect = (source: IConnectedSource): void => {
+    const serverOption = serverDisconnectAllowed(source);
     const localOnly = {
-      text: canDisconnectOnServer(source) ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
+      text: serverOption ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
       style: 'destructive' as const,
       onPress: (): void => runDisconnect(source, 'local-only'),
     };
     Alert.alert(
       'Disconnect portal?',
-      disconnectConfirmText(source),
-      canDisconnectOnServer(source)
+      disconnectConfirmText(source, serverOption),
+      serverOption
         ? [
             { text: 'Cancel', style: 'cancel' },
             localOnly,

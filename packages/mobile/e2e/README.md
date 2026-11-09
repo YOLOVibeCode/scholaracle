@@ -14,9 +14,19 @@ pnpm e2e:ios launch        # build a local Release app, check it boots (no login
 pnpm e2e:android launch
 pnpm e2e:ios smoke         # parent sign-in, student list, dashboard
 pnpm e2e:ios sync          # connect the portal, sign in, scrape, check grades
-pnpm e2e:android all       # every flow
+pnpm e2e:ios share         # owner invites a co-parent, co-parent accepts (two UAT accounts)
+pnpm e2e:android all       # every flow except share
 pnpm e2e:ios sync --no-build   # reuse the installed app
 ```
+
+`share` runs `share.yaml` (the parent account opens the student's Family &
+guardians screen and invites `MAESTRO_COPARENT_EMAIL`) and then `accept.yaml`
+(signs in as the co-parent and accepts from the Students banner). It needs a
+second throwaway UAT parent account in `MAESTRO_COPARENT_EMAIL` /
+`MAESTRO_COPARENT_PASSWORD`; it is not part of `all` and does not run in CI.
+Both flows are re-runnable: a repeat invitation reports "Already has access",
+and the accept flow skips the banner when there is nothing pending. To reset,
+the co-parent taps Leave on the student's Family & guardians screen.
 
 Local builds use Xcode and Gradle on this Mac, not EAS, so they cost no build
 credits. The app points at `E2E_API_URL`, which defaults to the UAT API.
