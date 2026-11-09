@@ -42,6 +42,7 @@ interface IDashboardScreenProps {
   onOpenCourse(course: ICourseGrade): void;
   onOpenAssignmentFromTab(assignment: ICourseGradeAssignment, course: ICourseGrade): void;
   onRunHistory?(): void;
+  onEditStudent?(): void;
 }
 
 export function DashboardScreen({
@@ -52,6 +53,7 @@ export function DashboardScreen({
   onOpenCourse,
   onOpenAssignmentFromTab,
   onRunHistory,
+  onEditStudent,
 }: IDashboardScreenProps): React.ReactElement {
   const [data, setData] = useState<IDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -131,6 +133,15 @@ export function DashboardScreen({
         </TouchableOpacity>
         <Text style={styles.title}>{studentName}</Text>
         <View style={styles.headerActions}>
+          {onEditStudent && (
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={onEditStudent}
+              testID="button-edit-student"
+            >
+              <Text style={styles.historyText}>Edit</Text>
+            </TouchableOpacity>
+          )}
           {onRunHistory && (
             <TouchableOpacity style={styles.historyBtn} onPress={onRunHistory}>
               <Text style={styles.historyText}>Runs</Text>
