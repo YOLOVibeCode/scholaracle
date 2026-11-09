@@ -1,6 +1,11 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import type { IAlertReader, IAlertWriter, IAlertData } from '@scholaracle/interfaces';
+import type {
+  IAlertReader,
+  IAlertWriter,
+  IAlertData,
+  IAlertVisibilityScope,
+} from '@scholaracle/interfaces';
 
 /**
  * Repository for Alert model operations.
@@ -22,6 +27,48 @@ export class AlertRepository implements IAlertReader, IAlertWriter {
   public async findByUserId(userId: string): Promise<readonly (IAlertData & { id?: string })[]> {
     const documents = await this._collection.find({ userId }).toArray();
 
+    return documents.map((doc) => this._toAlertData(doc));
+  }
+
+  /**
+   * Find every alert the viewer may see: rows carrying their own `userId` (legacy owner rows)
+   * plus, per accessible student, rows carrying that student's owner and one of its ids.
+   * Scoping by owner keeps a portal student id from matching another family's rows.
+   *
+   * @param viewerUserId - The caller
+   * @param scopes - Students the caller can access
+   * @returns Alerts newest first
+   */
+  public async findVisibleTo(
+    viewerUserId: string,
+    scopes: readonly IAlertVisibilityScope[]
+  ): Promise<readonly (IAlertData & { id?: string })[]> {
+    const clauses: Record<string, unknown>[] = [{ userId: viewerUserId }];
+    for (const scope of scopes) {
+      if (scope.studentIds.length === 0) continue;
+      clauses.push({ userId: scope.ownerUserId, studentId: { $in: [...scope.studentIds] } });
+    }
+    const documents = await this._collection
+      .find({ $or: clauses })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return documents.map((doc) => this._toAlertData(doc));
+  }
+
+  /**
+   * Find the alerts of one student: rows carrying that student's owner and one of its ids.
+   *
+   * @param scope - The student's owner and ids
+   * @returns Alerts newest first
+   */
+  public async findByStudentScope(
+    scope: IAlertVisibilityScope
+  ): Promise<readonly (IAlertData & { id?: string })[]> {
+    if (scope.studentIds.length === 0) return [];
+    const documents = await this._collection
+      .find({ userId: scope.ownerUserId, studentId: { $in: [...scope.studentIds] } })
+      .sort({ createdAt: -1 })
+      .toArray();
     return documents.map((doc) => this._toAlertData(doc));
   }
 
@@ -83,6 +130,31 @@ export class AlertRepository implements IAlertReader, IAlertWriter {
       { returnDocument: 'after' }
     );
 
+    return result !== null;
+  }
+
+  /**
+   * Acknowledge an alert for one person (sharing-spec §4.5: acknowledgement is per person).
+   * The legacy `acknowledged` / `acknowledgedAt` fields follow the owner only.
+   *
+   * @param id - Alert ID
+   * @param userId - The person acknowledging
+   * @param ownerUserId - The alert's owner
+   * @returns True if acknowledged, false if not found
+   */
+  public async acknowledgeFor(id: string, userId: string, ownerUserId: string): Promise<boolean> {
+    const objectId = new ObjectId(id);
+    const now = new Date();
+    const set: Record<string, unknown> = { [`acknowledgedBy.${userId}`]: now.toISOString() };
+    if (userId === ownerUserId) {
+      set['acknowledged'] = true;
+      set['acknowledgedAt'] = now;
+    }
+    const result = await this._collection.findOneAndUpdate(
+      { _id: objectId },
+      { $set: set },
+      { returnDocument: 'after' }
+    );
     return result !== null;
   }
 

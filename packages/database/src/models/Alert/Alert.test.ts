@@ -24,6 +24,26 @@ describe('Alert', () => {
       expect(alert.message).toBe('Assignment is missing');
     });
 
+    it('should default acknowledgedBy to an empty map and keep a provided one', () => {
+      const bare = new Alert({
+        studentId: 's1',
+        userId: 'u1',
+        type: 'grade_drop',
+        severity: 'warning',
+        message: 'x',
+      });
+      expect(bare.acknowledgedBy).toEqual({});
+      const acked = new Alert({
+        studentId: 's1',
+        userId: 'u1',
+        type: 'grade_drop',
+        severity: 'warning',
+        message: 'x',
+        acknowledgedBy: { u2: '2026-11-09T00:00:00.000Z' },
+      });
+      expect(acked.acknowledgedBy).toEqual({ u2: '2026-11-09T00:00:00.000Z' });
+    });
+
     it('should set acknowledged to false by default', () => {
       // Arrange
       const data = {

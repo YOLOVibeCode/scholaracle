@@ -15,7 +15,7 @@ export type StudentAccess = 'owner' | 'admin' | 'member';
 /** Display label for a shared adult. Permissions never derive from it. */
 export type SharingLabel = 'parent' | 'guardian' | 'caregiver';
 
-/** Alert delivery channels an adult may pick for a student. `push` delivery lands in S3. */
+/** Alert delivery channels an adult may pick for a student. `push` goes to that adult's own devices. */
 export type SharingAlertChannel = 'email' | 'sms' | 'push';
 
 export type SharingInviteStatus = 'pending' | 'accepted' | 'declined';

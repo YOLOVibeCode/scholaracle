@@ -1,5 +1,5 @@
 import { Student } from './Student';
-import type { ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 
 describe('Student', () => {
   describe('constructor', () => {
@@ -505,10 +505,11 @@ describe('Student', () => {
       expect(new Student({ userId: 'solo', name: 'Solo' }).peopleCount()).toBe(1);
     });
 
-    it('getAllAlertRecipients drops the push channel until S3 delivers it', () => {
+    it("getAllAlertRecipients keeps the push channel and carries each adult's userId (S3)", () => {
       const withPush = new Student({
         userId: 'owner-1',
         name: 'Ava',
+        ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['email', 'push'] },
         sharedWith: [
           {
             userId: 'u',
@@ -520,8 +521,86 @@ describe('Student', () => {
           },
         ],
       });
-      const shared = withPush.getAllAlertRecipients('owner@example.com').find((r) => !r.isPrimary);
-      expect(shared?.channels).toEqual(['email']);
+      const out = withPush.getAllAlertRecipients('owner@example.com');
+      expect(out.find((r) => r.isPrimary)).toMatchObject({
+        userId: 'owner-1',
+        channels: ['email', 'push'],
+      });
+      expect(out.find((r) => !r.isPrimary)).toMatchObject({
+        userId: 'u',
+        channels: ['email', 'push'],
+      });
+    });
+  });
+
+  describe('alertPrefsFor (sharing-spec §4.5)', () => {
+    const student = new Student({
+      userId: 'owner-1',
+      name: 'Ava',
+      ownerAlertPrefs: { receiveAlerts: true, alertChannels: ['sms'], alertTypes: ['grade_drop'] },
+      sharedWith: [
+        {
+          userId: 'admin-1',
+          email: 'admin@example.com',
+          role: 'guardian',
+          status: 'accepted',
+          invitedAt: new Date(),
+          receiveAlerts: false,
+          alertChannels: ['email', 'push'],
+        },
+        {
+          userId: 'member-1',
+          email: 'member@example.com',
+          role: 'parent',
+          status: 'accepted',
+          invitedAt: new Date(),
+        },
+        {
+          email: 'pending@example.com',
+          role: 'parent',
+          status: 'pending',
+          invitedAt: new Date(),
+        },
+      ],
+    });
+
+    it('returns the owner prefs for the owner', () => {
+      expect(student.alertPrefsFor('owner-1')).toEqual({
+        receiveAlerts: true,
+        alertChannels: ['sms'],
+        alertTypes: ['grade_drop'],
+      });
+    });
+
+    it('returns the accepted row prefs, defaulting channels to email', () => {
+      expect(student.alertPrefsFor('admin-1')).toMatchObject({
+        receiveAlerts: false,
+        alertChannels: ['email', 'push'],
+      });
+      expect(student.alertPrefsFor('member-1')).toMatchObject({
+        receiveAlerts: true,
+        alertChannels: ['email'],
+      });
+    });
+
+    it('returns null for pending invitees and strangers', () => {
+      expect(student.alertPrefsFor('stranger')).toBeNull();
+      expect(new Student({ userId: 'o', name: 'X' }).alertPrefsFor('nobody')).toBeNull();
+    });
+  });
+
+  describe('alertStudentIds', () => {
+    it('lists the Mongo id, the raw portal id and the id without its provider prefix', () => {
+      const id = new ObjectId();
+      const student = new Student({ userId: 'o', name: 'Ava', studentId: 'skyward:12345' }, id);
+      expect(student.alertStudentIds()).toEqual([id.toString(), 'skyward:12345', '12345']);
+    });
+
+    it('does not repeat an unprefixed portal id and copes with no ids at all', () => {
+      expect(new Student({ userId: 'o', name: 'Ava', studentId: '777' }).alertStudentIds()).toEqual(
+        ['777']
+      );
+      expect(new Student({ userId: 'o', name: 'Ava' }).alertStudentIds()).toEqual([]);
     });
   });
 });
