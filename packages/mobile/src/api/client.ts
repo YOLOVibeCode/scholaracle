@@ -15,6 +15,9 @@ import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
   IStudentCreateRequest,
+  IStudentUpdateRequest,
+  ISubscriptionWire,
+  ISubscriptionResponse,
   IStudentGradesResponse,
   IStudentMaterialsResponse,
   IActionBoardResponse,
@@ -337,6 +340,30 @@ export class ScholarmancyApiClient {
 
   async getStudents(): Promise<IStudentListItem[]> {
     return this._get<IStudentListItem[]>('/api/students');
+  }
+
+  /** PUT /api/students/:id — the same name / grade / student-id edit the web makes. */
+  async updateStudent(id: string, request: IStudentUpdateRequest): Promise<IStudentListItem> {
+    return this._put<IStudentListItem>(`/api/students/${encodeURIComponent(id)}`, request);
+  }
+
+  /** DELETE /api/students/:id — removes the student record from the account. */
+  async deleteStudent(id: string): Promise<void> {
+    await this._delete<unknown>(`/api/students/${encodeURIComponent(id)}`, {});
+  }
+
+  /** DELETE /api/students/:id/sources/:sourceId — removes the source from the account. */
+  async deleteStudentSource(studentId: string, sourceId: string): Promise<void> {
+    await this._delete<unknown>(
+      `/api/students/${encodeURIComponent(studentId)}/sources/${encodeURIComponent(sourceId)}`,
+      {}
+    );
+  }
+
+  /** GET /api/billing/subscription — read-only plan info (no in-app purchase). */
+  async getSubscription(): Promise<ISubscriptionWire> {
+    const res = await this._get<ISubscriptionResponse>('/api/billing/subscription');
+    return res.subscription;
   }
 
   async getConsents(): Promise<{ readonly serverAi: boolean }> {

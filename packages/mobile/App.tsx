@@ -19,6 +19,8 @@ import { SyncScreen } from './src/screens/SyncScreen';
 import { SyncAllScreen } from './src/screens/SyncAllScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { PlanScreen } from './src/screens/PlanScreen';
+import { StudentEditScreen } from './src/screens/StudentEditScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -69,6 +71,8 @@ interface INavState {
   readonly assignment?: ICourseGradeAssignment;
   readonly sourceInvite?: ISourceInvitePayload;
   readonly assignmentExternalId?: string;
+  /** Where the student edit screen returns to. */
+  readonly editReturn?: 'dashboard' | 'students';
 }
 
 function AppContent(): React.ReactElement {
@@ -376,6 +380,9 @@ function AppContent(): React.ReactElement {
           })
         }
         onRunHistory={() => setNav({ view: 'run-history', student: nav.student })}
+        onEditStudent={() =>
+          setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+        }
       />
     );
   }
@@ -445,9 +452,44 @@ function AppContent(): React.ReactElement {
     );
   }
 
+  if (nav.view === 'plan') {
+    return <PlanScreen onBack={() => setNav({ view: 'settings' })} />;
+  }
+
+  if (nav.view === 'student-edit' && nav.student) {
+    const returnTo = nav.editReturn ?? 'students';
+    return (
+      <StudentEditScreen
+        student={nav.student}
+        onBack={() =>
+          setNav(
+            returnTo === 'dashboard'
+              ? { view: 'dashboard', student: nav.student }
+              : { view: 'students' }
+          )
+        }
+        onSaved={(updated) =>
+          setNav(
+            returnTo === 'dashboard'
+              ? { view: 'dashboard', student: updated }
+              : { view: 'students' }
+          )
+        }
+        onRemoved={() => {
+          setNav({ view: 'students' });
+          void apiClient
+            .getStudents()
+            .then((rows) => setStudentCount(rows.length))
+            .catch(() => undefined);
+        }}
+      />
+    );
+  }
+
   if (nav.view === 'settings') {
     return (
       <SettingsScreen
+        onOpenPlan={() => setNav({ view: 'plan' })}
         onBack={() => setNav({ view: 'students' })}
         onSyncAll={(grouped) => {
           if (grouped.length === 0) return;
@@ -488,6 +530,7 @@ function AppContent(): React.ReactElement {
       onAddSource={() => setNav({ view: 'connect-source' })}
       onStartSetup={() => setNav({ view: 'students' })}
       onOpenSettings={() => setNav({ view: 'settings' })}
+      onEditStudent={(student) => setNav({ view: 'student-edit', student, editReturn: 'students' })}
     />
   );
 }

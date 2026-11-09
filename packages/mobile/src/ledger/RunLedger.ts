@@ -133,6 +133,17 @@ export class RunLedger {
     return entries.filter((e) => e.provider === provider);
   }
 
+  /** Drops every entry recorded for the given portal student ids (one student's purge). */
+  async removeByStudentExternalIds(studentExternalIds: readonly string[]): Promise<void> {
+    if (studentExternalIds.length === 0) return;
+    return this._enqueue(async () => {
+      const entries = await this._load();
+      const kept = entries.filter((e) => !studentExternalIds.includes(e.studentExternalId));
+      if (kept.length === entries.length) return;
+      await this._save(kept);
+    });
+  }
+
   async clear(): Promise<void> {
     return this._enqueue(() => AsyncStorage.removeItem(LEDGER_KEY));
   }

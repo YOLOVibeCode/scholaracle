@@ -15,12 +15,20 @@ import {
   Switch,
   ActivityIndicator,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
 import { groupSourcesByPortalAccount, portalAccountGroupKey } from '../sync/syncAllByPortalAccount';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
+import {
+  DISCONNECT_LOCAL_LABEL,
+  DISCONNECT_SERVER_LABEL,
+  canDisconnectOnServer,
+  disconnectConfirmText,
+  disconnectFailureMessage,
+  disconnectSource,
+  type DisconnectMode,
+} from '../sources/disconnectSource';
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
@@ -30,12 +38,15 @@ interface ISettingsScreenProps {
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
   onSyncAll?(sources: readonly IConnectedSource[]): void;
+  /** Opens the read-only Plan & usage screen (parent sessions only). */
+  onOpenPlan?(): void;
 }
 
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
   onSyncAll,
+  onOpenPlan,
 }: ISettingsScreenProps): React.ReactElement {
   const { logout } = useAuth();
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
@@ -80,24 +91,34 @@ export function SettingsScreen({
       .finally(() => setIsServerAiSaving(false));
   };
 
+  const runDisconnect = (source: IConnectedSource, mode: DisconnectMode): void => {
+    void disconnectSource(source, mode)
+      .catch((err: unknown) => {
+        Alert.alert('Could not disconnect', disconnectFailureMessage(err));
+      })
+      .finally(() => void loadSources());
+  };
+
   const handleDisconnect = (source: IConnectedSource): void => {
+    const localOnly = {
+      text: canDisconnectOnServer(source) ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
+      style: 'destructive' as const,
+      onPress: (): void => runDisconnect(source, 'local-only'),
+    };
     Alert.alert(
       'Disconnect portal?',
-      `Removes ${source.provider} (${source.institutionExternalId}) and its saved credentials from this device. Already-synced data stays in your account.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: (): void => {
-            void (async (): Promise<void> => {
-              await SecureStore.deleteItemAsync(source.credentialKey).catch(() => undefined);
-              await connectedSourceStore.remove(source.sourceId);
-              await loadSources();
-            })();
-          },
-        },
-      ]
+      disconnectConfirmText(source),
+      canDisconnectOnServer(source)
+        ? [
+            { text: 'Cancel', style: 'cancel' },
+            localOnly,
+            {
+              text: DISCONNECT_SERVER_LABEL,
+              style: 'destructive',
+              onPress: (): void => runDisconnect(source, 'server-and-local'),
+            },
+          ]
+        : [{ text: 'Cancel', style: 'cancel' }, localOnly]
     );
   };
 
@@ -244,6 +265,12 @@ export function SettingsScreen({
         >
           <Text style={styles.rowText}>Support</Text>
         </TouchableOpacity>
+
+        {!hideHousehold && onOpenPlan ? (
+          <TouchableOpacity style={styles.card} onPress={onOpenPlan} testID="link-plan-usage">
+            <Text style={styles.rowText}>Plan & usage</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity

@@ -19,6 +19,8 @@ interface IStudentsScreenProps {
   onAddSource(): void;
   onStartSetup?(): void;
   onOpenSettings?(): void;
+  /** Long-press a student card to edit or remove that student. */
+  onEditStudent?(student: IStudentListItem): void;
 }
 
 export function StudentsScreen({
@@ -26,6 +28,7 @@ export function StudentsScreen({
   onAddSource,
   onStartSetup,
   onOpenSettings,
+  onEditStudent,
 }: IStudentsScreenProps): React.ReactElement {
   const [students, setStudents] = useState<IStudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -101,6 +104,8 @@ export function StudentsScreen({
           <TouchableOpacity
             style={styles.card}
             onPress={() => onSelectStudent(item)}
+            onLongPress={onEditStudent ? (): void => onEditStudent(item) : undefined}
+            accessibilityHint={onEditStudent ? 'Long press to edit or remove' : undefined}
             testID="card-student"
           >
             <View style={styles.avatar}>
