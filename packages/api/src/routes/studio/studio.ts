@@ -16,6 +16,7 @@ import { createMongoTodaySource } from './mongoTodaySource';
 import { createMongoWorkPackSource } from './mongoWorkPackSource';
 import { buildOfflinePack } from './mongoOfflinePackSource';
 import {
+  HELP_FIELDS_UNSET,
   StudentHelpRequests,
   type IAlertJobQueue,
   type IHelpRequestAssignment,
@@ -36,28 +37,33 @@ export interface IStudioRouterConfig {
 
 const VALID_STUDENT_STATUSES = new Set<string>(STUDENT_STATUSES);
 
-/** Assignment-doc fields a "Need help" alert clears when the status moves on. */
-const HELP_FIELDS_UNSET = { studentNote: '', studentNoteAt: '', studentHelpRequestedAt: '' };
-
 interface IStatusBody {
   readonly status: StudentStatus | null;
   readonly note?: string;
+}
+
+/** The owner's IANA time zone (settings.ts stores it on the user). Unknown → undefined. */
+async function ownerTimeZoneById(
+  userRepository: UserRepository,
+  ownerUserId: string
+): Promise<string | undefined> {
+  try {
+    const owner = await userRepository.findById(ownerUserId);
+    return owner?.timezone;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
  * Day bucketing follows the household owner's zone (students carry none yet).
  * Unknown owner or zone → undefined, and WeekGuide falls back to UTC.
  */
-async function ownerTimeZone(
+function ownerTimeZone(
   userRepository: UserRepository,
   student: Student
 ): Promise<string | undefined> {
-  try {
-    const owner = await userRepository.findById(student.userId);
-    return owner?.timezone;
-  } catch {
-    return undefined;
-  }
+  return ownerTimeZoneById(userRepository, student.userId.toString());
 }
 
 function parseNote(raw: unknown): string | undefined {
@@ -82,7 +88,10 @@ function parseStatusBody(body: unknown): IStatusBody {
   return { status: status as StudentStatus | null, ...(note !== undefined ? { note } : {}) };
 }
 
-/** Title, course and due date for the alert copy; course name comes from slc_courses. */
+/**
+ * Title, course and due date for the alert copy. The course name reads `record.title`
+ * first and `record.name` second, the same precedence ingest uses for alert copy.
+ */
 async function describeAssignment(
   database: Db,
   student: Student,
@@ -104,8 +113,11 @@ async function describeAssignment(
     externalId: base.courseExternalId,
     deletedAt: null,
   });
-  const name = (course?.['record'] as Record<string, unknown> | undefined)?.['name'];
-  return typeof name === 'string' && name !== '' ? { ...base, courseName: name } : base;
+  const courseRecord = (course?.['record'] ?? {}) as Record<string, unknown>;
+  const name = [courseRecord['title'], courseRecord['name']].find(
+    (value): value is string => typeof value === 'string' && value !== ''
+  );
+  return name !== undefined ? { ...base, courseName: name } : base;
 }
 
 export function studioRouter(config: IStudioRouterConfig): Router {
@@ -118,6 +130,7 @@ export function studioRouter(config: IStudioRouterConfig): Router {
     database: config.database,
     queue: config.alertQueue,
     webOrigin: baseUrl,
+    resolveTimeZone: (ownerUserId) => ownerTimeZoneById(userRepository, ownerUserId),
     now: clock,
   });
 

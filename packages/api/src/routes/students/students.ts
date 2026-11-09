@@ -62,6 +62,8 @@ import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
 import { createContactSmsOptIn } from '../../services/sms/contactSmsOptIn';
 import { noopSink, registerNudgeRoutes } from './nudge';
+import { toIsoDate } from '../studio/studioTaskClassify';
+import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -307,11 +309,6 @@ function asksForHelp(item: IActionItem): boolean {
   return (
     item.studentStatus === 'need_help' && item.status !== 'submitted' && item.status !== 'graded'
   );
-}
-
-function toIsoString(value: unknown): string | undefined {
-  if (value instanceof Date) return value.toISOString();
-  return typeof value === 'string' ? value : undefined;
 }
 
 function determineActionBucket(
@@ -2287,9 +2284,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
 
         const studentStatus = (doc['studentStatus'] as string) ?? undefined;
-        const lastNudgedAt = toIsoString(doc['lastNudgedAt']);
+        const lastNudgedAt = toIsoDate(doc['lastNudgedAt']);
         const asking = studentStatus === 'need_help';
-        const askedForHelpAt = asking ? toIsoString(doc['studentHelpRequestedAt']) : undefined;
+        const askedForHelpAt = asking ? toIsoDate(doc['studentHelpRequestedAt']) : undefined;
         const noteRaw = doc['studentNote'];
         const studentNote =
           asking && typeof noteRaw === 'string' && noteRaw !== '' ? noteRaw : undefined;
@@ -2949,6 +2946,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`
         );
       }
+      // "Need help" is the student's own ask (it alerts the adults and stamps the ask time);
+      // a parent setting it would show "Asked for help" that nobody asked for.
+      if (status === 'need_help') {
+        throw new ValidationError(
+          'Only the student can ask for help. need_help is set from the student studio.'
+        );
+      }
 
       const studentExternalId = student.studentId ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
@@ -2962,10 +2966,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         },
         {
           $set: { studentStatus: status, updatedAt: new Date() },
-          // Leaving need_help (by anyone) ends the ask: drop the student's note and ask time.
-          ...(status !== 'need_help'
-            ? { $unset: { studentNote: '', studentNoteAt: '', studentHelpRequestedAt: '' } }
-            : {}),
+          // Any status a parent sets ends the ask: drop the student's note and ask time.
+          $unset: HELP_FIELDS_UNSET,
         }
       );
 

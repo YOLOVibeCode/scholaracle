@@ -617,6 +617,62 @@ describe('Students API Routes', () => {
     });
   });
 
+  describe('PUT /api/students/:id/assignments/:externalId/status (parent side, R3)', () => {
+    async function seedAsk(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Put Student', grade: 7 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      await database.collection('slc_assignments').deleteMany({ externalId: 'a-put' });
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId: 'course-put',
+        externalId: 'a-put',
+        deletedAt: null,
+        studentStatus: 'need_help',
+        studentHelpRequestedAt: new Date(),
+        studentNote: 'stuck on #3',
+        studentNoteAt: new Date(),
+        record: { title: 'Put HW', status: 'not_started' },
+      });
+      return studentId;
+    }
+
+    it('rejects need_help with 400: only the student can ask for help', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'need_help' });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(JSON.stringify(res.body)).toMatch(/Only the student can ask for help/);
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentNote']).toBe('stuck on #3');
+    });
+
+    it('any other status is accepted and ends the ask (note and ask time cleared)', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'working_on_it' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, studentStatus: 'working_on_it' });
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentStatus']).toBe('working_on_it');
+      expect(doc?.['studentNote']).toBeUndefined();
+      expect(doc?.['studentNoteAt']).toBeUndefined();
+      expect(doc?.['studentHelpRequestedAt']).toBeUndefined();
+    });
+  });
+
   describe('GET /api/students/:id/grade-history', () => {
     beforeEach(async () => {
       if (database) {
