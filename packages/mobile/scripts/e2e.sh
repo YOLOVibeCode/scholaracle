@@ -101,9 +101,9 @@ flows=()
 case "$suite" in
   launch) flows=(e2e/maestro/launch.yaml) ;;
   smoke) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml) ;;
-  tour) flows=(e2e/maestro/login-screen.yaml e2e/maestro/tour.yaml) ;;
+  tour) flows=(e2e/maestro/login-screen.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml) ;;
   sync) flows=(e2e/maestro/sync-portal.yaml) ;;
-  all) flows=(e2e/maestro/launch.yaml e2e/maestro/login-screen.yaml e2e/maestro/smoke.yaml e2e/maestro/tour.yaml e2e/maestro/sync-portal.yaml) ;;
+  all) flows=(e2e/maestro/launch.yaml e2e/maestro/login-screen.yaml e2e/maestro/smoke.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml e2e/maestro/sync-portal.yaml) ;;
   *) echo "unknown suite: $suite" >&2; exit 2 ;;
 esac
 
