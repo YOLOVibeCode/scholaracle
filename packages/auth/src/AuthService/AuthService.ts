@@ -384,6 +384,11 @@ export class AuthService implements IAuthService {
         };
       }
 
+      // Without a (provider-verified) email we cannot link by email or create an account.
+      if (email.trim() === '') {
+        return { success: false, error: 'An email address is required to create an account' };
+      }
+
       // 2) User exists by email -> link OAuth and login
       const userByEmail = await this._userRepository.findByEmail(email);
       if (userByEmail) {

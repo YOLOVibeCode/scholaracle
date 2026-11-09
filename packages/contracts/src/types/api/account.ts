@@ -26,7 +26,14 @@ export interface IPushTokenDeleteRequest {
 
 /** Request body of DELETE /api/account — permanently deletes the parent household. */
 export interface IAccountDeleteRequest {
-  readonly password: string;
+  /** Account password. Required unless an Apple proof is sent. */
+  readonly password?: string;
+  /**
+   * Fresh Sign in with Apple identity token (and its raw nonce) for accounts created with
+   * Apple, which have no known password. Must belong to the same user.
+   */
+  readonly appleIdentityToken?: string;
+  readonly appleNonce?: string;
 }
 
 export interface IAccountDeleteResponse {

@@ -185,6 +185,32 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  /**
+   * Sign in with Apple. No shared secret: the server verifies the identity token itself and
+   * takes the account id and email from it, so only the token and its raw nonce are sent.
+   */
+  async loginWithApple(
+    identityToken: string,
+    nonce: string,
+    name?: string
+  ): Promise<IAuthLoginResponse> {
+    const body: Record<string, unknown> = { appleIdentityToken: identityToken, appleNonce: nonce };
+    if (name !== undefined && name.trim() !== '') body['name'] = name.trim();
+    const res = await this._post<IAuthLoginResponse>('/api/auth/oauth/apple', body, false);
+    await this._persistSession(res, 'AppleLogin');
+    return res;
+  }
+
+  /**
+   * Permanently delete the signed-in parent account. Pass the password, or for accounts
+   * created with Apple (no known password) a fresh Apple identity token + nonce.
+   */
+  async deleteAccount(
+    proof: { password: string } | { appleIdentityToken: string; appleNonce: string }
+  ): Promise<void> {
+    await this._delete<{ success: boolean }>('/api/account', proof);
+  }
+
   async loginWithMagicToken(token: string): Promise<IAuthLoginResponse> {
     const res = await this._post<IAuthLoginResponse>('/api/auth/magic', { token }, false);
     await this._persistSession(res, 'MagicLogin');

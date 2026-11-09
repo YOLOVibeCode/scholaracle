@@ -23,6 +23,7 @@ import { groupSourcesByPortalAccount, portalAccountGroupKey } from '../sync/sync
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
+import { DeleteAccountSheet } from './DeleteAccountSheet';
 
 interface ISettingsScreenProps {
   onBack(): void;
@@ -40,6 +41,7 @@ export function SettingsScreen({
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
   const [pushStatus, setPushStatus] = useState<string>('unknown');
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
   const [serverAiEnabled, setServerAiEnabled] = useState(false);
   const [isServerAiLoading, setIsServerAiLoading] = useState(true);
   const [isServerAiSaving, setIsServerAiSaving] = useState(false);
@@ -123,20 +125,13 @@ export function SettingsScreen({
   };
 
   const handleDeleteAccount = (): void => {
-    Alert.alert(
-      'Delete account?',
-      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data. School portal passwords stay on this device until you uninstall.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: (): void => {
-            void Linking.openURL(STORE_LEGAL_URLS.deleteAccount);
-          },
-        },
-      ]
-    );
+    setShowDeleteSheet(true);
+  };
+
+  const handleAccountDeleted = (): void => {
+    setShowDeleteSheet(false);
+    // The server removed the account; purge this phone (credentials, ledger, tokens) and leave.
+    void logout().catch(() => undefined);
   };
 
   return (
@@ -267,6 +262,11 @@ export function SettingsScreen({
           <Text style={styles.signOutText}>{isSigningOut ? 'Signing out…' : 'Sign Out'}</Text>
         </TouchableOpacity>
       </ScrollView>
+      <DeleteAccountSheet
+        visible={showDeleteSheet}
+        onClose={() => setShowDeleteSheet(false)}
+        onDeleted={handleAccountDeleted}
+      />
     </View>
   );
 }
