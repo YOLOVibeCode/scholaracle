@@ -43,6 +43,10 @@ import type {
   IPortalAccountUpsertResponse,
   IPortalBindingUpsertRequest,
   IPortalBindingUpsertResponse,
+  IAlertListItem,
+  IAlertActionResponse,
+  IUserSettingsResponse,
+  IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
 import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
@@ -376,6 +380,36 @@ export class ScholarmancyApiClient {
       { enabled },
       { 'X-Consent-Source': '/mobile/settings' }
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Alerts + notification preferences (parent account)
+  // ---------------------------------------------------------------------------
+
+  /** GET /api/alerts-api — all alerts for the user (no server-side filters or paging). */
+  async getAlerts(): Promise<IAlertListItem[]> {
+    return this._get<IAlertListItem[]>('/api/alerts-api');
+  }
+
+  /** POST /api/alerts-api/:id/acknowledge. */
+  async acknowledgeAlert(alertId: string): Promise<IAlertActionResponse> {
+    return this._post<IAlertActionResponse>(
+      `/api/alerts-api/${encodeURIComponent(alertId)}/acknowledge`,
+      {},
+      true
+    );
+  }
+
+  /** GET /api/settings — notification + alert preferences (server defaults filled in). */
+  async getNotificationSettings(): Promise<IUserSettingsResponse> {
+    return this._get<IUserSettingsResponse>('/api/settings');
+  }
+
+  /** PUT /api/settings — partial update; the server merges and returns the new settings. */
+  async updateNotificationSettings(
+    update: IUserSettingsUpdateRequest
+  ): Promise<IUserSettingsResponse> {
+    return this._put<IUserSettingsResponse>('/api/settings', update);
   }
 
   // ---------------------------------------------------------------------------
