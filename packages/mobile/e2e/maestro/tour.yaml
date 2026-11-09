@@ -106,7 +106,8 @@ tags: [smoke]
     commands:
       - tapOn:
           text: "(?i)sign out"
-          index: 1
+          # The dialog hides the button behind it from Android's accessibility tree: one match.
+          retryTapIfNoChange: false
 - extendedWaitUntil:
     visible:
       id: input-email
