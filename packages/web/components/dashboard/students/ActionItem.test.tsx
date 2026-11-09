@@ -3,7 +3,7 @@
  */
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { ActionItem, formatAskedForHelpAgo, formatNudgedAgo } from './ActionItem';
+import { ActionItem, formatAgo, formatAskedForHelpAgo, formatNudgedAgo } from './ActionItem';
 import type { IActionItem } from '@/lib/api/students';
 
 const ITEM: IActionItem = {
@@ -56,10 +56,10 @@ describe('ActionItem need_help (student review R3)', () => {
     studentNote: "I don't get #7",
   };
 
-  it('shows "Asked for help 2 h ago", the note, and relabels the button "Reply with a nudge"', () => {
+  it('shows "Asked for help 2h ago", the note, and relabels the button "Reply with a nudge"', () => {
     const onNudge = jest.fn();
     render(<ActionItem item={asking} onNudge={onNudge} />);
-    expect(screen.getByTestId('action-item-needs-help')).toHaveTextContent('Asked for help 2 h ago');
+    expect(screen.getByTestId('action-item-needs-help')).toHaveTextContent('Asked for help 2h ago');
     expect(screen.getByTestId('action-item-student-note')).toHaveTextContent("I don't get #7");
     const button = screen.getByTestId('action-item-nudge');
     expect(button).toHaveTextContent('Reply with a nudge');
@@ -75,10 +75,13 @@ describe('ActionItem need_help (student review R3)', () => {
     expect(screen.queryByTestId('action-item-nudge')).toBeNull();
   });
 
-  it('formatAskedForHelpAgo uses minutes, hours, then days', () => {
+  it('formatAgo backs both labels: minutes, hours, then days, never under 1m', () => {
     const now = new Date('2026-11-09T18:00:00.000Z');
-    expect(formatAskedForHelpAgo('2026-11-09T17:45:00.000Z', now)).toBe('Asked for help 15 min ago');
-    expect(formatAskedForHelpAgo('2026-11-09T16:00:00.000Z', now)).toBe('Asked for help 2 h ago');
-    expect(formatAskedForHelpAgo('2026-11-06T18:00:00.000Z', now)).toBe('Asked for help 3 d ago');
+    expect(formatAgo('2026-11-09T17:59:59.000Z', now)).toBe('1m');
+    expect(formatAgo('2026-11-09T17:45:00.000Z', now)).toBe('15m');
+    expect(formatAgo('2026-11-09T16:00:00.000Z', now)).toBe('2h');
+    expect(formatAgo('2026-11-06T18:00:00.000Z', now)).toBe('3d');
+    expect(formatAskedForHelpAgo('2026-11-09T16:00:00.000Z', now)).toBe('Asked for help 2h ago');
+    expect(formatNudgedAgo('2026-11-09T16:00:00.000Z', now)).toBe('Nudged 2h ago');
   });
 });

@@ -10,21 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
 import { consentsApi } from '@/lib/api/consents';
-import { SERVER_AI_CONSENT_LABEL, alertTypeLabel } from '@scholaracle/contracts';
+import { AlertType, SERVER_AI_CONSENT_LABEL, alertTypeLabel } from '@scholaracle/contracts';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 
-const ALERT_TYPE_KEYS = [
-  'missing_assignment',
-  'deadline',
-  'grade_drop',
-  'test',
-  'workload',
-  'positive',
-  'recommendation',
-  'student_needs_help',
-] as const;
+/** Every alert type the API knows, in the contracts' order; labels come from contracts too. */
+const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
 
 export default function SettingsPage() {
   const [name, setName] = useState('');

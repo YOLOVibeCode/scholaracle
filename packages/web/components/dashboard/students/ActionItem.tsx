@@ -49,21 +49,22 @@ function formatDueDate(dueAt: string | undefined): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function formatNudgedAgo(iso: string, now: Date = new Date()): string {
+/** Compact elapsed time: "5m", "2h", "3d" (never less than 1m). */
+export function formatAgo(iso: string, now: Date = new Date()): string {
   const diffM = Math.max(1, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
-  if (diffM < 60) return `Nudged ${diffM}m ago`;
+  if (diffM < 60) return `${diffM}m`;
   const diffH = Math.floor(diffM / 60);
-  if (diffH < 24) return `Nudged ${diffH}h ago`;
-  return `Nudged ${Math.floor(diffH / 24)}d ago`;
+  if (diffH < 24) return `${diffH}h`;
+  return `${Math.floor(diffH / 24)}d`;
 }
 
-/** "Asked for help 2 h ago" (student review spec §3.2). */
+export function formatNudgedAgo(iso: string, now: Date = new Date()): string {
+  return `Nudged ${formatAgo(iso, now)} ago`;
+}
+
+/** "Asked for help 2h ago" (student review spec §3.2). */
 export function formatAskedForHelpAgo(iso: string, now: Date = new Date()): string {
-  const diffM = Math.max(1, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
-  if (diffM < 60) return `Asked for help ${diffM} min ago`;
-  const diffH = Math.floor(diffM / 60);
-  if (diffH < 24) return `Asked for help ${diffH} h ago`;
-  return `Asked for help ${Math.floor(diffH / 24)} d ago`;
+  return `Asked for help ${formatAgo(iso, now)} ago`;
 }
 
 export function nudgedToday(iso: string | undefined, now: Date = new Date()): boolean {
