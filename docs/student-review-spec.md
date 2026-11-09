@@ -47,11 +47,16 @@ IWeekView {
 IWeekItem {
   assignmentExternalId; title; courseName; dueAt?;
   studentStatus: 'not_started'|'working_on_it'|'need_help'|'done';
+  humanStatus: string;                      // 'Not turned in' (portal says missing/late) or 'Past due' (overdue, portal silent)
   needs: ('saved_file'|'school_login'|'internet')[];   // from the work pack partition, no fetch per item
   primaryCtaLabel;
 }
 ```
-Rules: an item the student marked `done` leaves `days`/`owed` and joins `doneThisWeek` until the
+Rules (as built in R1, PR #133): open tasks past due that the portal has NOT flagged are kind `overdue`
+and sit in `owed` after the missing ones, labelled "Past due"; Today ignores them. The 7-day cut is done
+once, by local calendar day, in `WeekGuide`. A finished item counts for this week only with evidence
+(`submittedAt`, `gradedAt`, or the student's own `done` + its timestamp); otherwise it is left out.
+An item the student marked `done` leaves `days`/`owed` and joins `doneThisWeek` until the
 portal confirms; if the portal later says missing, it returns to `owed` with the label "Marked done,
 but the school shows not turned in". `assertNoGradeLeak` applies to the whole view.
 
