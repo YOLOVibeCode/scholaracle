@@ -178,6 +178,10 @@ export interface IActionItem {
   readonly materials: readonly IActionAsset[];
   readonly studentStatus?: string;
   readonly lastNudgedAt?: string;
+  /** While studentStatus is need_help: when the student asked (ISO). */
+  readonly askedForHelpAt?: string;
+  /** While studentStatus is need_help: the student's optional note (at most 140 chars). */
+  readonly studentNote?: string;
 }
 
 export interface IActionBucket {

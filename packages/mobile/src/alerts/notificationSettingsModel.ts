@@ -3,36 +3,21 @@
  * draft -> PUT /api/settings body. No React, no network.
  */
 
-import type {
-  ISettingsAlertTypePref,
-  ISettingsQuietHours,
-  IUserSettingsResponse,
-  IUserSettingsUpdateRequest,
+import {
+  AlertType,
+  alertTypeLabel,
+  type ISettingsAlertTypePref,
+  type ISettingsQuietHours,
+  type IUserSettingsResponse,
+  type IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
 
-/** Alert types the API exposes (AlertType enum values), in display order. */
-export const ALERT_TYPE_KEYS = [
-  'missing_assignment',
-  'deadline',
-  'grade_drop',
-  'test',
-  'workload',
-  'positive',
-  'recommendation',
-] as const;
+/** Alert types the API exposes, in the contracts' declaration order (one source of truth). */
+export const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
 
-const ALERT_TYPE_LABELS: Readonly<Record<string, string>> = {
-  missing_assignment: 'Missing assignments',
-  deadline: 'Upcoming deadlines',
-  grade_drop: 'Grade drops',
-  test: 'Tests and quizzes',
-  workload: 'Heavy workload',
-  positive: 'Good news',
-  recommendation: 'Study recommendations',
-};
-
+/** Human copy from contracts; unknown keys fall back to spaced words. */
 export function alertTypeToggleLabel(key: string): string {
-  return ALERT_TYPE_LABELS[key] ?? key.replace(/_/g, ' ');
+  return alertTypeLabel(key);
 }
 
 const DEFAULT_QUIET_HOURS: ISettingsQuietHours = {

@@ -533,6 +533,144 @@ describe('Students API Routes', () => {
         needsAttention?.items.some((i) => i.assignmentExternalId === 'a-expired-missing')
       ).toBe(false);
     });
+
+    it('puts a need_help item in needs_attention even when only due soon, with askedForHelpAt and the note (R3)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Help Student', grade: 8 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      const now = Date.now();
+      const dueIn24h = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+      const askedAt = new Date(now - 2 * 60 * 60 * 1000);
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'test',
+        adapterId: 'com.test',
+        externalId: 'course-help',
+        deletedAt: null,
+        record: { name: 'Math' },
+      });
+      await database.collection('slc_assignments').insertMany([
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          studentNote: "I don't get #7",
+          record: { title: 'Ch. 5 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-plain',
+          deletedAt: null,
+          studentStatus: 'working_on_it',
+          record: { title: 'Ch. 6 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help-turned-in',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          record: { title: 'Old ask', status: 'submitted', dueAt: dueIn24h },
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/action-board`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      const buckets = res.body.buckets as Array<{
+        id: string;
+        items: Array<{
+          assignmentExternalId: string;
+          studentStatus?: string;
+          askedForHelpAt?: string;
+          studentNote?: string;
+        }>;
+      }>;
+      const byId = (id: string) => buckets.find((b) => b.id === id)!;
+      const help = byId('needs_attention').items.find((i) => i.assignmentExternalId === 'a-help');
+      expect(help).toBeDefined();
+      expect(help!.studentStatus).toBe('need_help');
+      expect(help!.askedForHelpAt).toBe(askedAt.toISOString());
+      expect(help!.studentNote).toBe("I don't get #7");
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-help')).toBe(false);
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-plain')).toBe(true);
+      // Once the portal shows the work in, a stale ask no longer demands attention.
+      expect(
+        byId('needs_attention').items.some((i) => i.assignmentExternalId === 'a-help-turned-in')
+      ).toBe(false);
+    });
+  });
+
+  describe('PUT /api/students/:id/assignments/:externalId/status (parent side, R3)', () => {
+    async function seedAsk(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Put Student', grade: 7 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      await database.collection('slc_assignments').deleteMany({ externalId: 'a-put' });
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId: 'course-put',
+        externalId: 'a-put',
+        deletedAt: null,
+        studentStatus: 'need_help',
+        studentHelpRequestedAt: new Date(),
+        studentNote: 'stuck on #3',
+        studentNoteAt: new Date(),
+        record: { title: 'Put HW', status: 'not_started' },
+      });
+      return studentId;
+    }
+
+    it('rejects need_help with 400: only the student can ask for help', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'need_help' });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(JSON.stringify(res.body)).toMatch(/Only the student can ask for help/);
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentNote']).toBe('stuck on #3');
+    });
+
+    it('any other status is accepted and ends the ask (note and ask time cleared)', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'working_on_it' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, studentStatus: 'working_on_it' });
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentStatus']).toBe('working_on_it');
+      expect(doc?.['studentNote']).toBeUndefined();
+      expect(doc?.['studentNoteAt']).toBeUndefined();
+      expect(doc?.['studentHelpRequestedAt']).toBeUndefined();
+    });
   });
 
   describe('GET /api/students/:id/grade-history', () => {

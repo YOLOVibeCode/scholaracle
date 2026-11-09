@@ -67,6 +67,8 @@ import { SharingService, parseSharingInviteBody } from '../../services/sharing/S
 import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
 import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing/sharingIdentity';
 import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
+import { toIsoDate } from '../studio/studioTaskClassify';
+import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
 
 export interface IStudentsRouterConfig {
   readonly database: Db;
@@ -306,6 +308,13 @@ function buildActionAsset(
   };
 }
 
+/** need_help is an open ask; once the portal shows the work in, it is history. */
+function asksForHelp(item: IActionItem): boolean {
+  return (
+    item.studentStatus === 'need_help' && item.status !== 'submitted' && item.status !== 'graded'
+  );
+}
+
 function determineActionBucket(
   item: IActionItem,
   assignmentDocs: ActionBoardAssignmentDoc[],
@@ -332,6 +341,8 @@ function determineActionBucket(
     return 'needs_attention';
   }
   if (item.status === 'late') return 'needs_attention';
+  // A student who tapped "Need help" lands here even if the item is merely due soon (R3).
+  if (asksForHelp(item)) return 'needs_attention';
   if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
   if (
     dueAt != null &&
@@ -2232,13 +2243,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
 
         const studentStatus = (doc['studentStatus'] as string) ?? undefined;
-        const lastNudgedRaw = doc['lastNudgedAt'];
-        const lastNudgedAt =
-          lastNudgedRaw instanceof Date
-            ? lastNudgedRaw.toISOString()
-            : typeof lastNudgedRaw === 'string'
-              ? lastNudgedRaw
-              : undefined;
+        const lastNudgedAt = toIsoDate(doc['lastNudgedAt']);
+        const asking = studentStatus === 'need_help';
+        const askedForHelpAt = asking ? toIsoDate(doc['studentHelpRequestedAt']) : undefined;
+        const noteRaw = doc['studentNote'];
+        const studentNote =
+          asking && typeof noteRaw === 'string' && noteRaw !== '' ? noteRaw : undefined;
 
         items.push({
           assignmentExternalId: externalId,
@@ -2260,6 +2270,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           materials: courseMaterials,
           ...(studentStatus !== undefined ? { studentStatus } : {}),
           ...(lastNudgedAt !== undefined ? { lastNudgedAt } : {}),
+          ...(askedForHelpAt !== undefined ? { askedForHelpAt } : {}),
+          ...(studentNote !== undefined ? { studentNote } : {}),
         });
       }
 
@@ -2893,6 +2905,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           `Invalid status. Must be one of: ${[...VALID_STUDENT_STATUSES].join(', ')}`
         );
       }
+      // "Need help" is the student's own ask (it alerts the adults and stamps the ask time);
+      // a parent setting it would show "Asked for help" that nobody asked for.
+      if (status === 'need_help') {
+        throw new ValidationError(
+          'Only the student can ask for help. need_help is set from the student studio.'
+        );
+      }
 
       const studentExternalId = student.studentId ?? '';
       const assignmentsColl = config.database.collection('slc_assignments');
@@ -2904,7 +2923,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           deletedAt: null,
           $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
         },
-        { $set: { studentStatus: status, updatedAt: new Date() } }
+        {
+          $set: { studentStatus: status, updatedAt: new Date() },
+          // Any status a parent sets ends the ask: drop the student's note and ask time.
+          $unset: HELP_FIELDS_UNSET,
+        }
       );
 
       if (result.matchedCount === 0) {
