@@ -76,6 +76,8 @@ interface INavState {
   readonly assignmentExternalId?: string;
   /** Where the student edit screen returns to. */
   readonly editReturn?: 'dashboard' | 'students';
+  /** Which studio tab the work pack returns to. */
+  readonly studioReturn?: 'today' | 'week';
 }
 
 function AppContent(): React.ReactElement {
@@ -333,18 +335,21 @@ function AppContent(): React.ReactElement {
       return (
         <StudentWorkPackScreen
           assignmentExternalId={nav.assignmentExternalId}
-          onBack={() => setNav({ view: 'today' })}
+          onBack={() => setNav({ view: nav.studioReturn ?? 'today' })}
         />
       );
     }
     if (view === 'settings') {
       return <SettingsScreen hideHousehold onBack={() => setNav({ view: 'today' })} />;
     }
+    const studioTab = view === 'week' ? 'week' : 'today';
     return (
       <TodayScreen
         key={accountEpoch}
+        tab={studioTab}
+        onSelectTab={(tab) => setNav({ view: tab })}
         onOpenAssignment={(assignmentExternalId) =>
-          setNav({ view: 'work-pack', assignmentExternalId })
+          setNav({ view: 'work-pack', assignmentExternalId, studioReturn: studioTab })
         }
         onOpenSettings={() => setNav({ view: 'settings' })}
       />

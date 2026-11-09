@@ -27,7 +27,10 @@ import type {
   IAuthRefreshResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudioStatusPatchRequest,
+  StudentStatus,
   IPushTokenRequest,
   IConnectorTokenResponse,
   IPendingSyncRequestsResponse,
@@ -48,7 +51,7 @@ import type {
   IUserSettingsResponse,
   IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
-import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
+import { parseTodayView, parseWeekView, parseWorkPackView } from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
@@ -420,6 +423,11 @@ export class ScholarmancyApiClient {
     return parseTodayView(await this._get<unknown>('/api/studio/today'));
   }
 
+  /** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+  async getStudioWeek(): Promise<IWeekView> {
+    return parseWeekView(await this._get<unknown>('/api/studio/week'));
+  }
+
   async getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView> {
     return parseWorkPackView(
       await this._get<unknown>(
@@ -428,13 +436,20 @@ export class ScholarmancyApiClient {
     );
   }
 
+  /**
+   * PATCH /api/studio/assignments/:id/status. `note` travels with need_help
+   * (≤140 chars); the server ignores it until the need-help alert lands (R3).
+   */
   async patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
+    status: StudentStatus | null,
+    note?: string
   ): Promise<void> {
+    const body: IStudioStatusPatchRequest =
+      note !== undefined && note !== '' ? { status, note } : { status };
     await this._patch(
       `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-      { status }
+      body
     );
   }
 

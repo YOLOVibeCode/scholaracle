@@ -6,49 +6,127 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import type { ITodayView } from '@scholaracle/contracts';
+import type { ITodayView, IWeekView, StudentStatus } from '@scholaracle/contracts';
+import { applyStudentStatusLocally } from '@scholaracle/studio-core';
 import type { IStudioApi } from '../api/interfaces';
 import { apiClient } from '../api/client';
 import { TodayView } from '../studio/TodayView';
+import { WeekView } from '../studio/WeekView';
+import { StatusSheet, type IStatusSheetTarget } from '../studio/StatusSheet';
+
+/** The two student-mode tabs. `week` is also the weekly review push target. */
+export type StudioTab = 'today' | 'week';
+
+export const STUDIO_TABS: readonly { readonly tab: StudioTab; readonly label: string }[] = [
+  { tab: 'today', label: 'Today' },
+  { tab: 'week', label: 'This week' },
+];
 
 export interface ITodayScreenProps {
   readonly studio?: IStudioApi;
+  /** Controlled by App nav so a push can land on This week. Defaults to Today. */
+  readonly tab?: StudioTab;
+  onSelectTab?(tab: StudioTab): void;
   onOpenAssignment(assignmentExternalId: string): void;
   onOpenSettings(): void;
 }
 
+interface ILoadState<T> {
+  readonly view: T | null;
+  readonly error: string | null;
+  readonly isLoading: boolean;
+}
+
+const INITIAL: ILoadState<never> = { view: null, error: null, isLoading: true };
+
 export function TodayScreen({
   studio = apiClient,
+  tab = 'today',
+  onSelectTab,
   onOpenAssignment,
   onOpenSettings,
 }: ITodayScreenProps): React.ReactElement {
-  const [view, setView] = useState<ITodayView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [today, setToday] = useState<ILoadState<ITodayView>>(INITIAL);
+  const [week, setWeek] = useState<ILoadState<IWeekView>>(INITIAL);
+  const [refreshing, setRefreshing] = useState(false);
+  const [sheetTarget, setSheetTarget] = useState<IStatusSheetTarget | null>(null);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const loadToday = useCallback(async () => {
+    setToday((s) => ({ ...s, isLoading: s.view === null, error: null }));
     try {
-      setView(await studio.getStudioToday());
+      setToday({ view: await studio.getStudioToday(), error: null, isLoading: false });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not load today');
-    } finally {
-      setIsLoading(false);
+      setToday((s) => ({
+        view: s.view,
+        error: err instanceof Error ? err.message : 'Could not load today',
+        isLoading: false,
+      }));
     }
   }, [studio]);
 
+  const loadWeek = useCallback(async () => {
+    setWeek((s) => ({ ...s, isLoading: s.view === null, error: null }));
+    try {
+      setWeek({ view: await studio.getStudioWeek(), error: null, isLoading: false });
+    } catch (err: unknown) {
+      setWeek((s) => ({
+        view: s.view,
+        error: err instanceof Error ? err.message : 'Could not load this week',
+        isLoading: false,
+      }));
+    }
+  }, [studio]);
+
+  const loadActive = useCallback(
+    () => (tab === 'week' ? loadWeek() : loadToday()),
+    [tab, loadToday, loadWeek]
+  );
+
+  // Each tab loads the first time it is shown; a tap on the other tab loads that one.
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadActive();
+  }, [loadActive]);
+
+  const refresh = (): void => {
+    setRefreshing(true);
+    void loadActive().finally(() => setRefreshing(false));
+  };
+
+  const submitStatus = async (
+    assignmentExternalId: string,
+    status: StudentStatus,
+    note?: string
+  ): Promise<void> => {
+    // Move the row before the server answers; the refetch below confirms it.
+    setWeek((s) =>
+      s.view === null
+        ? s
+        : { ...s, view: applyStudentStatusLocally(s.view, assignmentExternalId, status) }
+    );
+    try {
+      await studio.patchStudioAssignmentStatus(assignmentExternalId, status, note);
+    } catch (err: unknown) {
+      // Server said no: put the row back where the server has it.
+      void loadWeek();
+      throw err;
+    }
+    void loadWeek();
+    void loadToday();
+  };
+
+  const active = tab === 'week' ? week : today;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Today</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">
+          {tab === 'week' ? 'This week' : 'Today'}
+        </Text>
         <TouchableOpacity
           onPress={onOpenSettings}
+          accessibilityRole="button"
           accessibilityLabel="Settings"
           testID="button-settings"
           hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
@@ -57,22 +135,74 @@ export function TodayScreen({
           <Text style={styles.settingsIcon}>⚙︎</Text>
         </TouchableOpacity>
       </View>
-      {isLoading ? (
-        <View style={styles.center}>
+      <View style={styles.tabs} accessibilityRole="tablist" testID="studio-tabs">
+        {STUDIO_TABS.map((entry) => {
+          const selected = entry.tab === tab;
+          return (
+            <TouchableOpacity
+              key={entry.tab}
+              style={[styles.tab, selected && styles.tabSelected]}
+              onPress={() => onSelectTab?.(entry.tab)}
+              accessibilityRole="tab"
+              accessibilityLabel={entry.label}
+              accessibilityState={{ selected }}
+              testID={`studio-tab-${entry.tab}`}
+            >
+              <Text style={[styles.tabText, selected && styles.tabTextSelected]}>
+                {entry.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {active.isLoading ? (
+        <View style={styles.center} testID="studio-loading">
           <ActivityIndicator size="large" color="#4361ee" />
         </View>
-      ) : error != null ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <TouchableOpacity onPress={() => void load()}>
+      ) : active.error != null && active.view === null ? (
+        <View style={styles.center} testID="studio-error">
+          <Text style={styles.error}>{active.error}</Text>
+          <TouchableOpacity
+            onPress={() => void loadActive()}
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+            testID="studio-retry"
+          >
             <Text style={styles.retry}>Try again</Text>
           </TouchableOpacity>
         </View>
-      ) : view != null ? (
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <TodayView view={view} onOpenAssignment={onOpenAssignment} />
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#4361ee" />
+          }
+        >
+          {active.error != null ? (
+            <Text style={styles.staleError} testID="studio-stale-error">
+              {active.error}
+            </Text>
+          ) : null}
+          {tab === 'week' && week.view !== null ? (
+            <WeekView
+              view={week.view}
+              onOpenAssignment={onOpenAssignment}
+              onChangeStatus={setSheetTarget}
+            />
+          ) : tab === 'today' && today.view !== null ? (
+            <TodayView
+              view={today.view}
+              onOpenAssignment={onOpenAssignment}
+              onChangeStatus={setSheetTarget}
+            />
+          ) : null}
         </ScrollView>
-      ) : null}
+      )}
+      <StatusSheet
+        target={sheetTarget}
+        onClose={() => setSheetTarget(null)}
+        onSubmit={submitStatus}
+      />
     </View>
   );
 }
@@ -84,15 +214,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    paddingBottom: 8,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#dee2e6',
   },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
   settingsHit: { padding: 8, marginRight: -8 },
   settingsIcon: { fontSize: 22, color: '#4361ee' },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dee2e6',
+  },
+  tab: { paddingVertical: 10, paddingHorizontal: 4, marginRight: 20 },
+  tabSelected: { borderBottomWidth: 2, borderBottomColor: '#4361ee' },
+  tabText: { fontSize: 15, fontWeight: '600', color: '#6c757d' },
+  tabTextSelected: { color: '#4361ee' },
   scroll: { padding: 24, paddingBottom: 48 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error: { color: '#dc3545', textAlign: 'center', marginBottom: 12 },
+  staleError: { color: '#dc3545', marginBottom: 12 },
   retry: { color: '#4361ee', fontWeight: '600' },
 });

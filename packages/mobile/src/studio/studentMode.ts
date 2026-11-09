@@ -15,9 +15,10 @@ export type AppNavView =
   | 'alerts'
   | 'notification-settings'
   | 'today'
+  | 'week'
   | 'work-pack';
 
-const STUDENT_VIEWS: ReadonlySet<AppNavView> = new Set(['today', 'work-pack', 'settings']);
+const STUDENT_VIEWS: ReadonlySet<AppNavView> = new Set(['today', 'week', 'work-pack', 'settings']);
 const PARENT_VIEWS: ReadonlySet<AppNavView> = new Set([
   'students',
   'connect-source',
