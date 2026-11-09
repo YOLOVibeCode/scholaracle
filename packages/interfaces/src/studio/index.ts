@@ -1,8 +1,11 @@
 export type {
   ITodayGuide,
   ITodaySource,
+  IWeekGuide,
+  IWeekSource,
   IWin,
   IOpenTask,
+  IDoneTask,
   WinKind,
   OpenTaskKind,
 } from './ITodayGuide';

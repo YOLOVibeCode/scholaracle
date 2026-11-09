@@ -2,7 +2,7 @@ import express, { type Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
-import { ValidationError } from '@scholaracle/contracts';
+import { AiBudgetError, ERROR_CODES, ValidationError } from '@scholaracle/contracts';
 import { LlmClient, resolveLlmConfig } from '@scholaracle/agents';
 import {
   connectorAuthMiddleware,
@@ -11,7 +11,7 @@ import {
 import { asyncHandler } from '../../../middleware/asyncHandler';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../../middleware/rateLimit';
 import { recordAiUsage } from '../../../services/ai-rate-limit';
-import { getScraperSystemPrompt } from '../../../services/scraper-generator/prompts';
+import { getScraperSystemPrompt } from './scraperAssistPrompts';
 
 const DEFAULT_DAILY_LIMIT = 40;
 const BURST_WINDOW_MS = 60_000;
@@ -137,10 +137,23 @@ export function createScraperAssistRouter(params: {
         return;
       }
       const llm = new LlmClient(cfg);
-      const response = await llm.complete(body.messages, {
-        maxTokens: body.maxTokens ?? 4096,
-        system: getScraperSystemPrompt(),
-      });
+      let response;
+      try {
+        response = await llm.complete(body.messages, {
+          maxTokens: body.maxTokens ?? 4096,
+          system: getScraperSystemPrompt(),
+        });
+      } catch (err: unknown) {
+        if (err instanceof AiBudgetError) {
+          res.status(402).json({
+            success: false,
+            error: err.message,
+            code: ERROR_CODES.AI_BUDGET,
+          });
+          return;
+        }
+        throw err;
+      }
       await recordAiUsage(params.database, userId, 'scraper_generation');
       res.status(200).json({
         purpose: body.purpose,

@@ -1,0 +1,18 @@
+# Fake Skyward login page (scripts/fake-portal-server.mjs, demo/demo).
+appId: com.scholarmancy.app
+---
+- extendedWaitUntil:
+    visible: 'Fake Skyward|Username'
+    timeout: 60000
+- tapOn: Username
+- inputText:
+    text: ${MAESTRO_PORTAL_USERNAME}
+    label: Type portal username
+- tapOn: Password
+- inputText:
+    text: ${MAESTRO_PORTAL_PASSWORD}
+    label: Type portal password
+# Submit with Return from the password field. On iOS the desktop-width page puts the
+# Sign in button off-screen, and a text match on "Sign in" can hit the header
+# "Sign in to 127.0.0.1"; hideKeyboard also fails inside a WebView.
+- pressKey: Enter

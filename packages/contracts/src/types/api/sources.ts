@@ -7,7 +7,13 @@
  * record exists (created via POST /api/ingest/v1/sources).
  */
 
-import type { ISlcRunCoverage, ISourceIngestLastCounts } from '../../models/Ingest';
+import type {
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+  ISourceIngestLastCounts,
+  ISlcCursor,
+} from '../../models/Ingest';
 
 export interface ISourceListItem {
   readonly id: string;
@@ -26,6 +32,7 @@ export interface ISourceListItem {
   readonly lastRunId?: string;
   readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
+  readonly portalAccountId?: string;
 }
 
 export interface IRunListItem {
@@ -39,8 +46,13 @@ export interface IRunListItem {
   readonly error: string | null;
   /** Per-student coverage when stored on the run (client-sent on complete). */
   readonly coverage?: ISlcRunCoverage;
-  /** Validation / join-graph warnings (client-sent). */
+  /** Validation / join-graph / entity-record warnings. */
   readonly warnings?: readonly string[];
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly stats?: ISlcIngestRunStats;
+  readonly lastCursor?: ISlcCursor | null;
+  readonly newCursor?: ISlcCursor | null;
+  readonly clientMeta?: Readonly<Record<string, string>>;
 }
 
 /** POST /api/students/:id/sources/:sourceId/runs/trigger — client-led sync (device ingests). */

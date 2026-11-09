@@ -7,6 +7,7 @@ import {
   type CommunicationStatus,
   type CommunicationType,
 } from '../../models/CommunicationLog';
+import { maskCommunicationLogData } from '../../utils/maskCommunicationLogData';
 
 export interface IPaginatedLogs {
   readonly logs: readonly CommunicationLog[];
@@ -73,9 +74,10 @@ export class CommunicationLogRepository
    * @returns Created log
    */
   public async create(logData: ICommunicationLogData): Promise<CommunicationLog> {
+    const masked = maskCommunicationLogData(logData);
     const document = {
-      ...logData,
-      createdAt: logData.createdAt ?? new Date(),
+      ...masked,
+      createdAt: masked.createdAt ?? new Date(),
     };
 
     const result = await this._collection.insertOne(document);

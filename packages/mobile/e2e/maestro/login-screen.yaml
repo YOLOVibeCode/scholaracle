@@ -1,0 +1,22 @@
+# Logged-out login screen: the "Forgot password?" link exists (added after users could not reset
+# a password from the phone). Needs no credentials.
+appId: com.scholarmancy.app
+name: Login screen
+tags: [launch]
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - clearKeychain
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: input-email
+    timeout: 40000
+- assertVisible:
+    id: link-forgot-password
+- assertVisible:
+    id: button-login
+- takeScreenshot: login-screen

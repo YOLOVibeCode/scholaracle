@@ -16,12 +16,18 @@ import { DashboardScreen } from './src/screens/DashboardScreen';
 import { CourseDetailScreen } from './src/screens/CourseDetailScreen';
 import { AssignmentDetailScreen } from './src/screens/AssignmentDetailScreen';
 import { SyncScreen } from './src/screens/SyncScreen';
+import { SyncAllScreen } from './src/screens/SyncAllScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { PlanScreen } from './src/screens/PlanScreen';
+import { StudentEditScreen } from './src/screens/StudentEditScreen';
+import { AlertsScreen } from './src/screens/AlertsScreen';
+import { NotificationSettingsScreen } from './src/screens/NotificationSettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
-import { registerForPushNotifications, addResponseListener } from './src/notifications/pushSetup';
+import { registerForPushNotifications } from './src/notifications/pushSetup';
+import { usePushTapNavigation } from './src/notifications/usePushTapNavigation';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
 import { resavePortalCredentialsThisDeviceOnlyOnce } from './src/credentials/resavePortalCredentialsThisDeviceOnlyOnce';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
@@ -32,6 +38,7 @@ import { extractMagicToken } from './src/auth/magicDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import { DeployStamp } from './src/components/DeployStamp';
+import { AppRootGuard } from './src/launch/AppRootGuard';
 import type {
   ICourseGrade,
   ICourseGradeAssignment,
@@ -43,12 +50,13 @@ import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore
 import { sourceInviteApplier } from './src/install/applySourceInvite';
 import { apiClient } from './src/api/client';
 import { fetchPendingSyncRequestsOnAppOpen } from './src/sync/pendingSyncOnAppOpen';
+import { fetchServedSelectorPatchesOnAppOpen } from './src/sync/servedSelectorPatchesOnAppOpen';
+import { extractHostname } from './src/utils/urlNormalize';
 import {
   clampNavView,
   homeViewForRole,
   isStudentSession,
   mayStorePortalCredentials,
-  viewAfterNotificationTap,
   type AppNavView,
 } from './src/studio/studentMode';
 
@@ -61,10 +69,15 @@ interface INavState {
   readonly view: AppView;
   readonly student?: IStudentListItem;
   readonly syncSource?: IConnectedSource;
+  readonly syncAllSources?: readonly IConnectedSource[];
   readonly course?: ICourseGrade;
   readonly assignment?: ICourseGradeAssignment;
   readonly sourceInvite?: ISourceInvitePayload;
   readonly assignmentExternalId?: string;
+  /** Where the student edit screen returns to. */
+  readonly editReturn?: 'dashboard' | 'students';
+  /** Which studio tab the work pack returns to. */
+  readonly studioReturn?: 'today' | 'week';
 }
 
 function AppContent(): React.ReactElement {
@@ -134,6 +147,9 @@ function AppContent(): React.ReactElement {
       userId: '',
       name: payload.displayName,
       studentId: payload.studentExternalId,
+      // A source invite always comes from an owner/admin for their own student.
+      access: 'owner',
+      peopleCount: 1,
     };
     setNav({ view: 'connect-source', student, sourceInvite: payload });
   }, []);
@@ -174,6 +190,24 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn, studentMode, accountEpoch]);
 
   useEffect(() => {
+    if (!isLoggedIn || studentMode) return;
+    void (async (): Promise<void> => {
+      try {
+        const connectorToken = await apiClient.getOrMintConnectorToken();
+        const sources = await apiClient.listIngestConnectorSources(connectorToken);
+        const hosts = sources
+          .map((s) => (s.portalBaseUrl ? extractHostname(s.portalBaseUrl) : ''))
+          .filter((h) => h.length > 0);
+        await fetchServedSelectorPatchesOnAppOpen(hosts, (portalHost) =>
+          apiClient.getServedSelectorPatches(portalHost, connectorToken)
+        );
+      } catch {
+        // Best-effort: sync still works without remote patches.
+      }
+    })();
+  }, [isLoggedIn, studentMode, accountEpoch]);
+
+  useEffect(() => {
     if (!isLoggedIn) {
       setStudentCount(null);
       return;
@@ -201,13 +235,15 @@ function AppContent(): React.ReactElement {
     }
   }, [isLoggedIn, studentMode, studentCount, role]);
 
-  // Notification taps: parent → students list; student → Today.
-  useEffect(() => {
-    const subscription = addResponseListener(() => {
-      setNav({ view: viewAfterNotificationTap(role) });
-    });
-    return () => subscription.remove();
-  }, [role]);
+  // Notification taps (live + cold start): open the student/course/assignment named in the push
+  // data; student sessions and unroutable pushes land on the role's home.
+  usePushTapNavigation({
+    isLoading,
+    isLoggedIn,
+    role,
+    accountEpoch,
+    onNavigate: (next) => setNav(next),
+  });
 
   // Reset navigation on login/logout so the next session starts on the right home.
   useEffect(() => {
@@ -220,7 +256,18 @@ function AppContent(): React.ReactElement {
   }, [isLoggedIn, accountEpoch, role]);
 
   const startSync = useCallback(async (student: IStudentListItem) => {
-    const source = await connectedSourceStore.getForStudentRecord(student);
+    // Never fail silently: this runs from a button as `void startSync()`, so a lookup
+    // that hangs or throws used to leave the parent tapping Sync with no response.
+    let source: IConnectedSource | null;
+    try {
+      source = await withTimeout(connectedSourceStore.getForStudentRecord(student), 5000);
+    } catch (err) {
+      Alert.alert(
+        'Could not start sync',
+        err instanceof Error ? err.message : 'Reading saved portals failed.'
+      );
+      return;
+    }
     if (!source) {
       Alert.alert(
         'No portal connected',
@@ -291,18 +338,21 @@ function AppContent(): React.ReactElement {
       return (
         <StudentWorkPackScreen
           assignmentExternalId={nav.assignmentExternalId}
-          onBack={() => setNav({ view: 'today' })}
+          onBack={() => setNav({ view: nav.studioReturn ?? 'today' })}
         />
       );
     }
     if (view === 'settings') {
       return <SettingsScreen hideHousehold onBack={() => setNav({ view: 'today' })} />;
     }
+    const studioTab = view === 'week' ? 'week' : 'today';
     return (
       <TodayScreen
         key={accountEpoch}
+        tab={studioTab}
+        onSelectTab={(tab) => setNav({ view: tab })}
         onOpenAssignment={(assignmentExternalId) =>
-          setNav({ view: 'work-pack', assignmentExternalId })
+          setNav({ view: 'work-pack', assignmentExternalId, studioReturn: studioTab })
         }
         onOpenSettings={() => setNav({ view: 'settings' })}
       />
@@ -343,6 +393,9 @@ function AppContent(): React.ReactElement {
           })
         }
         onRunHistory={() => setNav({ view: 'run-history', student: nav.student })}
+        onEditStudent={() =>
+          setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+        }
       />
     );
   }
@@ -383,6 +436,10 @@ function AppContent(): React.ReactElement {
     return (
       <SyncScreen
         credentialKey={nav.syncSource.credentialKey}
+        connectedSource={{
+          ...nav.syncSource,
+          studentId: nav.syncSource.studentId ?? nav.student.id,
+        }}
         config={{
           provider: nav.syncSource.provider,
           adapterId: nav.syncSource.adapterId,
@@ -408,8 +465,84 @@ function AppContent(): React.ReactElement {
     );
   }
 
+  if (nav.view === 'plan') {
+    return <PlanScreen onBack={() => setNav({ view: 'settings' })} />;
+  }
+
+  if (nav.view === 'student-edit' && nav.student) {
+    const returnTo = nav.editReturn ?? 'students';
+    return (
+      <StudentEditScreen
+        student={nav.student}
+        onBack={() =>
+          setNav(
+            returnTo === 'dashboard'
+              ? { view: 'dashboard', student: nav.student }
+              : { view: 'students' }
+          )
+        }
+        onSaved={(updated) =>
+          setNav(
+            returnTo === 'dashboard'
+              ? { view: 'dashboard', student: updated }
+              : { view: 'students' }
+          )
+        }
+        onRemoved={() => {
+          setNav({ view: 'students' });
+          void apiClient
+            .getStudents()
+            .then((rows) => setStudentCount(rows.length))
+            .catch(() => undefined);
+        }}
+      />
+    );
+  }
+
+  if (nav.view === 'alerts') {
+    return <AlertsScreen onBack={() => setNav({ view: 'students' })} />;
+  }
+
+  if (nav.view === 'notification-settings') {
+    return <NotificationSettingsScreen onBack={() => setNav({ view: 'settings' })} />;
+  }
+
   if (nav.view === 'settings') {
-    return <SettingsScreen onBack={() => setNav({ view: 'students' })} />;
+    return (
+      <SettingsScreen
+        onOpenPlan={() => setNav({ view: 'plan' })}
+        onBack={() => setNav({ view: 'students' })}
+        onOpenNotificationSettings={() => setNav({ view: 'notification-settings' })}
+        onSyncAll={(grouped) => {
+          if (grouped.length === 0) return;
+          setNav({ view: 'sync-all', syncAllSources: grouped });
+        }}
+      />
+    );
+  }
+
+  if (nav.view === 'sync-all' && nav.syncAllSources?.length) {
+    const credentialKey = nav.syncAllSources[0]!.credentialKey;
+    return (
+      <SyncAllScreen
+        credentialKey={credentialKey}
+        items={nav.syncAllSources.map((source) => ({
+          config: {
+            provider: source.provider,
+            adapterId: source.adapterId,
+            baseUrl: source.baseUrl,
+            studentExternalId: source.studentExternalId,
+            institutionExternalId: source.institutionExternalId,
+            sourceId: source.sourceId,
+            adapterVersion: source.adapterVersion,
+          },
+          studentNameHint: source.studentExternalId,
+          connectedSource: source,
+        }))}
+        onDone={() => setNav({ view: 'settings' })}
+        onCancel={() => setNav({ view: 'settings' })}
+      />
+    );
   }
 
   return (
@@ -419,11 +552,37 @@ function AppContent(): React.ReactElement {
       onAddSource={() => setNav({ view: 'connect-source' })}
       onStartSetup={() => setNav({ view: 'students' })}
       onOpenSettings={() => setNav({ view: 'settings' })}
+      onEditStudent={(student) => setNav({ view: 'student-edit', student, editReturn: 'students' })}
+      onOpenAlerts={() => setNav({ view: 'alerts' })}
     />
   );
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out reading saved portals.')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    );
+  });
+}
+
 export default function App(): React.ReactElement {
+  return (
+    <AppRootGuard>
+      <AppRoot />
+    </AppRootGuard>
+  );
+}
+
+function AppRoot(): React.ReactElement {
   return (
     <SafeAreaProvider>
       <AuthProvider>

@@ -34,7 +34,13 @@ import { WebViewPageDriver } from '../scraper/WebViewPageDriver';
 import { runSyncPipeline, SyncError, type ISyncProgress } from '../scraper/SyncOrchestrator';
 import { WebViewAssetHost } from '../scraper/WebViewAssetHost';
 import { apiClient } from '../api/client';
+import type { IConnectedSource } from '../sources/ConnectedSourceStore';
+import { ensureBindingAfterSync } from '../sources/ensureBindingAfterSync';
 import { runLedger } from '../ledger/RunLedger';
+import {
+  clearSelectorPatchForHost,
+  pickSelectorPatchForSync,
+} from '../sync/servedSelectorPatchesSession';
 
 interface ISavedCredential {
   readonly username: string;
@@ -57,6 +63,7 @@ interface ISyncConfig {
 interface ISyncScreenProps {
   readonly credentialKey: string;
   readonly config: ISyncConfig;
+  readonly connectedSource: IConnectedSource;
   onDone(): void;
   onCancel?(): void;
 }
@@ -81,6 +88,7 @@ function localFailure(message: string): ISyncFailureView {
 export function SyncScreen({
   credentialKey,
   config,
+  connectedSource,
   onDone,
   onCancel,
 }: ISyncScreenProps): React.ReactElement {
@@ -146,6 +154,11 @@ export function SyncScreen({
     setSyncState('syncing');
     setShowWebView(false); // Switch to hidden WebView
 
+    const remotePatch = pickSelectorPatchForSync({
+      portalHost: config.institutionExternalId,
+      recipeId: config.provider,
+    });
+
     try {
       const connectorToken = await apiClient.getOrMintConnectorToken();
       // Idempotent upsert: guarantees the source exists server-side so the
@@ -181,7 +194,12 @@ export function SyncScreen({
         (p: ISyncProgress) => {
           if (!cancelledRef.current) setProgress(p);
         },
-        undefined,
+        remotePatch
+          ? {
+              selectorPatch: remotePatch.selectors,
+              appliedSelectorPatchId: remotePatch.patchId,
+            }
+          : undefined,
         new WebViewAssetHost({
           driver: driverRef.current,
           connectorToken,
@@ -192,6 +210,15 @@ export function SyncScreen({
           apiBaseUrl: apiClient.baseUrlValue,
         })
       );
+      if (cancelledRef.current) return;
+      try {
+        await ensureBindingAfterSync({
+          source: connectedSource,
+          registrar: apiClient,
+        });
+      } catch {
+        // Binding registration is best-effort after a successful sync.
+      }
       if (cancelledRef.current) return;
       setSyncState('done');
     } catch (err: unknown) {
@@ -205,8 +232,12 @@ export function SyncScreen({
         describeSyncFailure({ phase, message, provider: config.provider, loginFormShowing })
       );
       setSyncState('error');
+    } finally {
+      if (remotePatch) {
+        clearSelectorPatchForHost(config.institutionExternalId);
+      }
     }
-  }, [config, checkLoginForm]);
+  }, [config, checkLoginForm, connectedSource]);
 
   /** A finished navigation on the portal: start only if no sign-in form is showing. */
   const handleLoginCandidate = useCallback(
@@ -338,11 +369,13 @@ export function SyncScreen({
           {syncState === 'done' && (
             <>
               <Text style={styles.successIcon}>✓</Text>
-              <Text style={styles.statusText}>Sync complete!</Text>
+              <Text style={styles.statusText} testID="text-sync-complete">
+                Sync complete!
+              </Text>
               {progress?.opCount !== undefined && (
                 <Text style={styles.subText}>{progress.opCount} records updated</Text>
               )}
-              <TouchableOpacity style={styles.button} onPress={onDone}>
+              <TouchableOpacity style={styles.button} onPress={onDone} testID="button-sync-done">
                 <Text style={styles.buttonText}>Done</Text>
               </TouchableOpacity>
             </>

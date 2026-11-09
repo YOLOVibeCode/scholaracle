@@ -1,0 +1,51 @@
+# Parent opens a student's edit screen and the remove confirmation, and changes NOTHING:
+# nothing is saved and the remove dialog is cancelled, so the shared test account is untouched.
+# Needs MAESTRO_PARENT_EMAIL, MAESTRO_PARENT_PASSWORD.
+appId: com.scholarmancy.app
+name: Student edit (no changes)
+tags: [smoke]
+---
+- runFlow: subflows/login.yaml
+- tapOn:
+    id: text-student-name
+- extendedWaitUntil:
+    visible:
+      id: button-edit-student
+    timeout: 30000
+- tapOn:
+    id: button-edit-student
+- extendedWaitUntil:
+    visible:
+      id: student-edit-screen
+    timeout: 20000
+- assertVisible:
+    id: input-student-name
+- assertVisible:
+    id: button-save-student
+- assertNotVisible:
+    id: student-edit-error
+- takeScreenshot: student-edit
+
+# Remove: open the confirmation, then cancel.
+- scrollUntilVisible:
+    element:
+      id: button-remove-student
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: button-remove-student
+- extendedWaitUntil:
+    visible: "Remove student"
+    timeout: 10000
+- tapOn:
+    text: "Cancel"
+- assertVisible:
+    id: student-edit-screen
+
+# Back out without saving.
+- tapOn:
+    id: button-edit-back
+- extendedWaitUntil:
+    visible:
+      id: button-edit-student
+    timeout: 20000

@@ -281,4 +281,48 @@ describe('StudentRepository', () => {
       expect(foundA).not.toBeNull();
     });
   });
+
+  describe('findPendingByInviteGroupId', () => {
+    it('returns only students whose entry of that group is still pending', async () => {
+      const entry = (status: 'pending' | 'accepted', inviteGroupId: string) => ({
+        email: 'co@example.com',
+        role: 'parent' as const,
+        status,
+        invitedAt: new Date(),
+        inviteGroupId,
+      });
+      const pending = await repository.create(
+        makeStudentData({ studentId: 'g-1', sharedWith: [entry('pending', 'grp-a')] })
+      );
+      await repository.create(
+        makeStudentData({ studentId: 'g-2', sharedWith: [entry('accepted', 'grp-a')] })
+      );
+      await repository.create(
+        makeStudentData({ studentId: 'g-3', sharedWith: [entry('pending', 'grp-b')] })
+      );
+
+      const found = await repository.findPendingByInviteGroupId('grp-a');
+
+      expect(found.map((s) => s._id?.toString())).toEqual([pending._id?.toString()]);
+      expect(await repository.findPendingByInviteGroupId('grp-none')).toEqual([]);
+    });
+  });
+
+  describe('findByIds', () => {
+    it('returns the known students in the requested order and skips unknown ids', async () => {
+      const a = await repository.create(makeStudentData({ name: 'A', studentId: 'ids-a' }));
+      const b = await repository.create(makeStudentData({ name: 'B', studentId: 'ids-b' }));
+      const c = await repository.create(makeStudentData({ name: 'C', studentId: 'ids-c' }));
+
+      const found = await repository.findByIds([
+        c._id!.toString(),
+        new ObjectId().toString(),
+        a._id!,
+        b._id!.toString(),
+      ]);
+
+      expect(found.map((s) => s.name)).toEqual(['C', 'A', 'B']);
+      expect(await repository.findByIds([])).toEqual([]);
+    });
+  });
 });

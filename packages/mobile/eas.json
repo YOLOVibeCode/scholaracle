@@ -62,7 +62,7 @@
         "ascApiKeyId": "RA29BTM8KJ"
       },
       "android": {
-        "serviceAccountKeyPath": "/Users/admin/Dev/Noctusoft/tankroom/google-service-account.json",
+        "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH",
         "track": "internal",
         "releaseStatus": "completed",
         "changesNotSentForReview": true
@@ -80,7 +80,7 @@
         "metadataPath": "./store-metadata"
       },
       "android": {
-        "serviceAccountKeyPath": "/Users/admin/Dev/Noctusoft/tankroom/google-service-account.json",
+        "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH",
         "track": "alpha",
         "releaseStatus": "completed",
         "changesNotSentForReview": true

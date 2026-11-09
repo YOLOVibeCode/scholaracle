@@ -52,6 +52,25 @@ describe('AiUsageRepository', () => {
     });
   });
 
+  describe('recordCost', () => {
+    it('persists model, tokens, cost, and repairCandidateId', async () => {
+      await repository.recordCost({
+        userId: 'repair-user',
+        feature: 'scraper_repair',
+        at: new Date(),
+        model: 'claude-sonnet-mock',
+        inputTokens: 10,
+        outputTokens: 5,
+        costUsd: 0.000025,
+        repairCandidateId: 'host|aeries|step|hash|no_grade',
+      });
+      const doc = await database.collection('ai_usage').findOne({ userId: 'repair-user' });
+      expect(doc?.['model']).toBe('claude-sonnet-mock');
+      expect(doc?.['costUsd']).toBe(0.000025);
+      expect(doc?.['repairCandidateId']).toContain('aeries');
+    });
+  });
+
   describe('countInWindow', () => {
     it('returns 0 when no records exist', async () => {
       const count = await repository.countInWindow('user-1', 'agenda', new Date('2025-01-01'));
@@ -84,6 +103,37 @@ describe('AiUsageRepository', () => {
 
       const count = await repository.countInWindow('user-1', 'scraper_generation', boundary);
       expect(count).toBe(1);
+    });
+  });
+
+  describe('getAdminCostSummary', () => {
+    it('aggregates month spend from ai_usage rows', async () => {
+      const monthStart = new Date('2026-11-01T00:00:00.000Z');
+      await repository.recordCost({
+        userId: 'u1',
+        feature: 'scraper_repair',
+        at: new Date('2026-11-10T10:00:00Z'),
+        model: 'm',
+        inputTokens: 1,
+        outputTokens: 1,
+        costUsd: 0.00011,
+        repairCandidateId: 'host.a.net|aeries|s|h|no_grade',
+      });
+      await repository.recordCost({
+        userId: 'u1',
+        feature: 'scraper_repair',
+        at: new Date('2026-11-10T10:01:00Z'),
+        model: 'm',
+        inputTokens: 1,
+        outputTokens: 1,
+        costUsd: 0.00022,
+        repairCandidateId: 'host.a.net|aeries|s|h|no_grade',
+      });
+
+      const summary = await repository.getAdminCostSummary(monthStart);
+      expect(summary.monthToDateSpendUsd).toBe(0.00033);
+      expect(summary.verificationPassRate).toBe(1);
+      expect(summary.repairsByDistrict).toEqual([{ portalHost: 'host.a.net', repairCount: 1 }]);
     });
   });
 });

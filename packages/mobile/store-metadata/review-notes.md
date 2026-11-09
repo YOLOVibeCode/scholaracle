@@ -1,9 +1,12 @@
-# App Store / Play review — Scholarmancy mobile (3.1.3)
+# App Store / Play review — Scholarmancy mobile
 
-## Paid content
+## Payments
 
-- The app does **not** offer in-app purchase. Subscriptions and plan changes are completed on the **web** at scholarmancy.com.
-- Any mention of plans in the app is informational only. Where the device locale is US English (`en-US`), the app may show a single outbound link labeled **See plans on scholarmancy.com** that opens `https://scholarmancy.com/pricing` in the system browser. There is no purchase flow inside the app.
+- The app has **no in-app purchase** and no purchase UI. It does not sell digital goods or subscriptions inside the app, and it does not use StoreKit or Play Billing.
+- Subscriptions are purchased on the web at scholarmancy.com, outside the app. The app only reflects the plan the account already has.
+- Account-limit messaging (for example, "this account supports one student") is informational text. Only for users whose device locale is US English (`en-US`), that message is followed by a single outbound link, **See plans on scholarmancy.com**, which opens `https://scholarmancy.com/pricing` in the system browser. Users on any other locale see the text with no link.
+- There is no price, plan picker, checkout, or payment form anywhere in the app.
+- We are not claiming guideline 3.1.3 (Reader apps) or any other in-app-purchase exemption. The US-only link is the outbound-link behavior that the US storefront allows, and the app offers no other external purchase path.
 
 ## Account deletion
 

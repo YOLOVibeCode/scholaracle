@@ -40,6 +40,31 @@ describe('CommunicationLogRepository', () => {
       expect(log.content).toBe('Test email');
       expect(log._id).toBeDefined();
     });
+
+    it('should mask recipient email and phone at write time', async () => {
+      const fullEmail = 'pii-seed-m3-12@example.com';
+      const fullPhone = '+15557654321';
+      const log = await repository.create({
+        userId: '507f1f77bcf86cd799439011',
+        channel: 'sms',
+        type: 'notification',
+        content: `contact ${fullEmail} or ${fullPhone}`,
+        status: 'sent',
+        triggeredBy: 'system',
+        recipientEmail: fullEmail,
+        recipientPhone: fullPhone,
+      });
+
+      expect(log.recipientEmail).toBe('p***@example.com');
+      expect(log.recipientPhone).toBe('+1***4321');
+      expect(log.content).not.toContain(fullEmail);
+      expect(log.content).not.toContain('7654321');
+
+      const stored = await database.collection('communication_logs').findOne({ _id: log._id });
+      const raw = JSON.stringify(stored);
+      expect(raw).not.toContain(fullEmail);
+      expect(raw).not.toContain('7654321');
+    });
   });
 
   describe('findByUserId', () => {

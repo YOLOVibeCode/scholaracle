@@ -270,6 +270,41 @@ describe('runSyncPipeline', () => {
     }
   });
 
+  it('passes selectorPatch through to the scrape host', async () => {
+    let capturedPatch: Readonly<Record<string, string>> | undefined;
+    const resolver: IScraperResolver = {
+      async resolve() {
+        const module: IScraperModule = {
+          metadata: {
+            id: 'canvas',
+            name: 'Canvas',
+            adapterId: 'com.instructure.canvas',
+            version: '0.1.0',
+            hosts: ['*.instructure.com'],
+            entities: ['course'],
+            entry: 'builtin:canvas',
+            publisher: 'scholaracle',
+          },
+          scrape: async (host) => {
+            capturedPatch = host.selectorPatch;
+            return { user: 'Test Student', courses: [], timestamp: NOW };
+          },
+          transform: () => [courseOp()],
+        };
+        return { module, canRun: true, checkErrors: [] };
+      },
+    };
+    const recorder = makeRecorder();
+    const uploader = makeUploader();
+    const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+    await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+      resolver,
+      selectorPatch: { row: 'FixedRow' },
+      appliedSelectorPatchId: 'patch-abc',
+    });
+    expect(capturedPatch).toEqual({ row: 'FixedRow' });
+  });
+
   it('passes studentNameHint through to the scrape host config', async () => {
     let capturedHint: string | undefined;
     const resolver: IScraperResolver = {

@@ -6,6 +6,21 @@
  * models/Ingest.ts.
  */
 
+import type { ISlcIngestRunStats, ISlcIngestRunStep, ISlcRunCoverage } from '../../models/Ingest';
+
+/** Request body of POST /api/ingest/v1/runs/:runId/complete (success path). */
+export interface IIngestRunCompleteRequest {
+  readonly status?: 'success' | 'failed';
+  readonly error?: string;
+  readonly cursor?: { readonly type: 'opaque'; readonly value: string };
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
+  /** SHA-256 hex of sanitized page skeleton for district-level repair dedupe. */
+  readonly skeletonHash?: string;
+  /** Served selector patch the client applied for this sync (verification). */
+  readonly appliedSelectorPatchId?: string;
+}
+
 /** Request body of POST /api/ingest/v1/sources (upsert semantics). */
 export interface IIngestSourceRegisterRequest {
   readonly sourceId: string;
@@ -44,6 +59,8 @@ export interface IIngestRunCompleteResponse {
   readonly committed: boolean;
   readonly newCursor: { readonly type: 'opaque'; readonly value: string } | null;
   readonly derivedAlertsQueued: boolean;
+  /** Present when post-ingest LLM work hit the relay budget cap; sync still committed. */
+  readonly codes?: readonly string[];
 }
 
 /** Response of POST /api/ingest/v1/runs/:id/complete (failed path). */
@@ -52,6 +69,18 @@ export interface IIngestRunFailedResponse {
   readonly committed: false;
   readonly failed: true;
   readonly error?: string;
+}
+
+/** Request body of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceRequest {
+  readonly step: ISlcIngestRunStep;
+  readonly stats?: ISlcIngestRunStats;
+  readonly warnings?: readonly string[];
+}
+
+/** Response of POST /api/ingest/v1/runs/:id/trace */
+export interface IIngestRunTraceResponse {
+  readonly success: boolean;
 }
 
 /** Sanitized structural DOM snapshot from `common.captureSkeleton` on the device. */

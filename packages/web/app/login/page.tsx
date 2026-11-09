@@ -16,6 +16,7 @@ import {
   magicTokenFromSearchParam,
   releaseMagicTokenClaim,
 } from '@/lib/auth/magicLogin';
+import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function LoginForm() {
   const router = useRouter();
@@ -97,11 +98,7 @@ function LoginForm() {
         </CardHeader>
         {magicToken !== null ? (
           <CardContent className="space-y-4">
-            {error && (
-              <div data-testid="message-error" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-                {error}
-              </div>
-            )}
+            {error && <FormErrorAlert>{error}</FormErrorAlert>}
             {error ? (
               <p className="text-center text-sm text-muted-foreground">
                 <Link href="/login" className="font-medium text-blue-600 hover:underline">
@@ -118,26 +115,16 @@ function LoginForm() {
         <form data-testid="form-login" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {sessionExpired && (
-              <div
-                data-testid="message-session-expired"
-                className="rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
-              >
+              <FormStatusAlert variant="warning" data-testid="message-session-expired">
                 Your session expired. Please sign in again.
-              </div>
+              </FormStatusAlert>
             )}
             {resetSuccess && (
-              <div
-                data-testid="message-reset-success"
-                className="rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-200"
-              >
+              <FormStatusAlert variant="success" data-testid="message-reset-success">
                 Password updated. You can sign in with your new password.
-              </div>
+              </FormStatusAlert>
             )}
-            {error && (
-              <div data-testid="message-error" className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200">
-                {error}
-              </div>
-            )}
+            {error && <FormErrorAlert>{error}</FormErrorAlert>}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -171,14 +158,14 @@ function LoginForm() {
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={isLoading}
-                    className="rounded border-gray-300"
+                    className="h-6 w-6 shrink-0 rounded border-gray-300"
                     data-testid="input-remember-me"
                   />
                   <span>Remember me</span>
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 font-medium text-blue-600 hover:underline dark:text-blue-400"
                   data-testid="link-forgot-password"
                 >
                   Forgot password?
@@ -193,7 +180,7 @@ function LoginForm() {
               onProvidersResolved={(ids: OAuthProviderId[]) => setHasOAuth(ids.length > 0)}
             />
             {hasOAuth && (
-              <div className="relative text-center text-sm text-gray-500">
+              <div className="relative text-center text-sm text-gray-600 dark:text-gray-400">
                 <span className="bg-white px-2 dark:bg-gray-900">or</span>
               </div>
             )}
@@ -206,7 +193,7 @@ function LoginForm() {
                 Sign up
               </Link>
             </div>
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400">
+            <div className="text-center text-xs text-gray-600 dark:text-gray-400">
               <Link href="/privacy" className="hover:underline">Privacy</Link>
               {' · '}
               <Link href="/terms" className="hover:underline">Terms</Link>

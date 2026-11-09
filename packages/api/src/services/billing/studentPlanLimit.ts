@@ -67,7 +67,9 @@ export async function countNewStudentsRequiredByIngestOps(
   if (extIds.length === 0) {
     return 0;
   }
-  const students = await new StudentRepository(database).findByUserId(userId);
+  // Owned only (sharing-spec §4.6): a student shared *with* this account belongs to its owner's
+  // plan and must not count here.
+  const students = await new StudentRepository(database).findOwnedByUserId(userId);
   let newCount = 0;
   for (const studentExtId of extIds) {
     const exists = students.some((s) => studentMatchesExternalId(s, studentExtId));
@@ -93,7 +95,7 @@ export async function assertIngestWithinStudentPlanLimit(
   if (maxStudents === -1) {
     return;
   }
-  const existingStudents = await new StudentRepository(database).findByUserId(userId);
+  const existingStudents = await new StudentRepository(database).findOwnedByUserId(userId);
   const currentCount = existingStudents.length;
   if (currentCount + newStudents > maxStudents) {
     throw new IngestStudentPlanLimitError({ currentPlan, maxStudents, currentCount });

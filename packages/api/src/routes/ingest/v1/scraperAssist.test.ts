@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
+import { AiBudgetError, ERROR_CODES } from '@scholaracle/contracts';
 import { createScraperAssistRouter } from './scraperAssist';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { seedActiveConnectorJti } from '../../../testHelpers/connectorDeviceTestSeed';
@@ -149,6 +150,18 @@ describe('POST /ai/scraper-assist', () => {
       .set('Content-Type', 'application/json')
       .send(JSON.stringify(oversized));
     expect(res.status).toBe(413);
+  });
+
+  it('returns AI_BUDGET on relay 402 without recording ai_usage', async () => {
+    mockComplete.mockRejectedValueOnce(new AiBudgetError());
+    const res = await request(app)
+      .post('/api/ingest/v1/ai/scraper-assist')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({ purpose: 'generate', prompt: 'budget' });
+    expect(res.status).toBe(402);
+    expect(res.body.code).toBe(ERROR_CODES.AI_BUDGET);
+    const count = await database.collection('ai_usage').countDocuments({ userId: 'user-1' });
+    expect(count).toBe(0);
   });
 
   it('records an ai_usage row for each successful call', async () => {

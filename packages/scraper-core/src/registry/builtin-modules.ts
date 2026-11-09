@@ -127,7 +127,9 @@ export const aeriesBuiltinModule: IScraperModule = {
       timestamp: new Date().toISOString(),
     });
     const extract = await runPortalStep(host, 'aeries.extract', async () =>
-      runAeriesRecipe(host.driver, host.config.baseUrl)
+      runAeriesRecipe(host.driver, host.config.baseUrl, {
+        ...(host.selectorPatch ? { selectors: host.selectorPatch } : {}),
+      })
     );
     return extract as unknown as Record<string, unknown>;
   },

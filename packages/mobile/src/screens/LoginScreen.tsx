@@ -20,6 +20,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from 'react-native';
 import { View } from 'react-native';
@@ -32,6 +33,7 @@ import {
   resolvePrefill,
 } from '../credentials/savedLoginStore';
 import { ApiError } from '../api/ApiError';
+import { forgotPasswordUrl } from '../auth/forgotPasswordUrl';
 
 export interface ILoginScreenProps {
   /** Parent first-run only. Students are parent-provisioned and stay on this form. */
@@ -163,6 +165,14 @@ export function LoginScreen({ onCreateAccount }: ILoginScreenProps = {}): React.
           )}
         </TouchableOpacity>
 
+        <TouchableOpacity
+          onPress={() => void Linking.openURL(forgotPasswordUrl(email))}
+          accessibilityRole="link"
+          testID="link-forgot-password"
+        >
+          <Text style={styles.forgotLink}>Forgot password?</Text>
+        </TouchableOpacity>
+
         {error && (
           <Text style={styles.error} testID="text-login-error">
             {error}
@@ -281,6 +291,13 @@ const styles = StyleSheet.create({
     color: '#dc3545',
     marginTop: 16,
     textAlign: 'center',
+  },
+  forgotLink: {
+    color: '#4361ee',
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+    fontSize: 15,
   },
   createLink: {
     color: '#4361ee',

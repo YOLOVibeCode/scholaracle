@@ -1,18 +1,15 @@
 {
   "name": "@scholaracle/connector",
   "version": "0.1.0",
-  "description": "Scholaracle Local Connector (Node CLI) - uploads normalized academic data to Scholaracle",
+  "description": "Course and assignment reconciliation helpers for ingest",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "slc": "dist/cli.js"
-  },
   "scripts": {
     "build": "tsc --build",
     "dev": "ts-node-dev --respawn --transpile-only src/cli.ts",
     "harness": "ts-node --transpile-only src/harness/harness.ts",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "test": "jest --passWithNoTests=false",
+    "test:coverage": "jest --coverage --passWithNoTests=false",
     "lint": "eslint src --ext .ts",
     "lint:strict": "eslint src --ext .ts --max-warnings=0",
     "lint:fix": "eslint src --ext .ts --fix",

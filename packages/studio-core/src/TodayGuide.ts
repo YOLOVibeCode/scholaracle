@@ -5,10 +5,13 @@ import {
   type ITodayView,
 } from '@scholaracle/contracts';
 import type { IOpenTask, ITodayGuide, ITodaySource, IWin } from '@scholaracle/interfaces';
+import { sortByDueAsc } from './dueOrder';
+import { encouragementLine } from './encouragement';
 
 /**
  * Pure Today composer. One encouragement line + exactly one next step.
  * Missing assignments beat due-soon even when due-soon is earlier.
+ * `upcoming` and `overdue` tasks belong to WeekGuide and are ignored here.
  */
 export class TodayGuide implements ITodayGuide {
   private readonly _source: ITodaySource;
@@ -35,8 +38,8 @@ export class TodayGuide implements ITodayGuide {
     next: INextStep | null;
     alsoToday: readonly INextStep[];
   } {
-    const missing = this._sortByDue(tasks.filter((t) => t.kind === 'missing'));
-    const dueSoon = this._sortByDue(tasks.filter((t) => t.kind === 'due_soon'));
+    const missing = sortByDueAsc(tasks.filter((t) => t.kind === 'missing'));
+    const dueSoon = sortByDueAsc(tasks.filter((t) => t.kind === 'due_soon'));
     const chosen = missing[0] ?? dueSoon[0];
     if (!chosen) {
       return { next: null, alsoToday: [] };
@@ -46,16 +49,6 @@ export class TodayGuide implements ITodayGuide {
       next: this._toStep(chosen),
       alsoToday: rest.map((t) => this._toStep(t)),
     };
-  }
-
-  private _sortByDue(tasks: readonly IOpenTask[]): IOpenTask[] {
-    return [...tasks].sort((a, b) => this._dueMs(a) - this._dueMs(b));
-  }
-
-  private _dueMs(task: IOpenTask): number {
-    if (task.dueAt == null || task.dueAt === '') return Number.POSITIVE_INFINITY;
-    const ms = Date.parse(task.dueAt);
-    return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
   }
 
   private _toStep(task: IOpenTask): INextStep {
@@ -70,13 +63,6 @@ export class TodayGuide implements ITodayGuide {
   }
 
   private _encouragement(wins: readonly IWin[], next: INextStep | null): string {
-    const graded = wins.find((w) => w.kind === 'graded');
-    if (graded) return `Nice work on ${graded.title}.`;
-    const opened = wins.find((w) => w.kind === 'opened_pack');
-    if (opened) return `You opened ${opened.title} yesterday.`;
-    const streak = wins.find((w) => w.kind === 'on_time_streak');
-    if (streak) return 'On-time streak going — keep it up.';
-    if (next === null) return "You're caught up.";
-    return "Let's take the next step.";
+    return encouragementLine(wins, next !== null);
   }
 }

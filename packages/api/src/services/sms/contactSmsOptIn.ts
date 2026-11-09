@@ -7,10 +7,13 @@ import {
 import { normalizePhoneE164 } from '@scholaracle/agents';
 import { SmsConsentRepository, SmsContactOptInInviteRepository } from '@scholaracle/database';
 
+/** Channels as stored on a contact; `push` is carried through and ignored here. */
+type ContactAlertChannel = 'email' | 'sms' | 'push';
+
 export interface IContactForSmsStatus {
   readonly email?: string;
   readonly phone?: string;
-  readonly alertChannels?: readonly ('email' | 'sms')[];
+  readonly alertChannels?: readonly ContactAlertChannel[];
 }
 
 export interface IIssueContactOptInParams {
@@ -18,7 +21,7 @@ export interface IIssueContactOptInParams {
   readonly contactEmail: string;
   readonly inviterName: string;
   readonly phone?: string;
-  readonly alertChannels?: readonly ('email' | 'sms')[];
+  readonly alertChannels?: readonly ContactAlertChannel[];
 }
 
 export interface IContactSmsOptIn {

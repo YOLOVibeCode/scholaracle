@@ -18,10 +18,21 @@ import {
   type StudentStatus,
 } from '@/lib/api/students';
 
-const STATUS_OPTIONS: { value: StudentStatus; label: string; color: string }[] = [
+/** need_help stays listed so a current ask still renders, but only the student may set it. */
+const STATUS_OPTIONS: {
+  value: StudentStatus;
+  label: string;
+  color: string;
+  disabled?: boolean;
+}[] = [
   { value: 'not_started', label: 'Not Started', color: 'bg-gray-100 text-gray-700' },
   { value: 'working_on_it', label: 'Working On It', color: 'bg-blue-100 text-blue-700' },
-  { value: 'need_help', label: 'Need Help', color: 'bg-amber-100 text-amber-700' },
+  {
+    value: 'need_help',
+    label: 'Need Help (student only)',
+    color: 'bg-amber-100 text-amber-700',
+    disabled: true,
+  },
   { value: 'done', label: 'Done', color: 'bg-green-100 text-green-700' },
 ];
 
@@ -102,7 +113,7 @@ function TodoCard({ assignment, studentId, isHighlighted }: TodoCardProps) {
             </SelectTrigger>
             <SelectContent>
               {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
+                <SelectItem key={opt.value} value={opt.value} disabled={opt.disabled === true}>
                   {opt.label}
                 </SelectItem>
               ))}
