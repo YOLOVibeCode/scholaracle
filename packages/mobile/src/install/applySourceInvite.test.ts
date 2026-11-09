@@ -36,6 +36,19 @@ describe('applySourceInvite', () => {
     expect(await store.list()).toHaveLength(1);
   });
 
+  it('registers household binding when registrar is provided', async () => {
+    const store = new ConnectedSourceStore();
+    const upsertPortalAccount = jest.fn(async () => ({ portalAccountId: 'pa-invite' }));
+    const upsertPortalBinding = jest.fn(async () => undefined);
+    const registerIngestSource = jest.fn(async () => undefined);
+    const { applySourceInvite } = await import('./applySourceInvite');
+    const source = await applySourceInvite(AVERY, store, {
+      registrar: { upsertPortalAccount, upsertPortalBinding, registerIngestSource },
+    });
+    expect(source.portalAccountId).toBe('pa-invite');
+    expect(upsertPortalBinding).toHaveBeenCalled();
+  });
+
   it('second apply same sourceId replaces, list length 1', async () => {
     const store = new ConnectedSourceStore();
     await sourceInviteApplier.apply(AVERY, store);

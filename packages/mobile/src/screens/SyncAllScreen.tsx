@@ -15,6 +15,7 @@ import type { IConnectedSource } from '../sources/ConnectedSourceStore';
 import { ensureBindingAfterSync } from '../sources/ensureBindingAfterSync';
 import { runLedger } from '../ledger/RunLedger';
 import type { ISyncOrchestratorConfig } from '../scraper/SyncOrchestrator';
+import { shouldKeepSyncAllWebViewMounted } from '../sync/syncAllWebViewSession';
 
 interface ISyncAllItem {
   readonly config: ISyncOrchestratorConfig;
@@ -153,7 +154,11 @@ export function SyncAllScreen({
 
   return (
     <View style={styles.container} testID="sync-all-screen">
-      {credential && keepWebViewMounted.current ? (
+      {credential &&
+      shouldKeepSyncAllWebViewMounted({
+        hasCredential: true,
+        keepWebViewMounted: keepWebViewMounted.current,
+      }) ? (
         <SyncWebView
           ref={webViewRef}
           driver={driverRef.current}

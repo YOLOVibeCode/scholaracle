@@ -47,7 +47,8 @@ import type {
 import { handleInstallLink, redeemPendingInstall } from './src/install/handleInstallLink';
 import { installSourceLinkParser } from './src/install/installSourceDeepLink';
 import { pendingSourceInviteStore } from './src/install/pendingSourceInviteStore';
-import { sourceInviteApplier } from './src/install/applySourceInvite';
+import { applySourceInvite } from './src/install/applySourceInvite';
+import type { ISourceInviteApplier } from './src/install/types';
 import { apiClient } from './src/api/client';
 import { fetchPendingSyncRequestsOnAppOpen } from './src/sync/pendingSyncOnAppOpen';
 import { fetchServedSelectorPatchesOnAppOpen } from './src/sync/servedSelectorPatchesOnAppOpen';
@@ -62,6 +63,10 @@ import {
 
 // Install capture taps once at module load — before any other code runs.
 installDiagCapture();
+
+const sourceInviteApplierWithBinding: ISourceInviteApplier = {
+  apply: (payload, store) => applySourceInvite(payload, store, { registrar: apiClient }),
+};
 
 type AppView = AppNavView;
 
@@ -159,7 +164,7 @@ function AppContent(): React.ReactElement {
       parser: installSourceLinkParser,
       pending: pendingSourceInviteStore,
       redeem: (token) => apiClient.redeemSourceInvite(token),
-      apply: sourceInviteApplier,
+      apply: sourceInviteApplierWithBinding,
       isLoggedIn,
       onApplied: (payload) => applyInviteNav(payload),
       onError: (message) => Alert.alert('Install link', message),
@@ -171,7 +176,7 @@ function AppContent(): React.ReactElement {
     void redeemPendingInstall({
       pending: pendingSourceInviteStore,
       redeem: (token) => apiClient.redeemSourceInvite(token),
-      apply: sourceInviteApplier,
+      apply: sourceInviteApplierWithBinding,
       onApplied: (payload) => applyInviteNav(payload),
       onError: (message) => Alert.alert('Install link', message),
     });
