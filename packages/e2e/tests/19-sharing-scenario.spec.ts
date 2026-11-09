@@ -1,6 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { loginExpecting } from '../fixtures/auth';
-import { generateUniqueEmail } from '../fixtures/test-data';
+import { generateUniqueEmail, seedHeaders } from '../fixtures/test-data';
 
 /**
  * SHARING SCENARIO — docs/sharing-spec.md §6, the owner's exact case with throwaway accounts.
@@ -55,6 +55,20 @@ test.describe('@feature Sharing scenario (spec §6)', () => {
     const body = (await res.json()) as { token?: string };
     expect(body.token).toBeTruthy();
     return { email, name, token: body.token! };
+  }
+
+  /**
+   * A fresh account is on the free plan (one student). The owner of the scenario holds three,
+   * so the seed route puts them on the family plan (the shared adults stay on free: §6 step 8).
+   */
+  async function registerOwner(request: APIRequestContext, prefix: string, name: string): Promise<Person> {
+    const owner = await registerUser(request, prefix, name);
+    const plan = await request.post(`${apiBaseUrl}/api/seed/set-plan`, {
+      headers: seedHeaders(),
+      data: { email: owner.email, plan: 'family' },
+    });
+    expect(plan.status(), 'seed set-plan family for the owner').toBe(200);
+    return owner;
   }
 
   async function createStudent(
@@ -117,7 +131,7 @@ test.describe('@feature Sharing scenario (spec §6)', () => {
     test.setTimeout(120_000);
 
     // 1. Owner creates Ava, Christian, Gideon.
-    const owner = await registerUser(request, 'share-owner', 'Ricardo Owner');
+    const owner = await registerOwner(request, 'share-owner', 'Ricardo Owner');
     const ava = await createStudent(request, owner, 'Ava', 10);
     const christian = await createStudent(request, owner, 'Christian', 7);
     const gideon = await createStudent(request, owner, 'Gideon', 4);
@@ -258,7 +272,7 @@ test.describe('@feature Sharing scenario (spec §6)', () => {
   }) => {
     test.setTimeout(150_000);
 
-    const owner = await registerUser(request, 'share-web-owner', 'Ricardo Owner');
+    const owner = await registerOwner(request, 'share-web-owner', 'Ricardo Owner');
     const christian = await createStudent(request, owner, 'Christian', 7);
     const gideon = await createStudent(request, owner, 'Gideon', 4);
     const jennifer = await registerUser(request, 'share-web-jennifer', 'Jennifer');
@@ -289,8 +303,9 @@ test.describe('@feature Sharing scenario (spec §6)', () => {
     await expect(page.getByTestId('shared-with-you')).toHaveCount(2, { timeout: 15_000 });
     await expect(page.getByTestId('shared-with-you').first()).toContainText('Shared with you · by Ricardo Owner');
     await expect(page.getByTestId('button-delete-student')).toHaveCount(0);
-    await expect(page.getByTestId('button-edit-student')).toHaveCount(0);
-    await expect(page.getByTestId('button-open-student')).toHaveCount(2);
+    // Owners get the Edit link (`student-link`); members get Details (`student-details-link`).
+    await expect(page.getByTestId('student-link')).toHaveCount(0);
+    await expect(page.getByTestId('student-details-link')).toHaveCount(2);
     await expect(page.getByTestId('button-share')).toHaveCount(0);
 
     // Student page as a member: tab renamed, read-only overview, no connect, role-aware card.

@@ -172,8 +172,9 @@ export default function StudentsPage() {
                       </Link>
                     </Button>
                   ) : (
-                    <Button variant="outline" size="sm" asChild data-testid="button-open-student">
-                      <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
+                    // `asChild` merges props onto the Link, so the test id must live on the Link.
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/students/${student.id}`} data-testid="student-details-link">
                         <Eye className="mr-2 h-4 w-4" />
                         Details
                       </Link>
