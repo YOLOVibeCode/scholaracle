@@ -19,6 +19,7 @@ export const ALERT_TYPE_KEYS = [
   'workload',
   'positive',
   'recommendation',
+  'student_needs_help',
 ] as const;
 
 const ALERT_TYPE_LABELS: Readonly<Record<string, string>> = {
@@ -29,6 +30,7 @@ const ALERT_TYPE_LABELS: Readonly<Record<string, string>> = {
   workload: 'Heavy workload',
   positive: 'Good news',
   recommendation: 'Study recommendations',
+  student_needs_help: 'Asks for help',
 };
 
 export function alertTypeToggleLabel(key: string): string {

@@ -57,6 +57,15 @@ export function formatNudgedAgo(iso: string, now: Date = new Date()): string {
   return `Nudged ${Math.floor(diffH / 24)}d ago`;
 }
 
+/** "Asked for help 2 h ago" (student review spec §3.2). */
+export function formatAskedForHelpAgo(iso: string, now: Date = new Date()): string {
+  const diffM = Math.max(1, Math.floor((now.getTime() - new Date(iso).getTime()) / 60000));
+  if (diffM < 60) return `Asked for help ${diffM} min ago`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH < 24) return `Asked for help ${diffH} h ago`;
+  return `Asked for help ${Math.floor(diffH / 24)} d ago`;
+}
+
 export function nudgedToday(iso: string | undefined, now: Date = new Date()): boolean {
   if (iso === undefined || iso === '') return false;
   const diffMs = now.getTime() - new Date(iso).getTime();
@@ -90,6 +99,25 @@ function AssetChip({ asset }: { asset: IActionAsset }) {
   );
 }
 
+/** The student tapped "Need help": when, and what they wrote. */
+function NeedsHelpNote({ item }: { item: IActionItem }) {
+  return (
+    <div
+      className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-100"
+      data-testid="action-item-needs-help"
+    >
+      <p className="font-medium">
+        {item.askedForHelpAt ? formatAskedForHelpAgo(item.askedForHelpAt) : 'Asked for help'}
+      </p>
+      {item.studentNote ? (
+        <p className="italic" data-testid="action-item-student-note">
+          “{item.studentNote}”
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ActionItem({ item, onItemClick, onNudge, nudging = false }: ActionItemProps) {
   const gradeLabel =
     item.course.currentGrade != null
@@ -97,6 +125,7 @@ export function ActionItem({ item, onItemClick, onNudge, nudging = false }: Acti
       : item.course.letterGrade ?? '—';
   const allAssets = [...item.assets, ...item.materials];
   const alreadyNudged = nudgedToday(item.lastNudgedAt);
+  const asksForHelp = item.studentStatus === 'need_help';
 
   return (
     <div
@@ -124,6 +153,7 @@ export function ActionItem({ item, onItemClick, onNudge, nudging = false }: Acti
           Working on it
         </p>
       ) : null}
+      {asksForHelp ? <NeedsHelpNote item={item} /> : null}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">{item.course.name}</span>
         <span
@@ -156,7 +186,7 @@ export function ActionItem({ item, onItemClick, onNudge, nudging = false }: Acti
               onNudge(item);
             }}
           >
-            Nudge
+            {asksForHelp ? 'Reply with a nudge' : 'Nudge'}
           </button>
         </div>
       ) : null}
