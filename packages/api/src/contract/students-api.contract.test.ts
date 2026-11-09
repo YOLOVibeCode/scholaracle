@@ -7,7 +7,7 @@
  */
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { studentsRouter } from '../routes/students/students';
 import { authMiddleware } from '../middleware/auth';
@@ -190,6 +190,16 @@ describe('students API contract', () => {
       schedule: 'every_6h',
       dataTypes: ['grades'],
       enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await database.collection('slc_bindings').insertOne({
+      userId,
+      portalAccountId: 'pa-contract',
+      studentId: new ObjectId(studentDbId),
+      sourceId: SOURCE_ID,
+      studentExternalId: 'contract-stu-1',
       createdAt: now,
       updatedAt: now,
     });
@@ -415,6 +425,7 @@ describe('students API contract', () => {
       ['id', 'pluginId', 'provider', 'displayName', 'enabled', 'schedule', 'dataTypes', 'status'],
       [
         'portalBaseUrl',
+        'portalAccountId',
         'hasCredentials',
         'lastScraped',
         'lastSuccess',
@@ -438,7 +449,19 @@ describe('students API contract', () => {
     assertKeys(
       res.body[0] as Record<string, unknown>,
       ['runId', 'status', 'startedAt', 'error'],
-      ['uploadedAt', 'committedAt', 'abandonedAt', 'sourceId', 'coverage', 'warnings'],
+      [
+        'uploadedAt',
+        'committedAt',
+        'abandonedAt',
+        'sourceId',
+        'coverage',
+        'warnings',
+        'steps',
+        'stats',
+        'lastCursor',
+        'newCursor',
+        'clientMeta',
+      ],
       'IRunListItem'
     );
     expect(res.body[0].runId).toBe('run-contract-1');

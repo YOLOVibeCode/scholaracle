@@ -1,4 +1,8 @@
 import { getTokenExp } from '@/lib/jwt';
+import {
+  clearParentSessionAndRedirect,
+  SessionExpiredRedirectError,
+} from '@/lib/auth/clearParentSession';
 
 const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 
@@ -284,11 +288,8 @@ export class ApiClient {
           this._token = null;
           this.setRefreshToken(null);
           if (typeof window !== 'undefined') {
-            localStorage.removeItem('auth_token');
-            sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-            document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
-            document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-            window.location.href = '/login?reason=session_expired';
+            clearParentSessionAndRedirect('session_expired');
+            throw new SessionExpiredRedirectError();
           }
         }
       }
@@ -331,7 +332,7 @@ export class ApiClient {
         );
       }
     } catch (error) {
-      if (error instanceof ApiClientError) {
+      if (error instanceof SessionExpiredRedirectError || error instanceof ApiClientError) {
         throw error;
       }
       // fetch() rejections (offline, DNS, CORS) — normalize so users never

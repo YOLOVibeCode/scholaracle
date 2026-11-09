@@ -5,6 +5,7 @@ import {
   SyncStalenessMonitor,
   buildSyncStalenessConfigFromEnv,
   isDataSourceStale,
+  latestSyncDate,
 } from './sync-staleness-monitor';
 
 const TWENTY_FOUR_H_MS = 24 * 60 * 60_000;
@@ -22,6 +23,22 @@ describe('sync staleness (lastSuccessAt)', () => {
     const now = new Date();
     const staleThreshold = new Date(now.getTime() - 48 * 60 * 60_000);
     expect(isDataSourceStale({}, staleThreshold)).toBe(true);
+  });
+
+  it('latestSyncDate walks lastSuccess and lastScraped when lastSuccessAt is absent', () => {
+    const scraped = new Date('2024-06-01T00:00:00.000Z');
+    expect(latestSyncDate({ lastScraped: scraped })?.toISOString()).toBe(scraped.toISOString());
+    const success = new Date('2024-06-02T00:00:00.000Z');
+    expect(latestSyncDate({ lastSuccess: success, lastScraped: scraped })?.toISOString()).toBe(
+      success.toISOString()
+    );
+  });
+
+  it('isDataSourceStale when only lastScraped is older than threshold', () => {
+    const now = new Date();
+    const staleThreshold = new Date(now.getTime() - 48 * 60 * 60_000);
+    const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60_000);
+    expect(isDataSourceStale({ lastScraped: tenDaysAgo }, staleThreshold)).toBe(true);
   });
 
   it('prefers lastSuccessAt over a stale lastScraped', () => {
@@ -67,6 +84,15 @@ describe('buildSyncStalenessConfigFromEnv', () => {
     expect(
       buildSyncStalenessConfigFromEnv({ STALENESS_INITIAL_DELAY_MS: '5000' }).initialDelayMs
     ).toBe(5_000);
+  });
+
+  it('uses defaults when env interval values are not numbers', () => {
+    const cfg = buildSyncStalenessConfigFromEnv({
+      STALENESS_INTERVAL_MS: 'not-a-number',
+      STALENESS_THRESHOLD_MS: '',
+    });
+    expect(cfg.checkIntervalMs).toBe(60 * 60_000);
+    expect(cfg.staleThresholdMs).toBe(48 * 60 * 60_000);
   });
 });
 

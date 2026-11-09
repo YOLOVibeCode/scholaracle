@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import { registerDiagSecretTap } from '../diag/secretTap';
 import { snapshotEnv } from '../diag/env';
 import {
   fetchBackendStamp,
@@ -30,7 +31,7 @@ export function DeployStamp(): React.ReactElement {
   }, [local.apiUrl]);
 
   return (
-    <View style={styles.wrap} testID="deploy-stamp">
+    <Pressable style={styles.wrap} testID="deploy-stamp" onPress={registerDiagSecretTap}>
       <Text style={[styles.line, styles.lane]} testID="text-lane-stamp" selectable>
         {formatLaneLine(local.apiUrl)}
       </Text>
@@ -40,7 +41,7 @@ export function DeployStamp(): React.ReactElement {
       <Text style={styles.line} testID="text-api-stamp" selectable>
         {formatApiLine(local, backend)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

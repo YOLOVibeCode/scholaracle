@@ -23,6 +23,7 @@ import { parseUserAgent } from '../../utils/parseUserAgent';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { verifyAppleIdentityToken } from './appleIdentityToken';
+import { appleOAuthAudiences } from './appleAudiences';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -548,14 +549,6 @@ async function resolveOAuthAccount(
   }
 }
 
-function appleOAuthAudiences(): string[] {
-  const raw = process.env['APPLE_OAUTH_AUDIENCE'] ?? 'com.scholarmancy.app';
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 /**
  * Handle OAuth callback from Next.js server (internal).
  * Validates INTERNAL_API_SECRET header; finds/creates user and issues JWT tokens.
@@ -580,6 +573,56 @@ async function handleOAuth(
     email,
     payload.name
   );
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
+    }
+    res.status(200).json(result);
+  } else {
+    res.status(400).json(result);
+  }
+}
+
+/**
+ * Native Sign in with Apple for the phone app. No shared secret: the server trusts ONLY the
+ * verified Apple identity token (signature, issuer, audience, nonce). Account id and email come
+ * from the token, never from the request body, so a caller cannot choose whose account to enter.
+ * A token without an email can only sign in an existing link; it cannot create or link by email.
+ */
+async function handleNativeAppleLogin(
+  req: Request,
+  res: Response,
+  authService: AuthService,
+  sessionRepository?: ISessionRepository
+): Promise<void> {
+  const body = (req.body ?? {}) as {
+    appleIdentityToken?: unknown;
+    appleNonce?: unknown;
+    name?: unknown;
+  };
+  const token = typeof body.appleIdentityToken === 'string' ? body.appleIdentityToken.trim() : '';
+  if (token === '') {
+    throw new ValidationError('Missing required field: appleIdentityToken');
+  }
+  const nonce = typeof body.appleNonce === 'string' ? body.appleNonce.trim() : '';
+  let verified: { sub: string; email?: string };
+  try {
+    verified = await verifyAppleIdentityToken({
+      identityToken: token,
+      rawNonce: nonce === '' ? undefined : nonce,
+      audiences: appleOAuthAudiences(),
+    });
+  } catch {
+    throw new AuthenticationError('Invalid Apple identity token');
+  }
+  const email = (verified.email ?? '').trim();
+  const suppliedName = typeof body.name === 'string' ? body.name.trim() : '';
+  const name =
+    suppliedName !== '' ? suppliedName : email !== '' ? email.split('@')[0]! : 'Apple user';
+  const result = await authService.loginOrRegisterOAuth('apple', verified.sub, email, name);
   if (result.success && result.user?.id && result.familyId) {
     await upsertSession(sessionRepository, result.user.id, result.familyId, req);
   }
@@ -722,6 +765,17 @@ export function authRouter(config: IAuthRouterConfig): Router {
     '/oauth',
     asyncHandler((req: Request, res: Response) =>
       handleOAuth(req, res, authService, config.sessionRepository)
+    )
+  );
+
+  /**
+   * POST /api/auth/oauth/apple
+   * Phone-app Sign in with Apple. Public (no shared secret); identity comes from the verified token.
+   */
+  router.post(
+    '/oauth/apple',
+    asyncHandler((req: Request, res: Response) =>
+      handleNativeAppleLogin(req, res, authService, config.sessionRepository)
     )
   );
 

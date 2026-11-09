@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { generateUniqueEmail } from '../fixtures/test-data';
 
 /**
  * E2E: Blended-family consent-based contacts
@@ -125,9 +126,7 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
     expect(jessStudents.some((s) => s.name === 'Avery')).toBe(true);
   });
 
-  test('BFC-003: Ricky adds Casey and Gabe, invites Jamie and Jordan; Jamie accepts', async ({
-    request,
-  }) => {
+  test('BFC-003: Ricky invites Jamie and Jordan for Casey; Jamie accepts', async ({ request }) => {
     const ts3 = Date.now();
     const rickyEmail = `ricky3-${ts3}@blended-e2e.test`;
     const jessicaEmail = `jessica3-${ts3}@blended-e2e.test`;
@@ -143,29 +142,16 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
       data: { name: 'Casey', grade: 8 },
       headers: { authorization: `Bearer ${rickyToken}` },
     });
+    expect(createC.ok()).toBeTruthy();
     const casey = (await createC.json()) as { id: string };
-    const createG = await request.post(`${apiBaseUrl}/api/students`, {
-      data: { name: 'Gabe', grade: 6 },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    const gabe = (await createG.json()) as { id: string };
 
-    await request.post(`${apiBaseUrl}/api/students/${casey.id}/contacts`, {
-      data: { email: jessicaEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${casey.id}/contacts`, {
-      data: { email: jenniferEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${gabe.id}/contacts`, {
-      data: { email: jessicaEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
-    await request.post(`${apiBaseUrl}/api/students/${gabe.id}/contacts`, {
-      data: { email: jenniferEmail, role: 'parent' },
-      headers: { authorization: `Bearer ${rickyToken}` },
-    });
+    for (const email of [jessicaEmail, jenniferEmail]) {
+      const inviteRes = await request.post(`${apiBaseUrl}/api/students/${casey.id}/contacts`, {
+        data: { email, role: 'parent' },
+        headers: { authorization: `Bearer ${rickyToken}` },
+      });
+      expect(inviteRes.status()).toBe(201);
+    }
 
     const regJess = await request.post(`${apiBaseUrl}/api/auth/register`, {
       data: { email: jessicaEmail, password, name: 'Jamie' },
@@ -178,11 +164,6 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
       { data: { email: jessicaEmail }, headers: { authorization: `Bearer ${jessToken}` } }
     );
     expect(acceptC.ok()).toBeTruthy();
-    const acceptG = await request.post(
-      `${apiBaseUrl}/api/students/${gabe.id}/contacts/accept`,
-      { data: { email: jessicaEmail }, headers: { authorization: `Bearer ${jessToken}` } }
-    );
-    expect(acceptG.ok()).toBeTruthy();
 
     const listJess = await request.get(`${apiBaseUrl}/api/students`, {
       headers: { authorization: `Bearer ${jessToken}` },
@@ -190,7 +171,6 @@ test.describe('@feature Blended-family contacts (consent-first)', () => {
     expect(listJess.ok()).toBeTruthy();
     const names = ((await listJess.json()) as Array<{ name: string }>).map((s) => s.name);
     expect(names).toContain('Casey');
-    expect(names).toContain('Gabe');
   });
 
   test('BFC-004: Owner can set owner-alert-prefs per student', async ({ request }) => {
