@@ -56,7 +56,7 @@ describe('PendingInvitesList', () => {
     const card = await screen.findByTestId('invite-card-grp-1');
     expect(card).toHaveTextContent('Ricardo invited you to follow Christian and Gideon');
     expect(card).toHaveTextContent('Member');
-    expect(screen.getByTestId('invite-card-by:u-other')).toHaveTextContent('A parent invited you');
+    expect(screen.getByTestId('invite-card-student:s-old')).toHaveTextContent('A parent invited you');
 
     fireEvent.click(screen.getByTestId('invite-accept-grp-1'));
     await waitFor(() => expect(api.accept).toHaveBeenCalledWith({ inviteGroupId: 'grp-1' }));
@@ -70,7 +70,7 @@ describe('PendingInvitesList', () => {
     api.decline.mockRejectedValueOnce(new Error('No pending invitations found'));
     render(<PendingInvitesList />);
 
-    fireEvent.click(await screen.findByTestId('invite-decline-by:u-other'));
+    fireEvent.click(await screen.findByTestId('invite-decline-student:s-old'));
     await waitFor(() => expect(api.decline).toHaveBeenCalledWith({ studentIds: ['s-old'] }));
     expect(await screen.findByText(/No pending invitations found/)).toBeInTheDocument();
   });

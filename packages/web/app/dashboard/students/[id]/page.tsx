@@ -7,7 +7,6 @@ import type { StudentAccess } from '@scholaracle/contracts';
 import { ArrowLeft, LayoutDashboard, ListTodo, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { studentsApi, type IStudent } from '@/lib/api/students';
-import { sharingApi } from '@/lib/api/sharing';
 import { getSessionUser, type ISessionUser } from '@/lib/auth/sessionUser';
 import { canEditStudent, canManagePeople, canManageSources } from '@/lib/sharing/access';
 import { StudentOverviewTab } from '@/components/dashboard/students/StudentOverviewTab';
@@ -56,10 +55,16 @@ export default function EditStudentPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [familyRefresh, setFamilyRefresh] = useState(0);
   const [viewer, setViewer] = useState<ISessionUser | null>(null);
-  const [sharedBy, setSharedBy] = useState<{ userId: string; name?: string } | null>(null);
 
-  // The API always sends `access`; older cached responses without it belong to the owner.
-  const access: StudentAccess = student?.access ?? 'owner';
+  // Unknown until the student has loaded: every role-gated control stays hidden until then,
+  // so a member never sees owner controls flash (sharing-spec §4.2).
+  const access: StudentAccess | undefined = student?.access;
+  const mayEdit = access !== undefined && canEditStudent(access);
+  const maySources = access !== undefined && canManageSources(access);
+  const mayShare = access !== undefined && canManagePeople(access);
+  const invitedBy = student?.invitedBy;
+  const ownerName =
+    invitedBy && student && invitedBy.userId === student.userId ? invitedBy.name : undefined;
 
   useEffect(() => {
     setViewer(getSessionUser());
@@ -88,28 +93,6 @@ export default function EditStudentPage() {
   useEffect(() => {
     void loadStudent();
   }, [loadStudent]);
-
-  // Who shared this student with the viewer (name for the owner row and the badge).
-  useEffect(() => {
-    if (!student || student.access === 'owner') {
-      setSharedBy(null);
-      return;
-    }
-    let cancelled = false;
-    void sharingApi
-      .mine()
-      .then((view) => {
-        if (cancelled) return;
-        const mine = view.students.find((s) => s.studentId === student.id);
-        setSharedBy(mine?.invitedBy ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setSharedBy(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [student]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -190,9 +173,6 @@ export default function EditStudentPage() {
     );
   }
 
-  const ownerName =
-    sharedBy && student && sharedBy.userId === student.userId ? sharedBy.name : undefined;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -206,13 +186,13 @@ export default function EditStudentPage() {
           <p className="text-gray-600 dark:text-gray-400">
             {student?.grade
               ? `Grade ${student.grade}`
-              : canEditStudent(access)
+              : mayEdit
                 ? 'Update student information'
                 : 'Student information'}
           </p>
-          <SharedWithYouLine access={student?.access} sharedByName={sharedBy?.name} />
+          <SharedWithYouLine access={student?.access} sharedByName={invitedBy?.name} />
         </div>
-        {canManagePeople(access) && (
+        {mayShare && (
           <Button
             variant="outline"
             size="sm"
@@ -274,7 +254,7 @@ export default function EditStudentPage() {
             studentIdField={studentIdField}
             error={error}
             isSaving={isSaving}
-            readOnly={!canEditStudent(access)}
+            readOnly={!mayEdit}
             onNameChange={setName}
             onGradeChange={setGrade}
             onStudentIdFieldChange={setStudentIdField}
@@ -288,8 +268,8 @@ export default function EditStudentPage() {
         <div id="tabpanel-sources" role="tabpanel" aria-labelledby="tab-sources">
           <StudentDataSourcesTab
             studentId={studentId}
-            canManageSources={canManageSources(access)}
-            onConnectSource={() => setConnectWizardOpen(true)}
+            canManageSources={maySources}
+            onConnectSource={maySources ? () => setConnectWizardOpen(true) : undefined}
           />
         </div>
       )}
@@ -322,7 +302,7 @@ export default function EditStudentPage() {
         </div>
       )}
 
-      {activeTab === 'parents' && student && (
+      {activeTab === 'parents' && student && access !== undefined && (
         <div id="tabpanel-parents" role="tabpanel" aria-labelledby="tab-parents">
           <FamilyCard
             studentId={studentId}
@@ -331,7 +311,7 @@ export default function EditStudentPage() {
             viewer={viewer}
             ownerName={ownerName}
             refreshToken={familyRefresh}
-            onShare={canManagePeople(access) ? () => setShareOpen(true) : undefined}
+            onShare={mayShare ? () => setShareOpen(true) : undefined}
             onLeft={() => router.push('/dashboard/students')}
           />
         </div>
@@ -343,7 +323,7 @@ export default function EditStudentPage() {
         </div>
       )}
 
-      {canManageSources(access) && (
+      {maySources && (
         <ConnectSourceWizard
           open={connectWizardOpen}
           studentId={studentId}
@@ -352,7 +332,7 @@ export default function EditStudentPage() {
         />
       )}
 
-      {canManagePeople(access) && (
+      {mayShare && (
         <ShareDialog
           open={shareOpen}
           onClose={() => setShareOpen(false)}

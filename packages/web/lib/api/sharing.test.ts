@@ -78,6 +78,17 @@ describe('sharingApi', () => {
     );
   });
 
+  it('resendContact POSTs the student id and email for a legacy pending row', async () => {
+    await sharingApi.resendContact('s1', 'Legacy@Example.com');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `${BASE}/sharing/invites/resend-contact`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ studentId: 's1', email: 'Legacy@Example.com' }),
+      })
+    );
+  });
+
   it('leave POSTs the student id and returns success', async () => {
     expect(await sharingApi.leave('s1')).toBe(true);
     expect(fetchSpy).toHaveBeenCalledWith(

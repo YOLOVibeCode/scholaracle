@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ISharingPerson, SharingAlertChannel, StudentAccess } from '@scholaracle/contracts';
 import {
   BellOff,
@@ -64,7 +64,11 @@ interface INotice {
   readonly text: string;
 }
 
-type Pending = { kind: 'remove'; person: ISharingPerson } | { kind: 'leave' } | null;
+/** A confirmation in progress. `key` is the row the result (or its error) is reported under. */
+type Pending =
+  | { kind: 'remove'; person: ISharingPerson; key: string }
+  | { kind: 'leave' }
+  | null;
 
 const CHANNELS: readonly { value: SharingAlertChannel; label: string }[] = [
   { value: 'email', label: 'Email' },
@@ -204,13 +208,17 @@ export function FamilyCard({
   onLeft,
   refreshToken = 0,
 }: FamilyCardProps) {
-  const fetchPeople = useCallback(
-    () => sharingApi.listPeople(studentId),
-    // refreshToken is a deliberate reload trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [studentId, refreshToken]
-  );
+  const fetchPeople = useCallback(() => sharingApi.listPeople(studentId), [studentId]);
   const { data: people, isLoading, error, retry } = useAsyncData(fetchPeople, { retryCount: 1 });
+  // useAsyncData keeps fetchFn in a ref and reloads only on its own triggers, so a new student
+  // or a bumped refreshToken (the Share dialog just sent an invitation) has to ask it to.
+  const reloadKey = `${studentId}|${refreshToken}`;
+  const lastReloadKey = useRef(reloadKey);
+  useEffect(() => {
+    if (lastReloadKey.current === reloadKey) return;
+    lastReloadKey.current = reloadKey;
+    retry();
+  }, [reloadKey, retry]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [notices, setNotices] = useState<Readonly<Record<string, INotice>>>({});
   const [openAlertsKey, setOpenAlertsKey] = useState<string | null>(null);
@@ -244,18 +252,25 @@ export function FamilyCard({
     }
   };
 
+  /**
+   * Pending rows get their invitation again (by group, or re-issued for a row invited before
+   * groups existed); accepted rows get a 24 h sign-in link. Never the other way round.
+   */
   const resend = (key: string, person: ISharingPerson) =>
     run(
       key,
       async () => {
-        if (person.status === 'pending' && person.inviteGroupId) {
-          await sharingApi.resend(person.inviteGroupId);
+        const email = person.email ?? '';
+        if (person.status === 'pending') {
+          if (person.inviteGroupId) await sharingApi.resend(person.inviteGroupId);
+          else await sharingApi.resendContact(studentId, email);
           return { kind: 'ok', text: 'Invitation re-sent. The link works for 7 days.' };
         }
-        await sharingApi.sendLoginLink(studentId, person.email ?? '', 'email');
+        await sharingApi.sendLoginLink(studentId, email, 'email');
         return { kind: 'ok', text: 'Sign-in link sent. It expires in 24 hours.' };
       },
-      false
+      // A legacy row gains its group id on the server; reload so the next click uses it.
+      person.status === 'pending' && !person.inviteGroupId
     );
 
   const toggleAdmin = (key: string, person: ISharingPerson) =>
@@ -301,8 +316,7 @@ export function FamilyCard({
     const current = pending;
     setPending(null);
     if (current.kind === 'remove') {
-      const key = rowKey(current.person, -1);
-      await run(key, async () => {
+      await run(current.key, async () => {
         await sharingApi.removePerson(studentId, current.person.email ?? '');
         return null;
       });
@@ -459,7 +473,7 @@ export function FamilyCard({
                       ) : (
                         <Link2 className="h-3.5 w-3.5" />
                       )}
-                      {p.status === 'pending' ? 'Resend' : 'Send login link'}
+                      {p.status === 'pending' ? 'Resend' : 'Send sign-in link'}
                     </Button>
                   )}
                   {manager && !p.isOwner && p.status === 'declined' && (
@@ -495,7 +509,7 @@ export function FamilyCard({
                       variant="ghost"
                       size="sm"
                       className="text-muted-foreground hover:text-destructive"
-                      onClick={() => setPending({ kind: 'remove', person: p })}
+                      onClick={() => setPending({ kind: 'remove', person: p, key })}
                       disabled={busy}
                       data-testid={`family-remove-${key}`}
                     >

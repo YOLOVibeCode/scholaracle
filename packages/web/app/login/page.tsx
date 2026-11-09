@@ -47,7 +47,7 @@ function LoginForm() {
       if (result.success) {
         // An account created by accepting a sharing invitation has a password it never saw:
         // the dashboard shows a one-time, dismissible "Set a password" banner (sharing-spec §4.4).
-        if (result.forcePasswordReset) markSetPasswordPrompt();
+        if (result.forcePasswordReset && result.user?.id) markSetPasswordPrompt(result.user.id);
         router.push(postLoginDestination(result.user?.role, redirectTo));
         return;
       }

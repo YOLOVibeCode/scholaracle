@@ -11,6 +11,7 @@ jest.mock('@/lib/api/sharing', () => ({
   sharingApi: {
     listPeople: jest.fn(),
     resend: jest.fn(),
+    resendContact: jest.fn(),
     sendLoginLink: jest.fn(),
     setAdmin: jest.fn(),
     removePerson: jest.fn(),
@@ -117,7 +118,7 @@ describe('FamilyCard', () => {
     expect(screen.getByTestId('family-remove-declined@example.com')).toBeInTheDocument();
     expect(screen.getByTestId('family-reinvite-declined@example.com')).toBeInTheDocument();
     expect(screen.getByTestId('family-resend-jennifer@example.com')).toHaveTextContent('Resend');
-    expect(screen.getByTestId('family-resend-robert@example.com')).toHaveTextContent('Send login link');
+    expect(screen.getByTestId('family-resend-robert@example.com')).toHaveTextContent('Send sign-in link');
     expect(screen.queryByTestId('family-resend-declined@example.com')).not.toBeInTheDocument();
     expect(screen.queryByTestId(/^family-leave-/)).not.toBeInTheDocument();
     expect(screen.queryByTestId(/^family-my-alerts-/)).not.toBeInTheDocument();
@@ -127,8 +128,9 @@ describe('FamilyCard', () => {
     expect(onShare).toHaveBeenCalled();
   });
 
-  it('owner: resend uses the invite group when there is one, else a login link; make admin and remove call through', async () => {
+  it('owner: pending rows re-send the invitation (by group, or re-issued for a legacy row); accepted rows get a sign-in link', async () => {
     api.resend.mockResolvedValue({ success: true, studentIds: ['s-ava'], expiresAt: '2026-11-16T00:00:00.000Z' });
+    api.resendContact.mockResolvedValue({ success: true, studentIds: ['s-ava'], expiresAt: '2026-11-16T00:00:00.000Z' });
     api.sendLoginLink.mockResolvedValue({ success: true });
     api.setAdmin.mockResolvedValue(true);
     api.removePerson.mockResolvedValue(true);
@@ -137,10 +139,18 @@ describe('FamilyCard', () => {
 
     fireEvent.click(screen.getByTestId('family-resend-jennifer@example.com'));
     await waitFor(() => expect(api.resend).toHaveBeenCalledWith('grp-1'));
-    expect(await screen.findByTestId('family-notice-jennifer@example.com')).toHaveTextContent(/re-sent/i);
+    expect(await screen.findByTestId('family-notice-jennifer@example.com')).toHaveTextContent('Invitation re-sent');
 
+    const listCalls = api.listPeople.mock.calls.length;
     fireEvent.click(screen.getByTestId('family-resend-legacy@example.com'));
-    await waitFor(() => expect(api.sendLoginLink).toHaveBeenCalledWith('s-ava', 'legacy@example.com', 'email'));
+    await waitFor(() => expect(api.resendContact).toHaveBeenCalledWith('s-ava', 'legacy@example.com'));
+    expect(await screen.findByTestId('family-notice-legacy@example.com')).toHaveTextContent('Invitation re-sent');
+    await waitFor(() => expect(api.listPeople.mock.calls.length).toBeGreaterThan(listCalls));
+    expect(api.sendLoginLink).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('family-resend-robert@example.com'));
+    await waitFor(() => expect(api.sendLoginLink).toHaveBeenCalledWith('s-ava', 'robert@example.com', 'email'));
+    expect(await screen.findByTestId('family-notice-robert@example.com')).toHaveTextContent('Sign-in link sent');
 
     fireEvent.click(screen.getByTestId('family-toggle-admin-robert@example.com'));
     await waitFor(() => expect(api.setAdmin).toHaveBeenCalledWith('s-ava', 'robert@example.com', true));
@@ -216,6 +226,36 @@ describe('FamilyCard', () => {
     fireEvent.click(within(dialog).getByTestId('button-confirm-dialog'));
     await waitFor(() => expect(api.leave).toHaveBeenCalledWith('s-ava'));
     expect(onLeft).toHaveBeenCalled();
+  });
+
+  it('reloads the list when refreshToken is bumped (the Share dialog just sent an invitation)', async () => {
+    api.listPeople.mockResolvedValueOnce([OWNER]).mockResolvedValueOnce([OWNER, PENDING]);
+    const { rerender } = render(
+      <FamilyCard studentId="s-ava" studentName="Ava" access="owner" viewer={asOwner} refreshToken={0} />
+    );
+    await screen.findByTestId('family-row-owner');
+    expect(api.listPeople).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('family-row-jennifer@example.com')).not.toBeInTheDocument();
+
+    rerender(
+      <FamilyCard studentId="s-ava" studentName="Ava" access="owner" viewer={asOwner} refreshToken={1} />
+    );
+    expect(await screen.findByTestId('family-row-jennifer@example.com')).toBeInTheDocument();
+    expect(api.listPeople).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a remove failure under the same row even when the row has neither email nor user id', async () => {
+    const malformed: ISharingPerson = { role: 'parent', status: 'pending', isOwner: false, isAdmin: false };
+    api.listPeople.mockResolvedValue([OWNER, malformed]);
+    api.removePerson.mockRejectedValue(new Error('Contact not found'));
+    render(<FamilyCard studentId="s-ava" studentName="Ava" access="owner" viewer={asOwner} />);
+    await screen.findByTestId('family-row-1');
+
+    fireEvent.click(screen.getByTestId('family-remove-1'));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    fireEvent.click(within(dialog).getByTestId('button-confirm-dialog'));
+    await waitFor(() => expect(api.removePerson).toHaveBeenCalledWith('s-ava', ''));
+    expect(await screen.findByTestId('family-notice-1')).toHaveTextContent('Contact not found');
   });
 
   it('shows the owner by name for a shared viewer and reports load errors', async () => {

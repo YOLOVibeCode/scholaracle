@@ -73,6 +73,7 @@ import {
 } from '../../services/sharing/SharingService';
 import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
 import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing/sharingIdentity';
+import { inviterIdFor, inviterNameMap } from '../../services/sharing/inviterNames';
 import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
 import { toIsoDate } from '../studio/studioTaskClassify';
 import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
@@ -203,7 +204,17 @@ export interface IActivityTimelineResponse {
 // services/sharing/sharingIdentity.ts and are shared with /api/sharing.
 
 /** Projection of a student for the list, create and update responses. */
-function toStudentListItem(student: Student, userId: string): IStudentListItem {
+/**
+ * One row of GET /api/students. `inviterNames` (user id → display name) comes from
+ * `inviterNameMap` so a list of shared students costs one lookup per distinct inviter.
+ */
+function toStudentListItem(
+  student: Student,
+  userId: string,
+  inviterNames: ReadonlyMap<string, string> = new Map()
+): IStudentListItem {
+  const inviterId = inviterIdFor(student, userId);
+  const inviterName = inviterId ? inviterNames.get(inviterId) : undefined;
   return {
     id: student._id?.toString() ?? '',
     userId: student.userId.toString(),
@@ -215,6 +226,9 @@ function toStudentListItem(student: Student, userId: string): IStudentListItem {
       : undefined,
     access: student.accessFor(userId) ?? 'member',
     peopleCount: student.peopleCount(),
+    ...(inviterId
+      ? { invitedBy: { userId: inviterId, ...(inviterName ? { name: inviterName } : {}) } }
+      : {}),
   };
 }
 
@@ -445,8 +459,17 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       const students = await studentRepository.findByUserId(userId);
+      const inviterNames = await inviterNameMap(
+        userRepository,
+        students.flatMap((s) => {
+          const inviterId = inviterIdFor(s, userId);
+          return inviterId ? [inviterId] : [];
+        })
+      );
 
-      res.status(200).json(students.map((student) => toStudentListItem(student, userId)));
+      res
+        .status(200)
+        .json(students.map((student) => toStudentListItem(student, userId, inviterNames)));
     })
   );
 
@@ -1144,9 +1167,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      const inviterId = inviterIdFor(student, userId);
+      const inviterNames = await inviterNameMap(userRepository, inviterId ? [inviterId] : []);
 
       res.status(200).json({
-        ...toStudentListItem(student, userId),
+        ...toStudentListItem(student, userId, inviterNames),
         stats: student.stats,
         dataSources: student.dataSources,
         alertPreferences: student.alertPreferences,

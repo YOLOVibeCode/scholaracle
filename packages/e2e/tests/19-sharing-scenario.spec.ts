@@ -326,7 +326,7 @@ test.describe('@feature Sharing scenario (spec §6)', () => {
     await expect(ownerPage.getByTestId('family-share')).toBeVisible();
     await expect(ownerPage.getByTestId(`family-toggle-admin-${jennifer.email}`)).toHaveText(/Make admin/);
     await expect(ownerPage.getByTestId(`family-remove-${jennifer.email}`)).toBeVisible();
-    await expect(ownerPage.getByTestId(`family-resend-${jennifer.email}`)).toContainText('Send login link');
+    await expect(ownerPage.getByTestId(`family-resend-${jennifer.email}`)).toContainText('Send sign-in link');
     await expect(ownerPage.getByTestId('family-name-owner')).toContainText('(you)');
 
     await ownerPage.getByTestId('family-share').click();

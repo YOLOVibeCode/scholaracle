@@ -40,17 +40,23 @@ describe('groupPendingInvites', () => {
     expect(groups[0]!.students.map((s) => s.name)).toEqual(['Ava', 'Christian', 'Gideon']);
   });
 
-  it('keeps separate groups apart and falls back to student ids for legacy entries', () => {
+  it('keeps separate groups apart and gives each legacy entry its own card (they may differ in role or admin)', () => {
     const groups = groupPendingInvites([
       invite('s-ava', 'Ava', { inviteGroupId: 'grp-1', invitedByName: 'Ricardo' }),
-      invite('s-old', 'Old Entry', { invitedBy: 'u-other' }),
+      invite('s-old', 'Old Entry', { invitedBy: 'u-other', isAdmin: true }),
       invite('s-old2', 'Older Entry', { invitedBy: 'u-other' }),
     ]);
-    expect(groups).toHaveLength(2);
+    expect(groups).toHaveLength(3);
     expect(groups[1]).toMatchObject({
-      key: 'by:u-other',
+      key: 'student:s-old',
       inviterName: 'A parent',
-      selection: { studentIds: ['s-old', 's-old2'] },
+      isAdmin: true,
+      selection: { studentIds: ['s-old'] },
+    });
+    expect(groups[2]).toMatchObject({
+      key: 'student:s-old2',
+      isAdmin: false,
+      selection: { studentIds: ['s-old2'] },
     });
   });
 

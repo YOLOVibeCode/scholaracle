@@ -16,8 +16,6 @@ export interface StudentGradeStripRowProps {
   displayMode?: GradeDisplayMode;
   /** Optional loading skeleton. */
   loading?: boolean;
-  /** Who shared this student with the viewer (shown when `student.access` is not owner). */
-  sharedByName?: string;
 }
 
 function CompactCourseGrade({
@@ -88,7 +86,6 @@ export function StudentGradeStripRow({
   grades,
   displayMode = 'letter',
   loading,
-  sharedByName,
 }: StudentGradeStripRowProps) {
   if (loading) {
     return <StripRowSkeleton />;
@@ -111,7 +108,7 @@ export function StudentGradeStripRow({
           >
             {student.name}
           </Link>
-          <SharedWithYouLine access={student.access} sharedByName={sharedByName} />
+          <SharedWithYouLine access={student.access} sharedByName={student.invitedBy?.name} />
         </div>
         <div className="flex items-center gap-2">
           <Link

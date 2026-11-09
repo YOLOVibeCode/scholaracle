@@ -9,6 +9,11 @@ export interface IStudent {
   readonly access: StudentAccess;
   /** The owner plus every accepted shared adult (mirrors IStudentListItem.peopleCount). */
   readonly peopleCount: number;
+  /** Who shared the student with the signed-in parent; absent for students they own. */
+  readonly invitedBy?: {
+    readonly userId: string;
+    readonly name?: string;
+  };
   readonly grade: string;
   readonly school?: string;
   readonly studentId?: string;

@@ -94,6 +94,10 @@ export function ShareForm({ students, defaultStudentIds, onSent, onDone }: Share
     const alertChannels = (Object.keys(channels) as SharingAlertChannel[]).filter(
       (c) => channels[c]
     );
+    if (alertChannels.length === 0) {
+      setError('Pick at least one way to reach them: email, push or text.');
+      return;
+    }
     const body: ISharingInviteRequest = {
       email: trimmedEmail,
       label,

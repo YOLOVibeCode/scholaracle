@@ -15,14 +15,15 @@ export interface IPendingInviteGroup {
 
 /**
  * Group pending invitations into cards. Entries that share an `inviteGroupId` were one
- * invitation; older entries without one become a card per inviter.
+ * invitation. Older entries without one were each their own invitation (possibly with a
+ * different label or admin flag), so they get one card per student.
  */
 export function groupPendingInvites(
   invites: readonly ISharingPendingInvite[]
 ): readonly IPendingInviteGroup[] {
   const byKey = new Map<string, ISharingPendingInvite[]>();
   for (const invite of invites) {
-    const key = invite.inviteGroupId ?? `by:${invite.invitedBy}`;
+    const key = invite.inviteGroupId ?? `student:${invite.studentId}`;
     const list = byKey.get(key);
     if (list) list.push(invite);
     else byKey.set(key, [invite]);

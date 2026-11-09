@@ -117,6 +117,16 @@ describe('ShareForm', () => {
     expect(await screen.findByText('Copied')).toBeInTheDocument();
   });
 
+  it('requires at least one channel so the person can be reached', async () => {
+    render(<ShareForm students={[STUDENTS[0]!]} />);
+    fireEvent.change(screen.getByTestId('share-email'), { target: { value: 'x@example.com' } });
+    fireEvent.click(screen.getByTestId('share-channel-email'));
+    fireEvent.click(screen.getByTestId('share-channel-push'));
+    fireEvent.submit(screen.getByTestId('share-form'));
+    expect(await screen.findByTestId('share-error')).toHaveTextContent(/at least one way to reach/i);
+    expect(inviteMock).not.toHaveBeenCalled();
+  });
+
   it('surfaces an API error and keeps the form', async () => {
     inviteMock.mockRejectedValue(new Error('Only an owner or admin can share this student'));
     render(<ShareForm students={[STUDENTS[0]!]} />);

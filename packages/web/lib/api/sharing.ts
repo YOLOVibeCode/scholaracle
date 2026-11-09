@@ -58,6 +58,17 @@ export const sharingApi = {
     );
   },
 
+  /**
+   * Re-send the invitation for one pending person on one student. For a row invited before
+   * invitation groups existed the server mints a single-student group and emails a fresh link.
+   */
+  async resendContact(studentId: string, email: string): Promise<ISharingResendResult> {
+    return apiClient.post<ISharingResendResult>('/sharing/invites/resend-contact', {
+      studentId,
+      email,
+    });
+  },
+
   /** The signed-in adult stops following a student (never the owner). */
   async leave(studentId: string): Promise<boolean> {
     const res = await apiClient.post<{ success?: boolean }>('/sharing/leave', { studentId });

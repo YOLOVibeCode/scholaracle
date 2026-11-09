@@ -7,7 +7,6 @@ import { X, Plus, GraduationCap, Plug, UserPlus } from 'lucide-react';
 import { dashboardApi, type IDashboardStats } from '@/lib/api/dashboard';
 import { studentsApi } from '@/lib/api/students';
 import { settingsApi } from '@/lib/api/settings';
-import { sharingApi } from '@/lib/api/sharing';
 import { canManagePeople } from '@/lib/sharing/access';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
@@ -46,15 +45,8 @@ export default function DashboardPage() {
 
   const fetchStudentsAndGrades = useCallback(async () => {
     const students = await studentsApi.getAll();
-    // Who shared each student with the viewer; the badge still renders without a name.
-    const minePromise = sharingApi.mine().catch(() => null);
     const grades = await Promise.all(students.map((s) => studentsApi.getGrades(s.id)));
-    const mine = await minePromise;
-    const sharedBy = new Map<string, string | undefined>();
-    for (const s of mine?.students ?? []) {
-      if (s.invitedBy) sharedBy.set(s.studentId, s.invitedBy.name);
-    }
-    return { students, grades, sharedBy };
+    return { students, grades };
   }, []);
 
   const { data: studentsAndGrades, isLoading: studentsSectionLoading, error: studentsSectionError, retry: studentsSectionRetry } = useAsyncData(
@@ -69,8 +61,7 @@ export default function DashboardPage() {
     studentsAndGrades &&
     studentsAndGrades.students.length === 0;
 
-  const canShare =
-    studentsAndGrades?.students.some((s) => canManagePeople(s.access)) ?? false;
+  const canShare = studentsAndGrades?.students.some((s) => canManagePeople(s.access)) ?? false;
 
   return (
     <div className="space-y-6">
@@ -183,7 +174,6 @@ export default function DashboardPage() {
                     student={student}
                     grades={studentsAndGrades.grades[i] ?? null}
                     displayMode={gradeDisplayMode}
-                    sharedByName={studentsAndGrades.sharedBy.get(student.id)}
                   />
                 ))}
               </div>

@@ -15,18 +15,20 @@ import { clearSetPasswordPrompt, shouldPromptSetPassword } from '@/lib/sharing/s
  */
 export function SetPasswordBanner() {
   const [visible, setVisible] = useState(false);
-  const [email, setEmail] = useState<string | null>(null);
+  const [user, setUser] = useState<{ userId: string; email: string } | null>(null);
 
   useEffect(() => {
-    setVisible(shouldPromptSetPassword());
-    setEmail(getSessionUser()?.email ?? null);
+    const session = getSessionUser();
+    setUser(session);
+    // The flag is per user, so another account on this browser never inherits the prompt.
+    setVisible(shouldPromptSetPassword(session?.userId));
   }, []);
 
   if (!visible) return null;
 
-  const href = `/forgot-password?required=1${email ? `&email=${encodeURIComponent(email)}` : ''}`;
+  const href = `/forgot-password?required=1${user ? `&email=${encodeURIComponent(user.email)}` : ''}`;
   const dismiss = () => {
-    clearSetPasswordPrompt();
+    clearSetPasswordPrompt(user?.userId);
     setVisible(false);
   };
 

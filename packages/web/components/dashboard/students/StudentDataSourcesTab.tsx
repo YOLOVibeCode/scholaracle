@@ -128,14 +128,16 @@ export function StudentDataSourcesTab({
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      href={`/dashboard/integrations/${source.id}`}
-                      data-testid={`link-integration-${source.id}`}
-                    >
-                      View in Integrations
-                    </Link>
-                  </Button>
+                  {canManageSources && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/dashboard/integrations/${source.id}`}
+                        data-testid={`link-integration-${source.id}`}
+                      >
+                        View in Integrations
+                      </Link>
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
