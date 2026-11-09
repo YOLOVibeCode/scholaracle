@@ -1,0 +1,113 @@
+# Parent signs in, then opens every screen added in batch 1 and comes back:
+# alerts inbox, notification settings, plan & usage, delete-account sheet (opened and cancelled,
+# never confirmed), and signs out. Needs MAESTRO_PARENT_EMAIL, MAESTRO_PARENT_PASSWORD.
+appId: com.scholarmancy.app
+name: Screen tour
+tags: [smoke]
+---
+- runFlow: subflows/login.yaml
+- assertVisible:
+    id: students-list
+
+# Alerts inbox
+- tapOn:
+    id: button-alerts
+- extendedWaitUntil:
+    visible:
+      id: alerts-screen
+    timeout: 20000
+- assertNotVisible:
+    id: alerts-action-error
+- takeScreenshot: tour-alerts
+- tapOn:
+    id: button-alerts-back
+- assertVisible:
+    id: students-list
+
+# Settings
+- tapOn:
+    id: button-settings
+- extendedWaitUntil:
+    visible:
+      id: link-notification-settings
+    timeout: 20000
+
+# Notification settings
+- tapOn:
+    id: link-notification-settings
+- extendedWaitUntil:
+    visible:
+      id: notification-settings-screen
+    timeout: 20000
+- assertNotVisible:
+    id: notification-settings-error
+- takeScreenshot: tour-notification-settings
+- tapOn:
+    id: button-notification-settings-back
+- assertVisible:
+    id: link-plan-usage
+
+# Plan & usage
+- tapOn:
+    id: link-plan-usage
+- extendedWaitUntil:
+    visible:
+      id: plan-screen
+    timeout: 20000
+- assertNotVisible:
+    id: plan-error
+- assertVisible:
+    id: plan-name
+- takeScreenshot: tour-plan
+- tapOn:
+    id: button-plan-back
+- assertVisible:
+    id: link-delete-account
+
+# Delete-account sheet: open it, check it, cancel. Never confirm.
+- scrollUntilVisible:
+    element:
+      id: link-delete-account
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: link-delete-account
+- extendedWaitUntil:
+    visible:
+      id: delete-account-sheet
+    timeout: 10000
+- assertVisible:
+    id: input-delete-password
+- takeScreenshot: tour-delete-sheet
+- tapOn:
+    id: button-delete-cancel
+- assertNotVisible:
+    id: delete-account-sheet
+
+# Sign out
+- scrollUntilVisible:
+    element:
+      id: button-sign-out
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: button-sign-out
+# The confirm dialog also says "Sign Out", and the button behind it matches the same text, so on iOS
+# tap the dialog's red button by position. Android's dialog button is matched by text.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          point: "68%,58%"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          text: "(?i)sign out"
+          index: 1
+- extendedWaitUntil:
+    visible:
+      id: input-email
+    timeout: 20000

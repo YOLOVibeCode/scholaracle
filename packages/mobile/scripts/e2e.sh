@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the Maestro end-to-end flows on the iOS Simulator or the Android Emulator.
 #
-#   scripts/e2e.sh ios|android [launch|smoke|sync|all] [--no-build]
+#   scripts/e2e.sh ios|android [launch|smoke|tour|sync|all] [--no-build]
 #
 # Builds a local Release app (no EAS credits) pointed at E2E_API_URL
 # (default: the UAT API), installs it, then runs the flows in e2e/maestro.
@@ -17,7 +17,7 @@ set -euo pipefail
 platform="${1:-}"; suite="${2:-launch}"; build=1
 [[ "${3:-}" == "--no-build" || "${2:-}" == "--no-build" ]] && build=0
 [[ "$suite" == "--no-build" ]] && suite=launch
-case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|sync|all] [--no-build]" >&2; exit 2;; esac
+case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|tour|sync|all] [--no-build]" >&2; exit 2;; esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -101,8 +101,9 @@ flows=()
 case "$suite" in
   launch) flows=(e2e/maestro/launch.yaml) ;;
   smoke) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml) ;;
+  tour) flows=(e2e/maestro/login-screen.yaml e2e/maestro/tour.yaml) ;;
   sync) flows=(e2e/maestro/sync-portal.yaml) ;;
-  all) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml e2e/maestro/sync-portal.yaml) ;;
+  all) flows=(e2e/maestro/launch.yaml e2e/maestro/login-screen.yaml e2e/maestro/smoke.yaml e2e/maestro/tour.yaml e2e/maestro/sync-portal.yaml) ;;
   *) echo "unknown suite: $suite" >&2; exit 2 ;;
 esac
 
