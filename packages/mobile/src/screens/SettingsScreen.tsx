@@ -29,12 +29,15 @@ interface ISettingsScreenProps {
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
   onSyncAll?(sources: readonly IConnectedSource[]): void;
+  /** Parent sessions: opens the notification preferences screen. */
+  onOpenNotificationSettings?(): void;
 }
 
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
   onSyncAll,
+  onOpenNotificationSettings,
 }: ISettingsScreenProps): React.ReactElement {
   const { logout } = useAuth();
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
@@ -216,16 +219,31 @@ export function SettingsScreen({
         )}
 
         <Text style={styles.sectionHeader}>Notifications</Text>
-        <View style={styles.card}>
-          <Text style={styles.rowText}>
-            Permission: <Text style={styles.rowValue}>{pushStatus}</Text>
-          </Text>
-          {pushStatus !== 'granted' && (
-            <Text style={styles.hintText}>
-              Enable notifications in iOS Settings to receive grade alerts.
+        {onOpenNotificationSettings ? (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={onOpenNotificationSettings}
+            accessibilityRole="button"
+            accessibilityLabel={`Notification settings, device permission ${pushStatus}`}
+            testID="link-notification-settings"
+          >
+            <Text style={styles.rowText}>
+              Notification settings ›{' '}
+              <Text style={styles.rowValue}>{pushStatus === 'granted' ? '' : pushStatus}</Text>
             </Text>
-          )}
-        </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.rowText}>
+              Permission: <Text style={styles.rowValue}>{pushStatus}</Text>
+            </Text>
+            {pushStatus !== 'granted' && (
+              <Text style={styles.hintText}>
+                Enable notifications in iOS Settings to receive grade alerts.
+              </Text>
+            )}
+          </View>
+        )}
 
         <Text style={styles.sectionHeader}>Legal</Text>
         <TouchableOpacity

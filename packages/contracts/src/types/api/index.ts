@@ -11,3 +11,5 @@ export * from './materials';
 export * from './studio';
 export * from './studentLogin';
 export * from './household';
+export * from './alerts';
+export * from './settings';

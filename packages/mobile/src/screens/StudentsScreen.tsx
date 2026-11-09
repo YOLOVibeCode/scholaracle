@@ -19,6 +19,7 @@ interface IStudentsScreenProps {
   onAddSource(): void;
   onStartSetup?(): void;
   onOpenSettings?(): void;
+  onOpenAlerts?(): void;
 }
 
 export function StudentsScreen({
@@ -26,6 +27,7 @@ export function StudentsScreen({
   onAddSource,
   onStartSetup,
   onOpenSettings,
+  onOpenAlerts,
 }: IStudentsScreenProps): React.ReactElement {
   const [students, setStudents] = useState<IStudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +77,17 @@ export function StudentsScreen({
           >
             <Text style={styles.addButtonText}>+ Connect Source</Text>
           </TouchableOpacity>
+          {onOpenAlerts && (
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={onOpenAlerts}
+              accessibilityRole="button"
+              accessibilityLabel="Alerts"
+              testID="button-alerts"
+            >
+              <Text style={styles.settingsIcon}>🔔</Text>
+            </TouchableOpacity>
+          )}
           {onOpenSettings && (
             <TouchableOpacity
               style={styles.settingsButton}

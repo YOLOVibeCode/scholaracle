@@ -19,6 +19,8 @@ import { SyncScreen } from './src/screens/SyncScreen';
 import { SyncAllScreen } from './src/screens/SyncAllScreen';
 import { RunHistoryScreen } from './src/screens/RunHistoryScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { AlertsScreen } from './src/screens/AlertsScreen';
+import { NotificationSettingsScreen } from './src/screens/NotificationSettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -445,10 +447,19 @@ function AppContent(): React.ReactElement {
     );
   }
 
+  if (nav.view === 'alerts') {
+    return <AlertsScreen onBack={() => setNav({ view: 'students' })} />;
+  }
+
+  if (nav.view === 'notification-settings') {
+    return <NotificationSettingsScreen onBack={() => setNav({ view: 'settings' })} />;
+  }
+
   if (nav.view === 'settings') {
     return (
       <SettingsScreen
         onBack={() => setNav({ view: 'students' })}
+        onOpenNotificationSettings={() => setNav({ view: 'notification-settings' })}
         onSyncAll={(grouped) => {
           if (grouped.length === 0) return;
           setNav({ view: 'sync-all', syncAllSources: grouped });
@@ -488,6 +499,7 @@ function AppContent(): React.ReactElement {
       onAddSource={() => setNav({ view: 'connect-source' })}
       onStartSetup={() => setNav({ view: 'students' })}
       onOpenSettings={() => setNav({ view: 'settings' })}
+      onOpenAlerts={() => setNav({ view: 'alerts' })}
     />
   );
 }
