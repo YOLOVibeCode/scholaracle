@@ -29,6 +29,17 @@ async function createIndexes(): Promise<void> {
   // Students
   await db.collection('students').createIndex({ userId: 1 });
   console.log('  students.userId');
+  await db.collection('students').createIndex({ 'sharedWith.email': 1 });
+  console.log('  students.sharedWith.email');
+  await db.collection('students').createIndex({ 'sharedWith.inviteGroupId': 1 }, { sparse: true });
+  console.log('  students.sharedWith.inviteGroupId (sparse)');
+
+  // Sharing rate-limit counters
+  await db.collection('sharing_rate_limits').createIndex({ key: 1 }, { unique: true });
+  await db
+    .collection('sharing_rate_limits')
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
+  console.log('  sharing_rate_limits.key (unique), expiresAt (TTL)');
 
   // Admin users
   await db.collection('admin_users').createIndex({ email: 1 }, { unique: true });
@@ -84,10 +95,12 @@ async function createIndexes(): Promise<void> {
   await db.collection('slc_runs').createIndex({ status: 1, startedAt: 1 });
   console.log('  slc_runs.sourceId+createdAt, status+startedAt');
 
-  await db.collection('repair_candidates').createIndex(
-    { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
-    { unique: true }
-  );
+  await db
+    .collection('repair_candidates')
+    .createIndex(
+      { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+      { unique: true }
+    );
   console.log('  repair_candidates.portalHost+recipeId+step+skeletonHash+gapKind (unique)');
 
   await db.collection('repair_proposals').createIndex({ candidateId: 1, createdAt: -1 });

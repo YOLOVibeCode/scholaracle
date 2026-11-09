@@ -32,7 +32,7 @@ import {
 
 export interface ISharingServiceDeps {
   readonly database: Db;
-  /** Web origin used in emails and opt-in links. */
+  /** Web origin used in emails and opt-in links: the one source for every sharing route. */
   readonly baseUrl: string;
   readonly emailSender?: ISharingEmailSender;
   readonly magicLoginLink?: MagicLoginLink;
@@ -154,14 +154,18 @@ export function parseSharingSelection(body: unknown): ISharingInviteSelection {
 
 /**
  * Everything that changes `sharedWith` on behalf of a signed-in adult: invitations (across one or
- * many students), re-sends, accept / decline, leaving, and admin removal. The per-student
- * `/contacts` + `/parents` routes and `/api/sharing` all call this, so there is one behaviour.
+ * many students), re-sends, accept / decline, leaving, and admin removal. ONE instance is built
+ * in server.ts and injected into the students router and the sharing router, so the magic-link
+ * issuer, SMS opt-in, rate limiter and audit trail exist once and share one web origin.
  */
 export class SharingService {
+  /** The magic-link issuer the routes use for contact links too (same token store, same origin). */
+  public readonly magicLoginLink: MagicLoginLink;
+  /** Consent-first texting opt-in, shared with the contacts list (`smsStatus`). */
+  public readonly contactSmsOptIn: IContactSmsOptIn;
+
   private readonly _students: StudentRepository;
   private readonly _users: UserRepository;
-  private readonly _magic: MagicLoginLink;
-  private readonly _smsOptIn: IContactSmsOptIn;
   private readonly _rate: SharingRateLimiter;
   private readonly _audit: SharingAuditRecorder;
   private readonly _emails?: ISharingEmailSender;
@@ -172,10 +176,11 @@ export class SharingService {
     this._students = new StudentRepository(deps.database);
     this._users = new UserRepository(deps.database);
     this._baseUrl = deps.baseUrl.replace(/\/$/, '');
-    this._magic =
+    this.magicLoginLink =
       deps.magicLoginLink ??
       new MagicLoginLink({ database: deps.database, baseUrl: this._baseUrl, now: deps.now });
-    this._smsOptIn = deps.contactSmsOptIn ?? createContactSmsOptIn(deps.database, this._baseUrl);
+    this.contactSmsOptIn =
+      deps.contactSmsOptIn ?? createContactSmsOptIn(deps.database, this._baseUrl);
     this._rate = deps.rateLimiter ?? new SharingRateLimiter(deps.database, deps.now);
     this._audit = deps.audit ?? createSharingAuditRecorder(deps.database);
     this._emails = deps.emailSender;
@@ -185,7 +190,8 @@ export class SharingService {
   /**
    * Invite one adult to one or more students. The caller must be able to administer every
    * student (404 when they cannot even see one, 403 when they see it but are not admin).
-   * Students where the email is already invited or accepted are reported, never an error.
+   * Students where the email is already invited or accepted are reported, never an error, and
+   * a request that invites nobody new costs no daily invitation slot.
    */
   public async invite(
     req: Request,
@@ -197,47 +203,46 @@ export class SharingService {
     if (inviter && normalizeEmail(inviter.email) === input.email) {
       throw new ValidationError('You cannot invite yourself');
     }
-    await this._rate.takeInvite(actorUserId);
 
     const inviteGroupId = randomUUID();
-    const perStudent: { studentId: string; status: SharingInvitePerStudentStatus }[] = [];
-    const invited: Student[] = [];
-    let firstContact: ISharedParent | undefined;
-    for (const student of students) {
-      const studentId = student._id!.toString();
-      const skip = await this._duplicateStatus(student, input.email);
-      if (skip) {
-        perStudent.push({ studentId, status: skip });
-        continue;
-      }
-      const entry = this._newEntry(input, actorUserId, inviteGroupId);
-      firstContact ??= entry;
-      const kept = student.sharedWith.filter((sp) => sp.email !== input.email);
-      await this._students.update(student._id!, { sharedWith: [...kept, entry] });
-      perStudent.push({ studentId, status: 'invited' });
-      invited.push(student);
-      await this._audit(req, 'sharing:invite', studentId, input.email, {
-        inviteGroupId,
-        label: input.label,
-        isAdmin: input.isAdmin === true,
-        studentCount: input.studentIds.length,
-      });
-    }
-
-    if (invited.length === 0) {
+    const statuses = await this._duplicateStatuses(students, input.email);
+    const perStudent = students.map((student) => ({
+      studentId: student._id!.toString(),
+      status: statuses.get(student._id!.toString()) ?? ('invited' as const),
+    }));
+    const toInvite = students.filter((s) => !statuses.has(s._id!.toString()));
+    if (toInvite.length === 0) {
       return { inviteGroupId, perStudent };
     }
+
+    // Only an invitation that actually goes out consumes a daily slot.
+    await this._rate.takeInvite(actorUserId);
+    const entry = this._newEntry(input, actorUserId, inviteGroupId);
+    await Promise.all(
+      toInvite.map(async (student) => {
+        const kept = student.sharedWith.filter((sp) => sp.email !== input.email);
+        await this._students.update(student._id!, { sharedWith: [...kept, entry] });
+        await this._audit(req, 'sharing:invite', student._id!.toString(), input.email, {
+          inviteGroupId,
+          label: input.label,
+          isAdmin: input.isAdmin === true,
+          studentCount: input.studentIds.length,
+        });
+      })
+    );
+
+    const inviterName = inviter?.name ?? 'A parent';
     await this._sendInvitation(
       { email: input.email, name: input.name },
-      inviter?.name ?? 'A parent',
-      invited,
+      inviterName,
+      toInvite,
       inviteGroupId
     );
     // No text to the contact: they opt in themselves from a link the inviter shares.
-    const smsOptInUrl = await this._smsOptIn.issueIfTexting({
-      studentId: invited[0]!._id!.toString(),
+    const smsOptInUrl = await this.contactSmsOptIn.issueIfTexting({
+      studentId: toInvite[0]!._id!.toString(),
       contactEmail: input.email,
-      inviterName: inviter?.name ?? 'A parent',
+      inviterName,
       phone: input.phone,
       alertChannels: input.alertChannels,
     });
@@ -245,7 +250,7 @@ export class SharingService {
       inviteGroupId,
       perStudent,
       ...(smsOptInUrl ? { smsOptInUrl } : {}),
-      ...(firstContact ? { contact: firstContact } : {}),
+      contact: entry,
     };
   }
 
@@ -259,10 +264,8 @@ export class SharingService {
     if (students.length === 0) {
       throw new NotFoundError('No pending invitations for this group');
     }
-    for (const student of students) {
-      if (!student.canAdmin(actorUserId)) {
-        throw new ForbiddenError('Only an owner or admin can re-send this invitation');
-      }
+    if (students.some((student) => !student.canAdmin(actorUserId))) {
+      throw new ForbiddenError('Only an owner or admin can re-send this invitation');
     }
     const entry = students[0]!.sharedWith.find(
       (sp) => sp.inviteGroupId === inviteGroupId && sp.status === 'pending'
@@ -279,9 +282,11 @@ export class SharingService {
       inviteGroupId
     );
     const studentIds = students.map((s) => s._id!.toString());
-    for (const studentId of studentIds) {
-      await this._audit(req, 'sharing:link_sent', studentId, entry.email, { inviteGroupId });
-    }
+    await Promise.all(
+      studentIds.map((studentId) =>
+        this._audit(req, 'sharing:link_sent', studentId, entry.email, { inviteGroupId })
+      )
+    );
     return { sentTo: entry.email, studentIds, expiresAt: issued.expiresAt };
   }
 
@@ -293,20 +298,23 @@ export class SharingService {
     selection: ISharingInviteSelection
   ): Promise<readonly string[]> {
     const students = await this._selectPending(email, selection);
-    const accepted: string[] = [];
-    for (const student of students) {
-      const next = acceptedSharedWith(student, email, userId, this._now());
-      if (!next) continue;
-      await this._students.update(student._id!, { sharedWith: next });
-      const studentId = student._id!.toString();
-      await this.invalidateTokens(email, studentId);
-      await this._audit(req, 'sharing:accept', studentId, email);
-      accepted.push(studentId);
-    }
-    if (accepted.length === 0) {
+    const acceptedAt = this._now();
+    const accepted = await Promise.all(
+      students.map(async (student) => {
+        const next = acceptedSharedWith(student, email, userId, acceptedAt);
+        if (!next) return null;
+        const studentId = student._id!.toString();
+        await this._students.update(student._id!, { sharedWith: next });
+        await this.invalidateTokens(email, studentId);
+        await this._audit(req, 'sharing:accept', studentId, email);
+        return studentId;
+      })
+    );
+    const ids = accepted.filter((id): id is string => id !== null);
+    if (ids.length === 0) {
       throw new NotFoundError('No pending invitations found');
     }
-    return accepted;
+    return ids;
   }
 
   /** Decline the caller's pending invitations for the selected students. */
@@ -316,25 +324,28 @@ export class SharingService {
     selection: ISharingInviteSelection
   ): Promise<readonly string[]> {
     const students = await this._selectPending(email, selection);
-    const declined: string[] = [];
-    for (const student of students) {
-      const next = declinedSharedWith(student, email);
-      if (!next) continue;
-      await this._students.update(student._id!, { sharedWith: next });
-      const studentId = student._id!.toString();
-      await this.invalidateTokens(email, studentId);
-      await this._audit(req, 'sharing:decline', studentId, email);
-      declined.push(studentId);
-    }
-    if (declined.length === 0) {
+    const declined = await Promise.all(
+      students.map(async (student) => {
+        const next = declinedSharedWith(student, email);
+        if (!next) return null;
+        const studentId = student._id!.toString();
+        await this._students.update(student._id!, { sharedWith: next });
+        await this.invalidateTokens(email, studentId);
+        await this._audit(req, 'sharing:decline', studentId, email);
+        return studentId;
+      })
+    );
+    const ids = declined.filter((id): id is string => id !== null);
+    if (ids.length === 0) {
       throw new NotFoundError('No pending invitations found');
     }
-    return declined;
+    return ids;
   }
 
   /**
-   * The caller removes their own accepted row (owner decision Q3). Tokens die at once and the
-   * owner is told by email. The owner cannot leave their own student.
+   * The caller removes their own accepted row (owner decision Q3). Their links for THIS student
+   * die at once (links for other students they follow stay valid) and the owner is told by email.
+   * The owner cannot leave their own student.
    */
   public async leave(
     req: Request,
@@ -362,7 +373,7 @@ export class SharingService {
     await this._notifyOwnerLeft(student, row, userId);
   }
 
-  /** An owner or admin removes someone (pending or accepted). Their tokens for the student die. */
+  /** An owner or admin removes someone (pending or accepted). Their links for the student die. */
   public async removeByAdmin(req: Request, student: Student, targetEmail: string): Promise<void> {
     const email = normalizeEmail(targetEmail);
     const removed = student.sharedWith.find((sp) => sp.email === email);
@@ -376,42 +387,59 @@ export class SharingService {
     await this._audit(req, 'sharing:remove', studentId, email);
   }
 
-  /** Every unused invitation link for this email + student, plus the person's login links. */
+  /**
+   * Every unused invitation link for this email + student, plus (when the person has an account)
+   * the sign-in links that were issued for this student. Links for other students stay valid.
+   */
   public async invalidateTokens(email: string, studentId: string, userId?: string): Promise<void> {
-    await this._magic.invalidateInviteTokens(email, studentId);
+    await this.magicLoginLink.invalidateInviteTokens(email, studentId);
     if (userId) {
-      await this._magic.invalidateContactLoginTokens(userId);
+      await this.magicLoginLink.invalidateContactLoginTokens(userId, studentId);
     }
   }
 
+  /** One `$in` load; every id must exist, be visible (else 404) and be administrable (else 403). */
   private async _loadAdministrable(
     actorUserId: string,
     studentIds: readonly string[]
   ): Promise<readonly Student[]> {
-    const students: Student[] = [];
-    for (const id of studentIds) {
-      const student = await this._students.findById(id);
-      if (!student || !student.hasAccess(actorUserId)) {
-        throw new NotFoundError('Student not found');
-      }
-      if (!student.canAdmin(actorUserId)) {
-        throw new ForbiddenError('Only an owner or admin can share this student');
-      }
-      students.push(student);
+    const students = await this._students.findByIds(studentIds);
+    if (students.length !== studentIds.length || students.some((s) => !s.hasAccess(actorUserId))) {
+      throw new NotFoundError('Student not found');
+    }
+    if (students.some((s) => !s.canAdmin(actorUserId))) {
+      throw new ForbiddenError('Only an owner or admin can share this student');
     }
     return students;
   }
 
-  private async _duplicateStatus(
-    student: Student,
+  /**
+   * Which students already have this person: accepted / pending entries, or the owner's own
+   * address. One owner lookup per distinct owner, not per student.
+   */
+  private async _duplicateStatuses(
+    students: readonly Student[],
     email: string
-  ): Promise<SharingInvitePerStudentStatus | null> {
-    const existing = student.sharedWith.find((sp) => sp.email === email);
-    if (existing?.status === 'accepted') return 'already_accepted';
-    if (existing?.status === 'pending') return 'already_invited';
-    const owner = await this._users.findById(student.userId.toString());
-    if (owner && normalizeEmail(owner.email) === email) return 'already_accepted';
-    return null;
+  ): Promise<Map<string, SharingInvitePerStudentStatus>> {
+    const ownerIds = [...new Set(students.map((s) => s.userId.toString()))];
+    const owners = await Promise.all(ownerIds.map((id) => this._users.findById(id)));
+    const ownerEmails = new Map(
+      ownerIds.map((id, i) => {
+        const owner = owners[i];
+        return [id, owner ? normalizeEmail(owner.email) : null] as const;
+      })
+    );
+    const statuses = new Map<string, SharingInvitePerStudentStatus>();
+    for (const student of students) {
+      const existing = student.sharedWith.find((sp) => sp.email === email);
+      const id = student._id!.toString();
+      if (existing?.status === 'accepted') statuses.set(id, 'already_accepted');
+      else if (existing?.status === 'pending') statuses.set(id, 'already_invited');
+      else if (ownerEmails.get(student.userId.toString()) === email) {
+        statuses.set(id, 'already_accepted');
+      }
+    }
+    return statuses;
   }
 
   private _newEntry(
@@ -442,7 +470,7 @@ export class SharingService {
     inviteGroupId: string
   ): Promise<{ expiresAt: Date }> {
     const studentIds = students.map((s) => s._id!.toString());
-    const issued = await this._magic.issueForInviteGroup(
+    const issued = await this.magicLoginLink.issueForInviteGroup(
       recipient.email,
       studentIds,
       inviteGroupId
@@ -480,12 +508,7 @@ export class SharingService {
         )
       );
     }
-    const students: Student[] = [];
-    for (const id of selection.studentIds) {
-      const student = await this._students.findById(id);
-      if (student) students.push(student);
-    }
-    return students;
+    return this._students.findByIds(selection.studentIds);
   }
 
   private async _notifyOwnerLeft(
@@ -495,9 +518,11 @@ export class SharingService {
   ): Promise<void> {
     if (!this._emails) return;
     try {
-      const owner = await this._users.findById(student.userId.toString());
+      const [owner, leaver] = await Promise.all([
+        this._users.findById(student.userId.toString()),
+        this._users.findById(leaverUserId),
+      ]);
       if (!owner) return;
-      const leaver = await this._users.findById(leaverUserId);
       await this._emails.sendLeftNotice({
         to: owner.email,
         leaverName: row.name ?? leaver?.name ?? row.email,

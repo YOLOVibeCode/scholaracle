@@ -104,6 +104,41 @@ describe('MagicLoginTokenRepository', () => {
       expect(await repository.consumeValid('hash-u')).toEqual({ userId });
     });
 
+    it("revokes a shared adult's links for ONE student, leaving other students' links valid", async () => {
+      const userId = new ObjectId().toHexString();
+      const ava = new ObjectId().toHexString();
+      const christian = new ObjectId().toHexString();
+      const expiresAt = new Date(Date.now() + hour);
+      await repository.createForUser('sharedParent', userId, 'hash-ava', expiresAt, ava);
+      await repository.createForUser('sharedParent', userId, 'hash-chris', expiresAt, christian);
+      // A legacy link that carries no student is revoked too (it could open anything).
+      await repository.createForUser('sharedParent', userId, 'hash-legacy', expiresAt);
+
+      await repository.invalidateUnusedForUser('sharedParent', userId, ava);
+
+      expect(await repository.consumeValid('hash-ava')).toBeNull();
+      expect(await repository.consumeValid('hash-legacy')).toBeNull();
+      expect(await repository.consumeValid('hash-chris')).toEqual({ userId });
+    });
+
+    it('without a student, revokes every unused link of the user', async () => {
+      const userId = new ObjectId().toHexString();
+      const expiresAt = new Date(Date.now() + hour);
+      await repository.createForUser(
+        'sharedParent',
+        userId,
+        'hash-1',
+        expiresAt,
+        new ObjectId().toHexString()
+      );
+      await repository.createForUser('sharedParent', userId, 'hash-2', expiresAt);
+
+      await repository.invalidateUnusedForUser('sharedParent', userId);
+
+      expect(await repository.consumeValid('hash-1')).toBeNull();
+      expect(await repository.consumeValid('hash-2')).toBeNull();
+    });
+
     it('consumes a pending-invite token into { pendingInvite }', async () => {
       const studentId = new ObjectId().toHexString();
       await repository.createForPendingInvite(

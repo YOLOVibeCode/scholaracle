@@ -17,6 +17,7 @@ import { sharingRouter } from './sharing';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
 import { closeTestApp, createTestApp } from '../../test-utils/createTestApp';
+import { SharingService } from '../../services/sharing/SharingService';
 import type {
   ISharingEmailSender,
   ISharingInviteEmail,
@@ -71,6 +72,7 @@ describe('/api/sharing (S1)', () => {
   let database: Db;
   let authService: AuthService;
   let mail: ReturnType<typeof mailStub>;
+  let sharing: SharingService;
   let harness: Awaited<ReturnType<typeof createTestApp>>;
   let owner: IUserCtx;
   let jessica: IUserCtx;
@@ -85,18 +87,20 @@ describe('/api/sharing (S1)', () => {
         database = db;
         app = testApp;
         authService = new AuthService(db);
+        // One SharingService for both routers, exactly as server.ts wires it.
+        sharing = new SharingService({ database: db, baseUrl: BASE_URL, emailSender: mail });
         testApp.use('/api/auth', authRouter({ database: db, authService, baseUrl: BASE_URL }));
         testApp.use(
           '/api/students',
           authMiddleware(authService),
           requireParent,
-          studentsRouter({ database: db, baseUrl: BASE_URL, sharingEmailSender: mail })
+          studentsRouter({ database: db, baseUrl: BASE_URL, sharing })
         );
         testApp.use(
           '/api/sharing',
           authMiddleware(authService),
           requireParent,
-          sharingRouter({ database: db, baseUrl: BASE_URL, sharingEmailSender: mail })
+          sharingRouter({ database: db, sharing })
         );
       },
     });
@@ -357,17 +361,36 @@ describe('/api/sharing (S1)', () => {
       expect(jess.smsStatus).toBe('invited');
     });
 
-    it('allows 20 invitations per account per day, then 429', async () => {
+    it('allows 20 invitations per account per day, then 429; no-op invites cost no slot', async () => {
       const ava = await createStudent('Ava');
+      const christian = await createStudent('Christian');
+      expect((await invite({ email: JESSICA, label: 'parent', studentIds: [ava] })).status).toBe(
+        201
+      );
       const day = new Date().toISOString().slice(0, 10);
-      await database.collection('sharing_rate_limits').insertOne({
-        key: `invite:${owner.id}:${day}`,
-        count: 20,
-        expiresAt: new Date(Date.now() + 60_000),
-      });
-      const res = await invite({ email: JESSICA, label: 'parent', studentIds: [ava] });
+      const key = `invite:${owner.id}:${day}`;
+      const counter = database.collection('sharing_rate_limits');
+      expect((await counter.findOne({ key }))?.['count']).toBe(1);
+      await counter.updateOne({ key }, { $set: { count: 20 } });
+
+      // Already invited: reported, not refused, and the counter does not move.
+      const dup = await invite({ email: JESSICA, label: 'parent', studentIds: [ava] });
+      expect(dup.status).toBe(201);
+      expect(dup.body.perStudent).toEqual([{ studentId: ava, status: 'already_invited' }]);
+      expect((await counter.findOne({ key }))?.['count']).toBe(20);
+      // The per-student route's 409 is a no-op too.
+      const dup409 = await request(app)
+        .post(`/api/students/${ava}/contacts`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ email: JESSICA, role: 'parent' });
+      expect(dup409.status).toBe(409);
+      expect((await counter.findOne({ key }))?.['count']).toBe(20);
+
+      // A real invitation over the cap is refused before anything is written.
+      const res = await invite({ email: JESSICA, label: 'parent', studentIds: [christian] });
       expect(res.status).toBe(429);
-      expect(await sharedWithOf(ava)).toEqual([]);
+      expect(await sharedWithOf(christian)).toEqual([]);
+      expect(mail.invites).toHaveLength(1);
     });
   });
 
@@ -517,11 +540,9 @@ describe('/api/sharing (S1)', () => {
 
       const first = await request(app).post('/api/auth/magic').send({ token });
       expect(first.status).toBe(200);
-      expect(first.body.user).toMatchObject({
-        email: NEWBIE,
-        role: 'parent',
-        mustSetPassword: true,
-      });
+      expect(first.body.user).toMatchObject({ email: NEWBIE, role: 'parent' });
+      // Invitation-created account: the clients show "Set a password" (forcePasswordReset).
+      expect(first.body.forcePasswordReset).toBe(true);
       const newUserId = first.body.user.id as string;
       for (const id of [ava, gideon]) {
         expect((await sharedWithOf(id))[0]).toMatchObject({
@@ -611,7 +632,7 @@ describe('/api/sharing (S1)', () => {
       // The fresh link still signs Jessica in and accepts both.
       const consume = await request(app).post('/api/auth/magic').send({ token: newToken });
       expect(consume.status).toBe(200);
-      expect(consume.body.user.mustSetPassword).toBeUndefined();
+      expect(consume.body.forcePasswordReset).toBe(false);
       expect((await sharedWithOf(christian))[0]!['status']).toBe('accepted');
     });
   });
@@ -663,6 +684,34 @@ describe('/api/sharing (S1)', () => {
         .set('Authorization', `Bearer ${owner.token}`)
         .expect(200);
       expect(ownerList.body.find((s: { id: string }) => s.id === ava).peopleCount).toBe(1);
+    });
+
+    it("revokes only the links of the student being left; other students' links stay valid", async () => {
+      const ava = await createStudent('Ava');
+      const christian = await createStudent('Christian');
+      const inv = await invite({ email: ROBERT, label: 'guardian', studentIds: [ava, christian] });
+      await request(app)
+        .post('/api/sharing/invites/accept')
+        .set('Authorization', `Bearer ${robert.token}`)
+        .send({ inviteGroupId: inv.body.inviteGroupId })
+        .expect(200);
+      const avaLink = tokenOf(
+        (await sharing.magicLoginLink.issueForContact(ava, robert.id, null)).loginUrl
+      );
+      const christianLink = tokenOf(
+        (await sharing.magicLoginLink.issueForContact(christian, robert.id, null)).loginUrl
+      );
+
+      await request(app)
+        .post('/api/sharing/leave')
+        .set('Authorization', `Bearer ${robert.token}`)
+        .send({ studentId: ava })
+        .expect(200);
+
+      await request(app).post('/api/auth/magic').send({ token: avaLink }).expect(401);
+      const stillValid = await request(app).post('/api/auth/magic').send({ token: christianLink });
+      expect(stillValid.status).toBe(200);
+      expect(stillValid.body.user.id).toBe(robert.id);
     });
 
     it('refuses the owner, strangers and bad bodies', async () => {

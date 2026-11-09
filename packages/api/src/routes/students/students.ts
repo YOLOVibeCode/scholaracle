@@ -40,7 +40,7 @@ import {
 } from '@scholaracle/contracts';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import type { IInviteEmailSender } from '../../services/InviteEmailSender';
+import type { IEmailTransferConfirmationSender } from '../../services/EmailTransferConfirmationSender';
 import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { encryptCredentials } from '../../utils/credentialsCipher';
 import {
@@ -59,10 +59,8 @@ import { buildMergedCourseScheduleMaps } from '../../services/courses/courseSche
 import { StudentProvisioner } from '../../services/provision/StudentProvisioner';
 import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLoginAudit';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
-import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
-import { createContactSmsOptIn } from '../../services/sms/contactSmsOptIn';
 import { noopSink, registerNudgeRoutes } from './nudge';
 import type { ISharingEmailSender } from '../../services/sharing/SharingInviteEmailSender';
 import { SharingService, parseSharingInviteBody } from '../../services/sharing/SharingService';
@@ -75,12 +73,14 @@ export interface IStudentsRouterConfig {
   readonly baseUrl?: string;
   /** JWT secret for signing asset download URLs. */
   readonly jwtSecret?: string;
+  /** Sender for the two confirmation mails of a shared adult's email transfer. */
+  readonly emailTransferConfirmation?: IEmailTransferConfirmationSender;
   /**
-   * Legacy sender, now used only by the email-transfer confirmation mails.
-   * Invitations go through `sharingEmailSender`.
+   * The process-wide SharingService (built once in server.ts and shared with /api/sharing).
+   * When absent (tests), the router builds one from `sharingEmailSender` and `baseUrl`.
    */
-  readonly sendInviteEmail?: IInviteEmailSender;
-  /** Sender for sharing invitations (one email per invite group) and owner notices. */
+  readonly sharing?: SharingService;
+  /** Sender for sharing invitations and owner notices; used only when `sharing` is absent. */
   readonly sharingEmailSender?: ISharingEmailSender;
   /** Optional sink for parent nudges (student-only). Defaults to no-op. */
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
@@ -377,21 +377,19 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
   const alertRepository = new AlertRepository(config.database);
   const subscriptionRepository = new SubscriptionRepository(config.database);
   const userRepository = new UserRepository(config.database);
-  const magicLoginLink = new MagicLoginLink({
-    database: config.database,
-    baseUrl: config.baseUrl ?? 'http://localhost:2800',
-  });
   const webOrigin = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
-  const contactSmsOptIn = createContactSmsOptIn(config.database, webOrigin);
-  // One behaviour for invitations on /contacts, /parents and /api/sharing.
-  const sharing = new SharingService({
-    database: config.database,
-    baseUrl: webOrigin,
-    emailSender: config.sharingEmailSender,
-    magicLoginLink,
-    contactSmsOptIn,
-    audit: recordSharingEvent,
-  });
+  // One sharing graph for /contacts, /parents and /api/sharing: server.ts builds it and injects
+  // it; a router created without it (tests) builds its own from the same inputs.
+  const sharing =
+    config.sharing ??
+    new SharingService({
+      database: config.database,
+      baseUrl: webOrigin,
+      emailSender: config.sharingEmailSender,
+      audit: recordSharingEvent,
+    });
+  const magicLoginLink = sharing.magicLoginLink;
+  const contactSmsOptIn = sharing.contactSmsOptIn;
   registerStudentLoginRoutes(router, {
     studentRepository,
     provisioner: new StudentProvisioner({
@@ -919,26 +917,25 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
 
-      // Send confirmation emails (if email service is configured)
-      if (config.sendInviteEmail) {
-        const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
+      // Both addresses get a confirmation mail (if a sender is configured)
+      if (config.emailTransferConfirmation) {
         const studentId = student._id!.toString();
-        const confirmBaseUrl = `${baseUrl}/dashboard/students/${studentId}/contacts/transfer-confirm`;
+        const confirmBaseUrl = `${webOrigin}/dashboard/students/${studentId}/contacts/transfer-confirm`;
+        const confirmUrl = (token: string, email: string): string =>
+          `${confirmBaseUrl}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
 
         try {
-          await config.sendInviteEmail.sendInvite({
+          await config.emailTransferConfirmation.sendConfirmation({
             to: currentEmail,
             studentName: student.name,
-            studentId,
-            inviteEmail: currentEmail,
-            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(oldEmailToken)}&email=${encodeURIComponent(currentEmail)}`,
+            confirmUrl: confirmUrl(oldEmailToken, currentEmail),
+            expiresInHours: 48,
           });
-          await config.sendInviteEmail.sendInvite({
+          await config.emailTransferConfirmation.sendConfirmation({
             to: normalizedNewEmail,
             studentName: student.name,
-            studentId,
-            inviteEmail: normalizedNewEmail,
-            baseUrl: `${confirmBaseUrl}?token=${encodeURIComponent(newEmailToken)}&email=${encodeURIComponent(normalizedNewEmail)}`,
+            confirmUrl: confirmUrl(newEmailToken, normalizedNewEmail),
+            expiresInHours: 48,
           });
         } catch {
           // Best-effort: transfer is recorded in DB even if emails fail

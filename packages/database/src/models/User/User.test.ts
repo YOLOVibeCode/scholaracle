@@ -106,16 +106,16 @@ describe('User', () => {
     });
   });
 
-  describe('mustSetPassword', () => {
+  describe('forcePasswordReset', () => {
     const base = { email: 'invitee@example.com', passwordHash: 'random', name: 'Invitee' };
 
     it('defaults to false', () => {
-      expect(new User(base).mustSetPassword).toBe(false);
+      expect(new User(base).forcePasswordReset).toBe(false);
     });
 
     it('is true only when stored as true', () => {
-      expect(new User({ ...base, mustSetPassword: true }).mustSetPassword).toBe(true);
-      expect(new User({ ...base, mustSetPassword: false }).mustSetPassword).toBe(false);
+      expect(new User({ ...base, forcePasswordReset: true }).forcePasswordReset).toBe(true);
+      expect(new User({ ...base, forcePasswordReset: false }).forcePasswordReset).toBe(false);
     });
   });
 });

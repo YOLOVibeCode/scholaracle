@@ -9,7 +9,7 @@ export const RESENDS_PER_GROUP_PER_DAY = 5;
 interface ICounterDoc {
   key: string;
   count: number;
-  /** TTL anchor: Mongo drops the row shortly after the day ends. */
+  /** TTL anchor: Mongo drops the row an hour after the day ends (see database/src/indexes.ts). */
   expiresAt: Date;
 }
 
@@ -26,10 +26,14 @@ function endOfUtcDay(now: Date): Date {
 /**
  * Small per-day counters in Mongo (`sharing_rate_limits`), so limits hold across API instances
  * and restarts. Each `take` increments first and refuses when the new count exceeds the limit.
+ *
+ * The unique key + TTL indexes are created by `createIndexes` at boot like every other
+ * collection; `_ensureIndexes` is the fallback for processes that did not run it (tests,
+ * scripts) and retries on the next call until it has succeeded once.
  */
 export class SharingRateLimiter {
   private readonly _collection: Collection<ICounterDoc>;
-  private _indexed = false;
+  private _indexesReady = false;
 
   constructor(
     database: Db,
@@ -57,7 +61,7 @@ export class SharingRateLimiter {
   }
 
   private async _take(scope: string, limit: number, message: string): Promise<void> {
-    await this._ensureIndex();
+    await this._ensureIndexes();
     const now = this._now();
     const key = `${scope}:${utcDay(now)}`;
     const doc = await this._collection.findOneAndUpdate(
@@ -70,14 +74,15 @@ export class SharingRateLimiter {
     }
   }
 
-  private async _ensureIndex(): Promise<void> {
-    if (this._indexed) return;
-    this._indexed = true;
+  private async _ensureIndexes(): Promise<void> {
+    if (this._indexesReady) return;
     try {
       await this._collection.createIndex({ key: 1 }, { unique: true });
       await this._collection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
+      // Only a successful round marks the indexes ready; a failure is retried on the next call.
+      this._indexesReady = true;
     } catch (err) {
-      console.error('[sharing] rate-limit index creation failed', err);
+      console.error('[sharing] rate-limit index creation failed; will retry', err);
     }
   }
 }

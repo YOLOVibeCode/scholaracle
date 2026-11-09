@@ -19,16 +19,21 @@ export type MagicLoginConsumeResult =
 /**
  * Discriminated payload stored in the token document.
  * - student: bound to a userId
- * - sharedParent (accepted): bound to a userId
+ * - sharedParent (accepted): bound to a userId, and to the student the link was sent for
  * - sharedParent (pending invite): bound to studentId + inviteEmail; no userId yet
  * - inviteGroup: bound to inviteEmail + studentIds[] (one invitation across several students)
  */
 export interface IMagicLoginTokenStore {
+  /**
+   * @param studentId - For `sharedParent` links: the student the link was sent for, so that
+   *   removing the person from ONE student revokes only that student's links.
+   */
   createForUser(
     kind: MagicLoginKind,
     userId: string,
     tokenHash: string,
-    expiresAt: Date
+    expiresAt: Date,
+    studentId?: string
   ): Promise<void>;
   createForPendingInvite(
     studentId: string,
@@ -44,7 +49,11 @@ export interface IMagicLoginTokenStore {
     inviteGroupId?: string
   ): Promise<void>;
   consumeValid(tokenHash: string, now?: Date): Promise<MagicLoginConsumeResult>;
-  invalidateUnusedForUser(kind: MagicLoginKind, userId: string): Promise<void>;
+  /**
+   * Drop the unused tokens of `userId`. With `studentId`, only the links issued for that student
+   * (plus legacy rows that carry no student) go; other students' links stay valid.
+   */
+  invalidateUnusedForUser(kind: MagicLoginKind, userId: string, studentId?: string): Promise<void>;
   invalidateUnusedForPendingInvite(studentId: string, inviteEmail: string): Promise<void>;
   /**
    * Drop `studentId` from every unused invite-group token addressed to `inviteEmail`, deleting
@@ -60,7 +69,7 @@ interface TokenDocument {
   kind: MagicLoginKind;
   /** Present for accepted contacts and students. */
   userId?: ObjectId;
-  /** Present for pending-invite sharedParent tokens. */
+  /** Pending-invite sharedParent tokens: the student. Accepted sharedParent: the student the link was sent for. */
   studentId?: ObjectId;
   /** Present for inviteGroup tokens. */
   studentIds?: ObjectId[];
@@ -91,11 +100,13 @@ export class MagicLoginTokenRepository implements IMagicLoginTokenStore {
     kind: MagicLoginKind,
     userId: string,
     tokenHash: string,
-    expiresAt: Date
+    expiresAt: Date,
+    studentId?: string
   ): Promise<void> {
     await this._collection.insertOne({
       kind,
       userId: new ObjectId(userId),
+      ...(studentId ? { studentId: new ObjectId(studentId) } : {}),
       tokenHash,
       expiresAt,
       createdAt: new Date(),
@@ -172,11 +183,18 @@ export class MagicLoginTokenRepository implements IMagicLoginTokenStore {
     return null;
   }
 
-  public async invalidateUnusedForUser(kind: MagicLoginKind, userId: string): Promise<void> {
+  public async invalidateUnusedForUser(
+    kind: MagicLoginKind,
+    userId: string,
+    studentId?: string
+  ): Promise<void> {
     await this._collection.deleteMany({
       kind,
       userId: new ObjectId(userId),
       usedAt: { $exists: false },
+      ...(studentId
+        ? { $or: [{ studentId: new ObjectId(studentId) }, { studentId: { $exists: false } }] }
+        : {}),
     });
   }
 

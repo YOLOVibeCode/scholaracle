@@ -340,8 +340,10 @@ async function handleStudentMagic(
 
 /**
  * Find or create the parent account for an invited email and accept its pending entries on the
- * given students. A created account gets a random password it never saw, so `mustSetPassword`
- * is set and the clients prompt once to choose one (the reset flow clears it).
+ * given students. The lookup is case-insensitive so "Jessica@Example.com" never becomes a second
+ * account. A created account gets a random password it never saw, so `forcePasswordReset` is set
+ * and the clients prompt once to choose one (reset-password, admin set-password and an OAuth
+ * sign-in clear it).
  */
 async function acceptInvitesByMagic(
   req: Request,
@@ -353,29 +355,38 @@ async function acceptInvitesByMagic(
   const studentRepo = new StudentRepository(database);
   const audit = createSharingAuditRecorder(database);
 
-  let user = await userRepo.findByEmail(email);
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = await userRepo.findByEmail(normalizedEmail);
   if (!user) {
     const passwordHash = await UserRepository.hashPassword(
       `magic-${crypto.randomBytes(32).toString('base64url')}`
     );
     user = await userRepo.create({
-      email,
+      email: normalizedEmail,
       passwordHash,
-      name: email.split('@')[0] ?? email,
+      name: normalizedEmail.split('@')[0] ?? normalizedEmail,
       role: 'parent',
-      mustSetPassword: true,
+      forcePasswordReset: true,
     });
   }
   const userId = user._id!.toString();
 
-  for (const studentId of studentIds) {
-    const student = await studentRepo.findById(studentId);
-    if (!student) continue;
-    const updatedShared = acceptedSharedWith(student, email, userId);
-    if (!updatedShared) continue;
-    await studentRepo.update(student._id!, { sharedWith: updatedShared });
-    await audit(req, 'sharing:accept', studentId, email, { via: 'magic' }, { userId, email });
-  }
+  const students = await studentRepo.findByIds(studentIds);
+  await Promise.all(
+    students.map(async (student) => {
+      const updatedShared = acceptedSharedWith(student, normalizedEmail, userId);
+      if (!updatedShared) return;
+      await studentRepo.update(student._id!, { sharedWith: updatedShared });
+      await audit(
+        req,
+        'sharing:accept',
+        student._id!.toString(),
+        normalizedEmail,
+        { via: 'magic' },
+        { userId, email: normalizedEmail }
+      );
+    })
+  );
   return userId;
 }
 

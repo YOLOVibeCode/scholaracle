@@ -101,9 +101,10 @@ export class MagicLoginLink {
     inviteEmail: string | null
   ): Promise<IMagicLoginLinkIssued> {
     if (userId !== null) {
-      await this._tokens.invalidateUnusedForUser('sharedParent', userId);
+      // Links are per student: a fresh link for Christian must not kill the one for Ava.
+      await this._tokens.invalidateUnusedForUser('sharedParent', userId, studentId);
       return this._mintToken(this._sentTtlMs, async (tokenHash, expiresAt) => {
-        await this._tokens.createForUser('sharedParent', userId, tokenHash, expiresAt);
+        await this._tokens.createForUser('sharedParent', userId, tokenHash, expiresAt, studentId);
       });
     }
 
@@ -142,9 +143,12 @@ export class MagicLoginLink {
     await this._tokens.invalidateUnusedForInviteEmailAndStudent(inviteEmail, studentId);
   }
 
-  /** Drop the unused 24-h sign-in links of an accepted shared adult (removal / leave). */
-  public async invalidateContactLoginTokens(userId: string): Promise<void> {
-    await this._tokens.invalidateUnusedForUser('sharedParent', userId);
+  /**
+   * Drop the unused 24-h sign-in links an accepted shared adult holds for ONE student (removal /
+   * leave). Links issued for other students stay valid; legacy links without a student go too.
+   */
+  public async invalidateContactLoginTokens(userId: string, studentId: string): Promise<void> {
+    await this._tokens.invalidateUnusedForUser('sharedParent', userId, studentId);
   }
 
   public async consume(rawToken: string): Promise<MagicConsumeResult> {

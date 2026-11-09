@@ -11,22 +11,20 @@ import {
 } from '@scholaracle/contracts';
 import { StudentRepository, UserRepository, type Student } from '@scholaracle/database';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import type { ISharingEmailSender } from '../../services/sharing/SharingInviteEmailSender';
 import {
-  SharingService,
   parseSharingInviteBody,
   parseSharingSelection,
+  type SharingService,
 } from '../../services/sharing/SharingService';
 import { getUserEmail, requireUserId } from '../../services/sharing/sharingIdentity';
 
 export interface ISharingRouterConfig {
   readonly database: Db;
-  /** Web origin for emails and opt-in links. */
-  readonly baseUrl?: string;
-  /** Sender for invitation and owner-notice emails. Absent = no mail (dev/test). */
-  readonly sharingEmailSender?: ISharingEmailSender;
-  /** Clock override for tests. */
-  readonly now?: () => Date;
+  /**
+   * The ONE SharingService of the process (built in server.ts, shared with the students router),
+   * so invitations, links, opt-in and limits behave the same on every route.
+   */
+  readonly sharing: SharingService;
 }
 
 /** Caller email from the JWT, or 401. Sharing never reads an email from a body or query. */
@@ -93,15 +91,9 @@ function myStudentView(
  */
 export function sharingRouter(config: ISharingRouterConfig): Router {
   const router = Router();
-  const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
   const students = new StudentRepository(config.database);
   const users = new UserRepository(config.database);
-  const service = new SharingService({
-    database: config.database,
-    baseUrl,
-    emailSender: config.sharingEmailSender,
-    now: config.now,
-  });
+  const service = config.sharing;
 
   /**
    * POST /api/sharing/invites

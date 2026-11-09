@@ -15,11 +15,6 @@ export interface IAuthUser {
   readonly role: UserRole;
   /** Mongo `_id` of the scoped students document. Present for student logins. */
   readonly studentId?: string;
-  /**
-   * True for an account created by accepting a sharing invitation: it has a random password the
-   * person never saw. Clients show a one-time "Set a password" prompt (the reset flow clears it).
-   */
-  readonly mustSetPassword?: boolean;
 }
 
 /** Success body of POST /api/auth/login (failure is the standard error envelope). */
@@ -31,7 +26,10 @@ export interface IAuthLoginResponse {
   readonly familyId?: string;
   readonly rememberMe?: boolean;
   readonly user?: IAuthUser;
-  /** When true, client should force a password reset flow. */
+  /**
+   * When true, client should force a password reset flow. Also true right after an account was
+   * created by accepting a sharing invitation (random password): clients show "Set a password".
+   */
   readonly forcePasswordReset?: boolean;
   readonly error?: string;
 }
