@@ -134,15 +134,17 @@ test.describe('@studio Student studio (phone-width)', () => {
     await expect(week).not.toContainText(/\d+\s*%/);
     await expect(week).not.toContainText(/GPA/i);
 
-    // Status: Working on it saves at once and the chip updates.
-    const statusChip = page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-1"]');
-    await expect(statusChip).toContainText('Not started');
+    // Status taps use "Missing assignment 2": the shared demo DB is not reset between tests and
+    // STUDIO-001/003 open the Today primary (missing 1), which marks it working_on_it. The chip's
+    // starting state is whatever the last run left, so only the change is asserted.
+    const statusChip = page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-2"]');
+    await expect(statusChip).toBeVisible();
     await statusChip.click({ force: true });
     const sheet = page.locator('[data-testid="status-sheet"]');
     await expect(sheet).toBeVisible();
     const patch = page.waitForResponse(
       (r) =>
-        r.url().includes('/studio/assignments/demo-emma-alg2-missing-1/status') &&
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
         r.request().method() === 'PATCH'
     );
     await page.locator('[data-testid="status-option-working_on_it"]').click({ force: true });
@@ -159,7 +161,7 @@ test.describe('@studio Student studio (phone-width)', () => {
     await expect(page.locator('[data-testid="need-help-counter"]')).toHaveText('14/140');
     const helpPatch = page.waitForResponse(
       (r) =>
-        r.url().includes('/studio/assignments/demo-emma-alg2-missing-1/status') &&
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
         r.request().method() === 'PATCH'
     );
     await page.locator('[data-testid="need-help-send"]').click({ force: true });
@@ -185,22 +187,26 @@ test.describe('@studio Student studio (phone-width)', () => {
     // The server kept it: a reload shows the same status.
     await page.reload();
     await expect(
-      page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-1"]')
+      page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-2"]')
     ).toContainText('Need help');
 
     // Leave the shared demo row as it was seeded.
     await statusChip.click({ force: true });
     const reset = page.waitForResponse(
       (r) =>
-        r.url().includes('/studio/assignments/demo-emma-alg2-missing-1/status') &&
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
         r.request().method() === 'PATCH'
     );
     await page.locator('[data-testid="status-option-not_started"]').click({ force: true });
     expect((await reset).status()).toBe(200);
     await expect(statusChip).toContainText('Not started');
+    // The PATCH is followed by router.refresh(); let it land before navigating away, or the
+    // refresh can swallow the tab navigation.
+    await page.waitForLoadState('networkidle');
 
     // Back to Today from the tab.
     await page.locator('[data-testid="studio-tab-today"]').click({ force: true });
+    await expect(page).toHaveURL(/\/studio$/);
     await expect(page.locator('[data-testid="studio-today"]')).toBeVisible();
   });
 
