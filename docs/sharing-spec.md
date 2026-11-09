@@ -239,6 +239,22 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
 - Dashboard header "Edit" and Settings "Disconnect / remove" hidden for members; remove student hidden
   for admins.
 
+## 4.10 As built (S0 #132, S1 #142; 2026-11-09/10)
+- Identity: `/invites/pending`, accept and decline use the JWT email; a foreign body email is refused (403).
+- Invite-created accounts carry the existing `forcePasswordReset` flag (no separate `mustSetPassword`);
+  cleared by reset-password, admin set-password and OAuth sign-in. Emails are normalised (trim+lowercase)
+  on register/OAuth; `findByEmail` falls back to a case-insensitive exact match for legacy rows.
+- `POST /api/sharing/invites` refuses the WHOLE request when any student is not administrable by the caller
+  (403/404); duplicates per student are reported as `already_invited` / `already_accepted`, never an error;
+  the daily invite slot is consumed only when an email is actually sent. The SMS opt-in link (when a phone
+  and text channel are given) is issued against the first newly invited student.
+- `sharedParent` sign-in tokens are scoped per student; leaving one student does not revoke links for others.
+- `POST /api/sharing/invites/resend-contact { studentId, email }` re-issues a legacy single-student pending
+  invitation as an invite group (S2 follow-up).
+- `IStudentListItem` carries `access`, `peopleCount` and `invitedBy` (S2 follow-up).
+- Audit rows use the admin audit log with `sharing:*` actions; the actor fields hold the acting parent.
+- `/api/students/:id/parents*` remain as thin aliases of `/contacts*` (deprecated; web no longer calls them).
+
 ## 5. Implementation plan
 
 Each phase is one PR, green CI, with the tests named. Effort is for one developer.

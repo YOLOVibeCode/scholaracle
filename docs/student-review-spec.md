@@ -99,6 +99,18 @@ Student · This week                    ┌ Need help? ────────�
 ○ not started · ◐ working on it · ✓ done
 ```
 
+## 3.6 As built (R1 #133, R2 #141, R3 #143)
+- Alert rows for `student_needs_help` carry the student's EXTERNAL id like every other producer (the notify
+  job carries the Mongo id). The 24 h window is reserved atomically before sending; the response carries
+  `notified` and `nextAllowedAt`. The alert bypasses digest deferral (sent at once) and is parent-only.
+- The parent-side status PUT rejects `need_help` (only the student can ask for help).
+- Clients show "Your grown-ups were told" only when the server says `notified: true`; otherwise
+  "You already asked today…" or "Saved…". The note is limited to 140 UTF-16 code units client-side.
+- Course names resolve from `record.title ?? record.name`; due dates in alerts use the owner's time zone.
+- `This week` fetches a tab on first show and refetches the active tab after a status change; a failed save
+  rolls the optimistic row back. Marking a portal-flagged `missing` item done keeps it in Still owed with a
+  warning (matching the server).
+
 ## 4. Implementation plan (one developer)
 - **R1. Core + API (2–3 days).** `IWeekView` in contracts; `WeekGuide` with table-driven tests (owed
   ordering, 7-day bucketing across a month boundary, done-then-missing rule, needs glyphs, no grade
