@@ -140,5 +140,19 @@ export function buildFakePortalSkywardJsdomFixtures(skywardOrigin: string): {
   };
 }
 
+/** jsdom replay entry points for both fake-portal recipes (Aeries uses `M402SimAeriesDriver`). */
+export function buildFakePortalJsdomFixtures(
+  aeriesStudentRoot: string,
+  skywardOrigin: string
+): {
+  readonly aeriesStudentRoot: string;
+  readonly skyward: ReturnType<typeof buildFakePortalSkywardJsdomFixtures>;
+} {
+  return {
+    aeriesStudentRoot,
+    skyward: buildFakePortalSkywardJsdomFixtures(skywardOrigin),
+  };
+}
+
 /** Default demo origin for docs and local e2e when env is unset. */
 export const FAKE_PORTAL_DEFAULT_ORIGIN = 'http://127.0.0.1:2855';

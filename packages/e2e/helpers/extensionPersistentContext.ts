@@ -2,8 +2,10 @@
  * Inject the E2E extension conformance bundle (ContentScriptPageDriver + recipes).
  *
  * Playwright's bundled Chromium cannot load unpacked MV3 extensions (no service worker).
- * CI runs the same `dist/e2e-conformance.js` artifact via CDP init script — equivalent
- * to the extension content script under strict fake-portal CSP.
+ * CI runs the same `dist/e2e-conformance.js` artifact via CDP init script in a
+ * persistent context — equivalent to the extension content script under strict CSP.
+ * When Google Chrome is available locally, you can still build with manifest.e2e.json
+ * and load the unpacked extension manually; this helper targets CI Playwright Chromium.
  */
 import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
