@@ -119,6 +119,18 @@ export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'd
 
 export type StudentStatus = (typeof STUDENT_STATUSES)[number];
 
+/** Longest note a student may attach to "Need help" (spec §6, Q3). */
+export const STUDENT_NOTE_MAX_CHARS = 140;
+
+/**
+ * Body of `PATCH /api/studio/assignments/:id/status`. `note` rides along with
+ * `need_help` only; the server ignores it until the need-help alert ships (R3).
+ */
+export interface IStudioStatusPatchRequest {
+  readonly status: StudentStatus | null;
+  readonly note?: string;
+}
+
 /** What the student needs to do the work, derived from the work-pack partition. */
 export const WEEK_NEEDS = ['saved_file', 'school_login', 'internet'] as const;
 

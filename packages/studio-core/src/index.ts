@@ -6,6 +6,21 @@ export {
   type IWeekGuideOptions,
 } from './WeekGuide';
 export { encouragementLine } from './encouragement';
+export {
+  WEEK_NEED_GLYPHS,
+  STUDENT_STATUS_LABELS,
+  STUDENT_STATUS_MARKS,
+  OWED_SECTION_TITLE,
+  DONE_SECTION_TITLE,
+  WEEK_EMPTY_MESSAGE,
+  NEED_HELP_SENT_MESSAGE,
+  needGlyphs,
+  weekSummaryLine,
+  isWeekClear,
+  doneSectionTitle,
+  type IWeekNeedGlyph,
+} from './weekCopy';
+export { applyStudentStatusLocally } from './weekLocalStatus';
 export { deriveTaskNeeds } from './taskNeeds';
 export { dueAtMs, compareByDueAsc, sortByDueAsc, type IHasDueAt } from './dueOrder';
 export { buildWeekDays, calendarDayOffset, localDayOf, isValidTimeZone } from './weekDays';
