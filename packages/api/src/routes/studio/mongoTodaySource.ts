@@ -1,9 +1,16 @@
-import type { Db } from 'mongodb';
+import type { Db, Document } from 'mongodb';
 import type { Student } from '@scholaracle/database';
-import type { IOpenTask, ITodaySource, IWin } from '@scholaracle/interfaces';
+import { STUDENT_STATUSES, type ICourseMaterial, type StudentStatus } from '@scholaracle/contracts';
+import type { IDoneTask, IOpenTask, IWeekSource, IWin } from '@scholaracle/interfaces';
+import { deriveTaskNeeds } from '@scholaracle/studio-core';
 import { loadStudentMaterials } from '../../services/materials/loadStudentMaterials';
 import { slcStudentFilter } from './studioScope';
-import { classifyOpenTask, studioPrimaryCtaLabel, toIsoDate } from './studioTaskClassify';
+import {
+  DONE_STATUSES,
+  classifyOpenTask,
+  studioPrimaryCtaLabel,
+  toIsoDate,
+} from './studioTaskClassify';
 
 export interface IMongoTodaySourceConfig {
   readonly database: Db;
@@ -13,6 +20,11 @@ export interface IMongoTodaySourceConfig {
   readonly now?: Date;
 }
 
+interface IAssignmentDocs {
+  readonly assignmentDocs: readonly Document[];
+  readonly courseNames: ReadonlyMap<string, string>;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -20,9 +32,21 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
-function hostedMimeByAssignment(
-  materials: Awaited<ReturnType<typeof loadStudentMaterials>>
-): Map<string, string | undefined> {
+function str(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/** `slc_assignments.studentStatus` is set by `PATCH /api/studio/assignments/:id/status`. */
+function parseStudentStatus(value: unknown): StudentStatus | undefined {
+  if (typeof value !== 'string') return undefined;
+  return (STUDENT_STATUSES as readonly string[]).includes(value)
+    ? (value as StudentStatus)
+    : undefined;
+}
+
+type Materials = Awaited<ReturnType<typeof loadStudentMaterials>>;
+
+function hostedMimeByAssignment(materials: Materials): Map<string, string | undefined> {
   const hosted = new Map<string, string | undefined>();
   for (const course of materials.courses) {
     for (const material of course.materials) {
@@ -38,36 +62,60 @@ function hostedMimeByAssignment(
   return hosted;
 }
 
-export function createMongoTodaySource(config: IMongoTodaySourceConfig): ITodaySource {
+/**
+ * The work-pack partition, keyed by assignment, from the one materials load
+ * Today already does. Course-scoped materials (null assignment) are not needs.
+ */
+function materialsByAssignment(materials: Materials): Map<string, ICourseMaterial[]> {
+  const byAssignment = new Map<string, ICourseMaterial[]>();
+  for (const course of materials.courses) {
+    for (const material of course.materials) {
+      const assignmentId = material.assignmentExternalId;
+      if (assignmentId === null || assignmentId === '') continue;
+      const list = byAssignment.get(assignmentId);
+      if (list) list.push(material);
+      else byAssignment.set(assignmentId, [material]);
+    }
+  }
+  return byAssignment;
+}
+
+export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSource {
   const now = config.now ?? new Date();
   const student = config.student;
   const ownerUserId = student.dataUserId();
   const studentDbId = student._id?.toString() ?? '';
   const studentExternalId = student.studentId ?? '';
 
+  // One request = one source instance; the assignment docs are shared by all three reads.
+  let docsPromise: Promise<IAssignmentDocs> | undefined;
+  const loadDocs = (): Promise<IAssignmentDocs> => {
+    docsPromise ??= Promise.all([
+      config.database.collection('slc_assignments').find(slcStudentFilter(student)).toArray(),
+      config.database
+        .collection('slc_courses')
+        .find({ userId: ownerUserId, deletedAt: null })
+        .toArray(),
+    ]).then(([assignmentDocs, courseDocs]) => ({
+      assignmentDocs,
+      courseNames: courseNameMap(courseDocs),
+    }));
+    return docsPromise;
+  };
+
   return {
     recentWins: async (): Promise<readonly IWin[]> => {
-      const [assignmentDocs, courseDocs] = await Promise.all([
-        config.database.collection('slc_assignments').find(slcStudentFilter(student)).toArray(),
-        config.database
-          .collection('slc_courses')
-          .find({ userId: ownerUserId, deletedAt: null })
-          .toArray(),
-      ]);
-      const courseNames = courseNameMap(
-        courseDocs as ReadonlyArray<{ readonly [key: string]: unknown }>
-      );
+      const { assignmentDocs, courseNames } = await loadDocs();
       const wins: IWin[] = [];
       for (const doc of assignmentDocs) {
         const rec = asRecord(doc['record']);
-        const status = typeof rec?.['status'] === 'string' ? rec['status'] : '';
-        if (status.toLowerCase() !== 'graded') continue;
-        const title = typeof rec?.['title'] === 'string' ? rec['title'] : '';
+        if (str(rec?.['status']).toLowerCase() !== 'graded') continue;
+        const title = str(rec?.['title']);
         if (title === '') continue;
-        const courseExternalId = (doc['courseExternalId'] as string | undefined) ?? '';
+        const courseExternalId = str(doc['courseExternalId']);
         wins.push({
           kind: 'graded',
-          assignmentExternalId: (doc['externalId'] as string | undefined) ?? '',
+          assignmentExternalId: str(doc['externalId']),
           title,
           courseName: courseNames.get(courseExternalId) ?? courseExternalId,
         });
@@ -83,12 +131,8 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): ITodayS
     },
 
     openTasks: async (): Promise<readonly IOpenTask[]> => {
-      const [assignmentDocs, courseDocs, materials] = await Promise.all([
-        config.database.collection('slc_assignments').find(slcStudentFilter(student)).toArray(),
-        config.database
-          .collection('slc_courses')
-          .find({ userId: ownerUserId, deletedAt: null })
-          .toArray(),
+      const [{ assignmentDocs, courseNames }, materials] = await Promise.all([
+        loadDocs(),
         loadStudentMaterials({
           database: config.database,
           ownerUserId,
@@ -99,23 +143,22 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): ITodayS
           jwtSecret: config.jwtSecret,
         }),
       ]);
-      const courseNames = courseNameMap(
-        courseDocs as ReadonlyArray<{ readonly [key: string]: unknown }>
-      );
       const hosted = hostedMimeByAssignment(materials);
+      const linked = materialsByAssignment(materials);
       const tasks: IOpenTask[] = [];
       for (const doc of assignmentDocs) {
         const rec = asRecord(doc['record']);
-        const status = typeof rec?.['status'] === 'string' ? rec['status'] : '';
         const dueIso = toIsoDate(rec?.['dueAt']);
         const dueAt = dueIso !== undefined ? new Date(dueIso) : undefined;
-        const kind = classifyOpenTask(status, dueAt, now);
+        const kind = classifyOpenTask(str(rec?.['status']), dueAt, now);
         if (kind === null) continue;
-        const assignmentExternalId = (doc['externalId'] as string | undefined) ?? '';
-        const title = typeof rec?.['title'] === 'string' ? rec['title'] : '';
+        const assignmentExternalId = str(doc['externalId']);
+        const title = str(rec?.['title']);
         if (assignmentExternalId === '' || title === '') continue;
-        const courseExternalId = (doc['courseExternalId'] as string | undefined) ?? '';
+        const courseExternalId = str(doc['courseExternalId']);
         const mime = hosted.get(assignmentExternalId);
+        const studentStatus = parseStudentStatus(doc['studentStatus']);
+        const lmsUrl = str(rec?.['url']);
         tasks.push({
           kind,
           assignmentExternalId,
@@ -123,23 +166,49 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): ITodayS
           courseName: courseNames.get(courseExternalId) ?? courseExternalId,
           courseExternalId,
           primaryCtaLabel: studioPrimaryCtaLabel(hosted.has(assignmentExternalId), mime),
+          needs: deriveTaskNeeds(
+            linked.get(assignmentExternalId) ?? [],
+            lmsUrl !== '' ? lmsUrl : undefined
+          ),
           ...(dueIso !== undefined ? { dueAt: dueIso } : {}),
+          ...(studentStatus !== undefined ? { studentStatus } : {}),
         });
       }
       return tasks;
     },
+
+    doneThisWeek: async (): Promise<readonly IDoneTask[]> => {
+      const { assignmentDocs, courseNames } = await loadDocs();
+      const finished: IDoneTask[] = [];
+      for (const doc of assignmentDocs) {
+        const rec = asRecord(doc['record']);
+        if (!DONE_STATUSES.has(str(rec?.['status']).toLowerCase())) continue;
+        const dueAt = toIsoDate(rec?.['dueAt']);
+        const doneAt = toIsoDate(rec?.['submittedAt']) ?? toIsoDate(rec?.['gradedAt']) ?? dueAt;
+        const assignmentExternalId = str(doc['externalId']);
+        const title = str(rec?.['title']);
+        if (doneAt === undefined || assignmentExternalId === '' || title === '') continue;
+        const courseExternalId = str(doc['courseExternalId']);
+        finished.push({
+          assignmentExternalId,
+          title,
+          courseName: courseNames.get(courseExternalId) ?? courseExternalId,
+          doneAt,
+          ...(dueAt !== undefined ? { dueAt } : {}),
+        });
+      }
+      return finished;
+    },
   };
 }
 
-function courseNameMap(
-  courseDocs: ReadonlyArray<{ readonly [key: string]: unknown }>
-): Map<string, string> {
+function courseNameMap(courseDocs: readonly Document[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const course of courseDocs) {
-    const extId = course['externalId'] as string | undefined;
+    const extId = str(course['externalId']);
     const rec = asRecord(course['record']);
-    const name = typeof rec?.['name'] === 'string' ? rec['name'] : extId;
-    if (extId !== undefined && extId !== '' && name !== undefined) {
+    const name = str(rec?.['name']) || extId;
+    if (extId !== '' && name !== '') {
       map.set(extId, name);
     }
   }

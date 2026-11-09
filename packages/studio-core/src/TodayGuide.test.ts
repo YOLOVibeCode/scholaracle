@@ -160,6 +160,21 @@ describe('TodayGuide', () => {
     expect(getGrades).not.toHaveBeenCalled();
   });
 
+  it('ignores upcoming tasks (later this week) — they belong to This week, not Today', async () => {
+    const upcoming: IOpenTask = {
+      ...ESSAY,
+      kind: 'upcoming',
+      assignmentExternalId: 'demo-emma-eng10-upcoming',
+      dueAt: '2026-08-23T16:00:00.000Z',
+    };
+    const view = await new TodayGuide(fakeSource([], [upcoming, VOCAB])).load(SESSION_OFF);
+    expect(view.next?.assignmentExternalId).toBe('demo-emma-span2-vocab');
+    expect(view.alsoToday).toEqual([]);
+    const alone = await new TodayGuide(fakeSource([], [upcoming])).load(SESSION_OFF);
+    expect(alone.next).toBeNull();
+    expect(alone.encouragement).toMatch(/caught up/i);
+  });
+
   it('next is never an array (runtime)', async () => {
     const view = await new TodayGuide(fakeSource([], [CELL_DIVISION, VOCAB])).load(SESSION_OFF);
     expect(Array.isArray(view.next)).toBe(false);

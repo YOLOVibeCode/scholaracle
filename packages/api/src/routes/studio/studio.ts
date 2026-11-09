@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { StudentRepository } from '@scholaracle/database';
+import { StudentRepository, UserRepository, type Student } from '@scholaracle/database';
 import { NotFoundError, ValidationError } from '@scholaracle/contracts';
-import { TodayGuide, WorkPack } from '@scholaracle/studio-core';
+import { TodayGuide, WeekGuide, WorkPack } from '@scholaracle/studio-core';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { resolveStudioStudent, slcStudentFilter, toStudentSession } from './studioScope';
 import { createMongoTodaySource } from './mongoTodaySource';
@@ -17,9 +17,26 @@ export interface IStudioRouterConfig {
 
 const VALID_STUDENT_STATUSES = new Set(['not_started', 'working_on_it', 'need_help', 'done']);
 
+/**
+ * Day bucketing follows the household owner's zone (students carry none yet).
+ * Unknown owner or zone → undefined, and WeekGuide falls back to UTC.
+ */
+async function ownerTimeZone(
+  userRepository: UserRepository,
+  student: Student
+): Promise<string | undefined> {
+  try {
+    const owner = await userRepository.findById(student.userId);
+    return owner?.timezone;
+  } catch {
+    return undefined;
+  }
+}
+
 export function studioRouter(config: IStudioRouterConfig): Router {
   const router = Router();
   const studentRepository = new StudentRepository(config.database);
+  const userRepository = new UserRepository(config.database);
   const baseUrl = config.baseUrl ?? '';
 
   router.get(
@@ -36,6 +53,26 @@ export function studioRouter(config: IStudioRouterConfig): Router {
         })
       );
       const view = await guide.load(session);
+      res.status(200).json(view);
+    })
+  );
+
+  router.get(
+    '/week',
+    asyncHandler(async (req: Request, res: Response) => {
+      const student = await resolveStudioStudent(req, studentRepository);
+      const session = toStudentSession(student);
+      const timeZone = await ownerTimeZone(userRepository, student);
+      const guide = new WeekGuide(
+        createMongoTodaySource({
+          database: config.database,
+          student,
+          baseUrl,
+          jwtSecret: config.jwtSecret,
+        }),
+        { ...(timeZone !== undefined ? { timeZone } : {}) }
+      );
+      const view = await guide.load(session, new Date());
       res.status(200).json(view);
     })
   );
