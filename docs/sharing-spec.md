@@ -255,6 +255,22 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
 - Audit rows use the admin audit log with `sharing:*` actions; the actor fields hold the acting parent.
 - `/api/students/:id/parents*` remain as thin aliases of `/contacts*` (deprecated; web no longer calls them).
 
+## 4.11 As built (S2 #145 web, S3 #144 alerts)
+- Web: Share dialog (dashboard and student page), `/dashboard/invites`, **Family & guardians** tab on
+  `/contacts`, role-aware controls (owner / admin / member), "Shared with you · by <name>", Leave on the
+  viewer's row, "Set a password" banner for invite-created accounts (keyed per user, cleared on logout and
+  on reset). At least one channel is required when inviting (server rejects an empty list). Legacy pending
+  rows (no invite group) are shown one card per student and re-sent through
+  `POST /api/sharing/invites/resend-contact`. The pricing page states that sharing is included.
+- Alerts: every accepted adult receives by their own channels (`email`, `sms`, `push`); push goes to each
+  person's own devices; a silenced adult gets nothing. Newly accepted adults default to `['email','push']`;
+  the owner keeps `['email']` unless set. Inbox lists alerts for students the caller can access, trimmed by
+  the caller's `alertTypes`; acknowledgement is per person (`acknowledgedBy`); legacy fields follow the owner;
+  delete stays owner-only. Ingest now writes the student's account id on alert rows; two env-gated boot
+  migrations (`ALERT_STUDENT_ID_MIGRATION`, then `ALERT_ACK_BY_MIGRATION`; dry-run → apply) rewrote legacy
+  rows (UAT: 0 and 4 rows, 2026-11-10).
+- Test fixture: `POST /api/seed/set-plan` (seed-gated) puts an e2e owner on a paid plan.
+
 ## 5. Implementation plan
 
 Each phase is one PR, green CI, with the tests named. Effort is for one developer.
