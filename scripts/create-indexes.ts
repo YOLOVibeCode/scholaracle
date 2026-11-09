@@ -90,6 +90,9 @@ async function createIndexes(): Promise<void> {
   );
   console.log('  repair_candidates.portalHost+recipeId+step+skeletonHash+gapKind (unique)');
 
+  await db.collection('repair_proposals').createIndex({ candidateId: 1, createdAt: -1 });
+  console.log('  repair_proposals.candidateId+createdAt');
+
   await db.collection('sync_requests').createIndex({ syncRequestId: 1 }, { unique: true });
   await db.collection('sync_requests').createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
   console.log('  sync_requests.syncRequestId (unique), studentId+sourceId+createdAt');
