@@ -127,6 +127,10 @@ async function createIndexes(): Promise<void> {
   await db.collection('jobs').createIndex({ type: 1, status: 1 });
   console.log('  jobs.status+scheduledAt, type+status');
 
+  await db.collection('served_selector_patches').createIndex({ patchId: 1 }, { unique: true });
+  await db.collection('served_selector_patches').createIndex({ portalHost: 1, status: 1, servedAt: -1 });
+  console.log('  served_selector_patches.patchId (unique), portalHost+status+servedAt');
+
   console.log('All indexes created successfully.');
   await client.close();
 }

@@ -1306,4 +1306,21 @@ describe('ScholarmancyApiClient Apple login and account deletion', () => {
       appleNonce: 'raw-nonce',
     });
   });
+
+  it('getServedSelectorPatches GETs connector selector-patches for portal host', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: {
+        success: true,
+        flags: { remoteSelectorPatches: true, killSwitch: false },
+        patches: [],
+      },
+    });
+    const result = await client.getServedSelectorPatches('district.aeries.net', 'connector-jwt');
+    expect(result.patches).toEqual([]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/api/ingest/v1/selector-patches?portalHost=');
+    expect(url).toContain(encodeURIComponent('district.aeries.net'));
+    expect(init.method).toBe('GET');
+  });
 });
