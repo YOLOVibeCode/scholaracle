@@ -642,6 +642,147 @@ describe('/api/sharing (S1)', () => {
     });
   });
 
+  describe('POST /invites/resend-contact', () => {
+    it('mints a single-student group for a legacy pending row, then behaves like resend; admin only', async () => {
+      const ava = await createStudent('Ava');
+      // A row written before invitation groups existed: no inviteGroupId, no invitedByUserId.
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(ava) },
+        {
+          $push: {
+            sharedWith: {
+              email: JESSICA,
+              name: 'Jessica',
+              role: 'parent',
+              status: 'pending',
+              invitedAt: new Date(),
+              receiveAlerts: true,
+              alertChannels: ['email'],
+            },
+          } as never,
+        }
+      );
+
+      const asStranger = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${stranger.token}`)
+        .send({ studentId: ava, email: JESSICA });
+      expect(asStranger.status).toBe(404);
+      const badId = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ studentId: 'not-an-id', email: JESSICA });
+      expect(badId.status).toBe(400);
+      const notPending = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ studentId: ava, email: ROBERT });
+      expect(notPending.status).toBe(404);
+      expect(mail.invites).toHaveLength(0);
+
+      const res = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ studentId: ava, email: JESSICA.toUpperCase() });
+      expect(res.status).toBe(200);
+      expect(res.body.studentIds).toEqual([ava]);
+      expect(typeof res.body.inviteGroupId).toBe('string');
+      expect(mail.invites).toHaveLength(1);
+      expect(mail.invites[0]!.to).toBe(JESSICA);
+      expect(mail.invites[0]!.studentNames).toEqual(['Ava']);
+      const row = (await sharedWithOf(ava))[0]!;
+      expect(row['inviteGroupId']).toBe(res.body.inviteGroupId);
+      expect(row['invitedByUserId']).toBe(owner.id);
+      expect(row['status']).toBe('pending');
+      expect(await auditActions(ava)).toEqual(['sharing:link_sent']);
+
+      // Now the row has a group: a second re-send is an ordinary group resend with a fresh link.
+      const firstToken = tokenOf(mail.invites[0]!.inviteUrl);
+      const again = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ studentId: ava, email: JESSICA });
+      expect(again.status).toBe(200);
+      expect(again.body.inviteGroupId).toBe(res.body.inviteGroupId);
+      expect(mail.invites).toHaveLength(2);
+      await request(app).post('/api/auth/magic').send({ token: firstToken }).expect(401);
+
+      // A member (accepted, not admin) may not re-send someone else's invitation.
+      const robertInvite = await invite({ email: ROBERT, label: 'parent', studentIds: [ava] });
+      await request(app)
+        .post('/api/sharing/invites/accept')
+        .set('Authorization', `Bearer ${robert.token}`)
+        .send({ inviteGroupId: robertInvite.body.inviteGroupId })
+        .expect(200);
+      const asMember = await request(app)
+        .post('/api/sharing/invites/resend-contact')
+        .set('Authorization', `Bearer ${robert.token}`)
+        .send({ studentId: ava, email: JESSICA });
+      expect(asMember.status).toBe(403);
+
+      // The fresh link still signs Jessica in and accepts Ava.
+      const consume = await request(app)
+        .post('/api/auth/magic')
+        .send({ token: tokenOf(mail.invites[1]!.inviteUrl) });
+      expect(consume.status).toBe(200);
+      const accepted = (await sharedWithOf(ava)).find((sp) => sp['email'] === JESSICA)!;
+      expect(accepted['status']).toBe('accepted');
+    });
+  });
+
+  describe('POST /invites validation', () => {
+    it('refuses an empty alertChannels array: a person must be reachable somehow', async () => {
+      const ava = await createStudent('Ava');
+      const res = await invite({
+        email: JESSICA,
+        label: 'parent',
+        studentIds: [ava],
+        alertChannels: [],
+      });
+      expect(res.status).toBe(400);
+      expect(await sharedWithOf(ava)).toEqual([]);
+      expect(mail.invites).toHaveLength(0);
+    });
+  });
+
+  describe('invitedBy on the students list', () => {
+    it('names the inviter for shared students on GET /students and GET /students/:id, never for the owner', async () => {
+      const ava = await createStudent('Ava');
+      const inv = await invite({
+        email: JESSICA,
+        label: 'parent',
+        isAdmin: true,
+        studentIds: [ava],
+      });
+      await request(app)
+        .post('/api/sharing/invites/accept')
+        .set('Authorization', `Bearer ${jessica.token}`)
+        .send({ inviteGroupId: inv.body.inviteGroupId })
+        .expect(200);
+
+      const list = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${jessica.token}`)
+        .expect(200);
+      expect(list.body).toHaveLength(1);
+      expect(list.body[0].access).toBe('admin');
+      expect(list.body[0].invitedBy).toEqual({ userId: owner.id, name: 'Ricardo Owner' });
+
+      const one = await request(app)
+        .get(`/api/students/${ava}`)
+        .set('Authorization', `Bearer ${jessica.token}`)
+        .expect(200);
+      expect(one.body.invitedBy).toEqual({ userId: owner.id, name: 'Ricardo Owner' });
+
+      const ownerList = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(200);
+      expect(ownerList.body[0].access).toBe('owner');
+      expect(ownerList.body[0]).not.toHaveProperty('invitedBy');
+    });
+  });
+
   // ── leave ──────────────────────────────────────────────────────────────────
 
   describe('POST /leave', () => {

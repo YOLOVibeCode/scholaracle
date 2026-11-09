@@ -58,6 +58,11 @@ export interface ISharingResendOutcome {
   readonly expiresAt: Date;
 }
 
+export interface ISharingResendContactOutcome extends ISharingResendOutcome {
+  /** The group the row belongs to: the existing one, or the one minted for a legacy row. */
+  readonly inviteGroupId: string;
+}
+
 const LABELS: readonly SharingLabel[] = ['parent', 'guardian', 'caregiver'];
 const CHANNELS: readonly SharingAlertChannel[] = ['email', 'sms', 'push'];
 const MAX_STUDENTS_PER_INVITE = 20;
@@ -92,6 +97,9 @@ export function parseChannels(raw: unknown): readonly SharingAlertChannel[] | un
   const channels = [...new Set(raw)];
   if (!channels.every((c): c is SharingAlertChannel => CHANNELS.includes(c as never))) {
     throw new ValidationError('alertChannels may only contain email, sms or push');
+  }
+  if (channels.length === 0) {
+    throw new ValidationError('alertChannels must include at least one of email, sms or push');
   }
   return channels;
 }
@@ -289,6 +297,56 @@ export class SharingService {
       )
     );
     return { sentTo: entry.email, studentIds, expiresAt: issued.expiresAt };
+  }
+
+  /**
+   * Re-send the invitation of ONE pending person on ONE student. Rows that belong to an
+   * invitation group go through `resend`; a row invited before groups existed (no
+   * `inviteGroupId`) gets a single-student group minted here so its email carries a working
+   * 7-day link. Admin on the student; the first legacy re-send counts against a per-row
+   * limit, later ones against the new group's.
+   */
+  public async resendContact(
+    req: Request,
+    actorUserId: string,
+    studentId: string,
+    rawEmail: string
+  ): Promise<ISharingResendContactOutcome> {
+    const email = normalizeEmail(rawEmail);
+    const student = await this._students.findById(studentId);
+    if (!student || !student.hasAccess(actorUserId)) {
+      throw new NotFoundError('Student not found');
+    }
+    if (!student.canAdmin(actorUserId)) {
+      throw new ForbiddenError('Only an owner or admin can re-send this invitation');
+    }
+    const row = student.sharedWith.find((sp) => sp.email === email && sp.status === 'pending');
+    if (!row) {
+      throw new NotFoundError('No pending invitation for this person');
+    }
+    if (row.inviteGroupId) {
+      const outcome = await this.resend(req, actorUserId, row.inviteGroupId);
+      return { ...outcome, inviteGroupId: row.inviteGroupId };
+    }
+
+    await this._rate.takeResend(`${studentId}:${email}`);
+    const inviteGroupId = randomUUID();
+    const next = student.sharedWith.map((sp) =>
+      sp === row ? { ...sp, inviteGroupId, invitedByUserId: sp.invitedByUserId ?? actorUserId } : sp
+    );
+    await this._students.update(student._id!, { sharedWith: next });
+    const inviter = await this._users.findById(actorUserId);
+    const issued = await this._sendInvitation(
+      { email, name: row.name },
+      inviter?.name ?? 'A parent',
+      [student],
+      inviteGroupId
+    );
+    await this._audit(req, 'sharing:link_sent', studentId, email, {
+      inviteGroupId,
+      legacyRow: true,
+    });
+    return { sentTo: email, studentIds: [studentId], expiresAt: issued.expiresAt, inviteGroupId };
   }
 
   /** Accept the caller's pending invitations for the selected students. */

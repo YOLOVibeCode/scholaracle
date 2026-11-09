@@ -16,6 +16,7 @@ import {
   magicTokenFromSearchParam,
   releaseMagicTokenClaim,
 } from '@/lib/auth/magicLogin';
+import { markSetPasswordPrompt } from '@/lib/sharing/setPasswordPrompt';
 import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function LoginForm() {
@@ -44,6 +45,9 @@ function LoginForm() {
     void (async () => {
       const result = await authApi.loginWithMagicToken(magicToken);
       if (result.success) {
+        // An account created by accepting a sharing invitation has a password it never saw:
+        // the dashboard shows a one-time, dismissible "Set a password" banner (sharing-spec §4.4).
+        if (result.forcePasswordReset && result.user?.id) markSetPasswordPrompt(result.user.id);
         router.push(postLoginDestination(result.user?.role, redirectTo));
         return;
       }

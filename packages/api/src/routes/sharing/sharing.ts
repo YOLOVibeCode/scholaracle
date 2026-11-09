@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import type { Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import {
   AuthenticationError,
   ValidationError,
@@ -22,6 +22,7 @@ import {
   type SharingService,
 } from '../../services/sharing/SharingService';
 import { getUserEmail, requireUserId } from '../../services/sharing/sharingIdentity';
+import { inviterIdFor, inviterNameMap } from '../../services/sharing/inviterNames';
 
 export interface ISharingRouterConfig {
   readonly database: Db;
@@ -39,16 +40,6 @@ function requireUserEmail(req: Request): string {
     throw new AuthenticationError('Unauthorized');
   }
   return email;
-}
-
-function inviterNameMap(
-  users: UserRepository,
-  ids: readonly string[]
-): Promise<Map<string, string>> {
-  const unique = [...new Set(ids)];
-  return Promise.all(unique.map((id) => users.findById(id).catch(() => null))).then(
-    (found) => new Map(found.flatMap((u) => (u?._id ? [[u._id.toString(), u.name] as const] : [])))
-  );
 }
 
 function myStudentView(
@@ -193,6 +184,35 @@ export function sharingRouter(config: ISharingRouterConfig): Router {
     })
   );
 
+  /**
+   * POST /api/sharing/invites/resend-contact  { studentId, email }
+   * Re-send one pending person's invitation on one student. A row invited before invitation
+   * groups existed gets a single-student group minted here, so its email carries a working
+   * 7-day link. Admin on the student; rate-limited like resend.
+   */
+  router.post(
+    '/invites/resend-contact',
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = requireUserId(req);
+      const body = (req.body ?? {}) as { studentId?: unknown; email?: unknown };
+      const studentId = typeof body.studentId === 'string' ? body.studentId.trim() : '';
+      const email = typeof body.email === 'string' ? body.email.trim() : '';
+      if (!ObjectId.isValid(studentId)) {
+        throw new ValidationError('studentId must be a student id');
+      }
+      if (!email.includes('@')) {
+        throw new ValidationError('Valid email is required');
+      }
+      const outcome = await service.resendContact(req, userId, studentId, email);
+      res.status(200).json({
+        success: true,
+        studentIds: outcome.studentIds,
+        expiresAt: outcome.expiresAt.toISOString(),
+        inviteGroupId: outcome.inviteGroupId,
+      });
+    })
+  );
+
   /** POST /api/sharing/leave  { studentId }: the caller stops following a student. */
   router.post(
     '/leave',
@@ -217,8 +237,8 @@ export function sharingRouter(config: ISharingRouterConfig): Router {
       const names = await inviterNameMap(
         users,
         accessible.flatMap((s) => {
-          const row = s.sharedWith.find((sp) => sp.status === 'accepted' && sp.userId === userId);
-          return row ? [row.invitedByUserId ?? s.userId.toString()] : [];
+          const inviterId = inviterIdFor(s, userId);
+          return inviterId ? [inviterId] : [];
         })
       );
       const view: IMySharingView = {

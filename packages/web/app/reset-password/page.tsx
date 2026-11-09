@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth';
+import { clearSetPasswordPrompt } from '@/lib/sharing/setPasswordPrompt';
 import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function ResetPasswordForm() {
@@ -43,6 +44,7 @@ function ResetPasswordForm() {
         const result = await authApi.resetPassword(token, newPassword);
 
         if (result.success) {
+          clearSetPasswordPrompt();
           setSuccess(true);
           setTimeout(() => {
             router.push('/login?reset=success');

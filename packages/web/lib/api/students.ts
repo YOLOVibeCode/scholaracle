@@ -1,3 +1,4 @@
+import type { StudentAccess } from '@scholaracle/contracts';
 import { apiClient } from './client';
 
 export interface IStudent {
@@ -5,9 +6,14 @@ export interface IStudent {
   readonly userId: string;
   readonly name: string;
   /** What the signed-in parent may do with this student (mirrors IStudentListItem.access). */
-  readonly access: 'owner' | 'admin' | 'member';
+  readonly access: StudentAccess;
   /** The owner plus every accepted shared adult (mirrors IStudentListItem.peopleCount). */
   readonly peopleCount: number;
+  /** Who shared the student with the signed-in parent; absent for students they own. */
+  readonly invitedBy?: {
+    readonly userId: string;
+    readonly name?: string;
+  };
   readonly grade: string;
   readonly school?: string;
   readonly studentId?: string;
@@ -22,34 +28,6 @@ export interface IStudent {
     readonly gradeDrop?: number;
     readonly lowGradeThreshold?: number;
     readonly frequency?: string;
-  };
-}
-
-export interface ISharedParent {
-  readonly userId?: string;
-  readonly email?: string;
-  readonly name?: string;
-  readonly role: 'parent' | 'guardian' | 'caregiver';
-  readonly status: 'pending' | 'accepted' | 'declined';
-  readonly isOwner: boolean;
-  readonly isAdmin: boolean;
-  readonly invitedAt?: string;
-  readonly acceptedAt?: string;
-  readonly phone?: string;
-  readonly receiveAlerts?: boolean;
-  readonly alertChannels?: readonly ('email' | 'sms')[];
-  readonly alertTypes?: readonly string[];
-}
-
-export interface IPendingInvite {
-  readonly studentId: string;
-  readonly studentName: string;
-  readonly invitedBy: string;
-  readonly invite: {
-    readonly email: string;
-    readonly role: string;
-    readonly status: string;
-    readonly invitedAt: string;
   };
 }
 
@@ -635,57 +613,8 @@ export const studentsApi = {
   },
 
   // ---------------------------------------------------------------------------
-  // Parent sharing
+  // Family & guardians: see lib/api/sharing.ts (/sharing/* and /students/:id/contacts*).
   // ---------------------------------------------------------------------------
-
-  async getParents(studentId: string): Promise<readonly ISharedParent[]> {
-    return await apiClient.get<readonly ISharedParent[]>(`/students/${studentId}/parents`);
-  },
-
-  async inviteParent(
-    studentId: string,
-    email: string,
-    role: 'parent' | 'guardian' | 'caregiver' = 'parent'
-  ): Promise<{ success: boolean; message?: string }> {
-    try {
-      return await apiClient.post<{ success: boolean; message?: string }>(
-        `/students/${studentId}/parents/invite`,
-        { email, role }
-      );
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to invite parent';
-      return { success: false, message: msg };
-    }
-  },
-
-  async acceptInvite(studentId: string, email: string): Promise<boolean> {
-    const res = await apiClient.post<{ success?: boolean }>(
-      `/students/${studentId}/parents/accept`,
-      { email }
-    );
-    return res.success ?? false;
-  },
-
-  async setParentAdmin(studentId: string, email: string, isAdmin: boolean): Promise<boolean> {
-    const res = await apiClient.put<{ success?: boolean }>(
-      `/students/${studentId}/parents/${encodeURIComponent(email)}/admin`,
-      { isAdmin }
-    );
-    return res.success ?? false;
-  },
-
-  async removeParent(studentId: string, email: string): Promise<boolean> {
-    const res = await apiClient.delete<{ success?: boolean }>(
-      `/students/${studentId}/parents/${encodeURIComponent(email)}`
-    );
-    return res.success ?? false;
-  },
-
-  async getPendingInvites(email: string): Promise<readonly IPendingInvite[]> {
-    return apiClient.get<readonly IPendingInvite[]>(
-      `/students/invites/pending?email=${encodeURIComponent(email)}`
-    );
-  },
 
   /** Send a one-time magic login link to a student via email or SMS (owner only). */
   async sendStudentMagicLink(

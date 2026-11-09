@@ -31,6 +31,11 @@ export interface IStudentListItem {
   readonly access: StudentAccess;
   /** Adults who can see this student: the owner plus every accepted shared adult. */
   readonly peopleCount: number;
+  /** Who shared the student with the caller; absent for students the caller owns. */
+  readonly invitedBy?: {
+    readonly userId: string;
+    readonly name?: string;
+  };
 }
 
 /** Request body of POST /api/students. */

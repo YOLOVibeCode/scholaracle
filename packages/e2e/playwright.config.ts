@@ -133,6 +133,14 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
+    // Sharing scenario (sharing-spec §6): one owner, three adults, six grants; API + web views
+    {
+      name: 'sharing-scenario',
+      testMatch: /19-sharing-scenario\.spec\.ts/,
+      dependencies: ['critical'],
+      use: { ...devices['Desktop Chrome'] },
+      timeout: 150 * 1000,
+    },
     // Blended-family contacts (consent-first: contacts API, accept, owner-alert-prefs)
     {
       name: 'blended-family-contacts',

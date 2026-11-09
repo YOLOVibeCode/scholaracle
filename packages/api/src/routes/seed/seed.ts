@@ -992,6 +992,53 @@ export function seedRouter(config: ISeedRouterConfig): Router {
   );
 
   /**
+   * POST /api/seed/set-plan
+   * Put a fixture account on a plan so an E2E owner can hold several students (dev/test only).
+   * Email must be @scholarmancy.com or @example.com (fixture domains).
+   * Body: { email: string, plan: 'free' | 'starter' | 'premium' | 'family' }
+   */
+  router.post(
+    '/set-plan',
+    requireSeedAccess,
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!isDemoAllowed()) {
+        throw new ForbiddenError('Not allowed in production');
+      }
+      const { email, plan } = req.body as { email?: unknown; plan?: unknown };
+      if (typeof email !== 'string' || email.trim() === '') {
+        throw new ValidationError('Missing email');
+      }
+      const allowedPlans = ['free', 'starter', 'premium', 'family'] as const;
+      type SeedPlan = (typeof allowedPlans)[number];
+      if (!allowedPlans.includes(plan as SeedPlan)) {
+        throw new ValidationError(`plan must be one of ${allowedPlans.join(', ')}`);
+      }
+      const normalizedEmail = email.toLowerCase().trim();
+      if (!isSeedFixtureEmail(normalizedEmail)) {
+        throw new ForbiddenError('Email not allowed for seed set-plan');
+      }
+      const userRepository = new UserRepository(config.database);
+      const subscriptionRepository = new SubscriptionRepository(config.database);
+      const user = await userRepository.findByEmail(normalizedEmail);
+      if (!user?._id) {
+        throw new NotFoundError('User not found');
+      }
+      const userId = user._id.toString();
+      await config.database.collection('subscriptions').deleteMany({ userId });
+      const start = new Date();
+      const sub = await subscriptionRepository.create({
+        userId,
+        plan: plan as SeedPlan,
+        status: 'active',
+        currentPeriodStart: start,
+        currentPeriodEnd: new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000),
+        billingCycle: 'monthly',
+      });
+      res.json({ success: true, plan: sub.plan, subscriptionId: sub._id?.toString() });
+    })
+  );
+
+  /**
    * POST /api/seed/add-parent
    * Add a parent with accepted status directly to a student (dev/test only).
    * Email must be @scholarmancy.com or @example.com (fixture domains).
