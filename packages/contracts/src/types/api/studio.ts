@@ -165,6 +165,11 @@ export const WEEK_DAY_LABELS = [
   'Sat',
 ] as const;
 
+/** What the student says about an assignment (`PATCH /api/studio/assignments/:id/status`). */
+export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'done'] as const;
+
+export type StudentStatus = (typeof STUDENT_STATUSES)[number];
+
 /** What the student needs to do the work, derived from the work-pack partition. */
 export const WEEK_NEEDS = ['saved_file', 'school_login', 'internet'] as const;
 
