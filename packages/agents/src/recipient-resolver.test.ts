@@ -48,6 +48,7 @@ describe('resolveAllAlertRecipients', () => {
         {
           email: ownerEmail,
           phone: ownerPhone,
+          userId: 'owner-user-id',
           channels: ['email', 'sms'],
           isPrimary: true,
         },
@@ -74,7 +75,12 @@ describe('resolveAllAlertRecipients', () => {
     mockStudentInstance = {
       userId: { toString: () => 'owner-user-id' },
       getAllAlertRecipients: () => [
-        { email: 'owner@example.com', channels: ['email'], isPrimary: true },
+        {
+          email: 'owner@example.com',
+          userId: 'owner-user-id',
+          channels: ['email'],
+          isPrimary: true,
+        },
         { email: '', phone: undefined, channels: ['sms'], isPrimary: false },
       ],
     };
@@ -92,7 +98,7 @@ describe('resolveAllAlertRecipients', () => {
     mockStudentInstance = {
       userId: { toString: () => 'uid' },
       getAllAlertRecipients: () => [
-        { email: 'o@x.com', channels: ['email'], isPrimary: true },
+        { email: 'o@x.com', userId: 'uid', channels: ['email'], isPrimary: true },
         { email: 'c@x.com', phone: '+1555', channels: ['email', 'sms'], isPrimary: false },
       ],
     };
@@ -112,7 +118,12 @@ describe('resolveAllAlertRecipients', () => {
       userId: { toString: () => 'owner-id' },
       alertEmail: 'student.one@exampleisd.net',
       getAllAlertRecipients: () => [
-        { email: 'primary@example.com', channels: ['email'], isPrimary: true },
+        {
+          email: 'primary@example.com',
+          userId: 'owner-id',
+          channels: ['email'],
+          isPrimary: true,
+        },
         { email: 'secondary1@example.com', channels: ['email'], isPrimary: false },
         { email: 'secondary2@example.com', channels: ['email'], isPrimary: false },
         { email: 'student.one@exampleisd.net', channels: ['email'], isPrimary: false },
@@ -148,6 +159,7 @@ describe('resolveAllAlertRecipients', () => {
         {
           email: 'owner@example.com',
           phone: '+15550001111',
+          userId: 'user-1',
           channels: ['email', 'sms'],
           isPrimary: true,
         },
@@ -166,7 +178,13 @@ describe('resolveAllAlertRecipients', () => {
       mockStudentInstance = {
         userId: { toString: () => 'owner-id' },
         getAllAlertRecipients: (ownerEmail, ownerPhone) => [
-          { email: ownerEmail, phone: ownerPhone, channels: ['email', 'push'], isPrimary: true },
+          {
+            email: ownerEmail,
+            phone: ownerPhone,
+            userId: 'owner-id',
+            channels: ['email', 'push'],
+            isPrimary: true,
+          },
           {
             email: 'jess@example.com',
             userId: 'jess-id',
@@ -200,7 +218,7 @@ describe('resolveAllAlertRecipients', () => {
       mockStudentInstance = {
         userId: { toString: () => 'owner-id' },
         getAllAlertRecipients: () => [
-          { email: 'owner@example.com', channels: ['email'], isPrimary: true },
+          { email: 'owner@example.com', userId: 'owner-id', channels: ['email'], isPrimary: true },
           { email: 'push-only@example.com', userId: 'po-id', channels: ['push'], isPrimary: false },
           { email: 'silenced@example.com', userId: 'sil-id', channels: [], isPrimary: false },
           { email: 'no-account@example.com', channels: ['push'], isPrimary: false },
@@ -218,7 +236,13 @@ describe('resolveAllAlertRecipients', () => {
       mockStudentInstance = {
         userId: { toString: () => 'owner-id' },
         getAllAlertRecipients: () => [
-          { email: 'owner@example.com', channels: ['email'], alertTypes: [], isPrimary: true },
+          {
+            email: 'owner@example.com',
+            userId: 'owner-id',
+            channels: ['email'],
+            alertTypes: [],
+            isPrimary: true,
+          },
           {
             email: 'jess@example.com',
             userId: 'jess-id',

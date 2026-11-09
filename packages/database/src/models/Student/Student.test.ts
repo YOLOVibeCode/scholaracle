@@ -1,5 +1,11 @@
-import { Student } from './Student';
-import { ObjectId } from 'mongodb';
+import {
+  Student,
+  DEFAULT_OWNER_ALERT_CHANNELS,
+  DEFAULT_SHARED_ALERT_CHANNELS,
+  effectiveOwnerAlertPrefs,
+  effectiveSharedAlertPrefs,
+} from './Student';
+import type { ObjectId } from 'mongodb';
 
 describe('Student', () => {
   describe('constructor', () => {
@@ -572,14 +578,14 @@ describe('Student', () => {
       });
     });
 
-    it('returns the accepted row prefs, defaulting channels to email', () => {
+    it('returns the accepted row prefs, defaulting channels to email + push', () => {
       expect(student.alertPrefsFor('admin-1')).toMatchObject({
         receiveAlerts: false,
         alertChannels: ['email', 'push'],
       });
       expect(student.alertPrefsFor('member-1')).toMatchObject({
         receiveAlerts: true,
-        alertChannels: ['email'],
+        alertChannels: ['email', 'push'],
       });
     });
 
@@ -589,18 +595,50 @@ describe('Student', () => {
     });
   });
 
-  describe('alertStudentIds', () => {
-    it('lists the Mongo id, the raw portal id and the id without its provider prefix', () => {
-      const id = new ObjectId();
-      const student = new Student({ userId: 'o', name: 'Ava', studentId: 'skyward:12345' }, id);
-      expect(student.alertStudentIds()).toEqual([id.toString(), 'skyward:12345', '12345']);
+  describe('effective alert prefs (one default for storage, delivery and display)', () => {
+    it('owner defaults to email only unless set', () => {
+      expect(effectiveOwnerAlertPrefs(undefined)).toEqual({
+        receiveAlerts: true,
+        alertChannels: DEFAULT_OWNER_ALERT_CHANNELS,
+      });
+      expect(
+        effectiveOwnerAlertPrefs({
+          receiveAlerts: false,
+          alertChannels: ['sms', 'push'],
+          alertTypes: ['test'],
+        })
+      ).toEqual({ receiveAlerts: false, alertChannels: ['sms', 'push'], alertTypes: ['test'] });
     });
 
-    it('does not repeat an unprefixed portal id and copes with no ids at all', () => {
-      expect(new Student({ userId: 'o', name: 'Ava', studentId: '777' }).alertStudentIds()).toEqual(
-        ['777']
-      );
-      expect(new Student({ userId: 'o', name: 'Ava' }).alertStudentIds()).toEqual([]);
+    it('a shared adult with no stored channels reads as email + push (spec §8 Q4)', () => {
+      expect(effectiveSharedAlertPrefs({})).toEqual({
+        receiveAlerts: true,
+        alertChannels: DEFAULT_SHARED_ALERT_CHANNELS,
+      });
+      expect(DEFAULT_SHARED_ALERT_CHANNELS).toEqual(['email', 'push']);
+      expect(
+        effectiveSharedAlertPrefs({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] })
+      ).toEqual({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] });
+    });
+
+    it('getAllAlertRecipients and alertPrefsFor read the same defaults', () => {
+      const student = new Student({
+        userId: 'owner-1',
+        name: 'Ava',
+        sharedWith: [
+          {
+            userId: 'm',
+            email: 'm@example.com',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+          },
+        ],
+      });
+      const shared = student.getAllAlertRecipients('o@example.com').find((r) => !r.isPrimary);
+      expect(shared?.channels).toEqual(['email', 'push']);
+      expect(student.alertPrefsFor('m')?.alertChannels).toEqual(['email', 'push']);
+      expect(student.alertPrefsFor('owner-1')?.alertChannels).toEqual(['email']);
     });
   });
 });

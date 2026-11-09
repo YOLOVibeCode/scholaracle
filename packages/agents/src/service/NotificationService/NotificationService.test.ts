@@ -1301,6 +1301,50 @@ describe('NotificationService', () => {
       ]);
     });
 
+    it('a sole push-only adult (owner silenced) gets exactly one push; nothing goes to the student id', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job') };
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest
+          .fn()
+          .mockReturnValue(parentNotif([NotificationChannel.EMAIL, NotificationChannel.PUSH])),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue as unknown as MongoQueue, [
+        { userId: 'jess-id', push: true },
+      ]);
+
+      expect(jobs(mockQueue)).toEqual([{ to: 'jess-id', channel: NotificationChannel.PUSH }]);
+    });
+
+    it('in-process: a sole push-only adult gets exactly one push; nothing goes to the student id', async () => {
+      const studentNotif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 's',
+        body: 'b',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.GRADE_DROP,
+        channels: [],
+      });
+      mockStudentGenerator.generate.mockReturnValue(studentNotif);
+      mockParentGenerator.generate.mockReturnValue(
+        parentNotif([NotificationChannel.EMAIL, NotificationChannel.PUSH])
+      );
+      mockDeliveryRouter.route.mockResolvedValue({
+        success: true,
+        channel: NotificationChannel.PUSH,
+      });
+
+      await notificationService.processAlert(alert, [{ userId: 'jess-id', push: true }]);
+
+      expect(mockDeliveryRouter.route.mock.calls.map(([n, ch]) => [n.userId, ch])).toEqual([
+        ['jess-id', NotificationChannel.PUSH],
+      ]);
+    });
+
     it('keeps the legacy single-recipient path: PUSH goes to the notification userId', async () => {
       const mockQueue = { add: jest.fn().mockResolvedValue('job') };
       const agent: INotificationAgent = {

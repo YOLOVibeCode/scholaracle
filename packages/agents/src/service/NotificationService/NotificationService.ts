@@ -50,6 +50,17 @@ function wantsAlertType(recipient: IResolvedRecipient, alertType: string): boole
   return !types || types.length === 0 || types.includes(alertType);
 }
 
+/**
+ * The legacy "no resolver" call passes a single empty `{}` so the notification goes to its own
+ * `userId` as-is. Only that exact sentinel keeps the legacy behaviour; a resolved person with
+ * an account but no email/phone (push-only) is a real recipient and must never fall into it.
+ */
+function isLegacySentinel(recipients: readonly IResolvedRecipient[]): boolean {
+  if (recipients.length !== 1) return false;
+  const r = recipients[0]!;
+  return !r.parentEmail && !r.parentPhone && !r.push && !r.userId;
+}
+
 /** Does this recipient get a push of their own? Only people with an account do. */
 function wantsPush(
   recipient: IResolvedRecipient
@@ -225,8 +236,7 @@ export class NotificationService {
           : [resolvedRecipients]
         : [{}]; // empty = use parentNotification.userId as-is
 
-      const isDefaultSingleRecipient =
-        recipients.length === 1 && !recipients[0]!.parentEmail && !recipients[0]!.parentPhone;
+      const isDefaultSingleRecipient = isLegacySentinel(recipients);
       for (const recipient of recipients) {
         if (!wantsAlertType(recipient, alert.type)) continue;
         for (const channel of parentNotification.channels) {
@@ -366,8 +376,7 @@ export class NotificationService {
         ? resolvedRecipients
         : [resolvedRecipients]
       : [{}];
-    const isDefaultSingleRecipient =
-      recipients.length === 1 && !recipients[0]!.parentEmail && !recipients[0]!.parentPhone;
+    const isDefaultSingleRecipient = isLegacySentinel(recipients);
 
     for (const agent of this._agents) {
       if (!agent.handles(alert)) continue;

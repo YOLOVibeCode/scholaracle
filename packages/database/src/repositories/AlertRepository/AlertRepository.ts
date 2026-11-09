@@ -31,23 +31,23 @@ export class AlertRepository implements IAlertReader, IAlertWriter {
   }
 
   /**
-   * Find every alert the viewer may see: rows carrying their own `userId` (legacy owner rows)
-   * plus, per accessible student, rows carrying that student's owner and one of its ids.
-   * Scoping by owner keeps a portal student id from matching another family's rows.
+   * Find every alert the viewer may see: rows carrying their own `userId` (everything they
+   * own, including legacy rows whose `studentId` is still a portal id) plus, per student
+   * shared with them, rows carrying that student's owner and Mongo id. Pass only students the
+   * viewer does not own; owned students are already covered by the first clause.
    *
    * @param viewerUserId - The caller
-   * @param scopes - Students the caller can access
+   * @param scopes - Students shared with the caller
    * @returns Alerts newest first
    */
   public async findVisibleTo(
     viewerUserId: string,
     scopes: readonly IAlertVisibilityScope[]
   ): Promise<readonly (IAlertData & { id?: string })[]> {
-    const clauses: Record<string, unknown>[] = [{ userId: viewerUserId }];
-    for (const scope of scopes) {
-      if (scope.studentIds.length === 0) continue;
-      clauses.push({ userId: scope.ownerUserId, studentId: { $in: [...scope.studentIds] } });
-    }
+    const clauses: Record<string, unknown>[] = [
+      { userId: viewerUserId },
+      ...scopes.map((scope) => ({ userId: scope.ownerUserId, studentId: scope.studentId })),
+    ];
     const documents = await this._collection
       .find({ $or: clauses })
       .sort({ createdAt: -1 })
@@ -56,17 +56,16 @@ export class AlertRepository implements IAlertReader, IAlertWriter {
   }
 
   /**
-   * Find the alerts of one student: rows carrying that student's owner and one of its ids.
+   * Find the alerts of one student: rows carrying that student's owner and Mongo id.
    *
-   * @param scope - The student's owner and ids
+   * @param scope - The student's owner and Mongo id
    * @returns Alerts newest first
    */
   public async findByStudentScope(
     scope: IAlertVisibilityScope
   ): Promise<readonly (IAlertData & { id?: string })[]> {
-    if (scope.studentIds.length === 0) return [];
     const documents = await this._collection
-      .find({ userId: scope.ownerUserId, studentId: { $in: [...scope.studentIds] } })
+      .find({ userId: scope.ownerUserId, studentId: scope.studentId })
       .sort({ createdAt: -1 })
       .toArray();
     return documents.map((doc) => this._toAlertData(doc));

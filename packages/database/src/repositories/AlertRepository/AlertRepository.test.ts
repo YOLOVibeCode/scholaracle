@@ -234,19 +234,34 @@ describe('AlertRepository', () => {
   });
 
   describe('findVisibleTo (sharing-spec §4.5)', () => {
-    it('queries own rows plus owner-scoped rows for each accessible student, newest first', async () => {
+    it('queries own rows plus one owner + Mongo id clause per shared student, newest first', async () => {
       const toArray = jest.fn().mockResolvedValue([]);
       const sort = jest.fn().mockReturnValue({ toArray });
       (mockCollection.find as jest.Mock).mockReturnValue({ sort });
 
       await alertRepository.findVisibleTo('viewer', [
-        { ownerUserId: 'owner-a', studentIds: ['sid-a', '12345'] },
-        { ownerUserId: 'owner-b', studentIds: [] },
+        { ownerUserId: 'owner-a', studentId: 'sid-a' },
+        { ownerUserId: 'owner-b', studentId: 'sid-b' },
       ]);
 
       expect(mockCollection.find).toHaveBeenCalledWith({
-        $or: [{ userId: 'viewer' }, { userId: 'owner-a', studentId: { $in: ['sid-a', '12345'] } }],
+        $or: [
+          { userId: 'viewer' },
+          { userId: 'owner-a', studentId: 'sid-a' },
+          { userId: 'owner-b', studentId: 'sid-b' },
+        ],
       });
+      expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+    });
+
+    it('findByStudentScope queries one owner + Mongo id pair', async () => {
+      const toArray = jest.fn().mockResolvedValue([]);
+      const sort = jest.fn().mockReturnValue({ toArray });
+      (mockCollection.find as jest.Mock).mockReturnValue({ sort });
+
+      await alertRepository.findByStudentScope({ ownerUserId: 'owner-a', studentId: 'sid-a' });
+
+      expect(mockCollection.find).toHaveBeenCalledWith({ userId: 'owner-a', studentId: 'sid-a' });
       expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
     });
 

@@ -120,6 +120,35 @@ export interface IPersonAlertPrefs {
   readonly alertTypes?: readonly string[];
 }
 
+/** The owner's channels when they never set any (unchanged product default). */
+export const DEFAULT_OWNER_ALERT_CHANNELS: readonly SharedAlertChannel[] = ['email'];
+
+/**
+ * A shared adult's channels when the invitation chose none (sharing-spec §8 Q4). Written at
+ * accept time and used as the read-time default, so storage, delivery and display agree.
+ */
+export const DEFAULT_SHARED_ALERT_CHANNELS: readonly SharedAlertChannel[] = ['email', 'push'];
+
+/** The owner's effective alert preferences for a student. */
+export function effectiveOwnerAlertPrefs(prefs: IOwnerAlertPrefs | undefined): IPersonAlertPrefs {
+  return {
+    receiveAlerts: prefs?.receiveAlerts !== false,
+    alertChannels: prefs?.alertChannels ?? DEFAULT_OWNER_ALERT_CHANNELS,
+    ...(prefs?.alertTypes !== undefined ? { alertTypes: prefs.alertTypes } : {}),
+  };
+}
+
+/** A shared adult's effective alert preferences for a student (pending or accepted row). */
+export function effectiveSharedAlertPrefs(
+  row: Pick<ISharedParent, 'receiveAlerts' | 'alertChannels' | 'alertTypes'>
+): IPersonAlertPrefs {
+  return {
+    receiveAlerts: row.receiveAlerts !== false,
+    alertChannels: row.alertChannels ?? DEFAULT_SHARED_ALERT_CHANNELS,
+    ...(row.alertTypes !== undefined ? { alertTypes: row.alertTypes } : {}),
+  };
+}
+
 /** Parent-provisioned student login bound to this profile. */
 export interface IStudentLogin {
   readonly userId: string;
@@ -211,28 +240,28 @@ export class Student {
     ownerPhone?: string
   ): readonly IAlertRecipientResolved[] {
     const out: IAlertRecipientResolved[] = [];
-    const ownerOptedOut = this.ownerAlertPrefs?.receiveAlerts === false;
-    if (!ownerOptedOut) {
-      const channels = this.ownerAlertPrefs?.alertChannels ?? ['email'];
+    const ownerPrefs = effectiveOwnerAlertPrefs(this.ownerAlertPrefs);
+    if (ownerPrefs.receiveAlerts) {
       out.push({
         email: ownerEmail,
         phone: ownerPhone,
         userId: this.userId.toString(),
-        channels,
-        alertTypes: this.ownerAlertPrefs?.alertTypes,
+        channels: ownerPrefs.alertChannels,
+        alertTypes: ownerPrefs.alertTypes,
         isPrimary: true,
       });
     }
     for (const sp of this.sharedWith) {
       if (sp.status !== 'accepted') continue;
-      if (sp.receiveAlerts === false) continue;
+      const prefs = effectiveSharedAlertPrefs(sp);
+      if (!prefs.receiveAlerts) continue;
       out.push({
         email: sp.email,
         phone: sp.phone,
         name: sp.name,
         ...(sp.userId ? { userId: sp.userId } : {}),
-        channels: sp.alertChannels ?? ['email'],
-        alertTypes: sp.alertTypes,
+        channels: prefs.alertChannels,
+        alertTypes: prefs.alertTypes,
         isPrimary: false,
       });
     }
@@ -304,35 +333,8 @@ export class Student {
    * `receiveAlerts: false` or no channels means the person has silenced this student.
    */
   public alertPrefsFor(userId: string): IPersonAlertPrefs | null {
-    if (this.isOwner(userId)) {
-      return {
-        receiveAlerts: this.ownerAlertPrefs?.receiveAlerts !== false,
-        alertChannels: this.ownerAlertPrefs?.alertChannels ?? ['email'],
-        alertTypes: this.ownerAlertPrefs?.alertTypes,
-      };
-    }
+    if (this.isOwner(userId)) return effectiveOwnerAlertPrefs(this.ownerAlertPrefs);
     const row = this.sharedWith.find((sp) => sp.status === 'accepted' && sp.userId === userId);
-    if (!row) return null;
-    return {
-      receiveAlerts: row.receiveAlerts !== false,
-      alertChannels: row.alertChannels ?? ['email'],
-      alertTypes: row.alertTypes,
-    };
-  }
-
-  /**
-   * Every value an alert row's `studentId` may carry for this student: the Mongo id (seed,
-   * queued jobs) and the portal's student id, raw and without its `provider:` prefix (ingest).
-   */
-  public alertStudentIds(): readonly string[] {
-    const ids = new Set<string>();
-    if (this._id) ids.add(this._id.toString());
-    const raw = this.studentId?.trim();
-    if (raw) {
-      ids.add(raw);
-      const parts = raw.split(':', 2);
-      if (parts.length === 2 && parts[1]) ids.add(parts[1]);
-    }
-    return [...ids];
+    return row ? effectiveSharedAlertPrefs(row) : null;
   }
 }

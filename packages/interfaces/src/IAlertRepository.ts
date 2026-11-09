@@ -18,12 +18,14 @@ export interface IAlertData {
 }
 
 /**
- * One student the viewer may see alerts for. Alert rows carry the owner's `userId` and a
- * `studentId` that is either the Mongo id or the portal's student id, so both are matched.
+ * One student the viewer may see alerts for: its owner (alert rows carry the owner's `userId`)
+ * and its Mongo id (what `studentId` holds on every row ingest writes today and the
+ * ALERT_STUDENT_ID_MIGRATION rewrote on legacy rows). Rows that still carry an unresolvable
+ * portal id are visible to their owner only, through the owner's own `userId`.
  */
 export interface IAlertVisibilityScope {
   readonly ownerUserId: string;
-  readonly studentIds: readonly string[];
+  readonly studentId: string;
 }
 
 /**

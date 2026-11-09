@@ -32,7 +32,8 @@ export async function resolveAllAlertRecipients(
     const hasEmail = r.channels.includes('email');
     const hasSms = r.channels.includes('sms');
     const hasPush = r.channels.includes('push');
-    const userId = r.isPrimary ? student.userId.toString() : r.userId;
+    // `userId` comes from the Student model (owner and accepted adults alike).
+    const userId = r.userId;
     const recipientType: 'parent' | 'student' =
       studentAlertEmail && r.email === studentAlertEmail ? 'student' : 'parent';
     out.push({
