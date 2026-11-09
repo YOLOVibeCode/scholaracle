@@ -33,6 +33,7 @@ import { extractMagicToken } from './src/auth/magicDeepLink';
 import { installDiagCapture, log, openDiagPanel, unlockDiag } from './src/diag';
 import { DebugOverlay } from './src/components/debug/DebugOverlay';
 import { DeployStamp } from './src/components/DeployStamp';
+import { AppRootGuard } from './src/launch/AppRootGuard';
 import type {
   ICourseGrade,
   ICourseGradeAssignment,
@@ -509,6 +510,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export default function App(): React.ReactElement {
+  return (
+    <AppRootGuard>
+      <AppRoot />
+    </AppRootGuard>
+  );
+}
+
+function AppRoot(): React.ReactElement {
   return (
     <SafeAreaProvider>
       <AuthProvider>
