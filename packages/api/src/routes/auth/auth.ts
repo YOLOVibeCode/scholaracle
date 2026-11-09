@@ -24,6 +24,8 @@ import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { verifyAppleIdentityToken } from './appleIdentityToken';
 import { appleOAuthAudiences } from './appleAudiences';
+import { acceptedSharedWith } from '../../services/sharing/sharedWithOps';
+import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -337,6 +339,58 @@ async function handleStudentMagic(
 }
 
 /**
+ * Find or create the parent account for an invited email and accept its pending entries on the
+ * given students. The lookup is case-insensitive so "Jessica@Example.com" never becomes a second
+ * account. A created account gets a random password it never saw, so `forcePasswordReset` is set
+ * and the clients prompt once to choose one (reset-password, admin set-password and an OAuth
+ * sign-in clear it).
+ */
+async function acceptInvitesByMagic(
+  req: Request,
+  database: Db,
+  email: string,
+  studentIds: readonly string[]
+): Promise<string> {
+  const userRepo = new UserRepository(database);
+  const studentRepo = new StudentRepository(database);
+  const audit = createSharingAuditRecorder(database);
+
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = await userRepo.findByEmail(normalizedEmail);
+  if (!user) {
+    const passwordHash = await UserRepository.hashPassword(
+      `magic-${crypto.randomBytes(32).toString('base64url')}`
+    );
+    user = await userRepo.create({
+      email: normalizedEmail,
+      passwordHash,
+      name: normalizedEmail.split('@')[0] ?? normalizedEmail,
+      role: 'parent',
+      forcePasswordReset: true,
+    });
+  }
+  const userId = user._id!.toString();
+
+  const students = await studentRepo.findByIds(studentIds);
+  await Promise.all(
+    students.map(async (student) => {
+      const updatedShared = acceptedSharedWith(student, normalizedEmail, userId);
+      if (!updatedShared) return;
+      await studentRepo.update(student._id!, { sharedWith: updatedShared });
+      await audit(
+        req,
+        'sharing:accept',
+        student._id!.toString(),
+        normalizedEmail,
+        { via: 'magic' },
+        { userId, email: normalizedEmail }
+      );
+    })
+  );
+  return userId;
+}
+
+/**
  * Generic magic-link consume endpoint (POST /api/auth/magic).
  * Handles students, accepted shared parents, and pending-invite auto-onboarding.
  * The /student-magic route is kept as an alias for backwards compatibility.
@@ -363,45 +417,14 @@ async function handleMagicConsume(
   let userId: string;
 
   if ('pendingInvite' in consumed) {
-    // One-click onboarding: create (or find) a parent user and accept the invite
+    // Legacy single-student invite link: create (or find) a parent user and accept that invite.
     const { studentId, email } = consumed.pendingInvite;
-    const userRepo = new UserRepository(database);
-    const studentRepo = new StudentRepository(database);
-
-    let user = await userRepo.findByEmail(email);
-    if (!user) {
-      const passwordHash = await UserRepository.hashPassword(
-        `magic-${crypto.randomBytes(32).toString('base64url')}`
-      );
-      user = await userRepo.create({
-        email,
-        passwordHash,
-        name: email.split('@')[0] ?? email,
-        role: 'parent',
-      });
-    }
-    userId = user._id!.toString();
-
-    // Bind userId in the sharedWith entry and mark accepted
-    const student = await studentRepo.findById(studentId);
-    if (student) {
-      const inviteIdx = student.sharedWith.findIndex(
-        (sp) => sp.email === email && sp.status === 'pending'
-      );
-      if (inviteIdx !== -1) {
-        const updatedShared = [...student.sharedWith];
-        const current = updatedShared[inviteIdx]!;
-        updatedShared[inviteIdx] = {
-          ...current,
-          userId,
-          status: 'accepted',
-          acceptedAt: new Date(),
-          receiveAlerts: current.receiveAlerts !== false,
-          alertChannels: current.alertChannels ?? ['email'],
-        };
-        await studentRepo.update(student._id!, { sharedWith: updatedShared });
-      }
-    }
+    userId = await acceptInvitesByMagic(req, database, email, [studentId]);
+  } else if ('inviteGroup' in consumed) {
+    // Sharing invitation (one link for several students): accept every pending entry for that
+    // email among the token's students, creating the account if needed (sharing-spec §4.3).
+    const { email, studentIds } = consumed.inviteGroup;
+    userId = await acceptInvitesByMagic(req, database, email, studentIds);
   } else {
     userId = consumed.userId;
   }

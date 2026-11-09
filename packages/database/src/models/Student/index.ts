@@ -10,4 +10,5 @@ export type {
   IAlertRecipientResolved,
   IOwnerAlertPrefs,
   IStudentLogin,
+  SharedAlertChannel,
 } from './Student';

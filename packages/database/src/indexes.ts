@@ -19,6 +19,14 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentsCollection.createIndex({ userId: 1, studentId: 1 }, { unique: true, sparse: true });
   await studentsCollection.createIndex({ 'dataSources.id': 1 });
   await studentsCollection.createIndex({ 'dataSources.pluginId': 1 });
+  // Sharing (sharing-spec §4.3): pending invitations by email, and the students of one invite group.
+  await studentsCollection.createIndex({ 'sharedWith.email': 1 });
+  await studentsCollection.createIndex({ 'sharedWith.inviteGroupId': 1 }, { sparse: true });
+
+  // Sharing rate-limit counters: one row per (scope, UTC day); rows expire an hour after the day ends.
+  const sharingRateLimits = database.collection('sharing_rate_limits');
+  await sharingRateLimits.createIndex({ key: 1 }, { unique: true });
+  await sharingRateLimits.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
 
   // Grades collection indexes (if exists)
   const gradesCollection = database.collection('grades');

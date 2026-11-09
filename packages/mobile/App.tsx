@@ -145,6 +145,9 @@ function AppContent(): React.ReactElement {
       userId: '',
       name: payload.displayName,
       studentId: payload.studentExternalId,
+      // A source invite always comes from an owner/admin for their own student.
+      access: 'owner',
+      peopleCount: 1,
     };
     setNav({ view: 'connect-source', student, sourceInvite: payload });
   }, []);

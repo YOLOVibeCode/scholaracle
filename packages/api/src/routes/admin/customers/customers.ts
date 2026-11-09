@@ -530,7 +530,8 @@ async function handleSetPassword(
   }
 
   const passwordHash = await UserRepository.hashPassword(password);
-  const updated = await userRepository.update(id, { passwordHash });
+  // A password set by support ends any pending "reset / set a password" prompt.
+  const updated = await userRepository.update(id, { passwordHash, forcePasswordReset: false });
   if (!updated) {
     throw new NotFoundError('Customer not found');
   }

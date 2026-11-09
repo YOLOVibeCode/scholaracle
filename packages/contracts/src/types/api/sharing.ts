@@ -1,0 +1,140 @@
+/**
+ * Wire contracts for sharing a student with other adults (docs/sharing-spec.md §4.3).
+ *
+ * Server is source of truth: packages/api/src/routes/sharing/sharing.ts and the
+ * per-student `/api/students/:id/contacts*` routes in routes/students/students.ts.
+ * Identity for every sharing call is the JWT email; request bodies never choose
+ * whose invitation is listed, accepted or declined.
+ */
+
+import type { ContactSmsStatus } from '../smsCompliance';
+
+/** What the caller may do with a student. Labels (parent/guardian/caregiver) never grant rights. */
+export type StudentAccess = 'owner' | 'admin' | 'member';
+
+/** Display label for a shared adult. Permissions never derive from it. */
+export type SharingLabel = 'parent' | 'guardian' | 'caregiver';
+
+/** Alert delivery channels an adult may pick for a student. `push` delivery lands in S3. */
+export type SharingAlertChannel = 'email' | 'sms' | 'push';
+
+export type SharingInviteStatus = 'pending' | 'accepted' | 'declined';
+
+/**
+ * One person on a student's "Family & guardians" list (owner included), as returned by
+ * `GET /api/students/:id/contacts` and its `/parents` alias.
+ */
+export interface ISharingPerson {
+  /** Set for the owner and for accepted adults; absent while an invitation is pending. */
+  readonly userId?: string;
+  /** Absent for the owner row (the owner is identified by `userId`). */
+  readonly email?: string;
+  readonly name?: string;
+  readonly role: SharingLabel;
+  readonly status: SharingInviteStatus;
+  readonly isOwner: boolean;
+  readonly isAdmin: boolean;
+  readonly invitedAt?: string;
+  readonly acceptedAt?: string;
+  readonly phone?: string;
+  readonly receiveAlerts?: boolean;
+  readonly alertChannels?: readonly SharingAlertChannel[];
+  readonly alertTypes?: readonly string[];
+  /** Texting consent state for this person on this student (none / invited / opted_in / opted_out). */
+  readonly smsStatus?: ContactSmsStatus;
+  /** Groups the entries created by one invitation across several students. */
+  readonly inviteGroupId?: string;
+  /** The owner or admin who sent the invitation. */
+  readonly invitedByUserId?: string;
+}
+
+/** A pending invitation addressed to the caller, as listed by `GET /api/sharing/invites/pending`. */
+export interface ISharingPendingInvite {
+  readonly studentId: string;
+  readonly studentName: string;
+  /** User id of the person who invited (falls back to the owner for older entries). */
+  readonly invitedBy: string;
+  readonly invitedByName?: string;
+  readonly inviteGroupId?: string;
+  readonly invite: {
+    readonly email: string;
+    readonly role: SharingLabel;
+    readonly status: 'pending';
+    readonly invitedAt: string;
+    readonly isAdmin: boolean;
+  };
+}
+
+/** Request body of `POST /api/sharing/invites`: one person, one or more students, one email. */
+export interface ISharingInviteRequest {
+  readonly email: string;
+  readonly name?: string;
+  readonly phone?: string;
+  readonly label: SharingLabel;
+  readonly isAdmin?: boolean;
+  readonly studentIds: readonly string[];
+  readonly alertChannels?: readonly SharingAlertChannel[];
+}
+
+/**
+ * Outcome for one student of an invitation.
+ * - `invited`: a pending entry was created (or a declined one re-opened).
+ * - `already_invited` / `already_accepted`: skipped, not an error.
+ * - `no_access`: the caller may not administer that student. The server currently refuses the
+ *   whole request (403) instead of partially inviting, so clients should handle both forms.
+ */
+export type SharingInvitePerStudentStatus =
+  'invited' | 'already_invited' | 'already_accepted' | 'no_access';
+
+/** Response of `POST /api/sharing/invites` and `POST /api/students/:id/contacts`. */
+export interface ISharingInviteResult {
+  readonly inviteGroupId: string;
+  readonly perStudent: readonly {
+    readonly studentId: string;
+    readonly status: SharingInvitePerStudentStatus;
+  }[];
+  /**
+   * Present when a phone was given and texting requested: the consent link the inviter passes on.
+   * Nothing is texted to the number before the person opts in themselves.
+   */
+  readonly smsOptInUrl?: string;
+}
+
+/** The caller's own alert settings for one student. */
+export interface ISharingMyAlerts {
+  readonly receiveAlerts: boolean;
+  readonly alertChannels: readonly SharingAlertChannel[];
+  readonly alertTypes?: readonly string[];
+}
+
+/** One accessible student from the caller's point of view (`GET /api/sharing/mine`). */
+export interface IMySharingStudent {
+  readonly studentId: string;
+  readonly name: string;
+  readonly access: StudentAccess;
+  /** Who shared the student with the caller; absent for students the caller owns. */
+  readonly invitedBy?: {
+    readonly userId: string;
+    readonly name?: string;
+  };
+  readonly alerts: ISharingMyAlerts;
+}
+
+export interface IMySharingView {
+  readonly students: readonly IMySharingStudent[];
+}
+
+/** Request body of `POST /api/sharing/invites/accept` and `/decline`. */
+export type ISharingInviteSelection =
+  { readonly inviteGroupId: string } | { readonly studentIds: readonly string[] };
+
+/** Response of accept / decline: which students were affected. */
+export interface ISharingInviteSelectionResult {
+  readonly success: boolean;
+  readonly studentIds: readonly string[];
+}
+
+/** Request body of `POST /api/sharing/leave`. */
+export interface ISharingLeaveRequest {
+  readonly studentId: string;
+}

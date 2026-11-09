@@ -129,6 +129,11 @@ function publicUserFromUser(user: User): IAuthUserPayload {
   };
 }
 
+/** Emails are stored and compared lower-cased and trimmed, so "Jessica@Example.com" is one account. */
+export function normalizeAccountEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TOKEN_BYTES = 32;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -215,8 +220,9 @@ export class AuthService implements IAuthService {
   ): Promise<IAuthResult> {
     const rememberMe = options?.rememberMe !== false;
     try {
-      // Check if user already exists
-      const existingUser = await this._userRepository.findByEmail(email);
+      const normalizedEmail = normalizeAccountEmail(email);
+      // Check if user already exists (case-insensitive)
+      const existingUser = await this._userRepository.findByEmail(normalizedEmail);
       if (existingUser) {
         return {
           success: false,
@@ -229,7 +235,7 @@ export class AuthService implements IAuthService {
 
       // Create user
       const userData: IUserData = {
-        email,
+        email: normalizedEmail,
         passwordHash,
         name,
         role: 'parent',
@@ -363,25 +369,12 @@ export class AuthService implements IAuthService {
         providerAccountId
       );
       if (existingLink) {
-        const user = await this._userRepository.findById(existingLink.userId);
-        if (!user) {
+        const linked = await this._userRepository.findById(existingLink.userId);
+        if (!linked) {
           return { success: false, error: 'User no longer exists' };
         }
-        const userId = user._id?.toString() ?? '';
-        const refreshPair = await this._createRefreshToken(userId, user.email, undefined);
-        const token = this._generateToken(
-          userId,
-          user.email,
-          tokenClaimsFromUser(user, refreshPair?.familyId)
-        );
-        return {
-          success: true,
-          token,
-          refreshToken: refreshPair?.refreshToken,
-          familyId: refreshPair?.familyId,
-          rememberMe: true,
-          user: publicUserFromUser(user),
-        };
+        const user = await this._clearForcedResetAfterOAuth(linked);
+        return await this._issueSession(user, true);
       }
 
       // Without a (provider-verified) email we cannot link by email or create an account.
@@ -390,37 +383,30 @@ export class AuthService implements IAuthService {
       }
 
       // 2) User exists by email -> link OAuth and login
-      const userByEmail = await this._userRepository.findByEmail(email);
-      if (userByEmail) {
+      const normalizedEmail = normalizeAccountEmail(email);
+      const found = await this._userRepository.findByEmail(normalizedEmail);
+      if (found) {
         await this._oauthAccountRepository.create(
-          userByEmail._id!.toString(),
+          found._id!.toString(),
           provider,
           providerAccountId,
-          email
+          normalizedEmail
         );
-        const providers = [...(userByEmail.oauthProviders ?? []), provider];
-        await this._userRepository.update(userByEmail._id!, { oauthProviders: providers });
-        const userId = userByEmail._id?.toString() ?? '';
-        const refreshPair = await this._createRefreshToken(userId, userByEmail.email, undefined);
-        const token = this._generateToken(
-          userId,
-          userByEmail.email,
-          tokenClaimsFromUser(userByEmail, refreshPair?.familyId)
-        );
-        return {
-          success: true,
-          token,
-          refreshToken: refreshPair?.refreshToken,
-          familyId: refreshPair?.familyId,
-          rememberMe: true,
-          user: publicUserFromUser(userByEmail),
-        };
+        const providers = [...(found.oauthProviders ?? []), provider];
+        // A provider sign-in proves the person; an invitation-created account no longer needs the
+        // "set a password" prompt (owner decision: reuse forcePasswordReset for that prompt).
+        const userByEmail =
+          (await this._userRepository.update(found._id!, {
+            oauthProviders: providers,
+            forcePasswordReset: false,
+          })) ?? found;
+        return await this._issueSession(userByEmail, true);
       }
 
       // 3) New user: create user (placeholder password) + OAuth link + login
       const passwordHash = await UserRepo.hashPassword(crypto.randomBytes(32).toString('hex'));
       const userData: IUserData = {
-        email,
+        email: normalizedEmail,
         passwordHash,
         name,
         role: 'parent',
@@ -428,21 +414,13 @@ export class AuthService implements IAuthService {
       };
       const user = await this._userRepository.create(userData);
       const userId = user._id?.toString() ?? '';
-      await this._oauthAccountRepository.create(userId, provider, providerAccountId, email);
-      const refreshPair = await this._createRefreshToken(userId, user.email, undefined);
-      const token = this._generateToken(
+      await this._oauthAccountRepository.create(
         userId,
-        user.email,
-        tokenClaimsFromUser(user, refreshPair?.familyId)
+        provider,
+        providerAccountId,
+        normalizedEmail
       );
-      return {
-        success: true,
-        token,
-        refreshToken: refreshPair?.refreshToken,
-        familyId: refreshPair?.familyId,
-        rememberMe: true,
-        user: publicUserFromUser(user),
-      };
+      return await this._issueSession(user, true);
     } catch (error) {
       return {
         success: false,
@@ -632,10 +610,8 @@ export class AuthService implements IAuthService {
 
     try {
       const passwordHash = await UserRepo.hashPassword(newPassword);
-      await this._userRepository.update(valid.userId, {
-        passwordHash,
-        forcePasswordReset: false,
-      });
+      // Also ends the "set a password" prompt of an invitation-created account.
+      await this._userRepository.update(valid.userId, { passwordHash, forcePasswordReset: false });
       await this._passwordResetTokenStore.invalidateForUser(valid.userId);
       return { success: true };
     } catch (error) {
@@ -716,6 +692,12 @@ export class AuthService implements IAuthService {
       await this._refreshTokenStore.revokeFamily(existing.familyId);
     }
     return { success: true };
+  }
+
+  /** An OAuth sign-in ends a pending "set a password" prompt on an invitation-created account. */
+  private async _clearForcedResetAfterOAuth(user: User): Promise<User> {
+    if (!user.forcePasswordReset || !user._id) return user;
+    return (await this._userRepository.update(user._id, { forcePasswordReset: false })) ?? user;
   }
 
   /**

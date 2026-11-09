@@ -4,6 +4,10 @@ export interface IStudent {
   readonly id: string;
   readonly userId: string;
   readonly name: string;
+  /** What the signed-in parent may do with this student (mirrors IStudentListItem.access). */
+  readonly access: 'owner' | 'admin' | 'member';
+  /** The owner plus every accepted shared adult (mirrors IStudentListItem.peopleCount). */
+  readonly peopleCount: number;
   readonly grade: string;
   readonly school?: string;
   readonly studentId?: string;

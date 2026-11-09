@@ -9,6 +9,7 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { sharingRouter } from './routes/sharing/sharing';
 import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
@@ -44,8 +45,10 @@ import {
   createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
-import { SendGridInviteEmailSender } from './services/InviteEmailSender';
+import { SendGridEmailTransferConfirmationSender } from './services/EmailTransferConfirmationSender';
 import { MagicLinkSender } from './services/provision/MagicLinkSender';
+import { SharingInviteEmailSender } from './services/sharing/SharingInviteEmailSender';
+import { SharingService } from './services/sharing/SharingService';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
 import { SourceInviteService } from './services/source-invite/SourceInviteService';
@@ -385,7 +388,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     // these senders called api.sendgrid.com directly and every relay key got a 401.
     applySendGridBaseUrl(sgMail, process.env['SENDGRID_BASE_URL']);
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
-    const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
+    const emailTransferConfirmation = new SendGridEmailTransferConfirmationSender(
+      sendGridConfig,
+      sendGrid
+    );
     const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(
       sendGridConfig,
       sendGrid
@@ -437,6 +443,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       { fromEmail: magicFromEmail, fromName: magicFromName },
       guardedSmsSender
     );
+    // Sharing invitations ride the same transport as magic links, so the accept button in the
+    // mail points at the /magic route this server actually serves (sharing-spec D5).
+    const sharingEmailSender = new SharingInviteEmailSender(magicEmailTransport, {
+      fromEmail: magicFromEmail,
+      fromName: magicFromName,
+    });
+    // ONE sharing graph for the process: /api/students/:id/contacts*, /parents* and /api/sharing
+    // share the magic-link issuer, SMS opt-in, rate limiter, audit trail and web origin.
+    const sharing = new SharingService({ database, baseUrl, emailSender: sharingEmailSender });
 
     app.use(
       '/api/portal-accounts',
@@ -450,11 +465,19 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       requireParent,
       studentsRouter({
         database,
-        baseUrl: baseUrl ?? '',
+        baseUrl,
         jwtSecret,
-        sendInviteEmail: inviteEmailSender,
+        emailTransferConfirmation,
+        sharing,
         magicLinkSender,
       })
+    );
+    // Sharing across students (invite several at once, pending list, accept/decline, leave, mine).
+    app.use(
+      '/api/sharing',
+      authMiddleware(authService),
+      requireParent,
+      sharingRouter({ database, sharing })
     );
     // Public: a co-parent opts in to texts themselves from a link the inviting parent shares.
     app.use('/api/sms/optin', smsOptInRouter({ database, guardedSmsSender }));

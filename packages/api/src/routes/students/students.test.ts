@@ -1444,8 +1444,9 @@ describe('Students API Routes', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('should call sendInviteEmail when configured after successful invite', async () => {
-      const mockSendInvite = jest.fn().mockResolvedValue(undefined);
+    it('sends ONE sharing email with a working /magic link (single-student invite group)', async () => {
+      const sendInvite = jest.fn().mockResolvedValue(undefined);
+      const sendLeftNotice = jest.fn().mockResolvedValue(undefined);
       const appWithInvite = express();
       appWithInvite.use(express.json());
       appWithInvite.use(
@@ -1454,7 +1455,7 @@ describe('Students API Routes', () => {
         studentsRouter({
           database,
           baseUrl: 'http://test.example',
-          sendInviteEmail: { sendInvite: mockSendInvite },
+          sharingEmailSender: { sendInvite, sendLeftNotice },
         })
       );
 
@@ -1471,14 +1472,35 @@ describe('Students API Routes', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(mockSendInvite).toHaveBeenCalledTimes(1);
-      expect(mockSendInvite).toHaveBeenCalledWith({
-        to: 'parent@example.com',
-        studentName: 'Invite Email Student',
-        studentId,
-        inviteEmail: 'parent@example.com',
-        baseUrl: 'http://test.example',
+      expect(res.body.message).toBe('Invitation sent to parent@example.com');
+      expect(res.body.invite).toEqual({
+        email: 'parent@example.com',
+        role: 'parent',
+        status: 'pending',
       });
+      expect(typeof res.body.inviteGroupId).toBe('string');
+      expect(sendInvite).toHaveBeenCalledTimes(1);
+      const mail = sendInvite.mock.calls[0]![0] as {
+        to: string;
+        studentNames: string[];
+        inviteUrl: string;
+        baseUrl: string;
+        inviterName: string;
+      };
+      expect(mail.to).toBe('parent@example.com');
+      expect(mail.studentNames).toEqual(['Invite Email Student']);
+      expect(mail.inviteUrl).toMatch(/^http:\/\/test\.example\/magic\?token=/);
+      expect(mail.baseUrl).toBe('http://test.example');
+      expect(mail.inviterName).toBe('Students User');
+      // The entry carries the group and the inviter.
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const entry = (
+        stored?.['sharedWith'] as { inviteGroupId?: string; invitedByUserId?: string }[]
+      )[0]!;
+      expect(entry.inviteGroupId).toBe(res.body.inviteGroupId);
+      expect(entry.invitedByUserId).toBeDefined();
     });
   });
 

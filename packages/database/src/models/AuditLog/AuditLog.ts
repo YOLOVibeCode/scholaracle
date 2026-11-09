@@ -52,7 +52,11 @@ export type AuditAction =
   | 'sharing:accept'
   | 'sharing:decline'
   | 'sharing:remove'
-  | 'sharing:admin_changed';
+  | 'sharing:admin_changed'
+  // The adult removed themself from a student (owner decision 2026-11-09, sharing-spec Q3).
+  | 'sharing:leave'
+  // An invitation link was (re)sent for an invite group.
+  | 'sharing:link_sent';
 
 /**
  * Audit severity levels.
@@ -203,6 +207,8 @@ export class AuditLog {
       'sharing:decline': 'Declined a student-sharing invitation',
       'sharing:remove': 'Removed an adult from a student',
       'sharing:admin_changed': "Changed an adult's admin rights on a student",
+      'sharing:leave': 'An adult stopped following a student',
+      'sharing:link_sent': 'Sent or re-sent a student-sharing invitation link',
     };
     return descriptions[this.action];
   }
