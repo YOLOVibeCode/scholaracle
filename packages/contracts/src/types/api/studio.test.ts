@@ -14,6 +14,7 @@ import {
   NEXT_STEP_KEYS,
   WEEK_VIEW_KEYS,
   WEEK_ITEM_KEYS,
+  WEEK_DAY_LABELS,
   STUDENT_STATUSES,
   WEEK_NEEDS,
   parseTodayView,
@@ -373,6 +374,7 @@ describe('IWeekView — student review (R1)', () => {
     title: 'Cell Division worksheet',
     courseName: 'AP Biology',
     dueAt: '2026-08-27T16:00:00.000Z',
+    humanStatus: 'Due soon',
     studentStatus: 'not_started',
     needs: ['saved_file', 'internet'],
     primaryCtaLabel: 'Open worksheet',
@@ -383,6 +385,7 @@ describe('IWeekView — student review (R1)', () => {
     assignmentExternalId: 'demo-emma-alg2-missing-1',
     title: 'Missing assignment 1',
     courseName: 'Algebra II',
+    humanStatus: 'Not turned in',
     studentStatus: 'done',
     needs: [],
     warning: 'Marked done, but the school shows not turned in',
@@ -417,10 +420,22 @@ describe('IWeekView — student review (R1)', () => {
       'title',
       'courseName',
       'dueAt',
+      'humanStatus',
       'studentStatus',
       'needs',
       'primaryCtaLabel',
       'warning',
+    ]);
+    expect(WEEK_DAY_LABELS).toEqual([
+      'Today',
+      'Tomorrow',
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
     ]);
     expect(STUDENT_STATUSES).toEqual(['not_started', 'working_on_it', 'need_help', 'done']);
     expect(WEEK_NEEDS).toEqual(['saved_file', 'school_login', 'internet']);
@@ -469,6 +484,9 @@ describe('IWeekView — student review (R1)', () => {
         false
       )
     ).toThrow(/grade|points/i);
+    expect(() =>
+      assertNoGradeLeak({ ...WEEK, owed: [{ ...OWED, humanStatus: 'Graded 85%' }] }, false)
+    ).toThrow(/grade|percent/i);
     expect(() =>
       assertNoGradeLeak({ ...WEEK, doneThisWeek: [{ ...DONE, title: 'Essay 9/10' }] }, false)
     ).toThrow(/grade|points/i);

@@ -3,13 +3,14 @@
  *
  * Fake IWeekSource only. No Express, no grades router. Calendar-day bucketing
  * is done in the student's zone with date arithmetic, so DST never skips a day.
+ * The source never cuts the horizon; WeekGuide is the only ruler.
  */
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertNoGradeLeak, type IStudentSession } from '@scholaracle/contracts';
 import type { IDoneTask, IOpenTask, IWeekSource, IWin } from '@scholaracle/interfaces';
-import { MARKED_DONE_WARNING, WeekGuide } from './WeekGuide';
+import { MARKED_DONE_WARNING, PAST_DUE_LABEL, WeekGuide } from './WeekGuide';
 
 const SESSION_OFF: IStudentSession = {
   studentId: 'stu-emma',
@@ -85,6 +86,7 @@ describe('WeekGuide — owed', () => {
     ]);
     expect(view.counts.owed).toBe(4);
     expect(view.owed[0]?.warning).toBeUndefined();
+    expect(view.owed.every((i) => i.humanStatus === 'Not turned in')).toBe(true);
   });
 
   it('missing work due in the future (portal says missing) is still owed, never a day item', async () => {
@@ -98,10 +100,59 @@ describe('WeekGuide — owed', () => {
     expect(view.owed.map((i) => i.assignmentExternalId)).toEqual(['future-missing']);
     expect(view.days.every((d) => d.items.length === 0)).toBe(true);
   });
+
+  it('overdue work (past due, school has not said missing) is owed after missing, oldest first, as "Past due"', async () => {
+    const view = await load([
+      task({
+        assignmentExternalId: 'od-jan27',
+        kind: 'overdue',
+        dueAt: '2026-01-27T16:00:00.000Z',
+      }),
+      task({
+        assignmentExternalId: 'ms-jan28',
+        kind: 'missing',
+        dueAt: '2026-01-28T16:00:00.000Z',
+      }),
+      task({
+        assignmentExternalId: 'od-jan05',
+        kind: 'overdue',
+        dueAt: '2026-01-05T16:00:00.000Z',
+      }),
+      task({
+        assignmentExternalId: 'ms-jan10',
+        kind: 'missing',
+        dueAt: '2026-01-10T16:00:00.000Z',
+      }),
+    ]);
+    expect(view.owed.map((i) => [i.assignmentExternalId, i.humanStatus])).toEqual([
+      ['ms-jan10', 'Not turned in'],
+      ['ms-jan28', 'Not turned in'],
+      ['od-jan05', PAST_DUE_LABEL],
+      ['od-jan27', PAST_DUE_LABEL],
+    ]);
+    expect(PAST_DUE_LABEL).toBe('Past due');
+    expect(view.counts).toEqual({ owed: 4, due: 0, done: 0 });
+    expect(view.days.every((d) => d.items.length === 0)).toBe(true);
+  });
+
+  it('an overdue item the student marked done is pending in doneThisWeek, not owed (no portal verdict yet)', async () => {
+    const view = await load([
+      task({
+        assignmentExternalId: 'od-done',
+        kind: 'overdue',
+        dueAt: '2026-01-27T16:00:00.000Z',
+        studentStatus: 'done',
+      }),
+    ]);
+    expect(view.owed).toEqual([]);
+    expect(view.doneThisWeek.map((d) => [d.assignmentExternalId, d.confirmedBySchool])).toEqual([
+      ['od-done', false],
+    ]);
+  });
 });
 
 describe('WeekGuide — rolling 7 days', () => {
-  it('buckets by local day across a month boundary; beyond day 7 is dropped', async () => {
+  it('buckets by local day across a month boundary; beyond day 7 is dropped from every section and count', async () => {
     const view = await load([
       task({ assignmentExternalId: 'today', kind: 'due_soon', dueAt: '2026-01-29T20:00:00.000Z' }),
       task({
@@ -124,6 +175,11 @@ describe('WeekGuide — rolling 7 days', () => {
         assignmentExternalId: 'next-thu',
         kind: 'upcoming',
         dueAt: '2026-02-05T16:00:00.000Z',
+      }),
+      task({
+        assignmentExternalId: 'next-month',
+        kind: 'upcoming',
+        dueAt: '2026-03-01T16:00:00.000Z',
       }),
     ]);
     expect(view.days.map((d) => d.date)).toEqual([
@@ -153,8 +209,53 @@ describe('WeekGuide — rolling 7 days', () => {
       [],
       ['wed-early', 'wed-late'],
     ]);
-    expect(view.counts.due).toBe(5);
+    expect(view.counts).toEqual({ owed: 0, due: 5, done: 0 });
     expect(JSON.stringify(view)).not.toContain('next-thu');
+    expect(JSON.stringify(view)).not.toContain('next-month');
+    expect(view.days[0]?.items[0]?.humanStatus).toBe('Due soon');
+    expect(view.days[3]?.items[0]?.humanStatus).toBe('Coming up');
+  });
+
+  it('one ruler: inside 7×24h but on the 8th local day is dropped (Chicago, Mon 23:00 → next Mon 22:00)', async () => {
+    // Mon 2 Feb 2026 23:00 CST = 03 Feb 05:00Z; next Mon 22:00 CST = 10 Feb 04:00Z (6 d 23 h later).
+    const view = await load(
+      [task({ assignmentExternalId: 'eighth-day', dueAt: '2026-02-10T04:00:00.000Z' })],
+      [],
+      { now: new Date('2026-02-03T05:00:00.000Z'), timeZone: 'America/Chicago' }
+    );
+    expect(view.days.map((d) => d.date)).toEqual([
+      '2026-02-02',
+      '2026-02-03',
+      '2026-02-04',
+      '2026-02-05',
+      '2026-02-06',
+      '2026-02-07',
+      '2026-02-08',
+    ]);
+    expect(JSON.stringify(view)).not.toContain('eighth-day');
+    expect(view.counts).toEqual({ owed: 0, due: 0, done: 0 });
+  });
+
+  it('one ruler: DST fall-back keeps the 7th local day even when it is more than 7×24h away', async () => {
+    // Sat 31 Oct 2026 23:30 CDT = 01 Nov 04:30Z. DST ends 1 Nov. Fri 6 Nov 23:00 CST = 07 Nov 05:00Z,
+    // which is 7 d 0 h 30 m after now — a 7×24h cut would have dropped it.
+    const view = await load(
+      [task({ assignmentExternalId: 'seventh-day', dueAt: '2026-11-07T05:00:00.000Z' })],
+      [],
+      { now: new Date('2026-11-01T04:30:00.000Z'), timeZone: 'America/Chicago' }
+    );
+    expect(view.days.map((d) => d.date)).toEqual([
+      '2026-10-31',
+      '2026-11-01',
+      '2026-11-02',
+      '2026-11-03',
+      '2026-11-04',
+      '2026-11-05',
+      '2026-11-06',
+    ]);
+    expect(view.days[6]?.label).toBe('Fri');
+    expect(view.days[6]?.items.map((i) => i.assignmentExternalId)).toEqual(['seventh-day']);
+    expect(view.counts.due).toBe(1);
   });
 
   it.each([
@@ -252,6 +353,7 @@ describe('WeekGuide — done', () => {
     ]);
     expect(view.owed).toHaveLength(1);
     expect(view.owed[0]?.studentStatus).toBe('done');
+    expect(view.owed[0]?.humanStatus).toBe('Not turned in');
     expect(view.owed[0]?.warning).toBe(MARKED_DONE_WARNING);
     expect(view.owed[0]?.warning).toBe('Marked done, but the school shows not turned in');
     expect(view.doneThisWeek).toEqual([]);
@@ -309,7 +411,7 @@ describe('WeekGuide — done', () => {
 });
 
 describe('WeekGuide — item fields', () => {
-  it('carries studentStatus and needs; absent means not started and nothing needed', async () => {
+  it('carries humanStatus, studentStatus and needs; absent means not started and nothing needed', async () => {
     const view = await load([
       task({
         assignmentExternalId: 'help',
@@ -326,6 +428,7 @@ describe('WeekGuide — item fields', () => {
       title: 'Task help',
       courseName: 'AP Biology',
       dueAt: '2026-01-29T20:00:00.000Z',
+      humanStatus: 'Due soon',
       studentStatus: 'need_help',
       needs: ['saved_file', 'school_login'],
       primaryCtaLabel: 'Open worksheet',
@@ -333,6 +436,28 @@ describe('WeekGuide — item fields', () => {
     expect(view.owed[0]?.studentStatus).toBe('not_started');
     expect(view.owed[0]?.needs).toEqual([]);
     expect(view.owed[0]).not.toHaveProperty('dueAt');
+  });
+
+  it('reads the three source ports once each, in parallel', async () => {
+    const order: string[] = [];
+    const slow = <T>(name: string, value: T): (() => Promise<T>) => {
+      return () =>
+        new Promise<T>((resolve) => {
+          order.push(`${name}:start`);
+          setTimeout(() => {
+            order.push(`${name}:end`);
+            resolve(value);
+          }, 5);
+        });
+    };
+    const source: IWeekSource = {
+      recentWins: slow('wins', [] as readonly IWin[]),
+      openTasks: slow('tasks', [] as readonly IOpenTask[]),
+      doneThisWeek: slow('done', [] as readonly IDoneTask[]),
+    };
+    await new WeekGuide(source).load(SESSION_OFF, NOW);
+    expect(order.slice(0, 3)).toEqual(['wins:start', 'tasks:start', 'done:start']);
+    expect(order).toHaveLength(6);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { ICourseMaterial, WeekNeed } from '@scholaracle/contracts';
+import { isHostedMaterial } from './resourcePartition';
 import { isSchoolLoginHost } from './urlHost';
 
 /**
@@ -18,7 +19,7 @@ export function deriveTaskNeeds(
 ): WeekNeed[] {
   const needs = new Set<WeekNeed>();
   for (const material of forAssignment) {
-    if (isHosted(material)) {
+    if (isHostedMaterial(material)) {
       needs.add('saved_file');
       continue;
     }
@@ -38,8 +39,3 @@ export function deriveTaskNeeds(
 }
 
 const ORDER: readonly WeekNeed[] = ['saved_file', 'school_login', 'internet'];
-
-function isHosted(material: ICourseMaterial): boolean {
-  if (material.downloadUrl !== undefined && material.downloadUrl !== '') return true;
-  return Boolean(material.assetId) && Boolean(material.contentHash);
-}

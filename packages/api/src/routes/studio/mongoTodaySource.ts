@@ -2,12 +2,13 @@ import type { Db, Document } from 'mongodb';
 import type { Student } from '@scholaracle/database';
 import { STUDENT_STATUSES, type ICourseMaterial, type StudentStatus } from '@scholaracle/contracts';
 import type { IDoneTask, IOpenTask, IWeekSource, IWin } from '@scholaracle/interfaces';
-import { deriveTaskNeeds } from '@scholaracle/studio-core';
+import { deriveTaskNeeds, isHostedMaterial } from '@scholaracle/studio-core';
 import { loadStudentMaterials } from '../../services/materials/loadStudentMaterials';
 import { slcStudentFilter } from './studioScope';
 import {
   DONE_STATUSES,
   classifyOpenTask,
+  normalizeStatus,
   studioPrimaryCtaLabel,
   toIsoDate,
 } from './studioTaskClassify';
@@ -17,6 +18,7 @@ export interface IMongoTodaySourceConfig {
   readonly student: Student;
   readonly baseUrl: string;
   readonly jwtSecret?: string;
+  /** The request's single clock; the route passes the same instant to the composer. */
   readonly now?: Date;
 }
 
@@ -46,25 +48,11 @@ function parseStudentStatus(value: unknown): StudentStatus | undefined {
 
 type Materials = Awaited<ReturnType<typeof loadStudentMaterials>>;
 
-function hostedMimeByAssignment(materials: Materials): Map<string, string | undefined> {
-  const hosted = new Map<string, string | undefined>();
-  for (const course of materials.courses) {
-    for (const material of course.materials) {
-      const assignmentId = material.assignmentExternalId;
-      if (assignmentId === null || assignmentId === '') continue;
-      if (material.assetId === undefined || material.assetId === '') continue;
-      if (material.contentHash === undefined || material.contentHash === '') continue;
-      if (!hosted.has(assignmentId)) {
-        hosted.set(assignmentId, material.mimeType);
-      }
-    }
-  }
-  return hosted;
-}
-
 /**
- * The work-pack partition, keyed by assignment, from the one materials load
- * Today already does. Course-scoped materials (null assignment) are not needs.
+ * The work-pack partition, keyed by assignment, built once from the one
+ * materials load Today already does. Hosted file and mime come from the same
+ * list via `isHostedMaterial`, so the CTA label and `needs` cannot disagree.
+ * Course-scoped materials (null assignment) are not needs.
  */
 function materialsByAssignment(materials: Materials): Map<string, ICourseMaterial[]> {
   const byAssignment = new Map<string, ICourseMaterial[]>();
@@ -78,6 +66,18 @@ function materialsByAssignment(materials: Materials): Map<string, ICourseMateria
     }
   }
   return byAssignment;
+}
+
+/**
+ * When the portal says the work was finished. Never guess from the due date:
+ * submittedAt, else gradedAt, else — only when the student also marked it
+ * done — the document's last update. No evidence, no "this week".
+ */
+function finishedAt(doc: Document, rec: Record<string, unknown> | undefined): string | undefined {
+  const fromPortal = toIsoDate(rec?.['submittedAt']) ?? toIsoDate(rec?.['gradedAt']);
+  if (fromPortal !== undefined) return fromPortal;
+  if (parseStudentStatus(doc['studentStatus']) !== 'done') return undefined;
+  return toIsoDate(doc['updatedAt']);
 }
 
 export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSource {
@@ -109,7 +109,7 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSo
       const wins: IWin[] = [];
       for (const doc of assignmentDocs) {
         const rec = asRecord(doc['record']);
-        if (str(rec?.['status']).toLowerCase() !== 'graded') continue;
+        if (normalizeStatus(rec?.['status']) !== 'graded') continue;
         const title = str(rec?.['title']);
         if (title === '') continue;
         const courseExternalId = str(doc['courseExternalId']);
@@ -143,20 +143,20 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSo
           jwtSecret: config.jwtSecret,
         }),
       ]);
-      const hosted = hostedMimeByAssignment(materials);
       const linked = materialsByAssignment(materials);
       const tasks: IOpenTask[] = [];
       for (const doc of assignmentDocs) {
         const rec = asRecord(doc['record']);
         const dueIso = toIsoDate(rec?.['dueAt']);
         const dueAt = dueIso !== undefined ? new Date(dueIso) : undefined;
-        const kind = classifyOpenTask(str(rec?.['status']), dueAt, now);
+        const kind = classifyOpenTask(normalizeStatus(rec?.['status']), dueAt, now);
         if (kind === null) continue;
         const assignmentExternalId = str(doc['externalId']);
         const title = str(rec?.['title']);
         if (assignmentExternalId === '' || title === '') continue;
         const courseExternalId = str(doc['courseExternalId']);
-        const mime = hosted.get(assignmentExternalId);
+        const forAssignment = linked.get(assignmentExternalId) ?? [];
+        const hosted = forAssignment.find(isHostedMaterial);
         const studentStatus = parseStudentStatus(doc['studentStatus']);
         const lmsUrl = str(rec?.['url']);
         tasks.push({
@@ -165,11 +165,8 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSo
           title,
           courseName: courseNames.get(courseExternalId) ?? courseExternalId,
           courseExternalId,
-          primaryCtaLabel: studioPrimaryCtaLabel(hosted.has(assignmentExternalId), mime),
-          needs: deriveTaskNeeds(
-            linked.get(assignmentExternalId) ?? [],
-            lmsUrl !== '' ? lmsUrl : undefined
-          ),
+          primaryCtaLabel: studioPrimaryCtaLabel(hosted !== undefined, hosted?.mimeType),
+          needs: deriveTaskNeeds(forAssignment, lmsUrl !== '' ? lmsUrl : undefined),
           ...(dueIso !== undefined ? { dueAt: dueIso } : {}),
           ...(studentStatus !== undefined ? { studentStatus } : {}),
         });
@@ -182,12 +179,12 @@ export function createMongoTodaySource(config: IMongoTodaySourceConfig): IWeekSo
       const finished: IDoneTask[] = [];
       for (const doc of assignmentDocs) {
         const rec = asRecord(doc['record']);
-        if (!DONE_STATUSES.has(str(rec?.['status']).toLowerCase())) continue;
-        const dueAt = toIsoDate(rec?.['dueAt']);
-        const doneAt = toIsoDate(rec?.['submittedAt']) ?? toIsoDate(rec?.['gradedAt']) ?? dueAt;
+        if (!DONE_STATUSES.has(normalizeStatus(rec?.['status']))) continue;
+        const doneAt = finishedAt(doc, rec);
         const assignmentExternalId = str(doc['externalId']);
         const title = str(rec?.['title']);
         if (doneAt === undefined || assignmentExternalId === '' || title === '') continue;
+        const dueAt = toIsoDate(rec?.['dueAt']);
         const courseExternalId = str(doc['courseExternalId']);
         finished.push({
           assignmentExternalId,

@@ -175,6 +175,20 @@ describe('TodayGuide', () => {
     expect(alone.encouragement).toMatch(/caught up/i);
   });
 
+  it('ignores overdue tasks the portal has not called missing — This week owns them', async () => {
+    const overdue: IOpenTask = {
+      ...ESSAY,
+      kind: 'overdue',
+      assignmentExternalId: 'demo-emma-eng10-overdue',
+      dueAt: '2026-08-20T16:00:00.000Z',
+    };
+    const view = await new TodayGuide(fakeSource([], [overdue, VOCAB])).load(SESSION_OFF);
+    expect(view.next?.assignmentExternalId).toBe('demo-emma-span2-vocab');
+    expect(view.alsoToday).toEqual([]);
+    const alone = await new TodayGuide(fakeSource([], [overdue])).load(SESSION_OFF);
+    expect(alone.next).toBeNull();
+  });
+
   it('next is never an array (runtime)', async () => {
     const view = await new TodayGuide(fakeSource([], [CELL_DIVISION, VOCAB])).load(SESSION_OFF);
     expect(Array.isArray(view.next)).toBe(false);

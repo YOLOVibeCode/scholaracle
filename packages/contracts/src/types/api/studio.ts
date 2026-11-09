@@ -55,11 +55,16 @@ export const WEEK_ITEM_KEYS = [
   'title',
   'courseName',
   'dueAt',
+  'humanStatus',
   'studentStatus',
   'needs',
   'primaryCtaLabel',
   'warning',
 ] as const;
+
+export const WEEK_ITEM_OPTIONAL_KEYS = ['dueAt', 'warning'] as const;
+
+export const WEEK_DAY_KEYS = ['date', 'label', 'items'] as const;
 
 export const WEEK_DONE_KEYS = [
   'assignmentExternalId',
@@ -67,6 +72,23 @@ export const WEEK_DONE_KEYS = [
   'courseName',
   'dueAt',
   'confirmedBySchool',
+] as const;
+
+export const WEEK_DONE_OPTIONAL_KEYS = ['dueAt'] as const;
+
+export const WEEK_COUNT_KEYS = ['owed', 'due', 'done'] as const;
+
+/** Today, Tomorrow, then short weekday names. */
+export const WEEK_DAY_LABELS = [
+  'Today',
+  'Tomorrow',
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
 ] as const;
 
 /** What the student says about an assignment (`PATCH /api/studio/assignments/:id/status`). */
@@ -79,8 +101,7 @@ export const WEEK_NEEDS = ['saved_file', 'school_login', 'internet'] as const;
 
 export type WeekNeed = (typeof WEEK_NEEDS)[number];
 
-export type WeekDayLabel =
-  'Today' | 'Tomorrow' | 'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat';
+export type WeekDayLabel = (typeof WEEK_DAY_LABELS)[number];
 
 /** Student login context. Grades stay a boolean flag, never a gradebook. */
 export interface IStudentSession {
@@ -111,6 +132,8 @@ export interface IWeekItem {
   readonly title: string;
   readonly courseName: string;
   readonly dueAt?: string;
+  /** Student-facing English for where the school stands: "Not turned in", "Past due", … */
+  readonly humanStatus: string;
   readonly studentStatus: StudentStatus;
   readonly needs: readonly WeekNeed[];
   readonly primaryCtaLabel: string;
@@ -428,14 +451,19 @@ function parseCount(value: unknown, label: string): number {
   return value;
 }
 
+/** Required wire keys = all keys minus the optional ones, so the lists never drift. */
+function requiredKeys(all: readonly string[], optional: readonly string[]): readonly string[] {
+  return all.filter((key) => !optional.includes(key));
+}
+
 function parseWeekItem(value: unknown, label: string): IWeekItem {
   if (!isRecord(value)) {
     throw new ValidationError(`Invalid ${label}: expected object`);
   }
   unexpectedOrMissing(
     value,
-    ['assignmentExternalId', 'title', 'courseName', 'studentStatus', 'needs', 'primaryCtaLabel'],
-    ['dueAt', 'warning'],
+    requiredKeys(WEEK_ITEM_KEYS, WEEK_ITEM_OPTIONAL_KEYS),
+    WEEK_ITEM_OPTIONAL_KEYS,
     label
   );
   const needs = parseArray(value['needs'], `${label}.needs`).map((need, i) =>
@@ -448,6 +476,7 @@ function parseWeekItem(value: unknown, label: string): IWeekItem {
     ),
     title: parseString(value['title'], `${label}.title`),
     courseName: parseString(value['courseName'], `${label}.courseName`),
+    humanStatus: parseString(value['humanStatus'], `${label}.humanStatus`),
     studentStatus: parseOneOf(value['studentStatus'], STUDENT_STATUSES, `${label}.studentStatus`),
     needs,
     primaryCtaLabel: parseString(value['primaryCtaLabel'], `${label}.primaryCtaLabel`),
@@ -460,23 +489,11 @@ function parseWeekItem(value: unknown, label: string): IWeekItem {
   };
 }
 
-const WEEK_DAY_LABELS: readonly WeekDayLabel[] = [
-  'Today',
-  'Tomorrow',
-  'Sun',
-  'Mon',
-  'Tue',
-  'Wed',
-  'Thu',
-  'Fri',
-  'Sat',
-];
-
 function parseWeekDay(value: unknown, label: string): IWeekDay {
   if (!isRecord(value)) {
     throw new ValidationError(`Invalid ${label}: expected object`);
   }
-  unexpectedOrMissing(value, ['date', 'label', 'items'], [], label);
+  unexpectedOrMissing(value, WEEK_DAY_KEYS, [], label);
   return {
     date: parseString(value['date'], `${label}.date`),
     label: parseOneOf(value['label'], WEEK_DAY_LABELS, `${label}.label`),
@@ -492,8 +509,8 @@ function parseWeekDone(value: unknown, label: string): IWeekDone {
   }
   unexpectedOrMissing(
     value,
-    ['assignmentExternalId', 'title', 'courseName', 'confirmedBySchool'],
-    ['dueAt'],
+    requiredKeys(WEEK_DONE_KEYS, WEEK_DONE_OPTIONAL_KEYS),
+    WEEK_DONE_OPTIONAL_KEYS,
     label
   );
   if (typeof value['confirmedBySchool'] !== 'boolean') {
@@ -517,7 +534,7 @@ function parseWeekCounts(value: unknown, label: string): IWeekCounts {
   if (!isRecord(value)) {
     throw new ValidationError(`Invalid ${label}: expected object`);
   }
-  unexpectedOrMissing(value, ['owed', 'due', 'done'], [], label);
+  unexpectedOrMissing(value, WEEK_COUNT_KEYS, [], label);
   return {
     owed: parseCount(value['owed'], `${label}.owed`),
     due: parseCount(value['due'], `${label}.due`),
@@ -532,7 +549,7 @@ export function parseWeekView(input: unknown): IWeekView {
   if (!isRecord(input)) {
     throw new ValidationError('Invalid IWeekView: expected object');
   }
-  unexpectedOrMissing(input, [...WEEK_VIEW_KEYS], [], 'IWeekView');
+  unexpectedOrMissing(input, WEEK_VIEW_KEYS, [], 'IWeekView');
   return {
     encouragement: parseString(input['encouragement'], 'IWeekView.encouragement'),
     owed: parseArray(input['owed'], 'IWeekView.owed').map((item, i) =>
@@ -569,7 +586,10 @@ function scanWeekView(view: IWeekView, showGrades: boolean): void {
   scanCopy(view.encouragement, showGrades);
   const items = [...view.owed, ...view.days.flatMap((day) => day.items)];
   for (const item of items) {
-    scanCopy(`${item.title} ${item.primaryCtaLabel} ${item.warning ?? ''}`, showGrades);
+    scanCopy(
+      `${item.title} ${item.humanStatus} ${item.primaryCtaLabel} ${item.warning ?? ''}`,
+      showGrades
+    );
   }
   for (const done of view.doneThisWeek) {
     scanCopy(done.title, showGrades);

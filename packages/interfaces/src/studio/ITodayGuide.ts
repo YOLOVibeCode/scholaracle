@@ -14,10 +14,12 @@ import type {
 export type WinKind = 'graded' | 'opened_pack' | 'on_time_streak';
 
 /**
- * `missing` and `due_soon` feed Today. `upcoming` is open work due within the
- * next 7 days but beyond the due-soon window; Today ignores it, This week shows it.
+ * `missing` and `due_soon` feed Today. `upcoming` is any other open work due
+ * later (the adapter does not cut it; WeekGuide keeps the next 7 local days).
+ * `overdue` is open work past its due date that the portal has NOT flagged
+ * missing/late. Today ignores `upcoming` and `overdue`; This week shows both.
  */
-export type OpenTaskKind = 'missing' | 'due_soon' | 'upcoming';
+export type OpenTaskKind = 'missing' | 'overdue' | 'due_soon' | 'upcoming';
 
 export interface IWin {
   readonly kind: WinKind;

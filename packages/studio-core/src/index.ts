@@ -1,7 +1,13 @@
 export { TodayGuide } from './TodayGuide';
-export { WeekGuide, MARKED_DONE_WARNING, type IWeekGuideOptions } from './WeekGuide';
+export {
+  WeekGuide,
+  MARKED_DONE_WARNING,
+  PAST_DUE_LABEL,
+  type IWeekGuideOptions,
+} from './WeekGuide';
 export { encouragementLine } from './encouragement';
 export { deriveTaskNeeds } from './taskNeeds';
+export { dueAtMs, compareByDueAsc, sortByDueAsc, type IHasDueAt } from './dueOrder';
 export { buildWeekDays, calendarDayOffset, localDayOf, isValidTimeZone } from './weekDays';
 export { GuidanceLadder, resolveLadderStep, isQuietHour } from './guidance/GuidanceLadder';
 export type {
@@ -22,6 +28,7 @@ export {
 } from './descriptionLinks';
 export {
   partitionMaterials,
+  isHostedMaterial,
   classifyResource,
   type IMaterialPartition,
   type IResourceLink,
