@@ -13,6 +13,31 @@ import { ValidationError } from '../../errors';
 
 export const STUDENT_SESSION_KEYS = ['studentId', 'displayName', 'showGrades'] as const;
 
+/** Statuses a student may set on one of their assignments. */
+export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'done'] as const;
+export type StudentStatus = (typeof STUDENT_STATUSES)[number];
+
+/** Decision §6 Q3 (student review spec): the note on "Need help" is at most 140 characters. */
+export const STUDENT_HELP_NOTE_MAX_CHARS = 140;
+
+/** Body of `PATCH /api/studio/assignments/:assignmentExternalId/status`. */
+export interface IStudentStatusUpdateRequest {
+  readonly status: StudentStatus | null;
+  /** Travels with the need_help alert. Trimmed; at most STUDENT_HELP_NOTE_MAX_CHARS. */
+  readonly note?: string;
+}
+
+/** Response of the status PATCH. `notified`/`nextAllowedAt` appear only for need_help. */
+export interface IStudentStatusUpdateResponse {
+  readonly success: true;
+  readonly studentStatus: StudentStatus | null;
+  readonly studentNote?: string;
+  /** need_help: true when the adults were told this time; false when rate-limited. */
+  readonly notified?: boolean;
+  /** need_help, when rate-limited: ISO time the next alert may go out (24 h window). */
+  readonly nextAllowedAt?: string;
+}
+
 export const NEXT_STEP_KEYS = [
   'assignmentExternalId',
   'title',

@@ -9,6 +9,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   STUDENT_SESSION_KEYS,
+  STUDENT_STATUSES,
+  STUDENT_HELP_NOTE_MAX_CHARS,
   TODAY_VIEW_KEYS,
   WORK_PACK_VIEW_KEYS,
   NEXT_STEP_KEYS,
@@ -22,6 +24,8 @@ import {
   parseWeekView,
   assertNoGradeLeak,
   type IStudentSession,
+  type IStudentStatusUpdateRequest,
+  type IStudentStatusUpdateResponse,
   type ITodayView,
   type IWorkPackView,
   type INextStep,
@@ -30,6 +34,28 @@ import {
   type IWeekItem,
   type IWeekView,
 } from './studio';
+
+describe('student status PATCH contract (student review R3)', () => {
+  it('lists the four student statuses and caps the need-help note at 140 characters', () => {
+    expect([...STUDENT_STATUSES]).toEqual(['not_started', 'working_on_it', 'need_help', 'done']);
+    expect(STUDENT_HELP_NOTE_MAX_CHARS).toBe(140);
+  });
+
+  it('request carries status plus an optional note; response reports notified/nextAllowedAt', () => {
+    const request: IStudentStatusUpdateRequest = { status: 'need_help', note: "I don't get #7" };
+    const limited: IStudentStatusUpdateResponse = {
+      success: true,
+      studentStatus: 'need_help',
+      studentNote: request.note,
+      notified: false,
+      nextAllowedAt: '2026-11-10T18:00:00.000Z',
+    };
+    const plain: IStudentStatusUpdateResponse = { success: true, studentStatus: 'done' };
+    expect(Object.keys(request)).toEqual(['status', 'note']);
+    expect(limited.notified).toBe(false);
+    expect(plain.notified).toBeUndefined();
+  });
+});
 import type { ICourseMaterial } from './materials';
 
 const NEXT: INextStep = {
