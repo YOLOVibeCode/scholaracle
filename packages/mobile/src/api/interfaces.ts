@@ -14,7 +14,10 @@ import type {
   IAuthLoginResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
+  StudentStatus,
   ISourceInviteIssueRequest,
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
@@ -31,11 +34,13 @@ export interface IAuthSession {
 /** Student studio slice. Parent screens must not depend on this. */
 export interface IStudioApi {
   getStudioToday(): Promise<ITodayView>;
+  getStudioWeek(): Promise<IWeekView>;
   getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView>;
   patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-  ): Promise<void>;
+    status: StudentStatus | null,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse>;
 }
 
 export interface IConnectorTokenProvider {

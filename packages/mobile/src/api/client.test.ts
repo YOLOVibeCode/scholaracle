@@ -1018,6 +1018,81 @@ describe('ScholarmancyApiClient auth', () => {
       expect(call[1].method).toBe('PATCH');
       expect(JSON.parse(call[1].body)).toEqual({ status: 'working_on_it' });
     });
+
+    it('patchStudioAssignmentStatus sends a trimmed note only when there is one, and parses the answer', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence(
+        { status: 200, body: { success: true, studentStatus: 'need_help', notified: true } },
+        {
+          status: 200,
+          body: {
+            success: true,
+            studentStatus: 'need_help',
+            notified: false,
+            nextAllowedAt: '2026-11-10T18:00:00.000Z',
+          },
+        },
+        { status: 200, body: { success: true, studentStatus: 'done' } }
+      );
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', "  I don't get #7 ")
+      ).resolves.toEqual({ success: true, studentStatus: 'need_help', notified: true });
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', '   ')
+      ).resolves.toMatchObject({ notified: false, nextAllowedAt: '2026-11-10T18:00:00.000Z' });
+      // An older server answers without `notified`; the client does not invent it.
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'done', undefined)
+      ).resolves.toEqual({ success: true, studentStatus: 'done' });
+      const bodies = fetchMock.mock.calls.map((c) =>
+        JSON.parse((c as [string, { body: string }])[1].body)
+      );
+      expect(bodies).toEqual([
+        { status: 'need_help', note: "I don't get #7" },
+        { status: 'need_help' },
+        { status: 'done' },
+      ]);
+    });
+
+    const week = {
+      encouragement: 'Nice work on Reading response 8.',
+      owed: [
+        {
+          assignmentExternalId: 'demo-emma-alg2-missing-1',
+          title: 'Missing assignment 1',
+          courseName: 'Algebra II',
+          dueAt: '2026-11-05T16:00:00.000Z',
+          humanStatus: 'Not turned in',
+          studentStatus: 'not_started',
+          needs: ['saved_file'],
+          primaryCtaLabel: 'Open worksheet',
+        },
+      ],
+      days: [{ date: '2026-11-09', label: 'Today', items: [] }],
+      doneThisWeek: [],
+      counts: { owed: 1, due: 0, done: 0 },
+    };
+
+    it('getStudioWeek GETs /api/studio/week and parses the view', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: week });
+      await expect(client.getStudioWeek()).resolves.toEqual(week);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/studio/week`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+    });
+
+    it('getStudioWeek rejects a payload carrying a score', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({
+        status: 200,
+        body: { ...week, owed: [{ ...week.owed[0], percent: '92%' }] },
+      });
+      await expect(client.getStudioWeek()).rejects.toThrow(/unexpected percent/);
+    });
   });
 });
 

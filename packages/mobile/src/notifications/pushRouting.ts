@@ -7,6 +7,7 @@
  * Push `data` comes from the server (ExpoPushDelivery.buildPushData): `studentId` (the student's
  * Mongo id, i.e. IStudentListItem.id), and optionally `assignmentId` / `courseId` / `alertId`.
  * Older builds of the server send only `notificationId` and `type`; those fall back to home.
+ * A student push with `type: 'weekly_review'` (R4) opens This week.
  */
 
 import type {
@@ -18,8 +19,12 @@ import type {
 } from '@scholaracle/contracts';
 import { homeViewForRole, isStudentSession } from '../studio/studentMode';
 
+/** `data.type` of the weekly review push (student review spec §3.3). */
+export const WEEKLY_REVIEW_PUSH_TYPE = 'weekly_review';
+
 export type PushTarget =
   | { readonly kind: 'home' }
+  | { readonly kind: 'week' }
   | { readonly kind: 'student'; readonly studentId: string }
   | { readonly kind: 'course'; readonly studentId: string; readonly courseId: string }
   | {
@@ -41,13 +46,19 @@ function str(data: Readonly<Record<string, unknown>>, key: string): string | und
 
 /**
  * Decide the target for a tap. Returns null when nothing should happen (signed out). Student
- * sessions always go home (Today): they have no dashboard/course/assignment views.
+ * sessions go home (Today), or to This week for a weekly review push: they have no
+ * dashboard/course/assignment views.
  */
 export function planPushNavigation(data: unknown, session: IPushSession): PushTarget | null {
   if (!session.isLoggedIn) return null;
-  if (isStudentSession(session.role)) return { kind: 'home' };
-  if (!data || typeof data !== 'object') return { kind: 'home' };
-  const d = data as Readonly<Record<string, unknown>>;
+  const d =
+    data && typeof data === 'object' ? (data as Readonly<Record<string, unknown>>) : undefined;
+  if (isStudentSession(session.role)) {
+    return d !== undefined && str(d, 'type') === WEEKLY_REVIEW_PUSH_TYPE
+      ? { kind: 'week' }
+      : { kind: 'home' };
+  }
+  if (d === undefined) return { kind: 'home' };
   const studentId = str(d, 'studentId');
   if (!studentId) return { kind: 'home' };
   const assignmentId = str(d, 'assignmentId');
@@ -63,7 +74,8 @@ export function planPushNavigation(data: unknown, session: IPushSession): PushTa
 
 /** The slice of the app's nav state a push can set. */
 export interface IPushNavResult {
-  readonly view: 'students' | 'today' | 'dashboard' | 'course-detail' | 'assignment-detail';
+  readonly view:
+    'students' | 'today' | 'week' | 'dashboard' | 'course-detail' | 'assignment-detail';
   readonly student?: IStudentListItem;
   readonly course?: ICourseGrade;
   readonly assignment?: ICourseGradeAssignment;
@@ -87,6 +99,7 @@ export async function resolvePushNav(
 ): Promise<IPushNavResult> {
   const home: IPushNavResult = { view: homeViewForRole(role) };
   if (target.kind === 'home') return home;
+  if (target.kind === 'week') return isStudentSession(role) ? { view: 'week' } : home;
   try {
     const students = await api.getStudents();
     const student = students.find((s) => s.id === target.studentId);

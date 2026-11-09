@@ -21,6 +21,21 @@ describe('planPushNavigation', () => {
     expect(
       planPushNavigation({ studentId: 's1', assignmentId: 'a1', courseId: 'c1' }, student)
     ).toEqual({ kind: 'home' });
+    expect(planPushNavigation(undefined, student)).toEqual({ kind: 'home' });
+    expect(planPushNavigation({ type: 'deadline' }, student)).toEqual({ kind: 'home' });
+  });
+
+  it('opens This week for a student weekly review push; parents never route there', () => {
+    expect(planPushNavigation({ type: 'weekly_review', studentId: 's1' }, student)).toEqual({
+      kind: 'week',
+    });
+    expect(planPushNavigation({ type: ' weekly_review ' }, student)).toEqual({ kind: 'week' });
+    expect(planPushNavigation({ type: 'weekly_review' }, parent)).toEqual({ kind: 'home' });
+    expect(planPushNavigation({ type: 'weekly_review', studentId: 's1' }, parent)).toEqual({
+      kind: 'student',
+      studentId: 's1',
+    });
+    expect(planPushNavigation({ type: 'weekly_review' }, { isLoggedIn: false })).toBeNull();
   });
 
   it('routes to an assignment, with and without a course id', () => {
@@ -103,6 +118,13 @@ describe('resolvePushNav', () => {
     const api = makeApi();
     expect(await resolvePushNav({ kind: 'home' }, 'parent', api)).toEqual({ view: 'students' });
     expect(await resolvePushNav({ kind: 'home' }, 'student', api)).toEqual({ view: 'today' });
+    expect(api.getStudents).not.toHaveBeenCalled();
+  });
+
+  it('This week needs no network and stays student-only', async () => {
+    const api = makeApi();
+    expect(await resolvePushNav({ kind: 'week' }, 'student', api)).toEqual({ view: 'week' });
+    expect(await resolvePushNav({ kind: 'week' }, 'parent', api)).toEqual({ view: 'students' });
     expect(api.getStudents).not.toHaveBeenCalled();
   });
 

@@ -27,7 +27,10 @@ import type {
   IAuthRefreshResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
+  StudentStatus,
   IPushTokenRequest,
   IConnectorTokenResponse,
   IPendingSyncRequestsResponse,
@@ -48,7 +51,13 @@ import type {
   IUserSettingsResponse,
   IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
-import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
+import {
+  parseStudentStatusUpdateResponse,
+  parseTodayView,
+  parseWeekView,
+  parseWorkPackView,
+  studioStatusPatchBody,
+} from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
@@ -420,6 +429,11 @@ export class ScholarmancyApiClient {
     return parseTodayView(await this._get<unknown>('/api/studio/today'));
   }
 
+  /** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+  async getStudioWeek(): Promise<IWeekView> {
+    return parseWeekView(await this._get<unknown>('/api/studio/week'));
+  }
+
   async getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView> {
     return parseWorkPackView(
       await this._get<unknown>(
@@ -428,13 +442,21 @@ export class ScholarmancyApiClient {
     );
   }
 
+  /**
+   * PATCH /api/studio/assignments/:id/status. The body comes from the shared
+   * builder (a non-empty note rides along with need_help); the answer says
+   * whether the adults were told, when the server is new enough to know.
+   */
   async patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-  ): Promise<void> {
-    await this._patch(
-      `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-      { status }
+    status: StudentStatus | null,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse> {
+    return parseStudentStatusUpdateResponse(
+      await this._patch<unknown>(
+        `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+        studioStatusPatchBody(status, note)
+      )
     );
   }
 

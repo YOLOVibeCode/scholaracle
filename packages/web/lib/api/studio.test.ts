@@ -1,5 +1,6 @@
 import {
   fetchStudioToday,
+  fetchStudioWeek,
   fetchStudioWorkPack,
   patchStudioAssignmentStatus,
   StudioAuthError,
@@ -93,9 +94,92 @@ describe('studio API client', () => {
     );
   });
 
-  it('PATCHes working_on_it', async () => {
-    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ success: true }, 200));
-    await patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'working_on_it');
+  const WEEK = {
+    encouragement: 'Nice work on Reading response 8.',
+    owed: [
+      {
+        assignmentExternalId: 'demo-emma-alg2-missing-1',
+        title: 'Missing assignment 1',
+        courseName: 'Algebra II',
+        dueAt: '2026-11-05T16:00:00.000Z',
+        humanStatus: 'Not turned in',
+        studentStatus: 'not_started',
+        needs: ['saved_file'],
+        primaryCtaLabel: 'Open worksheet',
+      },
+    ],
+    days: [{ date: '2026-11-09', label: 'Today', items: [] }],
+    doneThisWeek: [],
+    counts: { owed: 1, due: 0, done: 0 },
+  };
+
+  it('loads This week with the student bearer token and parses it', async () => {
+    global.fetch = jest.fn().mockResolvedValue(fakeResponse(WEEK));
+    const view = await fetchStudioWeek('emma-jwt');
+    expect(view.owed[0]?.assignmentExternalId).toBe('demo-emma-alg2-missing-1');
+    expect(view.counts).toEqual({ owed: 1, due: 0, done: 0 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:2801/api/studio/week',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer emma-jwt' }),
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('This week rejects a score on an item and 403 as StudioAuthError', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(fakeResponse({ ...WEEK, owed: [{ ...WEEK.owed[0], percent: '92%' }] }));
+    await expect(fetchStudioWeek('emma-jwt')).rejects.toThrow(/unexpected percent/);
+    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ error: 'no' }, 403));
+    await expect(fetchStudioWeek('parent-jwt')).rejects.toBeInstanceOf(StudioAuthError);
+  });
+
+  it('PATCHes need_help with a trimmed note, omits a blank one, and returns the parsed answer', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        fakeResponse({ success: true, studentStatus: 'need_help', notified: true }, 200)
+      )
+      .mockResolvedValueOnce(
+        fakeResponse(
+          {
+            success: true,
+            studentStatus: 'need_help',
+            notified: false,
+            nextAllowedAt: '2026-11-10T18:00:00.000Z',
+          },
+          200
+        )
+      );
+    await expect(
+      patchStudioAssignmentStatus(
+        'emma-jwt',
+        'demo-emma-ap-bio-a5',
+        'need_help',
+        " I don't get #7 "
+      )
+    ).resolves.toEqual({ success: true, studentStatus: 'need_help', notified: true });
+    await expect(
+      patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'need_help', '   ')
+    ).resolves.toMatchObject({ notified: false, nextAllowedAt: '2026-11-10T18:00:00.000Z' });
+    const bodies = (global.fetch as jest.Mock).mock.calls.map((c: [string, RequestInit]) =>
+      JSON.parse(c[1].body as string)
+    );
+    expect(bodies).toEqual([
+      { status: 'need_help', note: "I don't get #7" },
+      { status: 'need_help' },
+    ]);
+  });
+
+  it('PATCHes working_on_it; an older server with no `notified` parses too', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(fakeResponse({ success: true, studentStatus: 'working_on_it' }, 200));
+    await expect(
+      patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'working_on_it')
+    ).resolves.toEqual({ success: true, studentStatus: 'working_on_it' });
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:2801/api/studio/assignments/demo-emma-ap-bio-a5/status',
       expect.objectContaining({

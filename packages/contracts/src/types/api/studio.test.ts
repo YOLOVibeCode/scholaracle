@@ -21,6 +21,8 @@ import {
   parseTodayView,
   parseWorkPackView,
   parseWeekView,
+  parseStudentStatusUpdateResponse,
+  studioStatusPatchBody,
   assertNoGradeLeak,
   type IStudentSession,
   type IStudentStatusUpdateRequest,
@@ -516,5 +518,79 @@ describe('IWeekView — student review (R1)', () => {
       assertNoGradeLeak({ ...WEEK, doneThisWeek: [{ ...DONE, title: 'Essay 9/10' }] }, false)
     ).toThrow(/grade|points/i);
     expect(() => assertNoGradeLeak({ ...WEEK, encouragement: '91% now.' }, true)).not.toThrow();
+  });
+});
+
+describe('status PATCH body + response (R2 clients, R3 server)', () => {
+  it('studioStatusPatchBody sends a trimmed note only when there is one', () => {
+    expect(studioStatusPatchBody('need_help', "  I don't get #7 ")).toEqual({
+      status: 'need_help',
+      note: "I don't get #7",
+    });
+    expect(studioStatusPatchBody('need_help', '   ')).toEqual({ status: 'need_help' });
+    expect(studioStatusPatchBody('done')).toEqual({ status: 'done' });
+    expect(studioStatusPatchBody(null, undefined)).toEqual({ status: null });
+  });
+
+  it('parseStudentStatusUpdateResponse keeps notified / nextAllowedAt when present', () => {
+    expect(
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        studentNote: 'stuck',
+        notified: false,
+        nextAllowedAt: '2026-11-10T18:00:00.000Z',
+      })
+    ).toEqual({
+      success: true,
+      studentStatus: 'need_help',
+      studentNote: 'stuck',
+      notified: false,
+      nextAllowedAt: '2026-11-10T18:00:00.000Z',
+    });
+    expect(
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        notified: true,
+      })
+    ).toEqual({ success: true, studentStatus: 'need_help', notified: true });
+  });
+
+  it('parseStudentStatusUpdateResponse accepts an older server that never says notified', () => {
+    expect(parseStudentStatusUpdateResponse({ success: true, studentStatus: 'done' })).toEqual({
+      success: true,
+      studentStatus: 'done',
+    });
+    expect(parseStudentStatusUpdateResponse({ success: true, studentStatus: null })).toEqual({
+      success: true,
+      studentStatus: null,
+    });
+    expect(parseStudentStatusUpdateResponse({ success: true })).toEqual({
+      success: true,
+      studentStatus: null,
+    });
+  });
+
+  it('parseStudentStatusUpdateResponse rejects garbage', () => {
+    expect(() => parseStudentStatusUpdateResponse(null)).toThrow(/expected object/);
+    expect(() => parseStudentStatusUpdateResponse({ success: false })).toThrow(/success/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({ success: true, studentStatus: 'late' })
+    ).toThrow(/studentStatus/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        notified: 'yes',
+      })
+    ).toThrow(/notified/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        nextAllowedAt: 5,
+      })
+    ).toThrow(/nextAllowedAt/);
   });
 });
