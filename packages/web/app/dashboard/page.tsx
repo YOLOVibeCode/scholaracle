@@ -3,21 +3,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { X, Plus, GraduationCap, Plug } from 'lucide-react';
+import { X, Plus, GraduationCap, Plug, UserPlus } from 'lucide-react';
 import { dashboardApi, type IDashboardStats } from '@/lib/api/dashboard';
 import { studentsApi } from '@/lib/api/students';
 import { settingsApi } from '@/lib/api/settings';
+import { sharingApi } from '@/lib/api/sharing';
+import { canManagePeople } from '@/lib/sharing/access';
 import { useAsyncData } from '@/lib/hooks';
 import { ErrorDisplay, LoadingSkeleton } from '@/components/common';
 import { StudentGradeStripRow } from '@/components/dashboard/StudentGradeStripRow';
 import { ActionBoard } from '@/components/dashboard/students/ActionBoard';
 import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
+import { SetPasswordBanner } from '@/components/dashboard/SetPasswordBanner';
+import { PendingInvitesBanner } from '@/components/dashboard/sharing/PendingInvitesBanner';
+import { ShareDialog } from '@/components/dashboard/sharing/ShareDialog';
 import type { GradeDisplayMode } from '@/components/dashboard/StudentGradePanel';
 
 export default function DashboardPage() {
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [gradeDisplayMode, setGradeDisplayMode] = useState<GradeDisplayMode>('letter');
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     void settingsApi.get().then((settings) => {
@@ -40,8 +46,15 @@ export default function DashboardPage() {
 
   const fetchStudentsAndGrades = useCallback(async () => {
     const students = await studentsApi.getAll();
+    // Who shared each student with the viewer; the badge still renders without a name.
+    const minePromise = sharingApi.mine().catch(() => null);
     const grades = await Promise.all(students.map((s) => studentsApi.getGrades(s.id)));
-    return { students, grades };
+    const mine = await minePromise;
+    const sharedBy = new Map<string, string | undefined>();
+    for (const s of mine?.students ?? []) {
+      if (s.invitedBy) sharedBy.set(s.studentId, s.invitedBy.name);
+    }
+    return { students, grades, sharedBy };
   }, []);
 
   const { data: studentsAndGrades, isLoading: studentsSectionLoading, error: studentsSectionError, retry: studentsSectionRetry } = useAsyncData(
@@ -56,12 +69,18 @@ export default function DashboardPage() {
     studentsAndGrades &&
     studentsAndGrades.students.length === 0;
 
+  const canShare =
+    studentsAndGrades?.students.some((s) => canManagePeople(s.access)) ?? false;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 data-testid="dashboard-header" className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-gray-600 dark:text-gray-400">Welcome to Scholarmancy</p>
       </div>
+
+      <SetPasswordBanner />
+      <PendingInvitesBanner />
 
       {showOnboardingBanner && (
         <Card data-testid="onboarding-banner" className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20">
@@ -108,16 +127,29 @@ export default function DashboardPage() {
           <div data-testid="dashboard-grade-summary">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-xl font-semibold tracking-tight">Grade summary</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGradeDisplayToggle}
-                data-testid="grade-display-toggle"
-                aria-pressed={gradeDisplayMode === 'score'}
-                aria-label={gradeDisplayMode === 'letter' ? 'Show numeric score; currently showing letter grade' : 'Show letter grade; currently showing score'}
-              >
-                {gradeDisplayMode === 'letter' ? 'Show score' : 'Show letter'}
-              </Button>
+              <div className="flex items-center gap-2">
+                {canShare && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShareOpen(true)}
+                    data-testid="button-share"
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Share
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGradeDisplayToggle}
+                  data-testid="grade-display-toggle"
+                  aria-pressed={gradeDisplayMode === 'score'}
+                  aria-label={gradeDisplayMode === 'letter' ? 'Show numeric score; currently showing letter grade' : 'Show letter grade; currently showing score'}
+                >
+                  {gradeDisplayMode === 'letter' ? 'Show score' : 'Show letter'}
+                </Button>
+              </div>
             </div>
             {studentsSectionLoading && (
               <div className="flex flex-col gap-2">
@@ -151,6 +183,7 @@ export default function DashboardPage() {
                     student={student}
                     grades={studentsAndGrades.grades[i] ?? null}
                     displayMode={gradeDisplayMode}
+                    sharedByName={studentsAndGrades.sharedBy.get(student.id)}
                   />
                 ))}
               </div>
@@ -227,7 +260,8 @@ export default function DashboardPage() {
           retry();
         }}
       />
+
+      <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>
   );
 }
-

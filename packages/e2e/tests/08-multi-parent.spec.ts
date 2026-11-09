@@ -98,7 +98,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     await page.click('[data-testid="tab-parents"]');
 
     // Should see the Manage Parents card
-    const card = page.locator('[data-testid="manage-parents-card"]');
+    const card = page.locator('[data-testid="family-card"]');
     await expect(card).toBeVisible({ timeout: 5000 });
 
     // Should show the owner
@@ -129,7 +129,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     // Invite via API
     const parentBEmail = generateUniqueEmail('parentB');
     const inviteRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: parentBEmail, role: 'parent' },
         headers: { authorization: `Bearer ${parentAToken}` },
@@ -142,12 +142,12 @@ test.describe('@feature Multi-Parent Sharing', () => {
     await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 5000 });
     await page.click('[data-testid="tab-parents"]');
 
-    const card = page.locator('[data-testid="manage-parents-card"]');
+    const card = page.locator('[data-testid="family-card"]');
     await expect(card).toBeVisible({ timeout: 5000 });
 
     // Should show the pending invite in the list (email is lowercased by the API)
     await expect(card).toContainText(parentBEmail.toLowerCase(), { timeout: 10000 });
-    await expect(card).toContainText('invite pending');
+    await expect(card).toContainText('Invited');
   });
 
   // ------------------------------------------------------------------
@@ -180,7 +180,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     // Invite Parent B via API
     const parentBEmail = generateUniqueEmail('betaB');
     const inviteRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: parentBEmail, role: 'parent' },
         headers: { authorization: `Bearer ${parentAToken}` },
@@ -204,13 +204,10 @@ test.describe('@feature Multi-Parent Sharing', () => {
     expect(parentBToken).toBeTruthy();
 
     // Accept the invite via API
-    const acceptRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/accept`,
-      {
-        data: { email: parentBEmail },
-        headers: { authorization: `Bearer ${parentBToken}` },
-      }
-    );
+    const acceptRes = await request.post(`${apiBaseUrl}/api/sharing/invites/accept`, {
+      data: { studentIds: [student.id] },
+      headers: { authorization: `Bearer ${parentBToken}` },
+    });
     expect(acceptRes.ok()).toBeTruthy();
 
     // Parent B should now see the student on their dashboard
@@ -244,7 +241,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     // Invite Parent B via API
     const parentBEmail = generateUniqueEmail('promoB');
     const inviteRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: parentBEmail, role: 'guardian' },
         headers: { authorization: `Bearer ${parentAToken}` },
@@ -260,18 +257,15 @@ test.describe('@feature Multi-Parent Sharing', () => {
     const parentBToken = ((await regBRes.json()) as { token: string }).token;
 
     // Accept invite
-    const acceptRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/accept`,
-      {
-        data: { email: parentBEmail },
-        headers: { authorization: `Bearer ${parentBToken}` },
-      }
-    );
+    const acceptRes = await request.post(`${apiBaseUrl}/api/sharing/invites/accept`, {
+      data: { studentIds: [student.id] },
+      headers: { authorization: `Bearer ${parentBToken}` },
+    });
     expect(acceptRes.ok()).toBeTruthy();
 
     // Parent A promotes Parent B to admin
     const promoteRes = await request.put(
-      `${apiBaseUrl}/api/students/${student.id}/parents/${encodeURIComponent(parentBEmail)}/admin`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts/${encodeURIComponent(parentBEmail)}/admin`,
       {
         data: { isAdmin: true },
         headers: { authorization: `Bearer ${parentAToken}` },
@@ -285,7 +279,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     // Verify Parent B is now admin — they can invite Parent C
     const parentCEmail = generateUniqueEmail('promoC');
     const inviteByBRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: parentCEmail, role: 'caregiver' },
         headers: { authorization: `Bearer ${parentBToken}` },
@@ -294,7 +288,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     expect(inviteByBRes.ok()).toBeTruthy();
 
     // Verify the parents list shows all three
-    const listRes = await request.get(`${apiBaseUrl}/api/students/${student.id}/parents`, {
+    const listRes = await request.get(`${apiBaseUrl}/api/students/${student.id}/contacts`, {
       headers: { authorization: `Bearer ${parentAToken}` },
     });
     expect(listRes.ok()).toBeTruthy();
@@ -350,7 +344,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     const student = (await createRes.json()) as { id: string };
 
     const parentBEmail = generateUniqueEmail('denyB');
-    await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/invite`, {
+    await request.post(`${apiBaseUrl}/api/students/${student.id}/contacts`, {
       data: { email: parentBEmail },
       headers: { authorization: `Bearer ${parentAToken}` },
     });
@@ -365,15 +359,15 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     const parentBToken = await page.evaluate(() => localStorage.getItem('auth_token'));
 
-    await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/accept`, {
-      data: { email: parentBEmail },
+    await request.post(`${apiBaseUrl}/api/sharing/invites/accept`, {
+      data: { studentIds: [student.id] },
       headers: { authorization: `Bearer ${parentBToken}` },
     });
 
     // Parent B (NOT admin) tries to invite Parent C — should be denied
     const parentCEmail = generateUniqueEmail('denyC');
     const inviteRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: parentCEmail },
         headers: { authorization: `Bearer ${parentBToken}` },
@@ -404,7 +398,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     // Invite and accept
     const parentBEmail = generateUniqueEmail('rmB');
-    await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/invite`, {
+    await request.post(`${apiBaseUrl}/api/students/${student.id}/contacts`, {
       data: { email: parentBEmail },
       headers: { authorization: `Bearer ${parentAToken}` },
     });
@@ -418,8 +412,8 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     const parentBToken = await page.evaluate(() => localStorage.getItem('auth_token'));
 
-    await request.post(`${apiBaseUrl}/api/students/${student.id}/parents/accept`, {
-      data: { email: parentBEmail },
+    await request.post(`${apiBaseUrl}/api/sharing/invites/accept`, {
+      data: { studentIds: [student.id] },
       headers: { authorization: `Bearer ${parentBToken}` },
     });
 
@@ -432,7 +426,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     // Parent A removes Parent B
     const removeRes = await request.delete(
-      `${apiBaseUrl}/api/students/${student.id}/parents/${encodeURIComponent(parentBEmail)}`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts/${encodeURIComponent(parentBEmail)}`,
       { headers: { authorization: `Bearer ${parentAToken}` } }
     );
     expect(removeRes.ok()).toBeTruthy();
@@ -476,7 +470,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     // 3. Add a pending invite for contactEmail
     const contactEmail = generateUniqueEmail('ml-contact');
     const inviteRes = await request.post(
-      `${apiBaseUrl}/api/students/${student.id}/parents/invite`,
+      `${apiBaseUrl}/api/students/${student.id}/contacts`,
       {
         data: { email: contactEmail },
         headers: { authorization: `Bearer ${ownerToken}` },

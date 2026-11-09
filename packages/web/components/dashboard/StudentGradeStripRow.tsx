@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { IStudent, IStudentGradesResponse, ICourseGrade } from '@/lib/api/students';
 import type { GradeDisplayMode } from '@/components/dashboard/StudentGradePanel';
+import { SharedWithYouLine } from '@/components/dashboard/sharing/SharedWithYouLine';
 import { gradeBarColor, gradeTextColor } from '@/lib/grade-colors';
 
 /** Min height per row in rem (~6.25rem). Responsive. */
@@ -15,6 +16,8 @@ export interface StudentGradeStripRowProps {
   displayMode?: GradeDisplayMode;
   /** Optional loading skeleton. */
   loading?: boolean;
+  /** Who shared this student with the viewer (shown when `student.access` is not owner). */
+  sharedByName?: string;
 }
 
 function CompactCourseGrade({
@@ -85,6 +88,7 @@ export function StudentGradeStripRow({
   grades,
   displayMode = 'letter',
   loading,
+  sharedByName,
 }: StudentGradeStripRowProps) {
   if (loading) {
     return <StripRowSkeleton />;
@@ -99,13 +103,16 @@ export function StudentGradeStripRow({
       data-testid={`student-grade-strip-row-${student.id}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link
-          href={`/dashboard/students/${student.id}/view`}
-          className="text-sm font-semibold leading-tight hover:underline"
-          data-testid={`strip-row-name-${student.id}`}
-        >
-          {student.name}
-        </Link>
+        <div>
+          <Link
+            href={`/dashboard/students/${student.id}/view`}
+            className="text-sm font-semibold leading-tight hover:underline"
+            data-testid={`strip-row-name-${student.id}`}
+          >
+            {student.name}
+          </Link>
+          <SharedWithYouLine access={student.access} sharedByName={sharedByName} />
+        </div>
         <div className="flex items-center gap-2">
           <Link
             href={`/dashboard/students/${student.id}?tab=trends`}

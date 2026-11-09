@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, GraduationCap, Edit, Trash2, LayoutDashboard } from 'lucide-react';
+import { Plus, GraduationCap, Edit, Eye, Trash2, LayoutDashboard, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
+import { sharingApi } from '@/lib/api/sharing';
+import { canEditStudent, canManagePeople, canRemoveStudent } from '@/lib/sharing/access';
 import { ConfirmDialog, ErrorDisplay } from '@/components/common';
 import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
+import { ShareDialog } from '@/components/dashboard/sharing/ShareDialog';
+import { SharedWithYouLine } from '@/components/dashboard/sharing/SharedWithYouLine';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<readonly IStudent[]>([]);
+  const [sharedBy, setSharedBy] = useState<ReadonlyMap<string, string | undefined>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,8 +31,16 @@ export default function StudentsPage() {
     setIsLoading(true);
     setActionError(null);
     try {
-      const data = await studentsApi.getAll();
+      const [data, mine] = await Promise.all([
+        studentsApi.getAll(),
+        sharingApi.mine().catch(() => null),
+      ]);
       setStudents(data);
+      const names = new Map<string, string | undefined>();
+      for (const s of mine?.students ?? []) {
+        if (s.invitedBy) names.set(s.studentId, s.invitedBy.name);
+      }
+      setSharedBy(names);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Failed to load students');
     } finally {
@@ -61,6 +75,8 @@ export default function StudentsPage() {
     setDeleteStudentId(null);
   };
 
+  const canShare = students.some((s) => canManagePeople(s.access));
+
   return (
     <div className="space-y-6">
       {actionError && (
@@ -71,10 +87,18 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Student
-        </Button>
+        <div className="flex items-center gap-2">
+          {canShare && (
+            <Button variant="outline" data-testid="button-share" onClick={() => setShareOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+          )}
+          <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Student
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -100,71 +124,90 @@ export default function StudentsPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="student-list">
-          {students.map((student) => (
-            <Card key={student.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle>{student.name}</CardTitle>
-                    <CardDescription>
-                      {student.grade ? `Grade ${student.grade}` : 'No grade specified'}
-                    </CardDescription>
+          {students.map((student) => {
+            const access = student.access;
+            return (
+              <Card key={student.id} data-testid={`student-card-${student.id}`}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle>{student.name}</CardTitle>
+                      <CardDescription>
+                        {student.grade ? `Grade ${student.grade}` : 'No grade specified'}
+                      </CardDescription>
+                      <SharedWithYouLine
+                        access={student.access}
+                        sharedByName={sharedBy.get(student.id)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <GraduationCap className="h-5 w-5 text-gray-400" />
                   </div>
-                  <GraduationCap className="h-5 w-5 text-gray-400" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                {student.stats && (
-                  <div className="space-y-2 text-sm">
-                    {student.stats.currentGPA !== undefined && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">GPA:</span>
-                        <span className="font-medium">{student.stats.currentGPA.toFixed(2)}</span>
-                      </div>
+                </CardHeader>
+                <CardContent>
+                  {student.stats && (
+                    <div className="space-y-2 text-sm">
+                      {student.stats.currentGPA !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">GPA:</span>
+                          <span className="font-medium">{student.stats.currentGPA.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {student.stats.totalAssignments !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Assignments:</span>
+                          <span className="font-medium">{student.stats.totalAssignments}</span>
+                        </div>
+                      )}
+                      {student.stats.missingAssignments !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">Missing:</span>
+                          <span className="font-medium text-red-600">
+                            {student.stats.missingAssignments}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
+                      <Link href={`/dashboard/students/${student.id}/view`}>
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        View as student
+                      </Link>
+                    </Button>
+                    {canEditStudent(access) ? (
+                      <Button variant="outline" size="sm" asChild data-testid="button-edit-student">
+                        <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" asChild data-testid="button-open-student">
+                        <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
+                          <Eye className="mr-2 h-4 w-4" />
+                          Details
+                        </Link>
+                      </Button>
                     )}
-                    {student.stats.totalAssignments !== undefined && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Assignments:</span>
-                        <span className="font-medium">{student.stats.totalAssignments}</span>
-                      </div>
-                    )}
-                    {student.stats.missingAssignments !== undefined && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">Missing:</span>
-                        <span className="font-medium text-red-600">
-                          {student.stats.missingAssignments}
-                        </span>
-                      </div>
+                    {canRemoveStudent(access) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteClick(student.id)}
+                        className="text-red-600 hover:text-red-700"
+                        data-testid="button-delete-student"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </Button>
                     )}
                   </div>
-                )}
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
-                    <Link href={`/dashboard/students/${student.id}/view`}>
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
-                      View as student
-                    </Link>
-                  </Button>
-                  <Button variant="outline" size="sm" asChild data-testid="button-edit-student">
-                    <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteClick(student.id)}
-                    className="text-red-600 hover:text-red-700"
-                    data-testid="button-delete-student"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -184,7 +227,8 @@ export default function StudentsPage() {
         onClose={() => setWizardOpen(false)}
         onStudentAdded={() => void loadStudents()}
       />
+
+      <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>
   );
 }
-

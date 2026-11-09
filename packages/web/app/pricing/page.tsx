@@ -131,6 +131,10 @@ export default function PricingPage() {
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400">
             $9.99 per student per month. One dashboard, one bill — the primary account holder pays.
           </p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400" data-testid="pricing-sharing-note">
+            Sharing a student with co-parents, guardians and caregivers is included and does not count
+            against their plan.
+          </p>
         </div>
 
         <div className="mx-auto mt-8 flex items-center justify-center gap-3" data-testid="billing-cycle-toggle">
