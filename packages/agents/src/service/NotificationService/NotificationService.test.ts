@@ -147,6 +147,53 @@ describe('NotificationService', () => {
       );
     });
 
+    it('delivers student_needs_help to the parent only on the legacy path', async () => {
+      const alert = new Alert({
+        studentId: 'gideon-id',
+        type: AlertType.STUDENT_NEEDS_HELP,
+        severity: 'info',
+        relatedData: { title: 'Ch. 5 problems' },
+      });
+      const studentNotification = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'gideon-id',
+        userId: 'gideon-id',
+        subject: 'Your grown-ups were told',
+        body: 'x',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: AlertType.STUDENT_NEEDS_HELP,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const parentNotification = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'gideon-id',
+        userId: 'parent-1',
+        subject: 'Gideon asked for help with Ch. 5 problems',
+        body: 'y',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: AlertType.STUDENT_NEEDS_HELP,
+        channels: [NotificationChannel.EMAIL],
+      });
+      mockStudentGenerator.generate.mockReturnValue(studentNotification);
+      mockParentGenerator.generate.mockReturnValue(parentNotification);
+      mockDeliveryRouter.route.mockResolvedValue({
+        success: true,
+        channel: NotificationChannel.EMAIL,
+        messageId: 'email-1',
+        deliveredAt: new Date(),
+      });
+      await notificationService.processAlert(alert, { parentEmail: 'owner@example.com' });
+      expect(mockDeliveryRouter.route).toHaveBeenCalledTimes(1);
+      const [sent, channel] = mockDeliveryRouter.route.mock.calls[0] as [
+        Notification,
+        NotificationChannel,
+      ];
+      expect(channel).toBe(NotificationChannel.EMAIL);
+      expect(sent.agentType).toBe(AgentType.PARENT);
+      expect(sent.userId).toBe('owner@example.com');
+      expect(studentNotification.sentAt).toBeUndefined();
+    });
+
     it('should deliver to all channels specified in notification', async () => {
       // Arrange
       const alert = new Alert({
@@ -915,6 +962,81 @@ describe('NotificationService', () => {
       expect((mockQueue.add as jest.Mock).mock.calls[0][2].notificationPayload.subject).toBe(
         'Parent sub'
       );
+    });
+
+    it('student_needs_help goes to the parents only, never back to the student alertEmail (R3)', async () => {
+      const mockQueue = {
+        add: jest.fn().mockResolvedValue('job-id'),
+      } as unknown as jest.Mocked<MongoQueue>;
+      const studentNotif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'gideon-id',
+        userId: 'gideon-id',
+        subject: 'Your grown-ups were told about Ch. 5 problems',
+        body: 'You asked for help.',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: AlertType.STUDENT_NEEDS_HELP,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const parentNotif = new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'gideon-id',
+        userId: 'parent-1',
+        subject: 'Gideon asked for help with Ch. 5 problems',
+        body: 'Gideon tapped "Need help" on "Ch. 5 problems" in Math.\nGideon wrote: "I don\'t get #7"',
+        priority: NotificationPriority.MEDIUM,
+        triggerType: AlertType.STUDENT_NEEDS_HELP,
+        channels: [NotificationChannel.EMAIL],
+      });
+      const svc = new NotificationService(
+        [
+          {
+            handles: jest.fn().mockReturnValue(true),
+            generate: jest.fn().mockReturnValue(studentNotif),
+          },
+          {
+            handles: jest.fn().mockReturnValue(true),
+            generate: jest.fn().mockReturnValue(parentNotif),
+          },
+        ],
+        mockDeliveryRouter
+      );
+      const alert = new Alert({
+        studentId: 'gideon-id',
+        type: AlertType.STUDENT_NEEDS_HELP,
+        severity: 'info',
+        relatedData: { title: 'Ch. 5 problems', note: "I don't get #7" },
+      });
+      await svc.processAlertEnqueueDeliver(alert, mockQueue, [
+        { parentEmail: 'owner@example.com', userId: 'parent-1', recipientType: 'parent' },
+        { parentEmail: 'coparent@example.com', recipientType: 'parent' },
+        { parentEmail: 'gideon.student@school.edu', recipientType: 'student' },
+      ]);
+      const payloads = (mockQueue.add as jest.Mock).mock.calls.map(
+        (
+          c: [
+            string,
+            string,
+            {
+              notificationPayload: {
+                userId: string;
+                agentType: AgentType;
+                subject: string;
+                body: string;
+              };
+            },
+          ]
+        ) => c[2].notificationPayload
+      );
+      expect(payloads.map((p) => p.userId).sort()).toEqual([
+        'coparent@example.com',
+        'owner@example.com',
+      ]);
+      for (const p of payloads) {
+        expect(p.agentType).toBe(AgentType.PARENT);
+        expect(p.subject).toBe('Gideon asked for help with Ch. 5 problems');
+        expect(p.body).toContain('Gideon wrote: "I don\'t get #7"');
+      }
     });
   });
 

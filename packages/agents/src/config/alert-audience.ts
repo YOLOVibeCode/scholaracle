@@ -14,6 +14,8 @@ export const alertAudience: Record<AlertType, { student: boolean; parent: boolea
   [AlertType.WORKLOAD]: { student: true, parent: false },
   [AlertType.POSITIVE]: { student: true, parent: false },
   [AlertType.RECOMMENDATION]: { student: false, parent: true },
+  // The student asked; the adults hear it. Never echoed to the student's own alertEmail.
+  [AlertType.STUDENT_NEEDS_HELP]: { student: false, parent: true },
 };
 
 export function shouldNotifyStudent(alertType: AlertType): boolean {
