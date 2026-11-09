@@ -9,8 +9,10 @@ import type { IScraperModule, IScraperResolver } from '../registry/module';
 import type { IAIEnricher, IClientScrapeHost, IIngestUploader } from './types';
 import { SyncError, STUDENT_MISMATCH_MESSAGE } from './types';
 import { runClientScrape } from './runClientScrape';
+import { runPortalStep } from './runPortalStep';
 import { aeriesBuiltinModule } from '../registry/builtin-modules';
 import type { IAeriesFullExtract } from '../extractors/aeries/aeries-extractors';
+import type { IScraperHost } from '../registry/module';
 
 const NOW = '2026-01-15T10:00:00.000Z';
 
@@ -97,6 +99,95 @@ function makeHost(
   };
   return { host, uploaded, progress };
 }
+
+const SKELETON_PAYLOAD = {
+  step: 'stub.portal',
+  capturedAt: NOW,
+  skeleton: '{"t":"html"}',
+  byteLength: 12,
+  sha256: 'a'.repeat(64),
+};
+
+function failingPortalResolver(): IScraperResolver {
+  const module: IScraperModule = {
+    metadata: {
+      id: 'skyward',
+      name: 'Skyward',
+      adapterId: 'com.skyward.grade',
+      version: '0.1.0',
+      hosts: ['*.skyward.com'],
+      entities: ['course'],
+      entry: 'builtin:skyward',
+      publisher: 'scholaracle',
+    },
+    scrape: async (host: IScraperHost) => {
+      await runPortalStep(host, 'stub.portal', async () => {
+        throw new Error('portal timed out');
+      });
+      return {};
+    },
+    transform: () => [],
+  };
+  return {
+    async resolve() {
+      return { module, canRun: true, checkErrors: [] };
+    },
+  };
+}
+
+describe('runClientScrape skeleton capture', () => {
+  it('uploads a skeleton once on portal failure when capture is wired', async () => {
+    const uploadSkeleton = jest.fn(async () => undefined);
+    const portalUrl = 'https://school.skyward.com';
+    const driver = new FakePageDriver({
+      initialUrl: portalUrl,
+      fixtures: { [portalUrl]: { evaluateResults: [SKELETON_PAYLOAD] } },
+    });
+    const host: IClientScrapeHost = {
+      driver,
+      captureSkeletons: true,
+      config: {
+        provider: 'skyward',
+        adapterId: 'com.skyward.grade',
+        adapterVersion: 'test@1.0.0',
+        baseUrl: portalUrl,
+        sourceId: 'src-1',
+        studentExternalId: 'stu-1',
+        institutionExternalId: 'inst-1',
+      },
+      clientType: 'mobile',
+      uploader: {
+        async upload() {
+          /* not reached */
+        },
+        uploadSkeleton,
+      },
+      resolver: failingPortalResolver(),
+    };
+    await expect(runClientScrape(host)).rejects.toThrow('portal timed out');
+    expect(uploadSkeleton).toHaveBeenCalledTimes(1);
+    expect(uploadSkeleton).toHaveBeenCalledWith(
+      expect.any(String),
+      'src-1',
+      SKELETON_PAYLOAD
+    );
+  });
+
+  it('does not upload a skeleton when extraction succeeds', async () => {
+    const uploadSkeleton = jest.fn(async () => undefined);
+    const { host } = makeHost([COURSE], {
+      captureSkeletons: true,
+      uploader: {
+        async upload(envelope) {
+          void envelope;
+        },
+        uploadSkeleton,
+      },
+    });
+    await runClientScrape(host);
+    expect(uploadSkeleton).not.toHaveBeenCalled();
+  });
+});
 
 describe('runClientScrape enrichment', () => {
   it('throws SyncError ZERO_ROWS when transform yields no ops', async () => {
