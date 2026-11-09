@@ -1250,3 +1250,60 @@ describe('ScholarmancyApiClient course tutorial', () => {
     expect(init.method).toBe('DELETE');
   });
 });
+
+describe('ScholarmancyApiClient Apple login and account deletion', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+    client = new ScholarmancyApiClient(BASE_URL);
+  });
+
+  it('loginWithApple posts only the token and nonce to /api/auth/oauth/apple, with no secret header', async () => {
+    const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+
+    await client.loginWithApple('apple.jwt', 'raw-nonce', ' Pat Parent ');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE_URL}/api/auth/oauth/apple`);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+      name: 'Pat Parent',
+    });
+    const headers = init.headers as Record<string, string>;
+    expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('x-internal-api-secret');
+    expect(secureStoreData.get('slc_access_token')).toBe('jwt-access-token-1');
+  });
+
+  it('loginWithApple omits a blank name', async () => {
+    const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+    await client.loginWithApple('apple.jwt', 'raw-nonce', '  ');
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('name');
+  });
+
+  it('deleteAccount sends DELETE /api/account with the password', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    const typedByUser = 'typed-by-user';
+    await client.deleteAccount({ password: typedByUser });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE_URL}/api/account`);
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(String(init.body))).toEqual({ password: typedByUser });
+  });
+
+  it('deleteAccount sends an Apple proof for accounts without a password', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    await client.deleteAccount({ appleIdentityToken: 'apple.jwt', appleNonce: 'raw-nonce' });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+    });
+  });
+});
