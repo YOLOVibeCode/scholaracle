@@ -1515,17 +1515,22 @@ describe('Students API Routes', () => {
   });
 
   describe('POST /api/students/:id/contacts/accept', () => {
-    it('should return 404 when no pending invite for email', async () => {
+    it("refuses an email that is not the caller's, and returns 404 when the caller has no pending invite", async () => {
       const createRes = await request(app)
         .post('/api/students')
         .set('Authorization', `Bearer ${testToken}`)
         .send({ name: 'Student', grade: 9 });
       const studentId = createRes.body.id as string;
-      const res = await request(app)
+      const foreign = await request(app)
         .post(`/api/students/${studentId}/contacts/accept`)
         .set('Authorization', `Bearer ${testToken}`)
         .send({ email: 'nopending@example.com' });
-      expect(res.status).toBe(404);
+      expect(foreign.status).toBe(403);
+      const own = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+      expect(own.status).toBe(404);
     });
   });
 
@@ -1807,6 +1812,176 @@ describe('Students API Routes', () => {
       expect(second.status).toBe(403);
       expect(second.body.code).toBe('PLAN_LIMIT_REACHED');
       expect(second.body.currentPlan).toBe('free');
+    });
+  });
+
+  describe('sharing security (S0)', () => {
+    const CO = 'coparent-s0@example.com';
+    const STRANGER = 'stranger-s0@example.com';
+    let coToken: string;
+    let strangerToken: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: { $in: [CO, STRANGER] } });
+      await database.collection('audit_logs').deleteMany({ entityType: 'student_sharing' });
+      const co = await authService.register(CO, 'password123', 'Co Parent');
+      const stranger = await authService.register(STRANGER, 'password123', 'Stranger');
+      if (!co.token || !stranger.token) {
+        throw new Error('Failed to register sharing test users');
+      }
+      coToken = co.token;
+      strangerToken = stranger.token;
+    });
+
+    async function ownerCreatesStudentAndInvites(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Shared Kid', grade: 8 });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+      const inviteRes = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO, name: 'Co Parent', role: 'parent' });
+      expect(inviteRes.status).toBe(201);
+      return studentId;
+    }
+
+    it('nobody can accept an invitation addressed to someone else', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const hijack = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ email: CO });
+      expect(hijack.status).toBe(403);
+      const ownerTries = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO });
+      expect(ownerTries.status).toBe(403);
+      // A stranger with no invitation of their own gets "nothing pending", not someone else's invite.
+      const strangerOwn = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(strangerOwn.status).toBe(404);
+      const stillPending = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      expect((stillPending?.['sharedWith'] as { status: string }[])[0]?.status).toBe('pending');
+    });
+
+    it('the invitee accepts with no email in the body, sees the student, and an audit row is written', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const accept = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      expect(accept.status).toBe(200);
+      const list = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(list.status).toBe(200);
+      expect((list.body as { id: string }[]).map((s) => s.id)).toContain(studentId);
+      const audit = await database
+        .collection('audit_logs')
+        .find({ entityType: 'student_sharing', entityId: studentId })
+        .toArray();
+      expect(audit.map((a) => a['action']).sort()).toEqual(['sharing:accept', 'sharing:invite']);
+      // The audit store masks addresses; the actor is still identifiable by its first letter + domain.
+      expect(audit.find((a) => a['action'] === 'sharing:accept')?.['adminEmail']).toMatch(
+        /^c\*+@example\.com$/
+      );
+    });
+
+    it('pending invites are listed for the caller only; a query email is ignored', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const mine = await request(app)
+        .get('/api/students/invites/pending')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(mine.status).toBe(200);
+      expect((mine.body as { studentId: string }[]).map((i) => i.studentId)).toEqual([studentId]);
+      const peek = await request(app)
+        .get(`/api/students/invites/pending?email=${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`);
+      expect(peek.status).toBe(200);
+      expect(peek.body).toEqual([]);
+    });
+
+    it('a member cannot edit, remove, or manage sources; an admin can edit; only the owner removes', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      const asMember = (): request.Test => request(app).put(`/api/students/${studentId}`);
+      expect(
+        (await asMember().set('Authorization', `Bearer ${coToken}`).send({ name: 'X' })).status
+      ).toBe(403);
+      const removeAsMember = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsMember.status).toBe(403);
+      const addSource = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'canvas',
+          displayName: 'Canvas',
+          dataTypes: ['grades'],
+        });
+      expect(addSource.status).toBe(403);
+      // Someone with no access at all gets 404, not 403 (no existence leak).
+      const strangerEdit = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ name: 'X' });
+      expect(strangerEdit.status).toBe(404);
+      // Promote to admin: edit works, remove still does not.
+      const promote = await request(app)
+        .put(`/api/students/${studentId}/parents/${encodeURIComponent(CO)}/admin`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ isAdmin: true });
+      expect(promote.status).toBe(200);
+      const editAsAdmin = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ name: 'Renamed Kid' });
+      expect(editAsAdmin.status).toBe(200);
+      expect(editAsAdmin.body.name).toBe('Renamed Kid');
+      const removeAsAdmin = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsAdmin.status).toBe(403);
+      const removeAsOwner = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(removeAsOwner.status).toBe(200);
+    });
+
+    it('/parents/accept applies the same identity rule', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Parents Route Kid', grade: 5 });
+      const studentId = createRes.body.id as string;
+      const invite = await request(app)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: STRANGER, role: 'guardian' });
+      expect(invite.status).toBe(201);
+      const wrongPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ email: STRANGER });
+      expect(wrongPerson.status).toBe(403);
+      const rightPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(rightPerson.status).toBe(200);
     });
   });
 });
