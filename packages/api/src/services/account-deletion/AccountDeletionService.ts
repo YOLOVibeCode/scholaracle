@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Db } from 'mongodb';
+import type { Db, Document, UpdateFilter } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import {
   ACCOUNT_DELETION_AUDIT_COLLECTION,
@@ -55,6 +55,24 @@ async function purgeCollectionsForStudents(db: Db, studentIds: readonly string[]
   }
 }
 
+/**
+ * A deleted co-parent must not stay listed (with their email) on students that
+ * another parent owns. Those students survive; only the share entry goes.
+ */
+async function removeFromOtherFamiliesShares(
+  db: Db,
+  userId: string,
+  email: string | undefined
+): Promise<void> {
+  const match: Record<string, unknown>[] = [{ userId }];
+  if (email) match.push({ email: email.toLowerCase() }, { email });
+  await db.collection('students').updateMany(
+    { sharedWith: { $elemMatch: { $or: match } } },
+    // The driver's PullOperator typing does not accept $or inside an array element filter.
+    { $pull: { sharedWith: { $or: match } } } as unknown as UpdateFilter<Document>
+  );
+}
+
 export class AccountDeletionService {
   private readonly _db: Db;
 
@@ -87,6 +105,7 @@ export class AccountDeletionService {
 
     await purgeCollectionsForUser(this._db, userId);
     await purgeCollectionsForStudents(this._db, studentIds);
+    await removeFromOtherFamiliesShares(this._db, userId, parent.email);
 
     for (const loginUserId of studentLoginUserIds) {
       await purgeCollectionsForUser(this._db, loginUserId);

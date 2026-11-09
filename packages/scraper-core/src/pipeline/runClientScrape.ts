@@ -31,6 +31,8 @@ import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
 import { computeRunCoverage } from './computeRunCoverage';
 import { narrowStudentExtractForTransform } from './narrowStudentExtract';
+import { captureSkeleton } from '../page-fns/captureSkeleton';
+import type { ISanitizedPageSkeletonCapture } from '@scholaracle/contracts';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -43,8 +45,20 @@ function toSyncError(err: unknown, phase: SyncFailurePhase, fallback: string): S
 
 function buildScraperHost(
   host: IClientScrapeHost,
-  onPhaseProgress: (p: ISyncProgress) => void
+  onPhaseProgress: (p: ISyncProgress) => void,
+  runId: string
 ): IScraperHost {
+  const mayCapture =
+    host.captureSkeletons === true && typeof host.uploader.uploadSkeleton === 'function';
+  const captureSkeletonOnFailure = mayCapture
+    ? async (step: string): Promise<void> => {
+        const payload = (await host.driver.evaluate(captureSkeleton, {
+          step,
+        })) as ISanitizedPageSkeletonCapture;
+        await host.uploader.uploadSkeleton?.(runId, host.config.sourceId, payload);
+      }
+    : undefined;
+
   return {
     driver: host.driver,
     config: {
@@ -58,6 +72,8 @@ function buildScraperHost(
         message: scraperProgress.message,
       });
     },
+    captureSkeletonOnFailure,
+    ...(host.selectorPatch ? { selectorPatch: host.selectorPatch } : {}),
   };
 }
 
@@ -75,6 +91,9 @@ function buildEnvelopeMeta(
     meta['enrichmentSource'] = enrichment.source;
     meta['enrichmentPatchCount'] = String(enrichment.patchCount);
     meta['enrichmentFailed'] = enrichment.failed ? 'true' : 'false';
+  }
+  if (host.appliedSelectorPatchId) {
+    meta['appliedSelectorPatchId'] = host.appliedSelectorPatchId;
   }
   const snap = rawExtract?.['canvasSnapshotMeta'] as Readonly<Record<string, string>> | undefined;
   if (snap && typeof snap === 'object') {
@@ -98,10 +117,22 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   const phaseStart = { current: Date.now() };
 
+  const postServerTrace = (step: {
+    readonly name: string;
+    readonly startedAt: string;
+    readonly ms: number;
+    readonly ok: boolean;
+    readonly error?: string;
+  }): void => {
+    if (uploader.postTrace) {
+      void uploader.postTrace(runId, step).catch(() => undefined);
+    }
+  };
+
   const emit = async (
     phase: SyncPhase,
     message: string,
-    extra?: { opCount?: number }
+    extra?: { opCount?: number; ok?: boolean; error?: string }
   ): Promise<void> => {
     const now = Date.now();
     const durationMs = now - phaseStart.current;
@@ -115,8 +146,40 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     if (recorder) {
       await recorder.addPhase(runId, record).catch(() => undefined);
     }
+    postServerTrace({
+      name: phase,
+      startedAt: record.timestamp,
+      ms: durationMs,
+      ok: extra?.ok ?? true,
+      ...(extra?.error ? { error: extra.error } : {}),
+    });
     onProgress?.({ phase, message, ...extra });
   };
+
+  const clientMeta = {
+    clientType: host.clientType,
+    coreVersion,
+    adapterVersion: config.adapterVersion,
+  };
+  const startingStep = {
+    name: 'starting',
+    startedAt,
+    ms: 0,
+    ok: true,
+  };
+
+  if (uploader.beginRun) {
+    await uploader
+      .beginRun({
+        runId,
+        sourceId: config.sourceId,
+        clientMeta,
+        startingStep,
+      })
+      .catch(() => undefined);
+  } else {
+    postServerTrace(startingStep);
+  }
 
   // 0. Register run in local recorder (optional)
   if (recorder) {
@@ -141,7 +204,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   let raw: Record<string, unknown>;
   try {
-    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p));
+    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p), runId);
     raw = await module.scrape(scraperHost);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'portal', 'Extract failed');

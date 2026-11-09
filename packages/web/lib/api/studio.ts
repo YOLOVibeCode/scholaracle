@@ -1,8 +1,14 @@
 import {
+  parseStudentStatusUpdateResponse,
   parseTodayView,
+  parseWeekView,
   parseWorkPackView,
+  studioStatusPatchBody,
+  type IStudentStatusUpdateResponse,
   type ITodayView,
+  type IWeekView,
   type IWorkPackView,
+  type StudentStatus,
 } from '@scholaracle/contracts';
 import type { IOfflinePackApiResponse } from '@scholaracle/studio-core';
 
@@ -51,6 +57,16 @@ export async function fetchStudioToday(token: string): Promise<ITodayView> {
   return parseTodayView(await res.json());
 }
 
+/** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+export async function fetchStudioWeek(token: string): Promise<IWeekView> {
+  const res = await studioFetch('/studio/week', token);
+  throwIfAuthFailed(res);
+  if (!res.ok) {
+    throw new Error(`Studio week failed: ${res.status}`);
+  }
+  return parseWeekView(await res.json());
+}
+
 export async function fetchStudioWorkPack(
   token: string,
   assignmentExternalId: string
@@ -87,18 +103,24 @@ export async function fetchOfflinePack(
   return res.json() as Promise<IOfflinePackApiResponse>;
 }
 
+/**
+ * PATCH /api/studio/assignments/:id/status with the shared body (a non-empty
+ * note rides along with need_help). The answer says whether the adults were
+ * told, when the server is new enough to know.
+ */
 export async function patchStudioAssignmentStatus(
   token: string,
   assignmentExternalId: string,
-  status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-): Promise<void> {
+  status: StudentStatus | null,
+  note?: string
+): Promise<IStudentStatusUpdateResponse> {
   const res = await studioFetch(
     `/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
     token,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(studioStatusPatchBody(status, note)),
     }
   );
   throwIfAuthFailed(res);
@@ -108,4 +130,5 @@ export async function patchStudioAssignmentStatus(
   if (!res.ok) {
     throw new Error(`Studio status failed: ${res.status}`);
   }
+  return parseStudentStatusUpdateResponse(await res.json());
 }

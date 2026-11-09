@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { AlertRepository } from '@scholaracle/database';
+import { AlertRepository, StudentRepository } from '@scholaracle/database';
 import { alertsApiRouter } from './alerts-api';
 import { authMiddleware } from '../../middleware/auth';
 import { createErrorHandler } from '../../middleware/errorHandler';
@@ -235,6 +235,250 @@ describe('Alerts API Routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
+    });
+  });
+
+  describe('inbox by access and per-person acknowledgement (sharing S3)', () => {
+    const MEMBER = 'member-s3@example.com';
+    const STRANGER = 'stranger-s3@example.com';
+    let memberToken: string;
+    let memberUserId: string;
+    let strangerToken: string;
+    let sharedStudentId: string;
+    let privateStudentId: string;
+    let sharedAlertId: string;
+    let missingAlertId: string;
+    let legacyPortalAlertId: string;
+    let privateAlertId: string;
+
+    async function setMemberRow(patch: Record<string, unknown>): Promise<void> {
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(sharedStudentId) },
+        {
+          $set: Object.fromEntries(Object.entries(patch).map(([k, v]) => [`sharedWith.0.${k}`, v])),
+        }
+      );
+    }
+
+    async function inbox(token: string): Promise<Array<Record<string, unknown>>> {
+      const res = await request(app).get('/api/alerts-api').set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      return res.body as Array<Record<string, unknown>>;
+    }
+
+    beforeEach(async () => {
+      await database.collection('students').deleteMany({});
+      await database.collection('users').deleteMany({ email: { $in: [MEMBER, STRANGER] } });
+      const member = await authService.register(MEMBER, 'password123', 'Member');
+      const stranger = await authService.register(STRANGER, 'password123', 'Stranger');
+      if (!member.token || !member.user || !stranger.token) {
+        throw new Error('Failed to register S3 test users');
+      }
+      memberToken = member.token;
+      memberUserId = member.user.id;
+      strangerToken = stranger.token;
+
+      const students = new StudentRepository(database);
+      const shared = await students.create({
+        userId: testUserId,
+        name: 'Ava',
+        studentId: 'skyward:12345',
+        sharedWith: [
+          {
+            userId: memberUserId,
+            email: MEMBER,
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+            acceptedAt: new Date(),
+            receiveAlerts: true,
+            alertChannels: ['email', 'push'],
+          },
+        ],
+      });
+      const priv = await students.create({ userId: testUserId, name: 'Gideon' });
+      sharedStudentId = shared._id!.toString();
+      privateStudentId = priv._id!.toString();
+
+      // Two rows keyed by the shared student's Mongo id (what ingest writes), one legacy row
+      // still carrying a portal id (owner-only fallback until ALERT_STUDENT_ID_MIGRATION), and
+      // an alert for a student the member was never given.
+      sharedAlertId = (
+        await alertRepo.create({
+          userId: testUserId,
+          studentId: sharedStudentId,
+          type: 'grade_drop',
+          severity: 'warning',
+          message: 'Ava: Math fell to 72',
+        })
+      ).id!;
+      missingAlertId = (
+        await alertRepo.create({
+          userId: testUserId,
+          studentId: sharedStudentId,
+          type: 'missing_assignment',
+          severity: 'critical',
+          message: 'Ava: Lab 4 missing',
+        })
+      ).id!;
+      legacyPortalAlertId = (
+        await alertRepo.create({
+          userId: testUserId,
+          studentId: '12345',
+          type: 'missing_assignment',
+          severity: 'critical',
+          message: 'Ava (legacy row): Lab 3 missing',
+        })
+      ).id!;
+      privateAlertId = (
+        await alertRepo.create({
+          userId: testUserId,
+          studentId: privateStudentId,
+          type: 'grade_drop',
+          severity: 'warning',
+          message: 'Gideon: Science fell',
+        })
+      ).id!;
+    });
+
+    it('owner sees every alert incl. legacy portal-id rows; member sees only the shared student by Mongo id', async () => {
+      const ownerIds = (await inbox(testToken)).map((a) => a['id']);
+      expect(ownerIds.sort()).toEqual(
+        [sharedAlertId, missingAlertId, legacyPortalAlertId, privateAlertId].sort()
+      );
+
+      // Documented fallback: a row still carrying a portal id is the owner's only.
+      const memberRows = await inbox(memberToken);
+      expect(memberRows.map((a) => a['id']).sort()).toEqual([sharedAlertId, missingAlertId].sort());
+      expect(memberRows.every((a) => a['acknowledged'] === false)).toBe(true);
+
+      expect(await inbox(strangerToken)).toEqual([]);
+    });
+
+    it("trims the inbox to the member's own alertTypes, and hides the same alerts on detail and acknowledge (404)", async () => {
+      await setMemberRow({ alertTypes: ['missing_assignment'] });
+      const rows = await inbox(memberToken);
+      expect(rows.map((a) => a['id'])).toEqual([missingAlertId]);
+      // The owner's inbox is untouched by someone else's filter.
+      expect(await inbox(testToken)).toHaveLength(4);
+
+      const hiddenDetail = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(hiddenDetail.status).toBe(404);
+      const hiddenAck = await request(app)
+        .post(`/api/alerts-api/${sharedAlertId}/acknowledge`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(hiddenAck.status).toBe(404);
+      expect(
+        (await database.collection('alerts').findOne({ _id: new ObjectId(sharedAlertId) }))?.[
+          'acknowledgedBy'
+        ]
+      ).toBeUndefined();
+
+      const visibleDetail = await request(app)
+        .get(`/api/alerts-api/${missingAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(visibleDetail.status).toBe(200);
+      // The owner's own alertTypes trim applies to the owner the same way.
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(sharedStudentId) },
+        {
+          $set: {
+            ownerAlertPrefs: {
+              receiveAlerts: true,
+              alertChannels: ['email'],
+              alertTypes: ['deadline'],
+            },
+          },
+        }
+      );
+      const ownerHidden = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ownerHidden.status).toBe(404);
+    });
+
+    it('a revoked adult loses the alerts at once (list, single, acknowledge)', async () => {
+      await database
+        .collection('students')
+        .updateOne({ _id: new ObjectId(sharedStudentId) }, { $set: { sharedWith: [] } });
+      expect(await inbox(memberToken)).toEqual([]);
+      const single = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(single.status).toBe(403);
+      const ack = await request(app)
+        .post(`/api/alerts-api/${sharedAlertId}/acknowledge`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(ack.status).toBe(403);
+    });
+
+    it('acknowledgement is per person: the member acks, the owner still sees it unread and legacy fields stay', async () => {
+      const ack = await request(app)
+        .post(`/api/alerts-api/${sharedAlertId}/acknowledge`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(ack.status).toBe(200);
+
+      const memberView = (await inbox(memberToken)).find((a) => a['id'] === sharedAlertId);
+      expect(memberView).toMatchObject({ acknowledged: true });
+      expect(typeof memberView?.['acknowledgedAt']).toBe('string');
+
+      const ownerView = (await inbox(testToken)).find((a) => a['id'] === sharedAlertId);
+      expect(ownerView).toMatchObject({ acknowledged: false });
+      expect(ownerView?.['acknowledgedAt']).toBeUndefined();
+
+      const row = await database.collection('alerts').findOne({ _id: new ObjectId(sharedAlertId) });
+      expect(row?.['acknowledged']).toBe(false);
+      expect(row?.['acknowledgedAt']).toBeUndefined();
+      expect(Object.keys(row?.['acknowledgedBy'] as Record<string, string>)).toEqual([
+        memberUserId,
+      ]);
+    });
+
+    it("the owner's acknowledgement writes the legacy fields and is theirs alone", async () => {
+      const ack = await request(app)
+        .post(`/api/alerts-api/${sharedAlertId}/acknowledge`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ack.status).toBe(200);
+
+      const row = await database.collection('alerts').findOne({ _id: new ObjectId(sharedAlertId) });
+      expect(row?.['acknowledged']).toBe(true);
+      expect(row?.['acknowledgedAt']).toBeInstanceOf(Date);
+      expect(Object.keys(row?.['acknowledgedBy'] as Record<string, string>)).toEqual([testUserId]);
+
+      const single = await request(app)
+        .get(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(single.status).toBe(200);
+      expect(single.body.acknowledged).toBe(false);
+    });
+
+    it('a legacy row acknowledged before the migration still reads as acknowledged for the owner only', async () => {
+      await database
+        .collection('alerts')
+        .updateOne(
+          { _id: new ObjectId(sharedAlertId) },
+          { $set: { acknowledged: true, acknowledgedAt: new Date('2026-11-01T00:00:00Z') } }
+        );
+      const ownerView = (await inbox(testToken)).find((a) => a['id'] === sharedAlertId);
+      expect(ownerView).toMatchObject({
+        acknowledged: true,
+        acknowledgedAt: '2026-11-01T00:00:00.000Z',
+      });
+      const memberView = (await inbox(memberToken)).find((a) => a['id'] === sharedAlertId);
+      expect(memberView).toMatchObject({ acknowledged: false });
+    });
+
+    it('delete stays owner-only', async () => {
+      const memberDelete = await request(app)
+        .delete(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(memberDelete.status).toBe(403);
+      const ownerDelete = await request(app)
+        .delete(`/api/alerts-api/${sharedAlertId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ownerDelete.status).toBe(200);
     });
   });
 });

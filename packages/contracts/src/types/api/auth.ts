@@ -26,7 +26,10 @@ export interface IAuthLoginResponse {
   readonly familyId?: string;
   readonly rememberMe?: boolean;
   readonly user?: IAuthUser;
-  /** When true, client should force a password reset flow. */
+  /**
+   * When true, client should force a password reset flow. Also true right after an account was
+   * created by accepting a sharing invitation (random password): clients show "Set a password".
+   */
   readonly forcePasswordReset?: boolean;
   readonly error?: string;
 }

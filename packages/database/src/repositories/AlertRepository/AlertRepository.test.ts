@@ -233,6 +233,93 @@ describe('AlertRepository', () => {
     });
   });
 
+  describe('findVisibleTo (sharing-spec §4.5)', () => {
+    it('queries own rows plus one owner + Mongo id clause per shared student, newest first', async () => {
+      const toArray = jest.fn().mockResolvedValue([]);
+      const sort = jest.fn().mockReturnValue({ toArray });
+      (mockCollection.find as jest.Mock).mockReturnValue({ sort });
+
+      await alertRepository.findVisibleTo('viewer', [
+        { ownerUserId: 'owner-a', studentId: 'sid-a' },
+        { ownerUserId: 'owner-b', studentId: 'sid-b' },
+      ]);
+
+      expect(mockCollection.find).toHaveBeenCalledWith({
+        $or: [
+          { userId: 'viewer' },
+          { userId: 'owner-a', studentId: 'sid-a' },
+          { userId: 'owner-b', studentId: 'sid-b' },
+        ],
+      });
+      expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+    });
+
+    it('findByStudentScope queries one owner + Mongo id pair', async () => {
+      const toArray = jest.fn().mockResolvedValue([]);
+      const sort = jest.fn().mockReturnValue({ toArray });
+      (mockCollection.find as jest.Mock).mockReturnValue({ sort });
+
+      await alertRepository.findByStudentScope({ ownerUserId: 'owner-a', studentId: 'sid-a' });
+
+      expect(mockCollection.find).toHaveBeenCalledWith({ userId: 'owner-a', studentId: 'sid-a' });
+      expect(sort).toHaveBeenCalledWith({ createdAt: -1 });
+    });
+
+    it('maps _id to id on the results', async () => {
+      const objectId = new ObjectId();
+      const toArray = jest
+        .fn()
+        .mockResolvedValue([{ _id: objectId, studentId: 's', userId: 'viewer' }]);
+      (mockCollection.find as jest.Mock).mockReturnValue({
+        sort: jest.fn().mockReturnValue({ toArray }),
+      });
+      const out = await alertRepository.findVisibleTo('viewer', []);
+      expect(out).toEqual([
+        { _id: objectId, id: objectId.toString(), studentId: 's', userId: 'viewer' },
+      ]);
+    });
+  });
+
+  describe('acknowledgeFor (per-person acknowledgement)', () => {
+    it('writes acknowledgedBy[user] only when a shared adult acknowledges', async () => {
+      const alertId = new ObjectId().toString();
+      (mockCollection.findOneAndUpdate as jest.Mock).mockResolvedValue({ _id: alertId });
+
+      const result = await alertRepository.acknowledgeFor(alertId, 'member-1', 'owner-1');
+
+      expect(result).toBe(true);
+      expect(mockCollection.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: expect.any(ObjectId) },
+        { $set: { 'acknowledgedBy.member-1': expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } },
+        { returnDocument: 'after' }
+      );
+    });
+
+    it('also writes the legacy fields when the owner acknowledges', async () => {
+      const alertId = new ObjectId().toString();
+      (mockCollection.findOneAndUpdate as jest.Mock).mockResolvedValue({ _id: alertId });
+
+      await alertRepository.acknowledgeFor(alertId, 'owner-1', 'owner-1');
+
+      expect(mockCollection.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: expect.any(ObjectId) },
+        {
+          $set: {
+            'acknowledgedBy.owner-1': expect.any(String),
+            acknowledged: true,
+            acknowledgedAt: expect.any(Date),
+          },
+        },
+        { returnDocument: 'after' }
+      );
+    });
+
+    it('returns false when the alert does not exist', async () => {
+      (mockCollection.findOneAndUpdate as jest.Mock).mockResolvedValue(null);
+      expect(await alertRepository.acknowledgeFor(new ObjectId().toString(), 'u', 'o')).toBe(false);
+    });
+  });
+
   describe('delete', () => {
     it('should delete alert successfully', async () => {
       // Arrange

@@ -18,8 +18,12 @@ export * from './models/AgendaOverride';
 
 // Connector / ingestion models
 export * from './models/IngestDeviceAuth';
+export * from './models/ConnectorDevice';
 export * from './models/IngestSource';
 export * from './models/IngestRun';
+export * from './models/PortalAccount';
+export * from './models/SlcBinding';
+export * from './models/RepairCandidate';
 export * from './models/ExternalIdAlias/ExternalIdAlias';
 
 // Repositories
@@ -42,12 +46,19 @@ export * from './repositories/EmailDigestPendingRepository';
 export * from './repositories/AiUsageRepository';
 export * from './repositories/WebhookEventRepository';
 export * from './repositories/SmsConsentRepository';
+export * from './repositories/ServerAiConsentRepository';
 export * from './repositories/SmsContactOptInInviteRepository';
 
 // Connector / ingestion repositories
 export * from './repositories/IngestDeviceAuthRepository';
+export * from './repositories/ConnectorDeviceRepository';
 export * from './repositories/IngestSourceRepository';
 export * from './repositories/IngestRunRepository';
+export * from './repositories/PortalAccountRepository';
+export * from './repositories/SlcBindingRepository';
+export * from './repositories/RepairCandidateRepository';
+export * from './repositories/RepairProposalRepository';
+export * from './repositories/ServedSelectorPatchRepository';
 export * from './repositories/SourceInviteRepository';
 export * from './repositories/ExternalIdAliasRepository/ExternalIdAliasRepository';
 

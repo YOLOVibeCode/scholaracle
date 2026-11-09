@@ -19,6 +19,14 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentsCollection.createIndex({ userId: 1, studentId: 1 }, { unique: true, sparse: true });
   await studentsCollection.createIndex({ 'dataSources.id': 1 });
   await studentsCollection.createIndex({ 'dataSources.pluginId': 1 });
+  // Sharing (sharing-spec §4.3): pending invitations by email, and the students of one invite group.
+  await studentsCollection.createIndex({ 'sharedWith.email': 1 });
+  await studentsCollection.createIndex({ 'sharedWith.inviteGroupId': 1 }, { sparse: true });
+
+  // Sharing rate-limit counters: one row per (scope, UTC day); rows expire an hour after the day ends.
+  const sharingRateLimits = database.collection('sharing_rate_limits');
+  await sharingRateLimits.createIndex({ key: 1 }, { unique: true });
+  await sharingRateLimits.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
 
   // Grades collection indexes (if exists)
   const gradesCollection = database.collection('grades');
@@ -73,6 +81,9 @@ export async function createIndexes(database: Db): Promise<void> {
   const smsConsents = database.collection('sms_consents');
   await smsConsents.createIndex({ phoneE164: 1, purpose: 1 }, { unique: true });
 
+  const consents = database.collection('consents');
+  await consents.createIndex({ userId: 1, purpose: 1 }, { unique: true });
+
   const smsContactOptInInvites = database.collection('sms_contact_optin_invites');
   await smsContactOptInInvites.createIndex({ token: 1 }, { unique: true });
   await smsContactOptInInvites.createIndex({ studentId: 1, contactEmail: 1, createdAt: -1 });
@@ -88,19 +99,58 @@ export async function createIndexes(database: Db): Promise<void> {
   await slcDeviceAuth.createIndex({ userCode: 1 }, { unique: true });
   await slcDeviceAuth.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+  const slcDevices = database.collection('slc_devices');
+  await slcDevices.createIndex({ userId: 1, deviceId: 1 }, { unique: true });
+  await slcDevices.createIndex({ activeJti: 1 });
+
   const slcSources = database.collection('slc_sources');
   await slcSources.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
   await slcSources.createIndex({ userId: 1, updatedAt: -1 });
 
+  const slcPortalAccounts = database.collection('slc_portal_accounts');
+  await slcPortalAccounts.createIndex({ userId: 1, portalAccountId: 1 }, { unique: true });
+  await slcPortalAccounts.createIndex(
+    { userId: 1, provider: 1, institutionExternalId: 1 },
+    { unique: true }
+  );
+
+  const slcBindings = database.collection('slc_bindings');
+  await slcBindings.createIndex({ userId: 1, sourceId: 1 }, { unique: true });
+  await slcBindings.createIndex({ userId: 1, studentId: 1 });
+  await slcBindings.createIndex({ userId: 1, portalAccountId: 1 });
+
   const slcRuns = database.collection('slc_runs');
   await slcRuns.createIndex({ userId: 1, runId: 1 }, { unique: true });
   await slcRuns.createIndex({ userId: 1, sourceId: 1, committedAt: -1 });
-  await slcRuns.createIndex({ runId: 1 });
+  try {
+    await slcRuns.dropIndex('runId_1');
+  } catch {
+    /* legacy non-unique index may be absent or already replaced */
+  }
+  await slcRuns.createIndex({ runId: 1 }, { unique: true });
   await slcRuns.createIndex({ status: 1, startedAt: 1 });
+
+  const slcRunSkeletons = database.collection('slc_run_skeletons');
+  await slcRunSkeletons.createIndex({ userId: 1, runId: 1, createdAt: -1 });
+  await slcRunSkeletons.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  const repairCandidates = database.collection('repair_candidates');
+  await repairCandidates.createIndex(
+    { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+    { unique: true }
+  );
+
+  const repairProposals = database.collection('repair_proposals');
+  await repairProposals.createIndex({ candidateId: 1, createdAt: -1 });
+
+  const servedSelectorPatches = database.collection('served_selector_patches');
+  await servedSelectorPatches.createIndex({ patchId: 1 }, { unique: true });
+  await servedSelectorPatches.createIndex({ portalHost: 1, status: 1, servedAt: -1 });
 
   const syncRequests = database.collection('sync_requests');
   await syncRequests.createIndex({ syncRequestId: 1 }, { unique: true });
   await syncRequests.createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
+  await syncRequests.createIndex({ requestedByUserId: 1, fulfilledAt: 1, createdAt: -1 });
 
   // Agenda overrides (snooze)
   const agendaOverrides = database.collection('agenda_overrides');
@@ -226,6 +276,13 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentMagicTokens.createIndex({ tokenHash: 1 }, { unique: true });
   await studentMagicTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   await studentMagicTokens.createIndex({ userId: 1, usedAt: 1 });
+
+  // Student "Need help": one student_needs_help alert per assignment per 24 h (student review §3.2)
+  const studentHelpRequests = database.collection('student_help_requests');
+  await studentHelpRequests.createIndex(
+    { studentId: 1, assignmentExternalId: 1 },
+    { unique: true }
+  );
 
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');

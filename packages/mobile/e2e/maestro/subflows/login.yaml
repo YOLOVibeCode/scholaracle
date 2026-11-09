@@ -1,0 +1,88 @@
+appId: com.scholarmancy.app
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - clearKeychain
+# On CI emulators a clear-state relaunch can race the previous task's teardown, which
+# kills the new process and leaves the app on its splash screen. Relaunch until the
+# sign-in screen shows.
+- retry:
+    maxRetries: 3
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            all: deny
+            # Granted so Android 13+ does not raise its notification prompt over the app.
+            notifications: allow
+      - extendedWaitUntil:
+          visible:
+            id: input-email
+          timeout: 40000
+# iOS simulator typing sometimes drops characters (one run typed only the first letter).
+# Type, confirm the whole address is in the field, and retry if not.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          id: input-email
+      - waitForAnimationToEnd
+      - eraseText: 80
+      - inputText:
+          text: ${MAESTRO_PARENT_EMAIL}
+          label: Type parent email
+      - assertVisible:
+          text: ${MAESTRO_PARENT_EMAIL}
+- tapOn:
+    id: input-password
+- waitForAnimationToEnd
+- inputText:
+    text: ${MAESTRO_PARENT_PASSWORD}
+    label: Type parent password
+# The password field submits on Return (onSubmitEditing). hideKeyboard is unreliable on
+# iOS simulators, and the keyboard can cover the Sign In button.
+- pressKey: Enter
+# Android 13+ asks for notification permission after sign-in, over the students list.
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn:
+          text: "Don.t allow"
+          # The prompt can vanish between the check and the tap.
+          optional: true
+# A login request can fail on a flaky CI network ("fetch failed ... canceled", API shown
+# as unreachable). If the error shows, tap Sign In again before giving up.
+- retry:
+    maxRetries: 2
+    commands:
+      # iOS offers to save the password over the app after a successful sign-in.
+      - runFlow:
+          when:
+            visible: "Not Now"
+          commands:
+            - tapOn:
+                text: "Not Now"
+                # The prompt can vanish between the check and the tap.
+                optional: true
+      - runFlow:
+          when:
+            visible:
+              id: text-login-error
+          commands:
+            - tapOn:
+                id: button-login
+      - extendedWaitUntil:
+          visible:
+            id: students-list
+          timeout: 40000
+# iOS can raise "Save Password?" a few seconds after the students list appears.
+- extendedWaitUntil:
+    visible: "Not Now"
+    timeout: 8000
+    optional: true
+- tapOn:
+    text: "Not Now"
+    optional: true

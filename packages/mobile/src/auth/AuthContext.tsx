@@ -147,6 +147,28 @@ export function AuthProvider({
     ) => {
       setState((s) => ({ ...s, isAuthenticating: true, error: null }));
       try {
+        // Apple is verified by the server from the identity token alone: no shared secret ships in
+        // the app, and the email/id in the request are never trusted.
+        if (
+          provider === 'apple' &&
+          oauthExtra?.appleIdentityToken !== undefined &&
+          oauthExtra.appleNonce !== undefined
+        ) {
+          const apple = await apiClient.loginWithApple(
+            oauthExtra.appleIdentityToken,
+            oauthExtra.appleNonce,
+            name
+          );
+          setState((s) => ({
+            ...s,
+            isLoggedIn: true,
+            isAuthenticating: false,
+            error: null,
+            accountEpoch: s.accountEpoch + 1,
+            ...roleFields(apple.user ?? null),
+          }));
+          return;
+        }
         const internalSecret = process.env['EXPO_PUBLIC_INTERNAL_API_SECRET'] ?? '';
         const res = await apiClient.loginWithOAuth(
           provider,

@@ -42,6 +42,7 @@ interface IDashboardScreenProps {
   onOpenCourse(course: ICourseGrade): void;
   onOpenAssignmentFromTab(assignment: ICourseGradeAssignment, course: ICourseGrade): void;
   onRunHistory?(): void;
+  onEditStudent?(): void;
 }
 
 export function DashboardScreen({
@@ -52,6 +53,7 @@ export function DashboardScreen({
   onOpenCourse,
   onOpenAssignmentFromTab,
   onRunHistory,
+  onEditStudent,
 }: IDashboardScreenProps): React.ReactElement {
   const [data, setData] = useState<IDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +70,8 @@ export function DashboardScreen({
         const [assignmentsRes, gradesRes, runsRes, materialsRes] = await Promise.all([
           apiClient.getStudentAssignments(studentId),
           apiClient.getStudentGrades(studentId),
-          apiClient.getStudentRuns(studentId),
+          // Sync history is secondary: a failing runs request must not blank the dashboard.
+          apiClient.getStudentRuns(studentId).catch(() => []),
           apiClient.getStudentMaterials(studentId),
         ]);
         setData({
@@ -130,6 +133,15 @@ export function DashboardScreen({
         </TouchableOpacity>
         <Text style={styles.title}>{studentName}</Text>
         <View style={styles.headerActions}>
+          {onEditStudent && (
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={onEditStudent}
+              testID="button-edit-student"
+            >
+              <Text style={styles.historyText}>Edit</Text>
+            </TouchableOpacity>
+          )}
           {onRunHistory && (
             <TouchableOpacity style={styles.historyBtn} onPress={onRunHistory}>
               <Text style={styles.historyText}>Runs</Text>
@@ -239,10 +251,16 @@ export function DashboardScreen({
             <Text style={styles.sectionHeader}>{section.title}</Text>
           )}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => onOpenCourse(item)}>
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => onOpenCourse(item)}
+              testID="card-course"
+            >
               <View style={styles.cardRow}>
-                <Text style={styles.cardTitle}>{item.courseName}</Text>
-                <Text style={styles.gradeBadge}>
+                <Text style={styles.cardTitle} testID="text-course-name">
+                  {item.courseName}
+                </Text>
+                <Text style={styles.gradeBadge} testID="text-course-grade">
                   {item.letterGrade ??
                     (item.officialGrade != null ? `${item.officialGrade.toFixed(1)}%` : 'N/A')}
                 </Text>

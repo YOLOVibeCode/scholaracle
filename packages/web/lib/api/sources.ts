@@ -1,5 +1,7 @@
 import type {
   ITriggerSyncResponse,
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
   ISlcRunCoverage,
   ISourceIngestLastCounts,
 } from '@scholaracle/contracts';
@@ -51,6 +53,9 @@ export interface IIngestRun {
   readonly error?: string | null;
   readonly coverage?: ISlcRunCoverage;
   readonly warnings?: readonly string[];
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly stats?: ISlcIngestRunStats;
+  readonly clientMeta?: Readonly<Record<string, string>>;
 }
 
 /**

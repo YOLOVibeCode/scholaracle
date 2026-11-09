@@ -7,6 +7,7 @@ import { requireParent } from '../../../middleware/requireRole';
 import { createErrorHandler } from '../../../middleware/errorHandler';
 import { ingestV1Router } from './ingest';
 import { studentsRouter } from '../../students/students';
+import { seedIngestBinding } from '../../../test-utils/seedIngestBinding';
 
 describe('Ingest complete updates student GET /sources', () => {
   let app: Express;
@@ -23,7 +24,14 @@ describe('Ingest complete updates student GET /sources', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
     app.use(
       '/api/students',
       authMiddleware(authService),
@@ -46,6 +54,8 @@ describe('Ingest complete updates student GET /sources', () => {
       'slc_sources',
       'slc_runs',
       'slc_device_auth',
+      'slc_devices',
+      'revoked_connector_tokens',
       'slc_assignments',
     ]) {
       await database.collection(name).deleteMany({});
@@ -94,6 +104,21 @@ describe('Ingest complete updates student GET /sources', () => {
     });
 
     const sourceId = 'src-cli-only';
+    await request(app)
+      .post('/api/ingest/v1/sources')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        displayName: 'Canvas',
+      })
+      .expect(200);
+    await seedIngestBinding(database, userId, {
+      sourceId,
+      studentExternalId: childId.toHexString(),
+      studentId: childId.toHexString(),
+    });
     const run = await request(app)
       .post('/api/ingest/v1/runs')
       .set('Authorization', `Bearer ${connectorToken}`)

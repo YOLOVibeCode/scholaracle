@@ -10,6 +10,13 @@ jest.mock('@scholaracle/database', () => {
   const mockUpdateSubscription = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
   return {
+    PLAN_FEATURES: {
+      free: { maxStudents: 1 },
+      starter: { maxStudents: 1 },
+      premium: { maxStudents: 2 },
+      family: { maxStudents: 5 },
+      enterprise: { maxStudents: -1 },
+    },
     SubscriptionRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserId,
       update: mockUpdateSubscription,
@@ -210,6 +217,7 @@ describe('Billing Routes', () => {
 
       expect(res.body.success).toBe(true);
       expect(res.body.subscription.plan).toBe('free');
+      expect(res.body.subscription.maxStudents).toBe(1);
     });
 
     it('should return subscription details when found', async () => {
@@ -228,6 +236,23 @@ describe('Billing Routes', () => {
       expect(res.body.subscription.plan).toBe('premium');
       expect(res.body.subscription.effectivePlan).toBe('premium');
       expect(res.body.subscription.status).toBe('active');
+      expect(res.body.subscription.maxStudents).toBe(2);
+    });
+
+    it('reports the free student cap when the paid plan has lapsed', async () => {
+      mockFindByUserId.mockResolvedValue({
+        plan: 'family',
+        status: 'cancelled',
+        currentPeriodEnd: new Date('2025-02-01'),
+        cancelAtPeriodEnd: false,
+        effectivePlan: () => 'free',
+      });
+
+      const res = await request(app).get('/api/billing/subscription').expect(200);
+
+      expect(res.body.subscription.plan).toBe('family');
+      expect(res.body.subscription.effectivePlan).toBe('free');
+      expect(res.body.subscription.maxStudents).toBe(1);
     });
   });
 
