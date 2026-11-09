@@ -1019,20 +1019,31 @@ describe('ScholarmancyApiClient auth', () => {
       expect(JSON.parse(call[1].body)).toEqual({ status: 'working_on_it' });
     });
 
-    it('patchStudioAssignmentStatus sends the need-help note only when there is one', async () => {
+    it('patchStudioAssignmentStatus sends a trimmed note only when there is one, and parses the answer', async () => {
       secureStoreData.set('slc_access_token', 'jwt-ok');
       const fetchMock = mockFetchSequence(
-        { status: 200, body: { success: true, studentStatus: 'need_help' } },
-        { status: 200, body: { success: true, studentStatus: 'need_help' } },
+        { status: 200, body: { success: true, studentStatus: 'need_help', notified: true } },
+        {
+          status: 200,
+          body: {
+            success: true,
+            studentStatus: 'need_help',
+            notified: false,
+            nextAllowedAt: '2026-11-10T18:00:00.000Z',
+          },
+        },
         { status: 200, body: { success: true, studentStatus: 'done' } }
       );
-      await client.patchStudioAssignmentStatus(
-        'demo-emma-ap-bio-a5',
-        'need_help',
-        "I don't get #7"
-      );
-      await client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', '');
-      await client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'done', undefined);
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', "  I don't get #7 ")
+      ).resolves.toEqual({ success: true, studentStatus: 'need_help', notified: true });
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', '   ')
+      ).resolves.toMatchObject({ notified: false, nextAllowedAt: '2026-11-10T18:00:00.000Z' });
+      // An older server answers without `notified`; the client does not invent it.
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'done', undefined)
+      ).resolves.toEqual({ success: true, studentStatus: 'done' });
       const bodies = fetchMock.mock.calls.map((c) =>
         JSON.parse((c as [string, { body: string }])[1].body)
       );

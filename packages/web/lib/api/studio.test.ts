@@ -136,15 +136,34 @@ describe('studio API client', () => {
     await expect(fetchStudioWeek('parent-jwt')).rejects.toBeInstanceOf(StudioAuthError);
   });
 
-  it('PATCHes need_help with a note, and omits an empty note', async () => {
-    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ success: true }, 200));
-    await patchStudioAssignmentStatus(
-      'emma-jwt',
-      'demo-emma-ap-bio-a5',
-      'need_help',
-      "I don't get #7"
-    );
-    await patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'need_help', '');
+  it('PATCHes need_help with a trimmed note, omits a blank one, and returns the parsed answer', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        fakeResponse({ success: true, studentStatus: 'need_help', notified: true }, 200)
+      )
+      .mockResolvedValueOnce(
+        fakeResponse(
+          {
+            success: true,
+            studentStatus: 'need_help',
+            notified: false,
+            nextAllowedAt: '2026-11-10T18:00:00.000Z',
+          },
+          200
+        )
+      );
+    await expect(
+      patchStudioAssignmentStatus(
+        'emma-jwt',
+        'demo-emma-ap-bio-a5',
+        'need_help',
+        " I don't get #7 "
+      )
+    ).resolves.toEqual({ success: true, studentStatus: 'need_help', notified: true });
+    await expect(
+      patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'need_help', '   ')
+    ).resolves.toMatchObject({ notified: false, nextAllowedAt: '2026-11-10T18:00:00.000Z' });
     const bodies = (global.fetch as jest.Mock).mock.calls.map((c: [string, RequestInit]) =>
       JSON.parse(c[1].body as string)
     );
@@ -154,9 +173,13 @@ describe('studio API client', () => {
     ]);
   });
 
-  it('PATCHes working_on_it', async () => {
-    global.fetch = jest.fn().mockResolvedValue(fakeResponse({ success: true }, 200));
-    await patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'working_on_it');
+  it('PATCHes working_on_it; an older server with no `notified` parses too', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(fakeResponse({ success: true, studentStatus: 'working_on_it' }, 200));
+    await expect(
+      patchStudioAssignmentStatus('emma-jwt', 'demo-emma-ap-bio-a5', 'working_on_it')
+    ).resolves.toEqual({ success: true, studentStatus: 'working_on_it' });
     expect(global.fetch).toHaveBeenCalledWith(
       'http://localhost:2801/api/studio/assignments/demo-emma-ap-bio-a5/status',
       expect.objectContaining({

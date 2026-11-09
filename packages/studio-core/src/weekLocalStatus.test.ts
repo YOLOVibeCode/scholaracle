@@ -1,18 +1,22 @@
 /**
- * R2 — optimistic status on a held This-week view: done moves the item to
- * Done this week; other statuses update in place; counts follow.
+ * R2 — optimistic status on a held This-week view, mirroring WeekGuide:
+ * done moves past-due / upcoming items to Done this week, keeps missing items
+ * owed with the warning; other statuses update in place; counts follow.
  */
 
 import type { IWeekItem, IWeekView } from '@scholaracle/contracts';
-import { MARKED_DONE_WARNING } from './WeekGuide';
+import { MARKED_DONE_WARNING, PAST_DUE_LABEL } from './WeekGuide';
+import { humanAssignmentStatus } from './humanAssignmentStatus';
 import { applyStudentStatusLocally } from './weekLocalStatus';
+
+const MISSING = humanAssignmentStatus('missing');
 
 function item(id: string, overrides: Partial<IWeekItem> = {}): IWeekItem {
   return {
     assignmentExternalId: id,
     title: `Title ${id}`,
     courseName: 'Math',
-    humanStatus: 'Not turned in',
+    humanStatus: 'Coming up',
     studentStatus: 'not_started',
     needs: [],
     primaryCtaLabel: 'Open worksheet',
@@ -22,9 +26,12 @@ function item(id: string, overrides: Partial<IWeekItem> = {}): IWeekItem {
 
 const VIEW: IWeekView = {
   encouragement: "Let's take the next step.",
-  owed: [item('owed-1', { dueAt: '2026-11-02T16:00:00.000Z', warning: MARKED_DONE_WARNING })],
+  owed: [
+    item('missing-1', { humanStatus: MISSING, dueAt: '2026-11-02T16:00:00.000Z' }),
+    item('late-1', { humanStatus: PAST_DUE_LABEL, dueAt: '2026-11-06T16:00:00.000Z' }),
+  ],
   days: [
-    { date: '2026-11-09', label: 'Today', items: [item('today-1')] },
+    { date: '2026-11-09', label: 'Today', items: [item('today-1', { humanStatus: 'Due soon' })] },
     { date: '2026-11-10', label: 'Tomorrow', items: [item('tmrw-1'), item('tmrw-2')] },
   ],
   doneThisWeek: [
@@ -35,58 +42,86 @@ const VIEW: IWeekView = {
       confirmedBySchool: true,
     },
   ],
-  counts: { owed: 1, due: 3, done: 1 },
+  counts: { owed: 2, due: 3, done: 1 },
 };
 
 describe('applyStudentStatusLocally', () => {
-  it('done lifts a day item into Done this week first, awaiting the school, and recounts', () => {
-    const next = applyStudentStatusLocally(VIEW, 'tmrw-1', 'done');
-    expect(next.days[1]?.items.map((i) => i.assignmentExternalId)).toEqual(['tmrw-2']);
-    expect(next.doneThisWeek[0]).toEqual({
-      assignmentExternalId: 'tmrw-1',
-      title: 'Title tmrw-1',
-      courseName: 'Math',
-      confirmedBySchool: false,
+  describe('done', () => {
+    const moves: ReadonlyArray<{
+      readonly id: string;
+      readonly from: 'owed' | 'days';
+      readonly label: string;
+    }> = [
+      { id: 'late-1', from: 'owed', label: 'past due (owed, not flagged missing)' },
+      { id: 'today-1', from: 'days', label: 'due soon (today)' },
+      { id: 'tmrw-1', from: 'days', label: 'coming up (tomorrow)' },
+    ];
+
+    it.each(moves)('$label moves to Done this week, awaiting the school', ({ id, from }) => {
+      const next = applyStudentStatusLocally(VIEW, id, 'done');
+      const stillOpen = [...next.owed, ...next.days.flatMap((d) => d.items)].map(
+        (i) => i.assignmentExternalId
+      );
+      expect(stillOpen).not.toContain(id);
+      expect(next.doneThisWeek[0]).toMatchObject({
+        assignmentExternalId: id,
+        confirmedBySchool: false,
+      });
+      expect(next.doneThisWeek[1]?.assignmentExternalId).toBe('done-1');
+      expect(next.counts).toEqual({
+        owed: from === 'owed' ? 1 : 2,
+        due: from === 'days' ? 2 : 3,
+        done: 2,
+      });
+      expect(next.encouragement).toBe(VIEW.encouragement);
     });
-    expect(next.doneThisWeek[1]?.assignmentExternalId).toBe('done-1');
-    expect(next.counts).toEqual({ owed: 1, due: 2, done: 2 });
-    expect(next.encouragement).toBe(VIEW.encouragement);
-  });
 
-  it('done on an owed item removes it from owed and keeps its due date', () => {
-    const next = applyStudentStatusLocally(VIEW, 'owed-1', 'done');
-    expect(next.owed).toEqual([]);
-    expect(next.doneThisWeek[0]).toMatchObject({
-      assignmentExternalId: 'owed-1',
-      dueAt: '2026-11-02T16:00:00.000Z',
-      confirmedBySchool: false,
+    it('keeps a missing item in Still owed with the warning, like WeekGuide', () => {
+      const next = applyStudentStatusLocally(VIEW, 'missing-1', 'done');
+      expect(next.owed.map((i) => i.assignmentExternalId)).toEqual(['missing-1', 'late-1']);
+      expect(next.owed[0]).toMatchObject({
+        studentStatus: 'done',
+        humanStatus: MISSING,
+        warning: MARKED_DONE_WARNING,
+        dueAt: '2026-11-02T16:00:00.000Z',
+      });
+      expect(next.doneThisWeek).toEqual(VIEW.doneThisWeek);
+      expect(next.counts).toEqual(VIEW.counts);
     });
-    expect(next.counts).toEqual({ owed: 0, due: 3, done: 2 });
+
+    it('keeps the due date on the moved row and never duplicates a done row', () => {
+      const once = applyStudentStatusLocally(VIEW, 'late-1', 'done');
+      expect(once.doneThisWeek[0]?.dueAt).toBe('2026-11-06T16:00:00.000Z');
+      const twice = applyStudentStatusLocally(once, 'late-1', 'done');
+      expect(twice).toBe(once);
+    });
   });
 
-  it('other statuses update the row in place and clear the marked-done warning', () => {
-    const next = applyStudentStatusLocally(VIEW, 'owed-1', 'working_on_it');
-    expect(next.owed[0]?.studentStatus).toBe('working_on_it');
-    expect(next.owed[0]?.warning).toBeUndefined();
-    expect(next.days).toEqual(VIEW.days);
-    expect(next.counts).toEqual(VIEW.counts);
+  describe('other statuses', () => {
+    const statuses = ['not_started', 'working_on_it', 'need_help'] as const;
 
-    const help = applyStudentStatusLocally(VIEW, 'today-1', 'need_help');
-    expect(help.days[0]?.items[0]?.studentStatus).toBe('need_help');
-    expect(help.owed).toEqual(VIEW.owed);
+    it.each(statuses)('%s updates the row in place and clears the warning', (status) => {
+      const warned = applyStudentStatusLocally(VIEW, 'missing-1', 'done');
+      const next = applyStudentStatusLocally(warned, 'missing-1', status);
+      expect(next.owed[0]).toMatchObject({ studentStatus: status, humanStatus: MISSING });
+      expect(next.owed[0]?.warning).toBeUndefined();
+      expect(next.days).toEqual(VIEW.days);
+      expect(next.counts).toEqual(VIEW.counts);
+    });
+
+    it('touches only the named row', () => {
+      const next = applyStudentStatusLocally(VIEW, 'tmrw-2', 'need_help');
+      expect(next.days[1]?.items.map((i) => i.studentStatus)).toEqual(['not_started', 'need_help']);
+      expect(next.owed).toEqual(VIEW.owed);
+    });
   });
 
-  it('leaves the view alone for an unknown id and never duplicates a done row', () => {
+  it('leaves the view alone for an unknown id and does not mutate the input', () => {
     expect(applyStudentStatusLocally(VIEW, 'nope', 'done')).toBe(VIEW);
-    const once = applyStudentStatusLocally(VIEW, 'today-1', 'done');
-    const twice = applyStudentStatusLocally(once, 'today-1', 'done');
-    expect(twice).toBe(once);
-  });
-
-  it('does not mutate the input', () => {
     const snapshot = JSON.stringify(VIEW);
     applyStudentStatusLocally(VIEW, 'tmrw-1', 'done');
-    applyStudentStatusLocally(VIEW, 'owed-1', 'need_help');
+    applyStudentStatusLocally(VIEW, 'missing-1', 'done');
+    applyStudentStatusLocally(VIEW, 'late-1', 'need_help');
     expect(JSON.stringify(VIEW)).toBe(snapshot);
   });
 });

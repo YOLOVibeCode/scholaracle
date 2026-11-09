@@ -3,18 +3,23 @@
  */
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { IWeekView, StudentStatus } from '@scholaracle/contracts';
+import type {
+  IStudentStatusUpdateResponse,
+  IWeekView,
+  StudentStatus,
+} from '@scholaracle/contracts';
 import { apiClient } from '@/lib/api/client';
 import { StudioWeek } from './StudioWeek';
 
 const refresh = jest.fn();
+const mockAnswers: unknown[] = [];
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), refresh }),
 }));
 
 jest.mock('@/lib/api/client', () => ({
-  apiClient: { request: jest.fn().mockResolvedValue({ success: true }) },
+  apiClient: { request: jest.fn().mockResolvedValue({ success: true, studentStatus: 'done' }) },
 }));
 
 jest.mock('./WeekView', () => ({
@@ -23,26 +28,34 @@ jest.mock('./WeekView', () => ({
     onStatusChange,
   }: {
     view: IWeekView;
-    onStatusChange?: (id: string, status: StudentStatus, note?: string) => Promise<void>;
-  }) => (
-    <div>
-      <span data-testid="owed-count">{view.counts.owed}</span>
-      <span data-testid="done-count">{view.counts.done}</span>
-      <span data-testid="first-status">{view.owed[0]?.studentStatus ?? 'none'}</span>
-      <button
-        type="button"
-        onClick={() => void onStatusChange?.('a1', 'done')?.catch(() => undefined)}
-      >
-        done
-      </button>
-      <button type="button" onClick={() => void onStatusChange?.('a1', 'need_help', 'stuck on 7')}>
-        help
-      </button>
-      <button type="button" onClick={() => void onStatusChange?.('a1', 'working_on_it', '')}>
-        working
-      </button>
-    </div>
-  ),
+    onStatusChange?: (
+      id: string,
+      status: StudentStatus,
+      note?: string
+    ) => Promise<IStudentStatusUpdateResponse | undefined>;
+  }) => {
+    const pick = (id: string, status: StudentStatus, note?: string): void => {
+      void onStatusChange?.(id, status, note)
+        ?.then((answer) => mockAnswers.push(answer))
+        .catch(() => mockAnswers.push('rejected'));
+    };
+    return (
+      <div>
+        <span data-testid="owed-count">{view.counts.owed}</span>
+        <span data-testid="done-count">{view.counts.done}</span>
+        <span data-testid="first-status">{view.owed[0]?.studentStatus ?? 'none'}</span>
+        <button type="button" onClick={() => pick('a1', 'done')}>
+          done
+        </button>
+        <button type="button" onClick={() => pick('a1', 'need_help', '  stuck on 7 ')}>
+          help
+        </button>
+        <button type="button" onClick={() => pick('a1', 'working_on_it', '')}>
+          working
+        </button>
+      </div>
+    );
+  },
 }));
 
 const VIEW: IWeekView = {
@@ -52,7 +65,7 @@ const VIEW: IWeekView = {
       assignmentExternalId: 'a1',
       title: 'Ch. 4 worksheet',
       courseName: 'Math',
-      humanStatus: 'Not turned in',
+      humanStatus: 'Past due',
       studentStatus: 'not_started',
       needs: [],
       primaryCtaLabel: 'Open worksheet',
@@ -67,9 +80,10 @@ describe('StudioWeek', () => {
   beforeEach(() => {
     (apiClient.request as jest.Mock).mockClear();
     refresh.mockClear();
+    mockAnswers.length = 0;
   });
 
-  it('done moves the item locally, PATCHes, then refreshes the page data', async () => {
+  it('done moves a past-due item locally, PATCHes with the shared body, then refreshes', async () => {
     render(<StudioWeek view={VIEW} />);
     expect(screen.getByTestId('owed-count')).toHaveTextContent('1');
     fireEvent.click(screen.getByRole('button', { name: 'done' }));
@@ -82,7 +96,10 @@ describe('StudioWeek', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
 
-  it('need help sends the note; an empty note is left off the wire', async () => {
+  it("hands the server's parsed answer back to the sheet; the note is trimmed, a blank one dropped", async () => {
+    (apiClient.request as jest.Mock)
+      .mockResolvedValueOnce({ success: true, studentStatus: 'need_help', notified: true })
+      .mockResolvedValueOnce({ success: true, studentStatus: 'working_on_it' });
     render(<StudioWeek view={VIEW} />);
     fireEvent.click(screen.getByRole('button', { name: 'help' }));
     expect(screen.getByTestId('first-status')).toHaveTextContent('need_help');
@@ -96,6 +113,9 @@ describe('StudioWeek', () => {
       { status: 'need_help', note: 'stuck on 7' },
       { status: 'working_on_it' },
     ]);
+    await waitFor(() => expect(mockAnswers).toHaveLength(2));
+    expect(mockAnswers[0]).toEqual({ success: true, studentStatus: 'need_help', notified: true });
+    expect(mockAnswers[1]).toEqual({ success: true, studentStatus: 'working_on_it' });
   });
 
   it('a failed PATCH puts the row back and surfaces the error to the sheet', async () => {
@@ -106,6 +126,7 @@ describe('StudioWeek', () => {
     await waitFor(() => expect(screen.getByTestId('owed-count')).toHaveTextContent('1'));
     expect(screen.getByTestId('done-count')).toHaveTextContent('0');
     expect(refresh).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockAnswers).toEqual(['rejected']));
   });
 
   it('a fresh server view replaces the optimistic copy', () => {

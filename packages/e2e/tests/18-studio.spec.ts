@@ -150,7 +150,7 @@ test.describe('@studio Student studio (phone-width)', () => {
     await expect(sheet).toBeHidden();
     await expect(statusChip).toContainText('Working on it');
 
-    // Need help: note is capped at 140 with a counter; Send → "Your grown-ups were told".
+    // Need help: note is capped at 140 with a counter; Send → the server's own answer.
     await statusChip.click({ force: true });
     await page.locator('[data-testid="status-option-need_help"]').click({ force: true });
     await expect(page.locator('[data-testid="status-sheet-note"]')).toBeVisible();
@@ -169,8 +169,14 @@ test.describe('@studio Student studio (phone-width)', () => {
       status: 'need_help',
       note: "I don't get #7",
     });
-    await expect(page.locator('[data-testid="status-sheet-sent"]')).toContainText(
-      'Your grown-ups were told'
+    // The server decides what the sheet may claim: told this time, or already told today
+    // (the 24 h rule when the shared demo row was asked about earlier).
+    const answer = (await helpResponse.json()) as { notified?: boolean };
+    expect(typeof answer.notified).toBe('boolean');
+    await expect(page.locator('[data-testid="need-help-outcome"]')).toHaveText(
+      answer.notified === true
+        ? 'Your grown-ups were told'
+        : 'You already asked today. Your grown-ups know.'
     );
     await page.locator('[data-testid="need-help-ok"]').click({ force: true });
     await expect(sheet).toBeHidden();

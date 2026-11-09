@@ -29,7 +29,7 @@ import type {
   ITodayView,
   IWeekView,
   IWorkPackView,
-  IStudioStatusPatchRequest,
+  IStudentStatusUpdateResponse,
   StudentStatus,
   IPushTokenRequest,
   IConnectorTokenResponse,
@@ -51,7 +51,13 @@ import type {
   IUserSettingsResponse,
   IUserSettingsUpdateRequest,
 } from '@scholaracle/contracts';
-import { parseTodayView, parseWeekView, parseWorkPackView } from '@scholaracle/contracts';
+import {
+  parseStudentStatusUpdateResponse,
+  parseTodayView,
+  parseWeekView,
+  parseWorkPackView,
+  studioStatusPatchBody,
+} from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
@@ -437,19 +443,20 @@ export class ScholarmancyApiClient {
   }
 
   /**
-   * PATCH /api/studio/assignments/:id/status. `note` travels with need_help
-   * (≤140 chars); the server ignores it until the need-help alert lands (R3).
+   * PATCH /api/studio/assignments/:id/status. The body comes from the shared
+   * builder (a non-empty note rides along with need_help); the answer says
+   * whether the adults were told, when the server is new enough to know.
    */
   async patchStudioAssignmentStatus(
     assignmentExternalId: string,
     status: StudentStatus | null,
     note?: string
-  ): Promise<void> {
-    const body: IStudioStatusPatchRequest =
-      note !== undefined && note !== '' ? { status, note } : { status };
-    await this._patch(
-      `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-      body
+  ): Promise<IStudentStatusUpdateResponse> {
+    return parseStudentStatusUpdateResponse(
+      await this._patch<unknown>(
+        `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+        studioStatusPatchBody(status, note)
+      )
     );
   }
 

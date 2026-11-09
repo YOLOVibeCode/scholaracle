@@ -8,21 +8,30 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import type { ITodayView, IWeekView, StudentStatus } from '@scholaracle/contracts';
-import { applyStudentStatusLocally } from '@scholaracle/studio-core';
+import type {
+  IStudentStatusUpdateResponse,
+  ITodayView,
+  IWeekView,
+  StudentStatus,
+} from '@scholaracle/contracts';
+import { applyStudentStatusLocally, submitWithRollback } from '@scholaracle/studio-core';
 import type { IStudioApi } from '../api/interfaces';
 import { apiClient } from '../api/client';
 import { TodayView } from '../studio/TodayView';
 import { WeekView } from '../studio/WeekView';
 import { StatusSheet, type IStatusSheetTarget } from '../studio/StatusSheet';
+import {
+  ALL_STALE,
+  STUDIO_TABS,
+  headerTitle,
+  markFresh,
+  markOtherStale,
+  needsLoad,
+  type StaleMap,
+  type StudioTab,
+} from '../studio/studioTabs';
 
-/** The two student-mode tabs. `week` is also the weekly review push target. */
-export type StudioTab = 'today' | 'week';
-
-export const STUDIO_TABS: readonly { readonly tab: StudioTab; readonly label: string }[] = [
-  { tab: 'today', label: 'Today' },
-  { tab: 'week', label: 'This week' },
-];
+export type { StudioTab } from '../studio/studioTabs';
 
 export interface ITodayScreenProps {
   readonly studio?: IStudioApi;
@@ -50,6 +59,7 @@ export function TodayScreen({
 }: ITodayScreenProps): React.ReactElement {
   const [today, setToday] = useState<ILoadState<ITodayView>>(INITIAL);
   const [week, setWeek] = useState<ILoadState<IWeekView>>(INITIAL);
+  const [stale, setStale] = useState<StaleMap>(ALL_STALE);
   const [refreshing, setRefreshing] = useState(false);
   const [sheetTarget, setSheetTarget] = useState<IStatusSheetTarget | null>(null);
 
@@ -79,41 +89,45 @@ export function TodayScreen({
     }
   }, [studio]);
 
-  const loadActive = useCallback(
-    () => (tab === 'week' ? loadWeek() : loadToday()),
-    [tab, loadToday, loadWeek]
+  const load = useCallback(
+    (which: StudioTab): Promise<void> => (which === 'week' ? loadWeek() : loadToday()),
+    [loadToday, loadWeek]
   );
 
-  // Each tab loads the first time it is shown; a tap on the other tab loads that one.
+  // A tab fetches the first time it is shown, and again only after something made it stale.
   useEffect(() => {
-    void loadActive();
-  }, [loadActive]);
+    if (!needsLoad(stale, tab)) return;
+    setStale((s) => markFresh(s, tab));
+    void load(tab);
+  }, [tab, stale, load]);
 
   const refresh = (): void => {
     setRefreshing(true);
-    void loadActive().finally(() => setRefreshing(false));
+    void load(tab).finally(() => setRefreshing(false));
   };
 
   const submitStatus = async (
     assignmentExternalId: string,
     status: StudentStatus,
     note?: string
-  ): Promise<void> => {
-    // Move the row before the server answers; the refetch below confirms it.
-    setWeek((s) =>
-      s.view === null
-        ? s
-        : { ...s, view: applyStudentStatusLocally(s.view, assignmentExternalId, status) }
-    );
+  ): Promise<IStudentStatusUpdateResponse> => {
+    let response: IStudentStatusUpdateResponse;
     try {
-      await studio.patchStudioAssignmentStatus(assignmentExternalId, status, note);
+      // The row moves at once; a refused PATCH puts the snapshot back.
+      response = await submitWithRollback<IWeekView, IStudentStatusUpdateResponse>({
+        current: week.view,
+        optimistic: (view) => applyStudentStatusLocally(view, assignmentExternalId, status),
+        set: (view) => setWeek((s) => ({ ...s, view })),
+        submit: () => studio.patchStudioAssignmentStatus(assignmentExternalId, status, note),
+      });
     } catch (err: unknown) {
-      // Server said no: put the row back where the server has it.
-      void loadWeek();
+      // Rolled back already; ask the server for its copy, best effort.
+      void load(tab);
       throw err;
     }
-    void loadWeek();
-    void loadToday();
+    void load(tab);
+    setStale((s) => markOtherStale(s, tab));
+    return response;
   };
 
   const active = tab === 'week' ? week : today;
@@ -122,7 +136,7 @@ export function TodayScreen({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle} accessibilityRole="header">
-          {tab === 'week' ? 'This week' : 'Today'}
+          {headerTitle(tab)}
         </Text>
         <TouchableOpacity
           onPress={onOpenSettings}
@@ -163,7 +177,7 @@ export function TodayScreen({
         <View style={styles.center} testID="studio-error">
           <Text style={styles.error}>{active.error}</Text>
           <TouchableOpacity
-            onPress={() => void loadActive()}
+            onPress={() => void load(tab)}
             accessibilityRole="button"
             accessibilityLabel="Try again"
             testID="studio-retry"

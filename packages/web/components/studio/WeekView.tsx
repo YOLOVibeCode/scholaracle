@@ -1,16 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { IWeekDone, IWeekItem, IWeekView, StudentStatus } from '@scholaracle/contracts';
+import type {
+  IStudentStatusUpdateResponse,
+  IWeekDone,
+  IWeekItem,
+  IWeekView,
+  StudentStatus,
+} from '@scholaracle/contracts';
 import {
   OWED_SECTION_TITLE,
   STUDENT_STATUS_LABELS,
   STUDENT_STATUS_MARKS,
   WEEK_EMPTY_MESSAGE,
   doneSectionTitle,
+  formatDueDay,
   isWeekClear,
   needGlyphs,
+  resolvedTimeZone,
   weekSummaryLine,
 } from '@scholaracle/studio-core';
 import { StudioTabs } from './StudioTabs';
@@ -23,15 +31,23 @@ export interface IWeekViewProps {
     assignmentExternalId: string,
     status: StudentStatus,
     note?: string
-  ): Promise<void>;
+  ): Promise<IStudentStatusUpdateResponse | undefined>;
 }
 
 /**
  * Student This week. Presentational — takes IWeekView as props and reports
  * status picks upward; the wrapper owns the PATCH and the refetch. No grades UI.
+ *
+ * Due dates render only after mount, in the viewer's zone with a fixed en-US
+ * format, so the server and the browser never disagree during hydration.
  */
 export function WeekView({ view, onStatusChange }: IWeekViewProps): React.ReactElement {
   const [target, setTarget] = useState<IStatusSheetTarget | null>(null);
+  const [timeZone, setTimeZone] = useState<string | null>(null);
+  useEffect(() => {
+    setTimeZone(resolvedTimeZone());
+  }, []);
+
   const daysWithWork = view.days.filter((day) => day.items.length > 0);
   const clear = isWeekClear(view.counts);
 
@@ -70,7 +86,7 @@ export function WeekView({ view, onStatusChange }: IWeekViewProps): React.ReactE
           title={OWED_SECTION_TITLE}
           testId="studio-week-owed"
           items={view.owed}
-          showDue
+          dueZone={timeZone}
           onStatus={openSheet}
         />
       ) : null}
@@ -81,7 +97,7 @@ export function WeekView({ view, onStatusChange }: IWeekViewProps): React.ReactE
           title={day.label}
           testId={`studio-week-day-${day.date}`}
           items={day.items}
-          showDue={false}
+          dueZone={null}
           onStatus={openSheet}
         />
       ))}
@@ -114,13 +130,14 @@ function WeekSection({
   title,
   testId,
   items,
-  showDue,
+  dueZone,
   onStatus,
 }: {
   readonly title: string;
   readonly testId: string;
   readonly items: readonly IWeekItem[];
-  readonly showDue: boolean;
+  /** Zone for "Due Nov 3"; null hides the date (day rows sit under their heading, or not mounted yet). */
+  readonly dueZone: string | null;
   readonly onStatus?: (item: IWeekItem) => void;
 }): React.ReactElement {
   return (
@@ -133,7 +150,7 @@ function WeekSection({
           <WeekRow
             key={item.assignmentExternalId}
             item={item}
-            showDue={showDue}
+            dueZone={dueZone}
             onStatus={onStatus}
           />
         ))}
@@ -144,15 +161,15 @@ function WeekSection({
 
 function WeekRow({
   item,
-  showDue,
+  dueZone,
   onStatus,
 }: {
   readonly item: IWeekItem;
-  readonly showDue: boolean;
+  readonly dueZone: string | null;
   readonly onStatus?: (item: IWeekItem) => void;
 }): React.ReactElement {
   const statusLabel = STUDENT_STATUS_LABELS[item.studentStatus];
-  const due = showDue ? formatDue(item.dueAt) : '';
+  const due = dueZone === null ? null : formatDueDay(item.dueAt, dueZone);
   return (
     <li
       data-testid={`studio-week-item-${item.assignmentExternalId}`}
@@ -167,7 +184,7 @@ function WeekRow({
         </Link>
         <p className="text-sm text-muted-foreground">
           {item.courseName}
-          {due !== '' ? ` · Due ${due}` : ''}
+          {due !== null ? ` · Due ${due}` : ''}
         </p>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">
@@ -226,11 +243,4 @@ function DoneRow({ done }: { readonly done: IWeekDone }): React.ReactElement {
       </div>
     </li>
   );
-}
-
-function formatDue(iso: string | undefined): string {
-  if (iso === undefined || iso === '') return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

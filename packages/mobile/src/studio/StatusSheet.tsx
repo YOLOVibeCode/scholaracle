@@ -9,20 +9,26 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { StudentStatus } from '@scholaracle/contracts';
+import {
+  STUDENT_HELP_NOTE_MAX_CHARS,
+  type IStudentStatusUpdateResponse,
+  type StudentStatus,
+} from '@scholaracle/contracts';
 import {
   NEED_HELP_NOTE_PLACEHOLDER,
-  NEED_HELP_SENT_MESSAGE,
   NEED_HELP_TITLE,
-  STATUS_OPTIONS,
+  NEED_HELP_UNSTUCK_HINT,
   STATUS_SAVE_ERROR,
-  STUDENT_NOTE_MAX_CHARS,
   clampNote,
-  isSelected,
+  needHelpOutcomeMessage,
   needHelpPrompt,
   normalizeNote,
   noteCounter,
-  sheetTitle,
+} from '@scholaracle/studio-core';
+import {
+  STATUS_OPTIONS,
+  canDismiss,
+  isSelected,
   stepAfterPick,
   type StatusSheetStep,
 } from './statusSheetModel';
@@ -37,20 +43,29 @@ export interface IStatusSheetTarget {
 export interface IStatusSheetProps {
   readonly target: IStatusSheetTarget | null;
   onClose(): void;
-  /** Resolves when the server accepted the change; rejects to keep the sheet open. */
-  onSubmit(assignmentExternalId: string, status: StudentStatus, note?: string): Promise<void>;
+  /**
+   * Resolves with the server's answer once it accepted the change (an older
+   * server answers without `notified`); rejects to keep the sheet open.
+   */
+  onSubmit(
+    assignmentExternalId: string,
+    status: StudentStatus,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse | undefined>;
 }
 
 /**
  * Bottom sheet shared by Today and This week: Not started / Working on it /
- * Need help / Done. Need help asks for an optional 140-char note, then shows
- * "Your grown-ups were told". No grades anywhere.
+ * Need help / Done. Need help asks for an optional 140-char note, then tells
+ * the student what actually happened: told, already told today, or just saved.
+ * Dismiss is ignored while a save is in flight. No grades anywhere.
  */
 export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): React.ReactElement {
   const [step, setStep] = useState<StatusSheetStep>('pick');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
 
   // Fresh sheet for every target.
   useEffect(() => {
@@ -58,15 +73,22 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
     setNote('');
     setBusy(false);
     setError(null);
+    setOutcome(null);
   }, [target?.assignmentExternalId]);
+
+  const requestClose = (): void => {
+    if (!canDismiss(busy)) return;
+    onClose();
+  };
 
   const submit = (status: StudentStatus, noteText?: string): void => {
     if (target === null || busy) return;
     setBusy(true);
     setError(null);
     void onSubmit(target.assignmentExternalId, status, noteText)
-      .then(() => {
+      .then((response) => {
         if (status === 'need_help') {
+          setOutcome(needHelpOutcomeMessage(response));
           setStep('sent');
         } else {
           onClose();
@@ -89,20 +111,21 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
       visible={target !== null}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
       testID="status-sheet"
     >
       <Pressable
         style={styles.backdrop}
-        onPress={onClose}
+        onPress={requestClose}
         accessibilityRole="button"
         accessibilityLabel="Close"
+        accessibilityState={{ disabled: busy }}
       />
       <View style={styles.sheet} accessibilityViewIsModal>
         {target === null ? null : step === 'pick' ? (
           <View testID="status-sheet-pick">
             <Text style={styles.title} numberOfLines={2}>
-              {sheetTitle(target.title)}
+              {target.title}
             </Text>
             {STATUS_OPTIONS.map((option) => {
               const selected = isSelected(option, target.currentStatus);
@@ -131,10 +154,12 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
               </Text>
             ) : null}
             <TouchableOpacity
-              onPress={onClose}
+              onPress={requestClose}
+              disabled={busy}
               style={styles.cancel}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
+              accessibilityState={{ disabled: busy }}
               testID="status-sheet-cancel"
             >
               <Text style={styles.cancelText}>Cancel</Text>
@@ -150,7 +175,7 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
               onChangeText={(text) => setNote(clampNote(text))}
               placeholder={NEED_HELP_NOTE_PLACEHOLDER}
               placeholderTextColor="#8a8f98"
-              maxLength={STUDENT_NOTE_MAX_CHARS}
+              maxLength={STUDENT_HELP_NOTE_MAX_CHARS}
               multiline
               editable={!busy}
               accessibilityLabel="Note, optional"
@@ -177,11 +202,12 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
                 <Text style={styles.sendText}>{busy ? 'Sending…' : 'Send'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={onClose}
+                onPress={requestClose}
                 disabled={busy}
                 style={styles.cancel}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel"
+                accessibilityState={{ disabled: busy }}
                 testID="need-help-cancel"
               >
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -190,8 +216,10 @@ export function StatusSheet({ target, onClose, onSubmit }: IStatusSheetProps): R
           </View>
         ) : (
           <View testID="status-sheet-sent">
-            <Text style={styles.title}>{NEED_HELP_SENT_MESSAGE}</Text>
-            <Text style={styles.prompt}>Move the status on when you get unstuck.</Text>
+            <Text style={styles.title} testID="need-help-outcome">
+              {outcome}
+            </Text>
+            <Text style={styles.prompt}>{NEED_HELP_UNSTUCK_HINT}</Text>
             <TouchableOpacity
               onPress={onClose}
               style={styles.send}

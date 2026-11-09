@@ -16,6 +16,7 @@ import type {
   ITodayView,
   IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
   StudentStatus,
   ISourceInviteIssueRequest,
   ISourceInviteIssueResponse,
@@ -39,7 +40,7 @@ export interface IStudioApi {
     assignmentExternalId: string,
     status: StudentStatus | null,
     note?: string
-  ): Promise<void>;
+  ): Promise<IStudentStatusUpdateResponse>;
 }
 
 export interface IConnectorTokenProvider {

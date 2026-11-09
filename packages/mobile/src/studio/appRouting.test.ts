@@ -10,6 +10,7 @@ const TODAY_SCREEN = fs.readFileSync(
 const WEEK_VIEW = fs.readFileSync(path.join(__dirname, 'WeekView.tsx'), 'utf8');
 const STATUS_SHEET = fs.readFileSync(path.join(__dirname, 'StatusSheet.tsx'), 'utf8');
 const TODAY_VIEW = fs.readFileSync(path.join(__dirname, 'TodayView.tsx'), 'utf8');
+const STUDIO_TABS = fs.readFileSync(path.join(__dirname, 'studioTabs.ts'), 'utf8');
 
 describe('mobile logged-out + student home', () => {
   it('logged-out users land on LoginScreen; parent onboarding is opt-in', () => {
@@ -31,37 +32,50 @@ describe('mobile logged-out + student home', () => {
     expect(APP).toMatch(/onSelectTab=\{\(tab\) => setNav\(\{ view: tab \}\)\}/);
     expect(APP).toMatch(/studioReturn: studioTab/);
     expect(APP).toMatch(/setNav\(\{ view: nav\.studioReturn \?\? 'today' \}\)/);
-    expect(TODAY_SCREEN).toMatch(/\{ tab: 'today', label: 'Today' \}/);
-    expect(TODAY_SCREEN).toMatch(/\{ tab: 'week', label: 'This week' \}/);
+    expect(STUDIO_TABS).toMatch(/\{ tab: 'today', label: 'Today' \}/);
+    expect(STUDIO_TABS).toMatch(/\{ tab: 'week', label: 'This week' \}/);
+    expect(TODAY_SCREEN).toMatch(/STUDIO_TABS\.map/);
     expect(TODAY_SCREEN).toMatch(/accessibilityRole="tab"/);
     expect(TODAY_SCREEN).toMatch(/studio\.getStudioWeek\(\)/);
     expect(TODAY_SCREEN).toMatch(/<RefreshControl/);
     expect(TODAY_SCREEN).toMatch(/<WeekView/);
+    // Fetch on first show only; a status change marks the other tab stale.
+    expect(TODAY_SCREEN).toMatch(/if \(!needsLoad\(stale, tab\)\) return;/);
+    expect(TODAY_SCREEN).toMatch(/setStale\(\(s\) => markFresh\(s, tab\)\)/);
+    expect(TODAY_SCREEN).toMatch(/setStale\(\(s\) => markOtherStale\(s, tab\)\)/);
+    expect(TODAY_SCREEN).not.toMatch(/void loadWeek\(\);\s*void loadToday\(\);/);
   });
 
-  it('Today and This week share one status sheet; done moves locally then refetches', () => {
+  it('Today and This week share one status sheet; the row moves first and snaps back on failure', () => {
     expect(TODAY_SCREEN).toMatch(/<StatusSheet/);
     expect(TODAY_SCREEN.match(/onChangeStatus=\{setSheetTarget\}/g)).toHaveLength(2);
+    // Snapshot + optimistic move + restore on failure come from the shared helper.
+    expect(TODAY_SCREEN).toMatch(/submitWithRollback<IWeekView, IStudentStatusUpdateResponse>\(/);
+    expect(TODAY_SCREEN).toMatch(/current: week\.view,/);
     expect(TODAY_SCREEN).toMatch(
-      /applyStudentStatusLocally\(s\.view, assignmentExternalId, status\)/
+      /optimistic: \(view\) => applyStudentStatusLocally\(view, assignmentExternalId, status\)/
     );
     expect(TODAY_SCREEN).toMatch(
-      /studio\.patchStudioAssignmentStatus\(assignmentExternalId, status, note\)/
+      /submit: \(\) => studio\.patchStudioAssignmentStatus\(assignmentExternalId, status, note\)/
     );
-    expect(TODAY_SCREEN).toMatch(/void loadWeek\(\);\s*void loadToday\(\);/);
-    // A refused PATCH refetches so the optimistic row snaps back to server truth.
-    expect(TODAY_SCREEN).toMatch(
-      /catch \(err: unknown\) \{\s*\/\/[^\n]*\n\s*void loadWeek\(\);\s*throw err;/
-    );
+    // After the rollback, a best-effort refetch of the active tab; on success the same refetch.
+    expect(TODAY_SCREEN).toMatch(/catch \(err: unknown\) \{[\s\S]*?void load\(tab\);\s*throw err;/);
+    expect(TODAY_SCREEN).toMatch(/return response;/);
     expect(TODAY_VIEW).toMatch(/onChangeStatus\?\(target: IStatusSheetTarget\)/);
     expect(WEEK_VIEW).toMatch(/currentStatus: row\.studentStatus/);
   });
 
-  it('the sheet offers the four statuses, a 140-char note for Need help, and the told copy', () => {
+  it('the sheet offers the four statuses, a 140-unit note, and says only what the server did', () => {
     expect(STATUS_SHEET).toMatch(/STATUS_OPTIONS\.map/);
-    expect(STATUS_SHEET).toMatch(/maxLength=\{STUDENT_NOTE_MAX_CHARS\}/);
+    expect(STATUS_SHEET).toMatch(/maxLength=\{STUDENT_HELP_NOTE_MAX_CHARS\}/);
     expect(STATUS_SHEET).toMatch(/noteCounter\(note\)/);
-    expect(STATUS_SHEET).toMatch(/\{NEED_HELP_SENT_MESSAGE\}/);
+    // The outcome line comes from the PATCH response, never a hard-coded "were told".
+    expect(STATUS_SHEET).toMatch(/needHelpOutcomeMessage\(response\)/);
+    expect(STATUS_SHEET).not.toMatch(/NEED_HELP_SENT_MESSAGE/);
+    expect(STATUS_SHEET).not.toMatch(/Your grown-ups were told/);
+    // Dismiss is ignored while a save is in flight.
+    expect(STATUS_SHEET).toMatch(/if \(!canDismiss\(busy\)\) return;/);
+    expect(STATUS_SHEET).toMatch(/onRequestClose=\{requestClose\}/);
     expect(STATUS_SHEET).toMatch(/testID="need-help-send"/);
     expect(STATUS_SHEET).not.toMatch(/Alert\.alert/);
   });

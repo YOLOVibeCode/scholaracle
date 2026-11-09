@@ -36,6 +36,57 @@ export interface IStudentStatusUpdateResponse {
   readonly nextAllowedAt?: string;
 }
 
+/**
+ * The one way every client builds the status PATCH body: a non-empty, trimmed
+ * note rides along; a blank note is left off the wire.
+ */
+export function studioStatusPatchBody(
+  status: StudentStatus | null,
+  note?: string
+): IStudentStatusUpdateRequest {
+  const trimmed = note?.trim() ?? '';
+  return trimmed === '' ? { status } : { status, note: trimmed };
+}
+
+/**
+ * Tolerant parse of the status PATCH response. Servers before the need-help
+ * alert answer with only `success` and `studentStatus`; `notified` and
+ * `nextAllowedAt` are then absent and the client must not claim anyone was told.
+ */
+export function parseStudentStatusUpdateResponse(input: unknown): IStudentStatusUpdateResponse {
+  const label = 'IStudentStatusUpdateResponse';
+  if (!isRecord(input)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  if (input['success'] !== true) {
+    throw new ValidationError(`Invalid ${label}.success: expected true`);
+  }
+  const rawStatus = input['studentStatus'];
+  const studentStatus =
+    rawStatus === null || rawStatus === undefined
+      ? null
+      : parseOneOf(rawStatus, STUDENT_STATUSES, `${label}.studentStatus`);
+  const notified = input['notified'];
+  if (notified !== undefined && typeof notified !== 'boolean') {
+    throw new ValidationError(`Invalid ${label}.notified: expected boolean`);
+  }
+  const nextAllowedAt = input['nextAllowedAt'];
+  if (nextAllowedAt !== undefined && typeof nextAllowedAt !== 'string') {
+    throw new ValidationError(`Invalid ${label}.nextAllowedAt: expected string`);
+  }
+  const studentNote = input['studentNote'];
+  if (studentNote !== undefined && typeof studentNote !== 'string') {
+    throw new ValidationError(`Invalid ${label}.studentNote: expected string`);
+  }
+  return {
+    success: true,
+    studentStatus,
+    ...(studentNote !== undefined ? { studentNote } : {}),
+    ...(notified !== undefined ? { notified } : {}),
+    ...(nextAllowedAt !== undefined ? { nextAllowedAt } : {}),
+  };
+}
+
 export const NEXT_STEP_KEYS = [
   'assignmentExternalId',
   'title',
@@ -113,23 +164,6 @@ export const WEEK_DAY_LABELS = [
   'Fri',
   'Sat',
 ] as const;
-
-/** What the student says about an assignment (`PATCH /api/studio/assignments/:id/status`). */
-export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'done'] as const;
-
-export type StudentStatus = (typeof STUDENT_STATUSES)[number];
-
-/** Longest note a student may attach to "Need help" (spec §6, Q3). */
-export const STUDENT_NOTE_MAX_CHARS = 140;
-
-/**
- * Body of `PATCH /api/studio/assignments/:id/status`. `note` rides along with
- * `need_help` only; the server ignores it until the need-help alert ships (R3).
- */
-export interface IStudioStatusPatchRequest {
-  readonly status: StudentStatus | null;
-  readonly note?: string;
-}
 
 /** What the student needs to do the work, derived from the work-pack partition. */
 export const WEEK_NEEDS = ['saved_file', 'school_login', 'internet'] as const;

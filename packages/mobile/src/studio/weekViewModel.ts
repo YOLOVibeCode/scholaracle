@@ -11,8 +11,10 @@ import {
   STUDENT_STATUS_MARKS,
   WEEK_EMPTY_MESSAGE,
   doneSectionTitle,
+  formatDueDay,
   isWeekClear,
   needGlyphs,
+  resolvedTimeZone,
   weekSummaryLine,
   type IWeekNeedGlyph,
 } from '@scholaracle/studio-core';
@@ -77,24 +79,28 @@ export interface IWeekViewModel {
   readonly emptyMessage: string | null;
 }
 
+export interface IWeekRowOptions {
+  readonly showDue: boolean;
+  /** IANA zone for due dates; the device's zone when absent. */
+  readonly timeZone?: string;
+}
+
 export function dayHeading(label: WeekDayLabel): string {
   return label;
 }
 
-export function formatDueShort(iso: string | undefined): string | null {
-  if (iso === undefined || iso === '') return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `Due ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+/** "Due Nov 3", formatted deterministically (en-US) in the given zone. */
+export function formatDueShort(iso: string | undefined, timeZone: string): string | null {
+  const day = formatDueDay(iso, timeZone);
+  return day === null ? null : `Due ${day}`;
 }
 
-export function weekRowModel(
-  item: IWeekItem,
-  options: { readonly showDue: boolean }
-): IWeekRowModel {
+export function weekRowModel(item: IWeekItem, options: IWeekRowOptions): IWeekRowModel {
   const needs = needGlyphs(item.needs);
   const statusLabel = STUDENT_STATUS_LABELS[item.studentStatus];
-  const dueLabel = options.showDue ? formatDueShort(item.dueAt) : null;
+  const dueLabel = options.showDue
+    ? formatDueShort(item.dueAt, options.timeZone ?? resolvedTimeZone())
+    : null;
   const parts = [
     item.title,
     item.courseName,
@@ -131,7 +137,11 @@ export function weekDoneRowModel(done: IWeekDone): IWeekDoneRowModel {
 }
 
 /** Maps IWeekView to phone chrome. Drops any extra fields; never a score. */
-export function weekViewModel(view: IWeekView): IWeekViewModel {
+export function weekViewModel(
+  view: IWeekView,
+  options: { readonly timeZone?: string } = {}
+): IWeekViewModel {
+  const timeZone = options.timeZone ?? resolvedTimeZone();
   const sections: IWeekSectionModel[] = [];
   if (view.owed.length > 0) {
     sections.push({
@@ -139,7 +149,7 @@ export function weekViewModel(view: IWeekView): IWeekViewModel {
       kind: 'owed',
       title: OWED_SECTION_TITLE,
       testId: 'studio-week-owed',
-      rows: view.owed.map((item) => weekRowModel(item, { showDue: true })),
+      rows: view.owed.map((item) => weekRowModel(item, { showDue: true, timeZone })),
     });
   }
   for (const day of view.days) {
@@ -149,7 +159,7 @@ export function weekViewModel(view: IWeekView): IWeekViewModel {
       kind: 'day',
       title: dayHeading(day.label),
       testId: `studio-week-day-${day.date}`,
-      rows: day.items.map((item) => weekRowModel(item, { showDue: false })),
+      rows: day.items.map((item) => weekRowModel(item, { showDue: false, timeZone })),
     });
   }
   const done: IWeekDoneSectionModel | null =

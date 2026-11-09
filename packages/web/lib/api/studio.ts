@@ -1,8 +1,10 @@
 import {
+  parseStudentStatusUpdateResponse,
   parseTodayView,
   parseWeekView,
   parseWorkPackView,
-  type IStudioStatusPatchRequest,
+  studioStatusPatchBody,
+  type IStudentStatusUpdateResponse,
   type ITodayView,
   type IWeekView,
   type IWorkPackView,
@@ -102,24 +104,23 @@ export async function fetchOfflinePack(
 }
 
 /**
- * PATCH /api/studio/assignments/:id/status. `note` travels with need_help
- * (≤140 chars); the server ignores it until the need-help alert lands (R3).
+ * PATCH /api/studio/assignments/:id/status with the shared body (a non-empty
+ * note rides along with need_help). The answer says whether the adults were
+ * told, when the server is new enough to know.
  */
 export async function patchStudioAssignmentStatus(
   token: string,
   assignmentExternalId: string,
   status: StudentStatus | null,
   note?: string
-): Promise<void> {
-  const body: IStudioStatusPatchRequest =
-    note !== undefined && note !== '' ? { status, note } : { status };
+): Promise<IStudentStatusUpdateResponse> {
   const res = await studioFetch(
     `/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
     token,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(studioStatusPatchBody(status, note)),
     }
   );
   throwIfAuthFailed(res);
@@ -129,4 +130,5 @@ export async function patchStudioAssignmentStatus(
   if (!res.ok) {
     throw new Error(`Studio status failed: ${res.status}`);
   }
+  return parseStudentStatusUpdateResponse(await res.json());
 }

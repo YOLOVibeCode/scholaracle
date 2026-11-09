@@ -8,6 +8,8 @@ import {
   weekViewModel,
 } from './weekViewModel';
 
+const UTC = { timeZone: 'UTC' };
+
 function item(id: string, overrides: Partial<IWeekItem> = {}): IWeekItem {
   return {
     assignmentExternalId: id,
@@ -77,7 +79,7 @@ const VIEW: IWeekView = {
 
 describe('weekViewModel', () => {
   it('orders sections Still owed, then only the days with work (today first), then Done', () => {
-    const model = weekViewModel(VIEW);
+    const model = weekViewModel(VIEW, UTC);
     expect(model.testId).toBe('studio-week');
     expect(model.encouragement).toBe('You finished 4 things. Nice.');
     expect(model.summary).toBe('3 due · 2 still owed · you finished 2');
@@ -90,13 +92,17 @@ describe('weekViewModel', () => {
     expect(model.emptyMessage).toBeNull();
   });
 
-  it('owed rows carry the due date; day rows do not repeat their heading', () => {
-    const model = weekViewModel(VIEW);
-    expect(model.sections[0]?.rows[0]?.dueLabel).toMatch(/^Due /);
+  it('owed rows carry a deterministic due date in the given zone; day rows do not repeat their heading', () => {
+    const model = weekViewModel(VIEW, UTC);
+    expect(model.sections[0]?.rows.map((r) => r.dueLabel)).toEqual(['Due Nov 3', 'Due Nov 6']);
     expect(model.sections[1]?.rows[0]?.dueLabel).toBeNull();
-    expect(formatDueShort(undefined)).toBeNull();
-    expect(formatDueShort('not a date')).toBeNull();
-    expect(formatDueShort('2026-11-03T16:00:00.000Z')).toMatch(/^Due \w+ \d+$/);
+    expect(formatDueShort(undefined, 'UTC')).toBeNull();
+    expect(formatDueShort('not a date', 'UTC')).toBeNull();
+    // 11:59 pm Nov 3 in Chicago is Nov 4 in UTC; the zone decides.
+    expect(formatDueShort('2026-11-04T05:59:00.000Z', 'America/Chicago')).toBe('Due Nov 3');
+    expect(formatDueShort('2026-11-04T05:59:00.000Z', 'UTC')).toBe('Due Nov 4');
+    // Without a zone the device zone is used; still a date, never a crash.
+    expect(weekViewModel(VIEW).sections[0]?.rows[0]?.dueLabel).toMatch(/^Due \w{3} \d{1,2}$/);
   });
 
   it('maps needs to glyphs: 📄 saved, 🔒 school login, 🌐 needs internet', () => {
@@ -107,25 +113,26 @@ describe('weekViewModel', () => {
       '📄 saved',
       '🌐 needs internet',
     ]);
-    const model = weekViewModel(VIEW);
+    const model = weekViewModel(VIEW, UTC);
     const ch5 = model.sections[2]?.rows[0];
     expect(ch5?.needs.map((n) => n.glyph)).toEqual(['📄', '🌐']);
     expect(model.sections[1]?.rows[0]?.needs.map((n) => n.label)).toEqual(['school login']);
   });
 
   it('rows carry the student status label and mark, and a spoken label with everything', () => {
-    const row = weekRowModel(VIEW.owed[0] as IWeekItem, { showDue: true });
+    const row = weekRowModel(VIEW.owed[0] as IWeekItem, { showDue: true, timeZone: 'UTC' });
     expect(row.statusLabel).toBe('Need help');
     expect(row.statusMark).toBe('⚠');
     expect(row.humanStatus).toBe('Not turned in');
-    expect(row.accessibilityLabel).toMatch(
-      /^Ch\. 4 worksheet, Math, Not turned in, Need help, Due .+, saved$/
+    expect(row.accessibilityLabel).toBe(
+      'Ch. 4 worksheet, Math, Not turned in, Need help, Due Nov 3, saved'
     );
     const working = weekRowModel(item('x', { studentStatus: 'working_on_it' }), {
       showDue: false,
     });
     expect(working.statusMark).toBe('◐');
     expect(working.warning).toBeNull();
+    expect(working.dueLabel).toBeNull();
   });
 
   it('keeps the marked-done warning on the row and in its spoken label', () => {
@@ -163,25 +170,31 @@ describe('weekViewModel', () => {
   });
 
   it("shows You're caught up. when nothing is owed or due, even with done work", () => {
-    const clear = weekViewModel({
-      encouragement: "You're caught up.",
-      owed: [],
-      days: VIEW.days.map((d) => ({ ...d, items: [] })),
-      doneThisWeek: VIEW.doneThisWeek,
-      counts: { owed: 0, due: 0, done: 2 },
-    });
+    const clear = weekViewModel(
+      {
+        encouragement: "You're caught up.",
+        owed: [],
+        days: VIEW.days.map((d) => ({ ...d, items: [] })),
+        doneThisWeek: VIEW.doneThisWeek,
+        counts: { owed: 0, due: 0, done: 2 },
+      },
+      UTC
+    );
     expect(clear.sections).toEqual([]);
     expect(clear.emptyMessage).toBe("You're caught up.");
     expect(clear.done?.rows).toHaveLength(2);
     expect(clear.summary).toBe('0 due · 0 still owed · you finished 2');
 
-    const empty = weekViewModel({
-      encouragement: "You're caught up.",
-      owed: [],
-      days: [],
-      doneThisWeek: [],
-      counts: { owed: 0, due: 0, done: 0 },
-    });
+    const empty = weekViewModel(
+      {
+        encouragement: "You're caught up.",
+        owed: [],
+        days: [],
+        doneThisWeek: [],
+        counts: { owed: 0, due: 0, done: 0 },
+      },
+      UTC
+    );
     expect(empty.done).toBeNull();
     expect(empty.emptyMessage).toBe("You're caught up.");
   });
@@ -191,7 +204,7 @@ describe('weekViewModel', () => {
       ...VIEW,
       owed: [{ ...(VIEW.owed[0] as IWeekItem), percent: '92%', letterGrade: 'A-' }],
     } as unknown as IWeekView;
-    const json = JSON.stringify(weekViewModel(poisoned));
+    const json = JSON.stringify(weekViewModel(poisoned, UTC));
     expect(json).not.toMatch(/92%/);
     expect(json).not.toMatch(/letterGrade|percent/);
   });

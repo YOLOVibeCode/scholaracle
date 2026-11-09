@@ -85,6 +85,7 @@ describe('ISP — student studio screens stay off parent-only ports', () => {
       path.join(dir, 'StatusSheet.tsx'),
       path.join(dir, 'weekViewModel.ts'),
       path.join(dir, 'statusSheetModel.ts'),
+      path.join(dir, 'studioTabs.ts'),
       path.join(dir, 'WorkPackView.tsx'),
       path.join(screens, 'TodayScreen.tsx'),
       path.join(screens, 'StudentWorkPackScreen.tsx'),
