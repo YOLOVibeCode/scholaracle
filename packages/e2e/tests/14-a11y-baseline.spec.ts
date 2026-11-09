@@ -19,13 +19,13 @@ import { TEST_USERS } from '../fixtures/test-data';
 test.describe('@a11y WCAG 2.2 AA baseline', () => {
   test('A11Y-001: /login has no serious/critical axe violations (golden path)', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(page.getByTestId('form-login')).toBeVisible();
     await expectNoA11yViolations(page);
   });
 
   test('A11Y-002: /register has no serious/critical axe violations', async ({ page }) => {
     await page.goto('/register');
-    await expect(page.getByRole('heading', { name: /create an account/i })).toBeVisible();
+    await expect(page.getByTestId('form-register')).toBeVisible();
     await expectNoA11yViolations(page);
   });
 

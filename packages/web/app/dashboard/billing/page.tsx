@@ -242,6 +242,7 @@ function BillingPageContent() {
                   type="button"
                   role="switch"
                   aria-checked={billingCycle === 'annual'}
+                  aria-label="Bill annually instead of monthly"
                   onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'annual' : 'monthly'))}
                   className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 aria-[checked=true]:bg-blue-600"
                   data-testid="toggle-annual-billing"

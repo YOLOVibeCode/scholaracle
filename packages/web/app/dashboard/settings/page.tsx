@@ -402,6 +402,7 @@ export default function SettingsPage() {
                 checked={emailNotifications}
                 onChange={(e) => setEmailNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="Enable email notifications"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -417,6 +418,7 @@ export default function SettingsPage() {
                 checked={smsNotifications}
                 onChange={(e) => setSmsNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="Enable SMS notifications"
               />
             </div>
 
@@ -429,6 +431,7 @@ export default function SettingsPage() {
                   checked={quietHoursEnabled}
                   onCheckedChange={setQuietHoursEnabled}
                   disabled={isSaving || !isLoaded}
+                  aria-label="Enable quiet hours"
                 />
               </div>
               {quietHoursEnabled && (
@@ -482,6 +485,7 @@ export default function SettingsPage() {
                   checked={autoSend}
                   onCheckedChange={setAutoSend}
                   disabled={isSaving || !isLoaded}
+                  aria-label="Enable auto-send digests"
                 />
               </div>
               {!autoSend && (
@@ -567,12 +571,14 @@ export default function SettingsPage() {
                     </p>
                     <div className="flex items-center gap-2">
                       <Input
+                        id="snooze-until-date"
                         type="date"
                         value={snoozeInput}
                         onChange={(e) => setSnoozeInput(e.target.value)}
                         min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
                         className="w-48"
                         disabled={isSaving || !isLoaded}
+                        aria-label="Snooze digests until date"
                       />
                       <Button
                         type="button"
@@ -619,11 +625,13 @@ export default function SettingsPage() {
                 All email times use your local timezone.
               </p>
               <select
+                id="settings-timezone"
                 data-testid="select-timezone"
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
                 disabled={isSaving || !isLoaded}
+                aria-label="Time zone"
               >
                 {Intl.supportedValuesOf('timeZone').map((tz) => (
                   <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
@@ -645,6 +653,7 @@ export default function SettingsPage() {
                   checked={glanceEnabled}
                   onCheckedChange={setGlanceEnabled}
                   disabled={isSaving || !isLoaded}
+                  aria-label="Enable Student at a Glance digest"
                 />
               </div>
               {glanceEnabled && (
@@ -902,7 +911,13 @@ export default function SettingsPage() {
                 <h5 className="text-sm font-medium text-gray-500 dark:text-gray-400">Advanced</h5>
                 <div className="flex items-center justify-between">
                   <Label>Custom Daily Digest</Label>
-                  <Switch checked={dailyDigestEnabled} onCheckedChange={setDailyDigestEnabled} disabled={isSaving || !isLoaded} />
+                  <Switch
+                    id="daily-digest-enabled"
+                    checked={dailyDigestEnabled}
+                    onCheckedChange={setDailyDigestEnabled}
+                    disabled={isSaving || !isLoaded}
+                    aria-label="Enable custom daily digest"
+                  />
                 </div>
                 {dailyDigestEnabled && (
                   <div className="space-y-2">
@@ -919,7 +934,13 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <Label>Weekly Digest</Label>
-                <Switch checked={weeklyDigestEnabled} onCheckedChange={setWeeklyDigestEnabled} disabled={isSaving || !isLoaded} />
+                <Switch
+                  id="weekly-digest-enabled"
+                  checked={weeklyDigestEnabled}
+                  onCheckedChange={setWeeklyDigestEnabled}
+                  disabled={isSaving || !isLoaded}
+                  aria-label="Enable weekly digest"
+                />
               </div>
               {weeklyDigestEnabled && (
                 <div className="grid grid-cols-2 gap-4">
@@ -1062,10 +1083,12 @@ export default function SettingsPage() {
                       />
                       <Label htmlFor={`alert-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
                       <select
+                        id={`alert-severity-${key}`}
                         value={val.severity}
                         onChange={(e) => setAlertType(key, val.enabled, e.target.value)}
                         disabled={isSaving || !isLoaded}
                         className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+                        aria-label={`Minimum severity for ${key.replace('_', ' ')}`}
                       >
                         <option value="critical">Critical</option>
                         <option value="warning">Warning</option>

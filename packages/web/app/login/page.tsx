@@ -152,20 +152,24 @@ function LoginForm() {
                 disabled={isLoading}
               />
               <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label
+                  htmlFor="remember-me"
+                  className="flex min-h-11 min-w-11 items-center gap-2 cursor-pointer"
+                >
                   <input
+                    id="remember-me"
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={isLoading}
-                    className="rounded border-gray-300"
+                    className="size-5 rounded border-gray-300"
                     data-testid="input-remember-me"
                   />
                   <span>Remember me</span>
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="inline-flex min-h-11 items-center px-2 font-medium text-blue-600 hover:underline dark:text-blue-400"
                   data-testid="link-forgot-password"
                 >
                   Forgot password?

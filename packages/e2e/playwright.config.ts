@@ -193,7 +193,8 @@ export default defineConfig({
     {
       name: 'a11y',
       testMatch: /14-a11y-baseline\.spec\.ts/,
-      dependencies: ['auth'],
+      // Spec logs in per test; only needs API/web up (critical), not the full auth project matrix.
+      dependencies: ['critical'],
       use: { ...devices['Desktop Chrome'] },
       timeout: 90 * 1000,
     },
