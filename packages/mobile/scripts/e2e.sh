@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the Maestro end-to-end flows on the iOS Simulator or the Android Emulator.
 #
-#   scripts/e2e.sh ios|android [launch|smoke|sync|all] [--no-build]
+#   scripts/e2e.sh ios|android [launch|smoke|tour|sync|all] [--no-build]
 #
 # Builds a local Release app (no EAS credits) pointed at E2E_API_URL
 # (default: the UAT API), installs it, then runs the flows in e2e/maestro.
@@ -17,7 +17,7 @@ set -euo pipefail
 platform="${1:-}"; suite="${2:-launch}"; build=1
 [[ "${3:-}" == "--no-build" || "${2:-}" == "--no-build" ]] && build=0
 [[ "$suite" == "--no-build" ]] && suite=launch
-case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|sync|all] [--no-build]" >&2; exit 2;; esac
+case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|tour|sync|all] [--no-build]" >&2; exit 2;; esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -88,6 +88,11 @@ build_app() {
     xcrun simctl install "$ios_device" "$app"
   else
     export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=2g"
+    # E2E builds only: the fake portal is plain http (10.0.2.2:2855), which Android
+    # blocks by default (ERR_CLEARTEXT_NOT_PERMITTED). Shipped builds never get this.
+    npx expo prebuild --platform android --no-install >/dev/null
+    sed -i.bak 's/<application /<application android:usesCleartextTraffic="true" /' \
+      android/app/src/main/AndroidManifest.xml && rm -f android/app/src/main/AndroidManifest.xml.bak
     npx expo run:android --variant release --no-bundler
   fi
 }
@@ -96,8 +101,9 @@ flows=()
 case "$suite" in
   launch) flows=(e2e/maestro/launch.yaml) ;;
   smoke) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml) ;;
+  tour) flows=(e2e/maestro/login-screen.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml) ;;
   sync) flows=(e2e/maestro/sync-portal.yaml) ;;
-  all) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml e2e/maestro/sync-portal.yaml) ;;
+  all) flows=(e2e/maestro/launch.yaml e2e/maestro/login-screen.yaml e2e/maestro/smoke.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml e2e/maestro/sync-portal.yaml) ;;
   *) echo "unknown suite: $suite" >&2; exit 2 ;;
 esac
 

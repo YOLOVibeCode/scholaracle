@@ -131,6 +131,31 @@ export interface IServerConfig {
  * @param config - Server configuration
  * @returns SendGrid configuration
  */
+/**
+ * Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay).
+ * The library resets its base URL to api.sendgrid.com on every setApiKey call, and each
+ * email sender calls setApiKey in its constructor (and some routes per request), so a
+ * one-time setDefaultRequest is silently undone. Re-apply it after every setApiKey.
+ */
+export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined): void {
+  if (!baseUrl) return;
+  const m = mail as {
+    client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+    setApiKey?: (key: string) => void;
+  };
+  const client = m.client;
+  if (!client) return;
+  const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
+  const original = m.setApiKey?.bind(m);
+  if (original) {
+    m.setApiKey = (key: string): void => {
+      original(key);
+      apply();
+    };
+  }
+  apply();
+}
+
 function getSendGridConfig(config: IServerConfig): {
   readonly apiKey: string;
   readonly fromEmail: string;
@@ -354,6 +379,10 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       );
     }
     const sendGrid = sgMail as unknown as MailService;
+    // Invite, password-reset and password-changed emails share this client. Point it at
+    // the Noctusoft relay here; it was only set inside initializeNotificationService, so
+    // these senders called api.sendgrid.com directly and every relay key got a 401.
+    applySendGridBaseUrl(sgMail, process.env['SENDGRID_BASE_URL']);
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
     const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
     const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(

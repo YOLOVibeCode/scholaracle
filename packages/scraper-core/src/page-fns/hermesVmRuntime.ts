@@ -25,8 +25,30 @@ function platformSlug(): string {
   return process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
 }
 
-async function downloadFile(url: string, dest: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
+/** Node's connection errors can be an AggregateError with an empty message; say which host and why. */
+function describeNetworkError(url: string, err: unknown): Error {
+  const parts: string[] = [];
+  const inner = (err as { errors?: unknown[] } | null)?.errors;
+  if (Array.isArray(inner) && inner.length > 0) {
+    for (const e of inner) {
+      const { code, address, port, message } = e as {
+        code?: string;
+        address?: string;
+        port?: number;
+        message?: string;
+      };
+      parts.push([code, address && `${address}:${port ?? ''}`, message].filter(Boolean).join(' '));
+    }
+  } else if (err instanceof Error) {
+    parts.push(err.message || err.name);
+  } else {
+    parts.push(String(err));
+  }
+  return new Error(`GET ${url} failed: ${parts.join('; ')}`);
+}
+
+function downloadOnce(url: string, dest: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const run = (fetchUrl: string): void => {
       httpsGet(fetchUrl, (res) => {
         if (
@@ -50,10 +72,29 @@ async function downloadFile(url: string, dest: string): Promise<void> {
           resolve();
         });
         file.on('error', reject);
-      }).on('error', reject);
+      }).on('error', (err) => reject(describeNetworkError(fetchUrl, err)));
     };
     run(url);
   });
+}
+
+const DOWNLOAD_ATTEMPTS = 4;
+
+/** Mirrors and release hosts drop connections from CI runners now and then; retry before failing. */
+async function downloadFile(url: string, dest: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      await downloadOnce(url, dest);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < DOWNLOAD_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+  }
+  throw lastError;
 }
 
 let hvmPathPromise: Promise<string> | null = null;
@@ -66,7 +107,10 @@ export function resolveHvmPath(): Promise<string> {
     return Promise.resolve(override);
   }
   if (hvmPathPromise === null) {
-    hvmPathPromise = ensureHvmBinary();
+    hvmPathPromise = ensureHvmBinary().catch((err: unknown) => {
+      hvmPathPromise = null;
+      throw err;
+    });
   }
   return hvmPathPromise;
 }
@@ -98,7 +142,10 @@ export function resolveIcuLibraryPath(): Promise<string> {
     return Promise.resolve('');
   }
   if (icuLibPromise === null) {
-    icuLibPromise = ensureIcu70Libraries();
+    icuLibPromise = ensureIcu70Libraries().catch((err: unknown) => {
+      icuLibPromise = null;
+      throw err;
+    });
   }
   return icuLibPromise;
 }

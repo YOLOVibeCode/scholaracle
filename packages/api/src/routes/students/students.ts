@@ -11,6 +11,7 @@ import {
   SubscriptionRepository,
   UserRepository,
   CourseTutorialOverrideRepository,
+  AuditLogRepository,
   PLAN_FEATURES,
   type IDataSource,
   type IDataSourceCredentials,
@@ -176,6 +177,29 @@ export interface IActivityTimelineResponse {
   readonly hasMore: boolean;
 }
 
+/** Email from the verified JWT. Sharing routes trust ONLY this, never an email in the body or query. */
+function getUserEmail(req: Request): string | null {
+  const email = (req as IAuthenticatedRequest).userEmail;
+  return typeof email === 'string' && email.trim() !== '' ? email.trim().toLowerCase() : null;
+}
+
+/**
+ * Sharing routes accept an optional `email` in the body for older clients. It must be the caller's own
+ * address; anything else is refused so a signed-in user cannot act on someone else's invitation.
+ */
+function requireOwnEmail(req: Request, bodyEmail: unknown): string {
+  const own = getUserEmail(req);
+  if (own === null) {
+    throw new AuthenticationError('Unauthorized');
+  }
+  if (typeof bodyEmail === 'string' && bodyEmail.trim() !== '') {
+    if (bodyEmail.trim().toLowerCase() !== own) {
+      throw new ForbiddenError('You can only act on invitations sent to your own email');
+    }
+  }
+  return own;
+}
+
 function getUserId(req: Request): string | null {
   return (req as IAuthenticatedRequest).userId ?? null;
 }
@@ -328,9 +352,51 @@ function determineActionBucket(
 // eslint-disable-next-line max-lines-per-function, complexity
 export function studentsRouter(config: IStudentsRouterConfig): Router {
   const router = Router();
+  const auditLogRepository = new AuditLogRepository(config.database);
+  /** Best-effort audit trail for sharing changes; never fails the request. */
+  const recordSharingEvent = async (
+    req: Request,
+    action:
+      | 'sharing:invite'
+      | 'sharing:accept'
+      | 'sharing:decline'
+      | 'sharing:remove'
+      | 'sharing:admin_changed',
+    studentId: string,
+    targetEmail: string,
+    metadata: Record<string, unknown> = {}
+  ): Promise<void> => {
+    try {
+      await auditLogRepository.create({
+        adminUserId: getUserId(req) ?? 'unknown',
+        adminEmail: getUserEmail(req) ?? 'unknown',
+        action,
+        entityType: 'student_sharing',
+        entityId: studentId,
+        entityDescription: targetEmail,
+        metadata,
+        ipAddress: req.ip ?? '',
+        userAgent: req.get('user-agent') ?? '',
+      });
+    } catch (err) {
+      console.error('[students] sharing audit write failed', err);
+    }
+  };
   const studentRepository = new StudentRepository(config.database);
   const ingestSourceRepository = new IngestSourceRepository(config.database);
   const bindingRepository = new SlcBindingRepository(config.database);
+  // Sources are listed from portal-account bindings (#93), but a binding can exist
+  // before the first ingest adds the source to student.dataSources. Accept either, or
+  // the runs routes 404 a source the list just returned and the app dashboard fails.
+  const studentHasSource = async (
+    student: { dataSources: readonly { id?: string }[]; dataUserId(): string },
+    studentId: string,
+    sourceId: string
+  ): Promise<boolean> => {
+    if (student.dataSources.some((ds) => ds.id === sourceId)) return true;
+    const bindings = await bindingRepository.findByStudentId(student.dataUserId(), studentId);
+    return bindings.some((b) => b.sourceId === sourceId);
+  };
   const portalAccountRepository = new PortalAccountRepository(config.database);
   const ingestRunRepository = new IngestRunRepository(config.database);
   const alertRepository = new AlertRepository(config.database);
@@ -409,20 +475,20 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const { email } = req.query as { email?: string };
-      if (!email) {
+      // The caller's own email only (from the JWT). A query `email` is ignored: it used to let any
+      // signed-in user list someone else's invitations and the students' names.
+      const email = getUserEmail(req);
+      if (email === null) {
         res.status(200).json([]);
         return;
       }
 
-      const students = await studentRepository.findPendingInvites(email.toLowerCase().trim());
+      const students = await studentRepository.findPendingInvites(email);
       const invites = students.map((s) => ({
         studentId: s._id?.toString(),
         studentName: s.name,
         invitedBy: s.userId.toString(),
-        invite: s.sharedWith.find(
-          (sp) => sp.email === email.toLowerCase().trim() && sp.status === 'pending'
-        ),
+        invite: s.sharedWith.find((sp) => sp.email === email && sp.status === 'pending'),
       }));
 
       res.status(200).json(invites);
@@ -549,6 +615,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       } catch {
         // Log but do not fail the request
       }
+      await recordSharingEvent(req, 'sharing:invite', student._id!.toString(), normalizedEmail);
       res.status(201).json({
         success: true,
         contact: {
@@ -579,11 +646,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!userId) {
         throw new AuthenticationError('Unauthorized');
       }
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-      const normalizedEmail = (email as string).toLowerCase().trim();
+      const normalizedEmail = requireOwnEmail(req, (req.body as { email?: unknown }).email);
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
         throw new NotFoundError('Student not found');
@@ -605,6 +668,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         alertChannels: current.alertChannels ?? ['email'],
       };
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      await recordSharingEvent(req, 'sharing:accept', student._id!.toString(), normalizedEmail);
       res.status(200).json({ success: true, message: 'Invite accepted' });
     })
   );
@@ -620,11 +684,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!userId) {
         throw new AuthenticationError('Unauthorized');
       }
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-      const normalizedEmail = (email as string).toLowerCase().trim();
+      const normalizedEmail = requireOwnEmail(req, (req.body as { email?: unknown }).email);
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
         throw new NotFoundError('Student not found');
@@ -638,6 +698,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const updatedShared = [...student.sharedWith];
       updatedShared[inviteIdx] = { ...updatedShared[inviteIdx]!, status: 'declined' };
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      await recordSharingEvent(req, 'sharing:decline', student._id!.toString(), normalizedEmail);
       res.status(200).json({ success: true, message: 'Invite declined' });
     })
   );
@@ -817,6 +878,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new NotFoundError('Contact not found');
       }
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      await recordSharingEvent(req, 'sharing:remove', student._id!.toString(), targetEmail);
       res.status(200).json({ success: true });
     })
   );
@@ -3177,8 +3239,11 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new ValidationError('Missing student ID');
       }
       const existing = await studentRepository.findById(id);
-      if (!existing || existing.userId.toString() !== userId) {
+      if (!existing || !existing.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!existing.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can edit this student');
       }
 
       const updates = req.body as Partial<IStudentData>;
@@ -3220,6 +3285,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const student = await studentRepository.findById(id);
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!student.isOwner(userId)) {
+        throw new ForbiddenError('Only the owner can remove a student');
       }
       const deleted = await studentRepository.delete(id);
       if (!deleted) {
@@ -3310,6 +3378,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const student = await studentRepository.findById(studentId);
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
+      }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
       }
 
       const sourceId = randomUUID();
@@ -3496,6 +3567,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
+      }
 
       const idx = student.dataSources.findIndex((ds) => ds.id === sourceId);
       if (idx === -1) {
@@ -3545,6 +3619,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
+      if (!student.canAdmin(userId)) {
+        throw new ForbiddenError('Only the owner or an admin can manage portal sources');
+      }
 
       const newDataSources = student.dataSources.filter((ds) => ds.id !== sourceId);
       if (newDataSources.length === student.dataSources.length) {
@@ -3578,7 +3655,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3616,7 +3693,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3692,7 +3769,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       if (!student || !student.hasAccess(userId)) {
         throw new NotFoundError('Student not found');
       }
-      const hasSource = student.dataSources.some((ds) => ds.id === sourceId);
+      const hasSource = await studentHasSource(student, studentId, sourceId);
       if (!hasSource) {
         throw new NotFoundError('Source not found');
       }
@@ -3838,6 +3915,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           });
       }
 
+      await recordSharingEvent(req, 'sharing:invite', student._id!.toString(), normalizedEmail, {
+        role: parentRole,
+      });
       res.status(201).json({
         success: true,
         message: `Invitation sent to ${normalizedEmail}`,
@@ -3862,12 +3942,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const { email } = req.body as { email?: string };
-      if (!email) {
-        throw new ValidationError('Email is required');
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
+      const normalizedEmail = requireOwnEmail(req, (req.body as { email?: unknown }).email);
       const student = await studentRepository.findById(req.params['id'] ?? '');
       if (!student) {
         throw new NotFoundError('Student not found');
@@ -3890,6 +3965,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
 
+      await recordSharingEvent(req, 'sharing:accept', student._id!.toString(), normalizedEmail);
       res.status(200).json({ success: true, message: 'Invite accepted' });
     })
   );
@@ -3936,6 +4012,9 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       updatedShared[idx] = { ...updatedShared[idx]!, isAdmin };
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+      await recordSharingEvent(req, 'sharing:admin_changed', student._id!.toString(), targetEmail, {
+        isAdmin,
+      });
 
       res.status(200).json({
         success: true,
@@ -3985,6 +4064,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       }
 
       await studentRepository.update(student._id!, { sharedWith: updatedShared });
+
+      await recordSharingEvent(req, 'sharing:remove', student._id!.toString(), targetEmail);
 
       res.status(200).json({ success: true });
     })

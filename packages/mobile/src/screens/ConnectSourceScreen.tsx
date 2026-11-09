@@ -228,7 +228,12 @@ export function ConnectSourceScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      // Without this the first tap on Next/Save only dismisses the keyboard.
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -266,8 +271,12 @@ export function ConnectSourceScreen({
               setUrlError(null);
             }}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="url"
             returnKeyType="next"
+            // The field starts as a template URL; select it so typing replaces it
+            // instead of leaving the template's tail after the cursor.
+            selectTextOnFocus
             onSubmitEditing={handleUrlNext}
             testID="input-connect-url"
           />

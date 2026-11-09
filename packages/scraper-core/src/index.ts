@@ -79,6 +79,7 @@ export { mergeSelectorRecord } from './selectors/mergeSelectorTables';
 
 // Test harness: M4-02 fake portal HTML (Playwright / Express)
 export * from './fixtures/fakePortalM402';
+export * from './fixtures/fakePortalConformance';
 
 // Validator
 export { validateEnvelope, validateOp } from './validator/validator';

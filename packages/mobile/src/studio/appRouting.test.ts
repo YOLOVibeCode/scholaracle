@@ -19,6 +19,12 @@ describe('mobile logged-out + student home', () => {
     expect(APP).toMatch(/setStudentCount\(0\)/);
   });
 
+  it('login offers a forgot-password link that opens the web reset page', () => {
+    expect(LOGIN).toMatch(/link-forgot-password/);
+    expect(LOGIN).toMatch(/Forgot password\?/);
+    expect(LOGIN).toMatch(/Linking\.openURL\(forgotPasswordUrl\(email\)\)/);
+  });
+
   it('login offers parent-only signup — students cannot self-register', () => {
     expect(LOGIN).toMatch(/onCreateAccount/);
     expect(LOGIN).toMatch(/Create a parent account/);
