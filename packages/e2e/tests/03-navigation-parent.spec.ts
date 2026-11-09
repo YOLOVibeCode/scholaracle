@@ -200,19 +200,12 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/dashboard');
 
-    const menuToggle = page.locator(
-      '[data-testid="mobile-menu-toggle"], button[aria-label*="menu"]'
-    );
-    const count = await menuToggle.count();
+    const menuToggle = page.getByTestId('mobile-menu-toggle');
+    await expect(menuToggle).toBeVisible({ timeout: 10_000 });
+    await menuToggle.click();
+    await page.waitForTimeout(300);
 
-    if (count > 0) {
-      await menuToggle.click();
-      await page.waitForTimeout(300);
-
-      // Verify menu is visible
-      const menu = page.locator('[data-testid="mobile-menu"], nav[aria-label*="mobile"]');
-      await expect(menu).toBeVisible({ timeout: 2000 });
-    }
+    await expect(page.locator('[data-testid="sidebar-students"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('NAV-P-014: Mobile nav links work', async ({ page }) => {
@@ -220,20 +213,14 @@ test.describe('@navigation Layer 3: Parent Navigation', () => {
     await page.goto('/dashboard');
 
     // Open mobile menu
-    const menuToggle = page.locator('[data-testid="mobile-menu-toggle"]');
-    const toggleCount = await menuToggle.count();
+    const menuToggle = page.getByTestId('mobile-menu-toggle');
+    await menuToggle.click();
+    await page.waitForTimeout(300);
 
-    if (toggleCount > 0) {
-      await menuToggle.click();
-      await page.waitForTimeout(300);
-
-      // Click students link
-      const studentsLink = page.locator(
-        '[data-testid="mobile-menu"] a[href="/dashboard/students"], nav a:has-text("Students")'
-      );
-      await studentsLink.first().click();
-      await expect(page).toHaveURL('/dashboard/students');
-    }
+    const studentsLink = page.getByTestId('sidebar-students');
+    await expect(studentsLink).toBeVisible({ timeout: 5000 });
+    await studentsLink.evaluate((el) => (el as HTMLAnchorElement).click());
+    await expect(page).toHaveURL('/dashboard/students');
   });
 
   test('NAV-P-015: Deep link direct access', async ({ page }) => {

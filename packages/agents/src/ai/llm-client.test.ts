@@ -1,3 +1,4 @@
+import { AiBudgetError } from '@scholaracle/contracts';
 import { LlmClient } from './llm-client';
 import { resolveModelForRole } from './models';
 
@@ -86,6 +87,18 @@ describe('LlmClient', () => {
 
       await expect(client.complete([{ role: 'user', content: 'test' }])).rejects.toThrow(
         'LLM API error 429'
+      );
+    });
+
+    it('throws AiBudgetError on HTTP 402 from the relay', async () => {
+      mockFetch({
+        status: 402,
+        ok: false,
+        body: { error: 'Budget has been exceeded' },
+      });
+
+      await expect(client.complete([{ role: 'user', content: 'test' }])).rejects.toBeInstanceOf(
+        AiBudgetError
       );
     });
 

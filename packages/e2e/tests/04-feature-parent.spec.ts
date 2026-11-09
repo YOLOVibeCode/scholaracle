@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/auth';
+import { RegisterPage } from '../pages/register.page';
 import { generateUniqueEmail } from '../fixtures/test-data';
-import { assertToastMessage } from '../helpers/assertions';
+import { assertToastMessage, assertOnDashboard } from '../helpers/assertions';
 
 /**
  * Layer 4: Feature CRUD Tests (Parent)
@@ -11,8 +12,11 @@ import { assertToastMessage } from '../helpers/assertions';
  * If Layer 3 fails → don't run
  */
 test.describe('@feature Layer 4: Parent Features', () => {
-  test('FEAT-P-001: Create student', async ({ page, loginAsRole }) => {
-    await loginAsRole('parent');
+  test('FEAT-P-001: Create student', async ({ page }) => {
+    const registerPage = new RegisterPage(page);
+    await registerPage.goto();
+    await registerPage.register(generateUniqueEmail('featp001'), 'Feature Parent', 'SecurePass123!');
+    await assertOnDashboard(page);
     await page.goto('/dashboard/students/new');
 
     const studentName = `Test Student ${Date.now()}`;
@@ -142,27 +146,15 @@ test.describe('@feature Layer 4: Parent Features', () => {
     const page = authenticatedPage;
     await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
 
-    const pushToggle = page.locator('[data-testid="toggle-push"]').first();
-    const count = await pushToggle.count();
+    const emailToggle = page.locator('[data-testid="toggle-email"]').first();
+    await expect(emailToggle).toBeVisible();
+    const initialState = await emailToggle.isChecked();
+    await emailToggle.setChecked(!initialState);
+    await expect(emailToggle).toBeChecked({ checked: !initialState });
 
-    if (count > 0) {
-      const initialState = await pushToggle.isChecked();
-      await pushToggle.setChecked(!initialState);
-      await page.waitForTimeout(500);
-
-      // Verify state changed
-      const newState = await pushToggle.isChecked();
-      expect(newState).toBe(!initialState);
-
-      // Save if save button exists
-      const saveButton = page.locator('[data-testid="button-save-settings"]');
-      const saveCount = await saveButton.count();
-
-      if (saveCount > 0) {
-        await saveButton.click();
-        await assertToastMessage(page, /saved|success/i);
-      }
-    }
+    const saveButton = page.locator('[data-testid="button-save-settings"]');
+    await saveButton.click();
+    await assertToastMessage(page, /saved|success/i);
   });
 
   test('FEAT-P-009: Update alert thresholds', async ({ authenticatedPage }) => {
@@ -192,34 +184,21 @@ test.describe('@feature Layer 4: Parent Features', () => {
     const page = authenticatedPage;
     await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
 
-    const pushToggle = page.locator('[data-testid="toggle-push"]').first();
-    const count = await pushToggle.count();
+    const emailToggle = page.locator('[data-testid="toggle-email"]').first();
+    await expect(emailToggle).toBeVisible();
+    const initialState = await emailToggle.isChecked();
+    await emailToggle.setChecked(!initialState);
+    await expect(emailToggle).toBeChecked({ checked: !initialState });
 
-    if (count > 0) {
-      const initialState = await pushToggle.isChecked();
-      await pushToggle.setChecked(!initialState);
-      if (initialState) {
-        await expect(pushToggle).not.toBeChecked({ timeout: 2000 });
-      } else {
-        await expect(pushToggle).toBeChecked({ timeout: 2000 });
-      }
+    const saveButton = page.locator('[data-testid="button-save-settings"]');
+    await saveButton.click();
+    await assertToastMessage(page, /saved|success/i);
 
-      const saveButton = page.locator('[data-testid="button-save-settings"]');
-      const saveCount = await saveButton.count();
+    await page.reload();
+    await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
 
-      if (saveCount > 0) {
-        await saveButton.click();
-        await assertToastMessage(page, /saved|success/i);
-      }
-
-      // Reload page
-      await page.reload();
-      await page.locator('[data-testid="settings-loaded"]').waitFor({ state: 'attached' });
-
-      // Verify setting persisted
-      const newToggle = page.locator('[data-testid="toggle-push"]').first();
-      const persistedState = await newToggle.isChecked();
-      expect(persistedState).toBe(!initialState);
-    }
+    const newToggle = page.locator('[data-testid="toggle-email"]').first();
+    const persistedState = await newToggle.isChecked();
+    expect(persistedState).toBe(!initialState);
   });
 });

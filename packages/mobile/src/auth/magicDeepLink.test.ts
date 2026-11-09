@@ -41,4 +41,22 @@ describe('extractMagicToken', () => {
   it('is case-insensitive for the scheme', () => {
     expect(extractMagicToken('SCHOLARMANCY://magic?token=tok')).toBe('tok');
   });
+
+  it('extracts the token from a scholarmancy.com universal / app link', () => {
+    expect(extractMagicToken('https://scholarmancy.com/magic?token=abc123')).toBe('abc123');
+    expect(extractMagicToken('https://www.scholarmancy.com/magic?token=a%2Bb')).toBe('a+b');
+    expect(extractMagicToken('HTTPS://SCHOLARMANCY.COM/magic/pathTok')).toBe('pathTok');
+  });
+
+  it('ignores other web hosts, insecure http, and other paths', () => {
+    expect(extractMagicToken('https://evil.example/magic?token=abc')).toBeNull();
+    expect(extractMagicToken('https://scholarmancy.com.evil.example/magic?token=abc')).toBeNull();
+    expect(extractMagicToken('http://scholarmancy.com/magic?token=abc')).toBeNull();
+    expect(extractMagicToken('https://scholarmancy.com/login?token=abc')).toBeNull();
+    expect(extractMagicToken('https://scholarmancy.com/pricing')).toBeNull();
+  });
+
+  it('returns null instead of throwing on a malformed percent escape', () => {
+    expect(extractMagicToken('https://scholarmancy.com/magic?token=%E0%A4%A')).toBeNull();
+  });
 });

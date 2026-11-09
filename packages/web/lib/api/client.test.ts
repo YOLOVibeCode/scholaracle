@@ -1,4 +1,5 @@
 import { ApiClient, ApiClientError } from './client';
+import { SessionExpiredRedirectError } from '@/lib/auth/clearParentSession';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -310,5 +311,98 @@ describe('ApiClient', () => {
     } catch (err) {
       expect((err as ApiClientError).requestId).toBe('req-body-9');
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // 401 session expiry (browser)
+  // -------------------------------------------------------------------------
+
+  describe('401 session expiry', () => {
+    let locationHref: string;
+    const mockStorage: Record<string, string> = {};
+
+    beforeEach(() => {
+      locationHref = '';
+      for (const key of Object.keys(mockStorage)) {
+        delete mockStorage[key];
+      }
+      mockStorage['auth_token'] = 'jwt-expired';
+      mockStorage['refresh_token'] = 'refresh-dead';
+      mockStorage['remember_me'] = 'true';
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).window = {
+        location: {
+          get href() {
+            return locationHref;
+          },
+          set href(value: string) {
+            locationHref = value;
+          },
+        },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).localStorage = {
+        getItem: (key: string) => mockStorage[key] ?? null,
+        setItem: (key: string, value: string) => {
+          mockStorage[key] = value;
+        },
+        removeItem: (key: string) => {
+          delete mockStorage[key];
+        },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).sessionStorage = {
+        getItem: (key: string) => mockStorage[`session:${key}`] ?? null,
+        setItem: (key: string, value: string) => {
+          mockStorage[`session:${key}`] = value;
+        },
+        removeItem: (key: string) => {
+          delete mockStorage[`session:${key}`];
+        },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).document = { cookie: '' };
+    });
+
+    afterEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).window = undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).localStorage = undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).sessionStorage = undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).document = undefined;
+    });
+
+    it('clears session and redirects when refresh fails after 401', async () => {
+      client.setToken('jwt-expired');
+      client.setRefreshToken('refresh-dead');
+      fetchSpy
+        .mockResolvedValueOnce(
+          fakeResponse({ success: false, error: 'Unauthorized' }, 401),
+        )
+        .mockResolvedValueOnce(
+          fakeResponse({ success: false, error: 'Unauthorized' }, 401),
+        );
+
+      await expect(client.get('/students')).rejects.toBeInstanceOf(SessionExpiredRedirectError);
+      expect(locationHref).toBe('/login?reason=session_expired');
+      expect(mockStorage['auth_token']).toBeUndefined();
+      expect(mockStorage['refresh_token']).toBeUndefined();
+      expect(client.getToken()).toBeNull();
+    });
+
+    it('does not redirect on 401 for login attempts', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({ success: false, error: 'Invalid credentials' }, 401),
+      );
+
+      await expect(client.post('/auth/login', { email: 'a', password: 'b' })).rejects.toThrow(
+        ApiClientError
+      );
+      expect(locationHref).toBe('');
+    });
   });
 });

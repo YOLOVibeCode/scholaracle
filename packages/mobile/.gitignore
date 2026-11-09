@@ -50,3 +50,6 @@ secrets.json
 # generated native folders
 /ios
 /android
+
+# Maestro E2E simulator build output
+/build/e2e-ios/

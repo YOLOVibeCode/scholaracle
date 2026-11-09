@@ -222,6 +222,35 @@ function m402TwoStudentExtract(): IAeriesFullExtract {
   };
 }
 
+describe('runClientScrape ingest telemetry', () => {
+  it('calls beginRun and postTrace when uploader implements them', async () => {
+    const traces: { name: string }[] = [];
+    let didBeginRun = false;
+    const uploader: IIngestUploader = {
+      async beginRun() {
+        didBeginRun = true;
+      },
+      async postTrace(_runId, step) {
+        traces.push({ name: step.name });
+      },
+      async upload() {
+        /* noop */
+      },
+    };
+    const { host } = makeHost(
+      [
+        op('course', 'c-1', { title: 'Algebra' }),
+        op('assignment', 'a-1', { title: 'HW1' }),
+      ],
+      { uploader }
+    );
+    await runClientScrape(host);
+    expect(didBeginRun).toBe(true);
+    expect(traces.some((t) => t.name === 'extracting')).toBe(true);
+    expect(traces.some((t) => t.name === 'complete')).toBe(true);
+  });
+});
+
 describe('runClientScrape studentNameHint', () => {
   const uploaded: ISlcDeltaOp[][] = [];
   let reportedFailure: string | undefined;

@@ -3,6 +3,48 @@ import { RegisterPage } from '../pages/register.page';
 import { LoginPage } from '../pages/login.page';
 import { generateUniqueEmail } from '../fixtures/test-data';
 import { assertOnDashboard } from '../helpers/assertions';
+import type { APIRequestContext } from '@playwright/test';
+
+function extractMagicLoginUrl(body: string): string | null {
+  const match = body.match(/https?:\/\/[^\s"'<>]+\/(?:magic\?token=|login\?magic=)[^\s"'<>]+/);
+  return match?.[0] ?? null;
+}
+
+async function pollMagicLoginUrl(
+  request: APIRequestContext,
+  mailpitApi: string,
+  recipientEmail: string,
+  timeoutMs = 20_000
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
+    if (mailpitRes.ok()) {
+      interface MailpitMessage {
+        ID: string;
+        To?: Array<{ Address?: string }>;
+      }
+      interface MailpitMessages {
+        messages?: MailpitMessage[];
+      }
+      const mailData = (await mailpitRes.json()) as MailpitMessages;
+      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
+        m.To?.some((r: { Address?: string }) => r.Address === recipientEmail)
+      );
+      if (magicMail) {
+        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
+        if (msgRes.ok()) {
+          const msg = (await msgRes.json()) as { Text?: string; HTML?: string };
+          const loginUrl =
+            extractMagicLoginUrl(msg.Text ?? '') ?? extractMagicLoginUrl(msg.HTML ?? '');
+          if (loginUrl) return loginUrl;
+        }
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
 
 /**
  * Multi-Parent E2E Tests
@@ -33,18 +75,24 @@ test.describe('@feature Multi-Parent Sharing', () => {
 
     const studentName = `Shared Student ${Date.now()}`;
     await page.fill('[data-testid="wizard-student-name"]', studentName);
+    await page.fill('[data-testid="wizard-student-grade"]', '10');
+    const createStudentRes = page.waitForResponse(
+      (r) => r.url().includes('/students') && r.request().method() === 'POST'
+    );
     await page.click('[data-testid="wizard-next-step"]');
+    const createRes = await createStudentRes;
+    expect(createRes.status()).toBeLessThan(400);
+    const created = (await createRes.json()) as { id?: string };
+    expect(created.id).toBeTruthy();
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
+      timeout: 10_000,
+    });
     await page.locator('[data-testid="wizard-skip-services"]').click();
     await page.locator('[data-testid="wizard-finish"]').click();
-    await expect(wizard).not.toBeVisible({ timeout: 3000 });
+    await expect(wizard).not.toBeVisible({ timeout: 10_000 });
 
-    // Navigate to student detail
-    await page.goto('/dashboard/students');
-    await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
-
-    // Click edit on the student
-    await page.locator('[data-testid="student-link"]').first().click();
-    await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 5000 });
+    await page.goto(`/dashboard/students/${created.id}`);
+    await page.waitForURL(new RegExp(`/dashboard/students/${created.id}`), { timeout: 15_000 });
 
     // Click Parents tab
     await page.click('[data-testid="tab-parents"]');
@@ -400,7 +448,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
   // ------------------------------------------------------------------
   // MP-007: Owner sends a magic link to a pending invite → recipient clicks and lands on /dashboard
   // ------------------------------------------------------------------
-  test('MP-007: Magic link sent to pending invitee → one-click login → guest parent /dashboard', async ({
+  test('MP-007: Magic link sent to pending invitee → one-click login → guest parent /dashboard @local-only', async ({
     page,
     request,
     browser,
@@ -446,30 +494,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     );
     expect(sendRes.ok()).toBeTruthy();
 
-    // 5. Capture the login link from Mailpit (if available)
-    let loginUrl: string | null = null;
-    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
-    if (mailpitRes.ok()) {
-      interface MailpitMessage {
-        ID: string;
-        To?: Array<{ Address?: string }>;
-      }
-      interface MailpitMessages {
-        messages?: MailpitMessage[];
-      }
-      const mailData = (await mailpitRes.json()) as MailpitMessages;
-      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
-        m.To?.some((r: { Address?: string }) => r.Address === contactEmail)
-      );
-      if (magicMail) {
-        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
-        if (msgRes.ok()) {
-          const msg = (await msgRes.json()) as { Text?: string };
-          const match = (msg.Text ?? '').match(/http[^\s]+\/login\?magic=[^\s]+/);
-          if (match) loginUrl = match[0];
-        }
-      }
-    }
+    const loginUrl = await pollMagicLoginUrl(request, mailpitApi, contactEmail);
 
     if (!loginUrl) {
       // Mailpit not available — skip browser-click validation but assert the send succeeded
@@ -507,7 +532,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
   // ------------------------------------------------------------------
   // MP-008: Owner sends a magic link for a provisioned student → clicks → lands on /studio
   // ------------------------------------------------------------------
-  test('MP-008: Magic link sent to student → click → /studio (student role)', async ({
+  test('MP-008: Magic link sent to student → click → /studio (student role) @local-only', async ({
     page,
     request,
     browser,
@@ -550,30 +575,7 @@ test.describe('@feature Multi-Parent Sharing', () => {
     );
     expect(sendRes.ok()).toBeTruthy();
 
-    // 5. Capture from Mailpit
-    let loginUrl: string | null = null;
-    const mailpitRes = await request.get(`${mailpitApi}/api/v1/messages`);
-    if (mailpitRes.ok()) {
-      interface MailpitMessage {
-        ID: string;
-        To?: Array<{ Address?: string }>;
-      }
-      interface MailpitMessages {
-        messages?: MailpitMessage[];
-      }
-      const mailData = (await mailpitRes.json()) as MailpitMessages;
-      const magicMail = (mailData.messages ?? []).find((m: MailpitMessage) =>
-        m.To?.some((r: { Address?: string }) => r.Address === studentEmail)
-      );
-      if (magicMail) {
-        const msgRes = await request.get(`${mailpitApi}/api/v1/message/${magicMail.ID}`);
-        if (msgRes.ok()) {
-          const msg = (await msgRes.json()) as { Text?: string };
-          const match = (msg.Text ?? '').match(/http[^\s]+\/login\?magic=[^\s]+/);
-          if (match) loginUrl = match[0];
-        }
-      }
-    }
+    const loginUrl = await pollMagicLoginUrl(request, mailpitApi, studentEmail);
 
     if (!loginUrl) {
       test.info().annotations.push({
