@@ -25,6 +25,7 @@ import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
 import { alertAckByOnBoot } from './bootstrap/alertAckByOnBoot';
+import { alertStudentIdOnBoot } from './bootstrap/alertStudentIdOnBoot';
 import { backfillBindingsOnBoot } from './bootstrap/backfillBindingsOnBoot';
 import { rekeyAdapterIdsOnBoot } from './bootstrap/rekeyAdapterIdsOnBoot';
 import {
@@ -787,8 +788,13 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   void backfillBindingsOnBoot(database, logger).catch((err: unknown) => {
     logger.error({ err }, 'backfill-bindings on boot failed');
   });
-  // Sharing S3: copy legacy owner acknowledgements into acknowledgedBy[owner].
-  // Opt-in via ALERT_ACK_BY_MIGRATION (dry-run | apply); same marker scheme as the two above.
+  // Sharing S3, two opt-in steps (dry-run | apply), markers in one_time_migrations:
+  //  1. ALERT_STUDENT_ID_MIGRATION rewrites legacy alert rows' portal student ids to Mongo ids
+  //     (scoped by owner) so shared adults can see them;
+  //  2. ALERT_ACK_BY_MIGRATION copies legacy owner acknowledgements into acknowledgedBy[owner].
+  void alertStudentIdOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'alert-student-id on boot failed');
+  });
   void alertAckByOnBoot(database, logger).catch((err: unknown) => {
     logger.error({ err }, 'alert-ack-by on boot failed');
   });

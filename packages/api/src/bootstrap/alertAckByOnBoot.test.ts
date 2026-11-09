@@ -1,6 +1,7 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { alertAckByOnBoot, backfillAcknowledgedBy } from './alertAckByOnBoot';
+import { BULK_BATCH_SIZE } from './oneTimeMigrationMarker';
 
 describe('alertAckByOnBoot (sharing S3: acknowledgedBy backfill)', () => {
   let server: MongoMemoryServer;
@@ -110,10 +111,45 @@ describe('alertAckByOnBoot (sharing S3: acknowledgedBy backfill)', () => {
     const marker = await db
       .collection('one_time_migrations')
       .findOne({ _id: 'alert-ack-by' as never });
+    expect(marker?.['startedAt']).toBeInstanceOf(Date);
+    expect(marker?.['appliedAt']).toBeInstanceOf(Date);
     expect(marker?.['stats']).toEqual({ scanned: 4, updated: 2, skipped: 2 });
 
     // A second boot with the variable still set skips; the backfill itself is idempotent too.
     expect(await alertAckByOnBoot(db, log)).toBe('already-applied');
     expect(await backfillAcknowledgedBy(db, true)).toEqual({ scanned: 4, updated: 0, skipped: 4 });
+  });
+
+  it('two replicas booting at once: exactly one applies, the other skips, no duplicate-key error', async () => {
+    process.env['ALERT_ACK_BY_MIGRATION'] = 'apply';
+    const results = await Promise.all([alertAckByOnBoot(db, log), alertAckByOnBoot(db, log)]);
+    expect(results.sort()).toEqual(['already-applied', 'applied']);
+    expect(await db.collection('one_time_migrations').countDocuments()).toBe(1);
+    expect(
+      (await db.collection('alerts').findOne({ type: 'grade_drop' }))?.['acknowledgedBy']
+    ).toEqual({ 'owner-1': ackedAt.toISOString() });
+  });
+
+  it('writes in bulk batches and still covers every row past the batch size', async () => {
+    const extra = BULK_BATCH_SIZE + 7;
+    await db.collection('alerts').insertMany(
+      Array.from({ length: extra }, (_, i) => ({
+        userId: 'owner-bulk',
+        studentId: 's-bulk',
+        type: 'test',
+        acknowledged: true,
+        acknowledgedAt: ackedAt,
+        createdAt,
+        seq: i,
+      }))
+    );
+    const stats = await backfillAcknowledgedBy(db, true);
+    expect(stats).toEqual({ scanned: 4 + extra, updated: 2 + extra, skipped: 2 });
+    expect(
+      await db.collection('alerts').countDocuments({
+        userId: 'owner-bulk',
+        'acknowledgedBy.owner-bulk': ackedAt.toISOString(),
+      })
+    ).toBe(extra);
   });
 });
