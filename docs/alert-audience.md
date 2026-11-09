@@ -15,6 +15,7 @@ Alerts are defined in `packages/contracts/src/enums/AlertType.ts`:
 - `workload`
 - `positive`
 - `recommendation`
+- `student_needs_help`
 
 ## Audience Matrix (v1)
 
@@ -29,6 +30,7 @@ Implemented in `packages/agents/src/config/alert-audience.ts`. Change this table
 | positive           | Yes     | **No** | Encouragement for the student. Does not count against the daily student-push budget. Parent waits for digest (type-level parent false). |
 | workload           | Yes     | **No** | Student first. Parent digest unless severity high — high-severity override is **deferred**. |
 | test               | Yes     | **No** | Same as workload. |
+| student_needs_help | **No**  | Yes    | The student tapped "Need help" (`PATCH /api/studio/assignments/:id/status`). Severity info; carries the student's note (≤140 chars) and a deep link to the parent board; at most one per assignment per 24 h (`student_help_requests`). Reaches shared adults once sharing S3 lands. |
 
 Per-household override of this matrix is a follow-up, not v1.
 

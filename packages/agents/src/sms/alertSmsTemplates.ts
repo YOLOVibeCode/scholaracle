@@ -163,6 +163,14 @@ const TEMPLATES: Readonly<Record<string, ISmsTemplate>> = {
     }),
     render: (v) => `A suggestion for ${v['name']}: ${v['title']}.`,
   },
+  [AlertType.STUDENT_NEEDS_HELP]: {
+    fields: (d) => ({
+      name: field(firstName(d), 4),
+      title: field(title(d, 'title', 'assignment'), 8, 'an assignment'),
+      course: field(course(d), 6, 'a class'),
+    }),
+    render: (v) => `${v['name']} asked for help with ${v['title']} in ${v['course']}.`,
+  },
   [AGENDA_REMINDER_TRIGGER]: {
     fields: (d) => ({
       name: field(firstName(d), 4),

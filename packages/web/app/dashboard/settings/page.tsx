@@ -10,20 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
 import { consentsApi } from '@/lib/api/consents';
-import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
+import { AlertType, SERVER_AI_CONSENT_LABEL, alertTypeLabel } from '@scholaracle/contracts';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 
-const ALERT_TYPE_KEYS = [
-  'missing_assignment',
-  'deadline',
-  'grade_drop',
-  'test',
-  'workload',
-  'positive',
-  'recommendation',
-] as const;
+/** Every alert type the API knows, in the contracts' order; labels come from contracts too. */
+const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
 
 export default function SettingsPage() {
   const [name, setName] = useState('');
@@ -1085,10 +1078,10 @@ export default function SettingsPage() {
                         onChange={(e) => setAlertType(key, e.target.checked, val.severity)}
                         disabled={isSaving || !isLoaded}
                       />
-                      <Label htmlFor={`alert-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
+                      <Label htmlFor={`alert-${key}`}>{alertTypeLabel(key)}</Label>
                       <select
                         value={val.severity}
-                        aria-label={`${key.replace('_', ' ')} alert severity`}
+                        aria-label={`${alertTypeLabel(key)} alert severity`}
                         onChange={(e) => setAlertType(key, val.enabled, e.target.value)}
                         disabled={isSaving || !isLoaded}
                         className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"

@@ -5,6 +5,7 @@ export { TestTemplate } from './TestTemplate';
 export { WorkloadTemplate } from './WorkloadTemplate';
 export { PositiveTemplate } from './PositiveTemplate';
 export { RecommendationTemplate } from './RecommendationTemplate';
+export { StudentNeedsHelpTemplate } from './StudentNeedsHelpTemplate';
 export type {
   ITemplateResult,
   ITemplateAction,

@@ -11,6 +11,7 @@ import {
 } from '../../config/alert-audience';
 import {
   Alert,
+  AlertType,
   Notification,
   DeliveryResult,
   AgentType,
@@ -18,6 +19,17 @@ import {
   NotificationChannel,
   type INotificationPayload,
 } from '@scholaracle/contracts';
+
+/**
+ * Alert types that go out at once on every channel, whatever the recipient's digest
+ * settings say. A student asking for help is a conversation the adults should have today,
+ * not a line in tomorrow's summary (student review spec §3.2).
+ */
+const IMMEDIATE_ALERT_TYPES: ReadonlySet<string> = new Set([AlertType.STUDENT_NEEDS_HELP]);
+
+function sendsAtOnce(alert: Alert): boolean {
+  return IMMEDIATE_ALERT_TYPES.has(alert.type);
+}
 
 export interface IResolvedRecipient {
   parentEmail?: string;
@@ -219,12 +231,14 @@ export class NotificationService {
                 ? (recipient.parentPhone ?? parentNotification.userId)
                 : parentNotification.userId;
 
-          const deferred = await this._tryDeferSmsToDigest(
-            channel,
-            recipient,
-            parentNotification,
-            deliveryResults
-          );
+          const deferred = sendsAtOnce(alert)
+            ? false
+            : await this._tryDeferSmsToDigest(
+                channel,
+                recipient,
+                parentNotification,
+                deliveryResults
+              );
           if (deferred) continue;
 
           const notifToSend =
@@ -346,6 +360,7 @@ export class NotificationService {
       if (!notification) continue;
 
       const basePayload = this._serializeNotification(notification);
+      const mayDefer = !sendsAtOnce(alert);
 
       for (const channel of notification.channels) {
         if (
@@ -361,7 +376,12 @@ export class NotificationService {
         )
           continue;
 
-        if (channel === NotificationChannel.SMS && recipient.userId && recipient.parentPhone) {
+        if (
+          mayDefer &&
+          channel === NotificationChannel.SMS &&
+          recipient.userId &&
+          recipient.parentPhone
+        ) {
           const deferred = await this._tryDeferSmsToDigestEnqueue(
             recipient,
             notification.subject,
@@ -370,7 +390,12 @@ export class NotificationService {
           if (deferred) continue;
         }
 
-        if (channel === NotificationChannel.EMAIL && recipient.userId && recipient.parentEmail) {
+        if (
+          mayDefer &&
+          channel === NotificationChannel.EMAIL &&
+          recipient.userId &&
+          recipient.parentEmail
+        ) {
           const deferred = await this._tryDeferEmailToDigestEnqueue(alert, recipient, notification);
           if (deferred) continue;
         }

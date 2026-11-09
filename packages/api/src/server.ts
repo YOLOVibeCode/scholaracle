@@ -466,6 +466,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         database,
         baseUrl: baseUrl ?? '',
         jwtSecret,
+        // A student's "Need help" tap enqueues a notify job the same way ingest alerts do.
+        alertQueue: notificationQueue,
       })
     );
     app.use(
