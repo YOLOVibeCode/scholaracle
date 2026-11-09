@@ -5,13 +5,31 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** "Tue, Nov 10" or '' when the date is missing or unparseable. */
-function shortDue(value: unknown): string {
+function formatDay(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone,
+  }).format(date);
+}
+
+/**
+ * "Tue, Nov 10" in the owner's time zone (UTC when none is known, never the server's), or ''
+ * when the date is missing or unparseable. An 11:59 PM Central due date must not read as the
+ * next day.
+ */
+function shortDue(value: unknown, timeZone: unknown): string {
   const raw = text(value);
   if (!raw) return '';
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return '';
-  return parsed.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const zone = text(timeZone) || 'UTC';
+  try {
+    return formatDay(parsed, zone);
+  } catch {
+    return formatDay(parsed, 'UTC');
+  }
 }
 
 /**
@@ -31,7 +49,7 @@ export class StudentNeedsHelpTemplate {
     const course = text(rd['courseName']) || text(rd['course']);
     const note = text(rd['note']);
     const dashboardUrl = text(rd['dashboardUrl']);
-    const due = shortDue(rd['dueAt']);
+    const due = shortDue(rd['dueAt'], rd['timeZone']);
 
     const subject = `${firstName} asked for help with ${title}`;
 
