@@ -16,6 +16,7 @@ export interface IConnectedSource {
   readonly studentExternalId: string;
   readonly institutionExternalId: string;
   readonly studentId?: string;
+  readonly portalAccountId?: string;
   readonly adapterVersion: string;
 }
 
@@ -91,7 +92,13 @@ export function sourceIdForStudent(
   return `local-${provider}-${institutionExternalId}-${studentMongoId}`;
 }
 
+/**
+ * SecureStore keys may contain only letters, digits, ".", "-" and "_". Portal URLs
+ * with a path or port (Aeries "/student/", Skyward "/scripts/...") made the key
+ * invalid, so "Save & Connect" failed. Other characters become "_"; keys that were
+ * already valid are unchanged, so saved credentials keep their key.
+ */
 export function buildCredentialKey(provider: string, baseUrl: string): string {
   const domain = baseUrl.replace(/https?:\/\//, '').replace(/\/$/, '');
-  return `slc_creds_${provider}_${domain}`;
+  return `slc_creds_${provider}_${domain}`.replace(/[^A-Za-z0-9._-]/g, '_');
 }

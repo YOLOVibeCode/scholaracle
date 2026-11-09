@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { UserRepository, type IUserDevice } from '@scholaracle/database';
+import { OAuthAccountRepository, UserRepository, type IUserDevice } from '@scholaracle/database';
+import { verifyAppleIdentityToken } from '../auth/appleIdentityToken';
+import { appleOAuthAudiences } from '../auth/appleAudiences';
 import {
   AuthenticationError,
   NotFoundError,
@@ -32,6 +34,7 @@ export interface IAccountRouterConfig {
 export function createAccountRouter(config: IAccountRouterConfig): Router {
   const router = Router();
   const userRepository = new UserRepository(config.database);
+  const oauthAccountRepository = new OAuthAccountRepository(config.database);
   const emailTransferService = new EmailTransferService({
     database: config.database,
     userRepository,
@@ -258,9 +261,12 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const { password } = req.body as Partial<IAccountDeleteRequest>;
-      if (!password || typeof password !== 'string' || !password.trim()) {
-        throw new ValidationError('password required');
+      const { password, appleIdentityToken, appleNonce } = (req.body ??
+        {}) as Partial<IAccountDeleteRequest>;
+      const hasPassword = typeof password === 'string' && password.trim() !== '';
+      const hasApple = typeof appleIdentityToken === 'string' && appleIdentityToken.trim() !== '';
+      if (!hasPassword && !hasApple) {
+        throw new ValidationError('password or Apple confirmation required');
       }
 
       const user = await userRepository.findById(userId);
@@ -268,9 +274,33 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         throw new NotFoundError('User not found');
       }
 
-      const isValidPassword = await UserRepository.verifyPassword(password, user.passwordHash);
-      if (!isValidPassword) {
-        throw new AuthenticationError('Invalid password');
+      if (hasPassword) {
+        const isValidPassword = await UserRepository.verifyPassword(
+          password as string,
+          user.passwordHash
+        );
+        if (!isValidPassword) {
+          throw new AuthenticationError('Invalid password');
+        }
+      } else {
+        // Apple-created accounts have no known password: require a FRESH Apple sign-in whose
+        // account id is the one linked to THIS user.
+        const nonce = typeof appleNonce === 'string' ? appleNonce.trim() : '';
+        let sub: string;
+        try {
+          const verified = await verifyAppleIdentityToken({
+            identityToken: (appleIdentityToken as string).trim(),
+            rawNonce: nonce === '' ? undefined : nonce,
+            audiences: appleOAuthAudiences(),
+          });
+          sub = verified.sub;
+        } catch {
+          throw new AuthenticationError('Invalid Apple identity token');
+        }
+        const link = await oauthAccountRepository.findByProviderAndId('apple', sub);
+        if (!link || link.userId !== userId) {
+          throw new AuthenticationError('This Apple account is not linked to your account');
+        }
       }
 
       const deletionService = new AccountDeletionService(config.database);

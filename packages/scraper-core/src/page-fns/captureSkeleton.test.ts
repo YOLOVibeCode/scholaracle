@@ -66,8 +66,9 @@ describe('captureSkeleton', () => {
   });
 
   it('caps serialized skeleton at 200 KB', async () => {
+    // Enough nodes to exceed the cap (capTree binary search is CPU-heavy in jsdom).
     const spans = Array.from(
-      { length: 10_000 },
+      { length: 7_500 },
       (_, i) => `<span class="row item" id="cell-${i}"></span>`
     ).join('');
     document.body.innerHTML = `<div class="table">${spans}</div>`;
@@ -75,7 +76,7 @@ describe('captureSkeleton', () => {
     expect(result.byteLength).toBeLessThanOrEqual(MAX_BYTES);
     expect(result.skeleton.length).toBeLessThanOrEqual(MAX_BYTES);
     expect(result.truncated).toBe(true);
-  }, 30_000);
+  }, 60_000);
 
   it('produces a stable sha256 across two captures of the same DOM', async () => {
     document.body.innerHTML =

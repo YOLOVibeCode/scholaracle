@@ -13,4 +13,6 @@ export interface IRepairCandidateData extends ISlcRepairCandidateKey {
   readonly seenCount: number;
   readonly firstSeenAt: Date;
   readonly lastSeenAt: Date;
+  readonly lastFailureReason?: string;
+  readonly lastFailureAt?: Date;
 }

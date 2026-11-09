@@ -399,9 +399,11 @@ export default function SettingsPage() {
                 name="notify-email"
                 data-testid="toggle-email"
                 type="checkbox"
+                className="h-6 w-6 shrink-0 rounded border-gray-300"
                 checked={emailNotifications}
                 onChange={(e) => setEmailNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="Email notifications"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -414,9 +416,11 @@ export default function SettingsPage() {
                 name="notify-sms"
                 data-testid="toggle-sms"
                 type="checkbox"
+                className="h-6 w-6 shrink-0 rounded border-gray-300"
                 checked={smsNotifications}
                 onChange={(e) => setSmsNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="SMS notifications"
               />
             </div>
 
@@ -426,6 +430,7 @@ export default function SettingsPage() {
                 <Label htmlFor="quiet-hours-enabled">Do Not Disturb</Label>
                 <Switch
                   id="quiet-hours-enabled"
+                  aria-label="Do Not Disturb"
                   checked={quietHoursEnabled}
                   onCheckedChange={setQuietHoursEnabled}
                   disabled={isSaving || !isLoaded}
@@ -479,6 +484,7 @@ export default function SettingsPage() {
                 </div>
                 <Switch
                   id="auto-send"
+                  aria-label="Auto-Send Digests"
                   checked={autoSend}
                   onCheckedChange={setAutoSend}
                   disabled={isSaving || !isLoaded}
@@ -518,6 +524,7 @@ export default function SettingsPage() {
                       Enter email addresses (one per line) that should receive digest emails.
                     </p>
                     <textarea
+                      aria-label="Digest recipient email addresses"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       rows={3}
                       placeholder="parent@example.com&#10;guardian@example.com"
@@ -568,6 +575,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2">
                       <Input
                         type="date"
+                        aria-label="Snooze digests until date"
                         value={snoozeInput}
                         onChange={(e) => setSnoozeInput(e.target.value)}
                         min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
@@ -620,6 +628,7 @@ export default function SettingsPage() {
               </p>
               <select
                 data-testid="select-timezone"
+                aria-label="Timezone"
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
@@ -642,6 +651,7 @@ export default function SettingsPage() {
                 <Switch
                   id="glance-enabled"
                   data-testid="toggle-glance"
+                  aria-label="Student at a Glance"
                   checked={glanceEnabled}
                   onCheckedChange={setGlanceEnabled}
                   disabled={isSaving || !isLoaded}
@@ -707,6 +717,8 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           disabled={isSaving || !isLoaded}
+                          aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                          aria-pressed={slot.enabled}
                           onClick={() => {
                             setWeekdaySlots((prev) =>
                               prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -778,6 +790,8 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             disabled={isSaving || !isLoaded}
+                            aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                            aria-pressed={slot.enabled}
                             onClick={() => {
                               setWeekendSlots((prev) =>
                                 prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -902,7 +916,12 @@ export default function SettingsPage() {
                 <h5 className="text-sm font-medium text-gray-500 dark:text-gray-400">Advanced</h5>
                 <div className="flex items-center justify-between">
                   <Label>Custom Daily Digest</Label>
-                  <Switch checked={dailyDigestEnabled} onCheckedChange={setDailyDigestEnabled} disabled={isSaving || !isLoaded} />
+                  <Switch
+                    aria-label="Custom Daily Digest"
+                    checked={dailyDigestEnabled}
+                    onCheckedChange={setDailyDigestEnabled}
+                    disabled={isSaving || !isLoaded}
+                  />
                 </div>
                 {dailyDigestEnabled && (
                   <div className="space-y-2">
@@ -919,7 +938,12 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <Label>Weekly Digest</Label>
-                <Switch checked={weeklyDigestEnabled} onCheckedChange={setWeeklyDigestEnabled} disabled={isSaving || !isLoaded} />
+                <Switch
+                  aria-label="Weekly Digest"
+                  checked={weeklyDigestEnabled}
+                  onCheckedChange={setWeeklyDigestEnabled}
+                  disabled={isSaving || !isLoaded}
+                />
               </div>
               {weeklyDigestEnabled && (
                 <div className="grid grid-cols-2 gap-4">
@@ -1056,6 +1080,7 @@ export default function SettingsPage() {
                       <input
                         id={`alert-${key}`}
                         type="checkbox"
+                        className="h-6 w-6 shrink-0 rounded border-gray-300"
                         checked={val.enabled}
                         onChange={(e) => setAlertType(key, e.target.checked, val.severity)}
                         disabled={isSaving || !isLoaded}
@@ -1063,6 +1088,7 @@ export default function SettingsPage() {
                       <Label htmlFor={`alert-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
                       <select
                         value={val.severity}
+                        aria-label={`${key.replace('_', ' ')} alert severity`}
                         onChange={(e) => setAlertType(key, val.enabled, e.target.value)}
                         disabled={isSaving || !isLoaded}
                         className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"
@@ -1084,6 +1110,7 @@ export default function SettingsPage() {
                 <input
                   id="prioritize-high"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={prioritizeHighImpact}
                   onChange={(e) => setPrioritizeHighImpact(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1094,6 +1121,7 @@ export default function SettingsPage() {
                 <input
                   id="emphasize-weak"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={emphasizeWeakSubjects}
                   onChange={(e) => setEmphasizeWeakSubjects(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1104,6 +1132,7 @@ export default function SettingsPage() {
                 <input
                   id="celebrate-wins"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={celebrateWins}
                   onChange={(e) => setCelebrateWins(e.target.checked)}
                   disabled={isSaving || !isLoaded}

@@ -30,6 +30,47 @@ export interface IExpoPushDeliveryConfig {
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
+/** Ids longer than this are dropped: they are never real ids and Expo caps the payload at 4KB. */
+const MAX_ROUTING_ID_LENGTH = 128;
+
+function routingId(
+  source: Readonly<Record<string, unknown>>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.length > 0 && value.length <= MAX_ROUTING_ID_LENGTH) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Push `data` the phone uses to open the right screen on tap. `notificationId` and `type` are
+ * unchanged (older app builds read only those); the routing ids are added only when present.
+ * `studentId` is the student's Mongo id (what the phone's student list calls `id`);
+ * `assignmentId` / `courseId` are the portal's raw external ids from the alert's related data.
+ */
+export function buildPushData(notification: Notification): Record<string, string> {
+  const data: Record<string, string> = {
+    notificationId: notification.id,
+    type: notification.triggerType,
+  };
+  if (notification.studentId) data['studentId'] = notification.studentId;
+  const trigger =
+    notification.triggerData && typeof notification.triggerData === 'object'
+      ? (notification.triggerData as Readonly<Record<string, unknown>>)
+      : {};
+  const assignmentId = routingId(trigger, 'assignmentExternalId', 'assignmentId', 'externalId');
+  const courseId = routingId(trigger, 'courseExternalId', 'courseId');
+  const alertId = routingId(trigger, 'alertId');
+  if (assignmentId) data['assignmentId'] = assignmentId;
+  if (courseId) data['courseId'] = courseId;
+  if (alertId) data['alertId'] = alertId;
+  return data;
+}
+
 async function defaultExpoSender(
   messages: ReadonlyArray<{
     readonly to: string;
@@ -85,7 +126,7 @@ export class ExpoPushDelivery implements INotificationDelivery {
         to,
         title: notification.subject,
         body: notification.body,
-        data: { notificationId: notification.id, type: notification.triggerType },
+        data: buildPushData(notification),
       }))
     );
 

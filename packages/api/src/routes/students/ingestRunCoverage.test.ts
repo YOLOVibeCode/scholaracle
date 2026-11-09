@@ -11,6 +11,7 @@ import { ingestV1Router } from '../ingest/v1/ingest';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { seedBindingsForEnvelope } from '../../test-utils/seedIngestBinding';
 import { seedActiveConnectorJti } from '../../testHelpers/connectorDeviceTestSeed';
 
 function randomJti(): string {
@@ -136,6 +137,7 @@ describe('GET ingest run coverage', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, parentUserId, envelope);
     await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)

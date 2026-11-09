@@ -102,6 +102,18 @@ describe('RunLedger', () => {
     await expect(ledger.getAll()).resolves.toEqual([]);
   });
 
+  it('should remove only the given students entries', async () => {
+    await ledger.startRun({ runId: 'r1', provider: 'canvas', studentExternalId: 's1' });
+    await ledger.startRun({ runId: 'r2', provider: 'canvas', studentExternalId: 's2' });
+    await ledger.startRun({ runId: 'r3', provider: 'aeries', studentExternalId: 's1' });
+    await ledger.removeByStudentExternalIds(['s1']);
+    expect((await ledger.getAll()).map((e) => e.runId)).toEqual(['r2']);
+    // No-ops: empty list and ids with no entries leave the store alone.
+    await ledger.removeByStudentExternalIds([]);
+    await ledger.removeByStudentExternalIds(['nobody']);
+    expect((await ledger.getAll()).map((e) => e.runId)).toEqual(['r2']);
+  });
+
   it('should ignore addPhase/completeRun for unknown runIds', async () => {
     await ledger.startRun({ runId: 'r1', provider: 'canvas', studentExternalId: 's1' });
     await ledger.addPhase('nope', makePhase(0));

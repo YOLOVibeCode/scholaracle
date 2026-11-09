@@ -42,6 +42,10 @@ This document outlines the comprehensive parental access control system with ema
 ### 2. Permission Updates
 
 #### Shared Parent Self-Removal Prevention
+
+> **Superseded 2026-11-09.** The owner decided shared adults may leave on their own; see
+> `docs/sharing-spec.md` §4.2 and `POST /api/sharing/leave`. The text below describes the behaviour
+> that is still in the code until sharing phase S1 ships.
 **Change**: Modified `DELETE /api/students/:id/contacts/:email` endpoint
 
 **Old behavior**: Shared parents could remove themselves from the student

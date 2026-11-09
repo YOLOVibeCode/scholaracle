@@ -19,6 +19,9 @@ interface IStudentsScreenProps {
   onAddSource(): void;
   onStartSetup?(): void;
   onOpenSettings?(): void;
+  /** Long-press a student card to edit or remove that student. */
+  onEditStudent?(student: IStudentListItem): void;
+  onOpenAlerts?(): void;
 }
 
 export function StudentsScreen({
@@ -26,6 +29,8 @@ export function StudentsScreen({
   onAddSource,
   onStartSetup,
   onOpenSettings,
+  onEditStudent,
+  onOpenAlerts,
 }: IStudentsScreenProps): React.ReactElement {
   const [students, setStudents] = useState<IStudentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +80,17 @@ export function StudentsScreen({
           >
             <Text style={styles.addButtonText}>+ Connect Source</Text>
           </TouchableOpacity>
+          {onOpenAlerts && (
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={onOpenAlerts}
+              accessibilityRole="button"
+              accessibilityLabel="Alerts"
+              testID="button-alerts"
+            >
+              <Text style={styles.settingsIcon}>🔔</Text>
+            </TouchableOpacity>
+          )}
           {onOpenSettings && (
             <TouchableOpacity
               style={styles.settingsButton}
@@ -98,12 +114,20 @@ export function StudentsScreen({
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
         contentContainerStyle={students.length === 0 ? styles.emptyContainer : undefined}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => onSelectStudent(item)}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => onSelectStudent(item)}
+            onLongPress={onEditStudent ? (): void => onEditStudent(item) : undefined}
+            accessibilityHint={onEditStudent ? 'Long press to edit or remove' : undefined}
+            testID="card-student"
+          >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={styles.cardInfo}>
-              <Text style={styles.cardName}>{item.name}</Text>
+              <Text style={styles.cardName} testID="text-student-name">
+                {item.name}
+              </Text>
               <Text style={styles.cardGrade}>
                 {item.grade != null ? `Grade ${item.grade}` : ''}
                 {item.grade != null && item.stats?.currentGPA != null ? '  ·  ' : ''}

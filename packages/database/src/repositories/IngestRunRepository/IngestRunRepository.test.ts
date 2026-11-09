@@ -201,6 +201,40 @@ describe('IngestRunRepository', () => {
     expect(found?.runId).toBe('run-src');
   });
 
+  it('stores initial step on startRun and appends via appendTraceStep', async () => {
+    const starting = {
+      name: 'starting',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      ms: 0,
+      ok: true,
+    };
+    await repo.startRun({
+      userId: 'user-1',
+      sourceId: 'src-1',
+      runId: 'run-trace',
+      lastCursor: null,
+      initialStep: starting,
+    });
+    const afterStart = await repo.findByUserIdAndRunId('user-1', 'run-trace');
+    expect(afterStart?.steps).toEqual([starting]);
+
+    await repo.appendTraceStep('user-1', 'run-trace', {
+      step: {
+        name: 'extracting',
+        startedAt: '2026-01-01T00:00:01.000Z',
+        ms: 1200,
+        ok: true,
+      },
+      stats: { opCount: 5 },
+      warnings: ['client warning'],
+    });
+    const afterTrace = await repo.findByUserIdAndRunId('user-1', 'run-trace');
+    expect(afterTrace?.steps).toHaveLength(2);
+    expect(afterTrace?.steps?.[1]?.name).toBe('extracting');
+    expect(afterTrace?.stats).toEqual({ opCount: 5 });
+    expect(afterTrace?.warnings).toEqual(['client warning']);
+  });
+
   it('fails a run without requiring an envelope', async () => {
     await repo.startRun({
       userId: 'user-1',
