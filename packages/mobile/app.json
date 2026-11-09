@@ -34,7 +34,14 @@
     "plugins": [
       "expo-updates",
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#0A1628",
+          "defaultChannel": "default"
+        }
+      ],
       "expo-apple-authentication",
       [
         "expo-splash-screen",

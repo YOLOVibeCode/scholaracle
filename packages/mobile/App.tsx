@@ -24,7 +24,8 @@ import { StudentEditScreen } from './src/screens/StudentEditScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
-import { registerForPushNotifications, addResponseListener } from './src/notifications/pushSetup';
+import { registerForPushNotifications } from './src/notifications/pushSetup';
+import { usePushTapNavigation } from './src/notifications/usePushTapNavigation';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
 import { resavePortalCredentialsThisDeviceOnlyOnce } from './src/credentials/resavePortalCredentialsThisDeviceOnlyOnce';
 import { connectedSourceStore, type IConnectedSource } from './src/sources/ConnectedSourceStore';
@@ -53,7 +54,6 @@ import {
   homeViewForRole,
   isStudentSession,
   mayStorePortalCredentials,
-  viewAfterNotificationTap,
   type AppNavView,
 } from './src/studio/studentMode';
 
@@ -227,13 +227,15 @@ function AppContent(): React.ReactElement {
     }
   }, [isLoggedIn, studentMode, studentCount, role]);
 
-  // Notification taps: parent → students list; student → Today.
-  useEffect(() => {
-    const subscription = addResponseListener(() => {
-      setNav({ view: viewAfterNotificationTap(role) });
-    });
-    return () => subscription.remove();
-  }, [role]);
+  // Notification taps (live + cold start): open the student/course/assignment named in the push
+  // data; student sessions and unroutable pushes land on the role's home.
+  usePushTapNavigation({
+    isLoading,
+    isLoggedIn,
+    role,
+    accountEpoch,
+    onNavigate: (next) => setNav(next),
+  });
 
   // Reset navigation on login/logout so the next session starts on the right home.
   useEffect(() => {
