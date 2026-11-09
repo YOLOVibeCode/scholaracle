@@ -13,7 +13,9 @@
     "test:codegen": "playwright codegen ${BASE_URL:-http://localhost:2800}",
     "test:production": "BASE_URL=${BASE_URL:-https://scholarmancy.com} API_BASE_URL=${API_BASE_URL:-https://api.scholarmancy.com} playwright test --project=critical",
     "test:staging": "BASE_URL=${BASE_URL:-https://staging.scholarmancy.com} API_BASE_URL=${API_BASE_URL:-https://staging-api.scholarmancy.com} playwright test",
-    "test:fake-portal": "pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/logger build && pnpm --filter @scholaracle/scraper-core build && E2E_SKIP_GLOBAL_SETUP=1 PLAYWRIGHT_FAKE_PORTAL_ONLY=1 pnpm exec playwright test --project=fake-portal"
+    "fake-portal:build": "tsc --build fake-portal/tsconfig.json",
+    "fake-portal:start": "node fake-portal/dist/server.js",
+    "test:fake-portal": "pnpm --filter @scholaracle/contracts build && pnpm --filter @scholaracle/logger build && pnpm --filter @scholaracle/scraper-core build && pnpm run fake-portal:build && E2E_SKIP_GLOBAL_SETUP=1 PLAYWRIGHT_FAKE_PORTAL_ONLY=1 pnpm exec playwright test --project=fake-portal"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",

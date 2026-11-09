@@ -208,7 +208,7 @@ export default defineConfig({
       ? [
           {
             command:
-              'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs',
+              'FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 pnpm --filter @scholaracle/e2e run fake-portal:start',
             url: 'http://127.0.0.1:2855/',
             reuseExistingServer: !process.env.CI,
             timeout: 120 * 1000,
