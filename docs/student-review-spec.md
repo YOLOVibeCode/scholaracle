@@ -1,6 +1,6 @@
 # Student review: helping a student keep track of what they need
 
-Status: DRAFT for owner review (2026-11-09). Companion to `docs/sharing-spec.md`; follows the rules in
+Status: APPROVED by the owner on 2026-11-09 (decisions in §6); ready to implement. Companion to `docs/sharing-spec.md`; follows the rules in
 `docs/PARENT_STUDENT_STUDIO_CHECKLIST.md` (no grade leak, one composer per view in `studio-core`,
 narrow ports, tests first). Verified on main `89d513f`.
 
@@ -119,7 +119,7 @@ on sharing S3.
    back with the warning label.
 4. Sunday 6 pm: the student's phone gets the weekly review; tapping it opens This week.
 
-## 6. Decisions for the owner
-- Q1. Horizon: rolling 7 days (proposed) or "through next Friday"?
-- Q2. Should parents get a copy of the weekly review by default? (Proposed: off, per-student toggle.)
-- Q3. Should the student be able to attach a note to "Need help"? (Proposed: yes, 140 characters.)
+## 6. Decisions (made by the owner, 2026-11-09)
+- Q1. Horizon: **rolling 7 days**.
+- Q2. Parents do **not** get a copy of the weekly review by default; per-student toggle.
+- Q3. The student **may** attach a note to "Need help", 140 characters.
