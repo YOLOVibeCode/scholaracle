@@ -1173,6 +1173,179 @@ describe('NotificationService', () => {
     });
   });
 
+  describe('push fan-out per person and alertTypes (sharing S3)', () => {
+    const parentNotif = (channels: NotificationChannel[]): Notification =>
+      new Notification({
+        agentType: AgentType.PARENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 'Grade drop',
+        body: 'Math fell to 72.',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.GRADE_DROP,
+        channels,
+      });
+    const alert = new Alert({
+      studentId: 'student-123',
+      type: AlertType.GRADE_DROP,
+      severity: 'warning',
+      relatedData: {},
+    });
+    type AddCall = [
+      string,
+      string,
+      { notificationPayload: { userId: string }; channel: NotificationChannel },
+    ];
+    const jobs = (q: { add: jest.Mock }): Array<{ to: string; channel: NotificationChannel }> =>
+      (q.add.mock.calls as AddCall[]).map((c) => ({
+        to: c[2].notificationPayload.userId,
+        channel: c[2].channel,
+      }));
+
+    it("enqueues one push per person who chose it, to that person's own account", async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job') };
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest
+          .fn()
+          .mockReturnValue(parentNotif([NotificationChannel.EMAIL, NotificationChannel.SMS])),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const resolved = [
+        { parentEmail: 'owner@example.com', userId: 'owner-id', push: true },
+        { parentEmail: 'jess@example.com', userId: 'jess-id', push: true },
+        { parentPhone: '+15550000002', userId: 'tom-id' },
+      ];
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue as unknown as MongoQueue, resolved);
+
+      const sent = jobs(mockQueue);
+      expect(sent).toEqual(
+        expect.arrayContaining([
+          { to: 'owner@example.com', channel: NotificationChannel.EMAIL },
+          { to: 'owner-id', channel: NotificationChannel.PUSH },
+          { to: 'jess@example.com', channel: NotificationChannel.EMAIL },
+          { to: 'jess-id', channel: NotificationChannel.PUSH },
+          { to: '+15550000002', channel: NotificationChannel.SMS },
+        ])
+      );
+      expect(sent).toHaveLength(5);
+      const pushTargets = sent
+        .filter((j) => j.channel === NotificationChannel.PUSH)
+        .map((j) => j.to);
+      expect(pushTargets).toEqual(['owner-id', 'jess-id']);
+    });
+
+    it('skips a person whose alertTypes exclude this alert, on every channel', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job') };
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(parentNotif([NotificationChannel.EMAIL])),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const resolved = [
+        { parentEmail: 'owner@example.com', userId: 'owner-id', push: true },
+        {
+          parentEmail: 'only-missing@example.com',
+          userId: 'om-id',
+          push: true,
+          alertTypes: [AlertType.MISSING_ASSIGNMENT],
+        },
+        {
+          parentEmail: 'wants-grades@example.com',
+          userId: 'wg-id',
+          alertTypes: [AlertType.GRADE_DROP],
+        },
+        { parentEmail: 'empty-list@example.com', alertTypes: [] },
+      ];
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue as unknown as MongoQueue, resolved);
+
+      const to = jobs(mockQueue).map((j) => j.to);
+      expect(to).toEqual([
+        'owner@example.com',
+        'owner-id',
+        'wants-grades@example.com',
+        'empty-list@example.com',
+      ]);
+    });
+
+    it('does not fan a PUSH channel on the notification out to resolved recipients generically', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job') };
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest
+          .fn()
+          .mockReturnValue(parentNotif([NotificationChannel.PUSH, NotificationChannel.EMAIL])),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+      const resolved = [
+        { parentEmail: 'owner@example.com', userId: 'owner-id' },
+        { userId: 'jess-id', push: true },
+        {
+          parentEmail: 'kid@school.edu',
+          userId: 'kid-id',
+          push: true,
+          recipientType: 'student' as const,
+        },
+      ];
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue as unknown as MongoQueue, resolved);
+
+      // The student's email still goes out; nobody gets a push except the adult who chose it,
+      // and the notification's own PUSH channel is not broadcast to every resolved recipient.
+      expect(jobs(mockQueue)).toEqual([
+        { to: 'owner@example.com', channel: NotificationChannel.EMAIL },
+        { to: 'jess-id', channel: NotificationChannel.PUSH },
+        { to: 'kid@school.edu', channel: NotificationChannel.EMAIL },
+      ]);
+    });
+
+    it('keeps the legacy single-recipient path: PUSH goes to the notification userId', async () => {
+      const mockQueue = { add: jest.fn().mockResolvedValue('job') };
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(parentNotif([NotificationChannel.PUSH])),
+      };
+      const svc = new NotificationService([agent], mockDeliveryRouter);
+
+      await svc.processAlertEnqueueDeliver(alert, mockQueue as unknown as MongoQueue);
+
+      expect(jobs(mockQueue)).toEqual([{ to: 'student-123', channel: NotificationChannel.PUSH }]);
+    });
+
+    it('in-process processAlert routes one PUSH per person to their own account', async () => {
+      const studentNotif = new Notification({
+        agentType: AgentType.STUDENT,
+        studentId: 'student-123',
+        userId: 'student-123',
+        subject: 's',
+        body: 'b',
+        priority: NotificationPriority.HIGH,
+        triggerType: AlertType.GRADE_DROP,
+        channels: [],
+      });
+      mockStudentGenerator.generate.mockReturnValue(studentNotif);
+      mockParentGenerator.generate.mockReturnValue(parentNotif([NotificationChannel.EMAIL]));
+      const ok: DeliveryResult = { success: true, channel: NotificationChannel.EMAIL };
+      mockDeliveryRouter.route.mockResolvedValue(ok);
+
+      await notificationService.processAlert(alert, [
+        { parentEmail: 'owner@example.com', userId: 'owner-id', push: true },
+        { parentEmail: 'jess@example.com', userId: 'jess-id', push: true },
+        { parentEmail: 'quiet@example.com', userId: 'quiet-id', alertTypes: ['deadline'] },
+      ]);
+
+      const routed = mockDeliveryRouter.route.mock.calls.map(([n, ch]) => [n.userId, ch]);
+      expect(routed).toEqual([
+        ['owner@example.com', NotificationChannel.EMAIL],
+        ['owner-id', NotificationChannel.PUSH],
+        ['jess@example.com', NotificationChannel.EMAIL],
+        ['jess-id', NotificationChannel.PUSH],
+      ]);
+    });
+  });
+
   describe('deliverOne', () => {
     it('should reconstruct notification and route to channel, return DeliveryResult', async () => {
       const mockAgent: INotificationAgent = {

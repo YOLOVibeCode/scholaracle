@@ -34,10 +34,27 @@ function sendsAtOnce(alert: Alert): boolean {
 export interface IResolvedRecipient {
   parentEmail?: string;
   parentPhone?: string;
-  /** When set, used for SMS digest preference lookup (e.g. account owner). */
+  /** This person's account id: digest preference lookup and the target of their push. */
   userId?: string;
+  /** Deliver push to this person's own devices (needs `userId`). */
+  push?: boolean;
+  /** Alert types this person wants for the student; unset or empty = all. */
+  alertTypes?: readonly string[];
   /** Distinguishes student (alertEmail) from parents (owner + sharedWith) for routing. */
   recipientType?: 'parent' | 'student';
+}
+
+/** Whether a recipient wants alerts of this type (sharing-spec §4.5; unset or empty = all). */
+function wantsAlertType(recipient: IResolvedRecipient, alertType: string): boolean {
+  const types = recipient.alertTypes;
+  return !types || types.length === 0 || types.includes(alertType);
+}
+
+/** Does this recipient get a push of their own? Only people with an account do. */
+function wantsPush(
+  recipient: IResolvedRecipient
+): recipient is IResolvedRecipient & { userId: string } {
+  return recipient.push === true && typeof recipient.userId === 'string' && recipient.userId !== '';
 }
 
 /** @deprecated Use IResolvedRecipient (singular). Kept for backwards compat. */
@@ -211,6 +228,7 @@ export class NotificationService {
       const isDefaultSingleRecipient =
         recipients.length === 1 && !recipients[0]!.parentEmail && !recipients[0]!.parentPhone;
       for (const recipient of recipients) {
+        if (!wantsAlertType(recipient, alert.type)) continue;
         for (const channel of parentNotification.channels) {
           if (
             channel === NotificationChannel.EMAIL &&
@@ -224,6 +242,8 @@ export class NotificationService {
             !isDefaultSingleRecipient
           )
             continue;
+          // Push is per person (each recipient's own devices); routed after the channel loop.
+          if (channel === NotificationChannel.PUSH && !isDefaultSingleRecipient) continue;
           const to =
             channel === NotificationChannel.EMAIL
               ? (recipient.parentEmail ?? parentNotification.userId)
@@ -243,21 +263,16 @@ export class NotificationService {
 
           const notifToSend =
             to !== parentNotification.userId
-              ? new Notification({
-                  agentType: parentNotification.agentType,
-                  studentId: parentNotification.studentId,
-                  userId: to,
-                  subject: parentNotification.subject,
-                  body: parentNotification.body,
-                  priority: parentNotification.priority,
-                  triggerType: parentNotification.triggerType,
-                  triggerData: parentNotification.triggerData,
-                  channels: parentNotification.channels,
-                  actions: parentNotification.actions,
-                })
+              ? this._cloneFor(parentNotification, to)
               : parentNotification;
           const result = await this._deliveryRouter.route(notifToSend, channel);
           deliveryResults.push(result);
+        }
+        if (wantsPush(recipient)) {
+          const pushNotif = this._cloneFor(parentNotification, recipient.userId);
+          deliveryResults.push(
+            await this._deliveryRouter.route(pushNotif, NotificationChannel.PUSH)
+          );
         }
       }
       parentNotification.markSent();
@@ -268,6 +283,22 @@ export class NotificationService {
       parentNotification,
       deliveryResults,
     };
+  }
+
+  /** Same content addressed to another person (email, phone or account id). */
+  private _cloneFor(notification: Notification, userId: string): Notification {
+    return new Notification({
+      agentType: notification.agentType,
+      studentId: notification.studentId,
+      userId,
+      subject: notification.subject,
+      body: notification.body,
+      priority: notification.priority,
+      triggerType: notification.triggerType,
+      triggerData: notification.triggerData,
+      channels: notification.channels,
+      actions: notification.actions,
+    });
   }
 
   private async _processAlertWithAgents(alert: Alert): Promise<IProcessAlertResult> {
@@ -354,6 +385,7 @@ export class NotificationService {
       const useStudent = recipient.recipientType === 'student';
       if (useStudent && !shouldNotifyStudent(alert.type)) continue;
       if (!useStudent && !shouldNotifyParent(alert.type)) continue;
+      if (!wantsAlertType(recipient, alert.type)) continue;
       const notification = useStudent
         ? (studentNotification ?? parentNotification)
         : (parentNotification ?? studentNotification);
@@ -375,6 +407,8 @@ export class NotificationService {
           !isDefaultSingleRecipient
         )
           continue;
+        // Push is per person (each recipient's own devices); enqueued after the channel loop.
+        if (channel === NotificationChannel.PUSH && !isDefaultSingleRecipient) continue;
 
         if (
           mayDefer &&
@@ -416,12 +450,31 @@ export class NotificationService {
         );
         deliveryJobIds.push(jobId);
       }
+
+      if (!useStudent && wantsPush(recipient)) {
+        deliveryJobIds.push(await this._enqueuePush(queue, basePayload, recipient.userId));
+      }
     }
 
     if (studentNotification) studentNotification.markSent();
     if (parentNotification) parentNotification.markSent();
 
     return { notifications, deliveryJobIds };
+  }
+
+  /** One push deliver job addressed to this person's account (their registered devices). */
+  private async _enqueuePush(
+    queue: MongoQueue,
+    basePayload: INotificationPayload,
+    userId: string
+  ): Promise<string> {
+    const payload: INotificationPayload = { ...basePayload, userId };
+    return queue.add(
+      'deliver',
+      'deliver-one',
+      { notificationPayload: payload, channel: NotificationChannel.PUSH },
+      { maxAttempts: 5 }
+    );
   }
 
   /** Returns true if SMS was deferred to digest; caller should not enqueue deliver job. */

@@ -3,8 +3,14 @@ import { StudentRepository, UserRepository } from '@scholaracle/database';
 import type { IResolvedRecipient } from './service/NotificationService/NotificationService';
 
 /**
- * Resolve all alert recipients for a student: owner (if opted in) + accepted contacts with receiveAlerts.
- * Returns one IResolvedRecipient per person; only channels they have (email/phone) are set.
+ * Resolve all alert recipients for a student: owner (if opted in) + accepted contacts with
+ * receiveAlerts. Returns one IResolvedRecipient per person, honouring that person's own
+ * channels (email / sms / push) and alert types (sharing-spec §4.5):
+ * - `parentEmail` / `parentPhone` are set only for channels the person chose and has;
+ * - `userId` is set for the owner and every accepted adult (they always have one once accepted);
+ * - `push` is set when the person chose push, so delivery reaches their own devices;
+ * - `alertTypes` is passed through when the person narrowed it (unset or empty = all).
+ * A person with `receiveAlerts: false` or no deliverable channel gets nothing.
  */
 export async function resolveAllAlertRecipients(
   studentId: string,
@@ -25,14 +31,18 @@ export async function resolveAllAlertRecipients(
   for (const r of resolved) {
     const hasEmail = r.channels.includes('email');
     const hasSms = r.channels.includes('sms');
+    const hasPush = r.channels.includes('push');
+    const userId = r.isPrimary ? student.userId.toString() : r.userId;
     const recipientType: 'parent' | 'student' =
       studentAlertEmail && r.email === studentAlertEmail ? 'student' : 'parent';
     out.push({
       ...(hasEmail && r.email ? { parentEmail: r.email } : {}),
       ...(hasSms && r.phone ? { parentPhone: r.phone } : {}),
-      ...(r.isPrimary ? { userId: student.userId.toString() } : {}),
+      ...(userId ? { userId } : {}),
+      ...(hasPush && userId ? { push: true } : {}),
+      ...(r.alertTypes && r.alertTypes.length > 0 ? { alertTypes: r.alertTypes } : {}),
       recipientType,
     });
   }
-  return out.filter((o) => o.parentEmail ?? o.parentPhone);
+  return out.filter((o) => o.parentEmail ?? o.parentPhone ?? o.push);
 }
