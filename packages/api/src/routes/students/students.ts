@@ -302,6 +302,18 @@ function buildActionAsset(
   };
 }
 
+/** need_help is an open ask; once the portal shows the work in, it is history. */
+function asksForHelp(item: IActionItem): boolean {
+  return (
+    item.studentStatus === 'need_help' && item.status !== 'submitted' && item.status !== 'graded'
+  );
+}
+
+function toIsoString(value: unknown): string | undefined {
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === 'string' ? value : undefined;
+}
+
 function determineActionBucket(
   item: IActionItem,
   assignmentDocs: ActionBoardAssignmentDoc[],
@@ -328,6 +340,8 @@ function determineActionBucket(
     return 'needs_attention';
   }
   if (item.status === 'late') return 'needs_attention';
+  // A student who tapped "Need help" lands here even if the item is merely due soon (R3).
+  if (asksForHelp(item)) return 'needs_attention';
   if (item.course.currentGrade != null && item.course.currentGrade < 70) return 'needs_attention';
   if (
     dueAt != null &&
@@ -2273,13 +2287,12 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         }
 
         const studentStatus = (doc['studentStatus'] as string) ?? undefined;
-        const lastNudgedRaw = doc['lastNudgedAt'];
-        const lastNudgedAt =
-          lastNudgedRaw instanceof Date
-            ? lastNudgedRaw.toISOString()
-            : typeof lastNudgedRaw === 'string'
-              ? lastNudgedRaw
-              : undefined;
+        const lastNudgedAt = toIsoString(doc['lastNudgedAt']);
+        const asking = studentStatus === 'need_help';
+        const askedForHelpAt = asking ? toIsoString(doc['studentHelpRequestedAt']) : undefined;
+        const noteRaw = doc['studentNote'];
+        const studentNote =
+          asking && typeof noteRaw === 'string' && noteRaw !== '' ? noteRaw : undefined;
 
         items.push({
           assignmentExternalId: externalId,
@@ -2301,6 +2314,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           materials: courseMaterials,
           ...(studentStatus !== undefined ? { studentStatus } : {}),
           ...(lastNudgedAt !== undefined ? { lastNudgedAt } : {}),
+          ...(askedForHelpAt !== undefined ? { askedForHelpAt } : {}),
+          ...(studentNote !== undefined ? { studentNote } : {}),
         });
       }
 
@@ -2945,7 +2960,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
           deletedAt: null,
           $or: [{ studentId: studentDbId }, ...(studentExternalId ? [{ studentExternalId }] : [])],
         },
-        { $set: { studentStatus: status, updatedAt: new Date() } }
+        {
+          $set: { studentStatus: status, updatedAt: new Date() },
+          // Leaving need_help (by anyone) ends the ask: drop the student's note and ask time.
+          ...(status !== 'need_help'
+            ? { $unset: { studentNote: '', studentNoteAt: '', studentHelpRequestedAt: '' } }
+            : {}),
+        }
       );
 
       if (result.matchedCount === 0) {

@@ -13,9 +13,7 @@ import { ValidationError } from '../../errors';
 
 export const STUDENT_SESSION_KEYS = ['studentId', 'displayName', 'showGrades'] as const;
 
-/** Statuses a student may set on one of their assignments. */
-export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'done'] as const;
-export type StudentStatus = (typeof STUDENT_STATUSES)[number];
+// STUDENT_STATUSES / StudentStatus are declared with the week view below (one source of truth).
 
 /** Decision §6 Q3 (student review spec): the note on "Need help" is at most 140 characters. */
 export const STUDENT_HELP_NOTE_MAX_CHARS = 140;

@@ -269,6 +269,13 @@ export async function createIndexes(database: Db): Promise<void> {
   await studentMagicTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   await studentMagicTokens.createIndex({ userId: 1, usedAt: 1 });
 
+  // Student "Need help": one student_needs_help alert per assignment per 24 h (student review §3.2)
+  const studentHelpRequests = database.collection('student_help_requests');
+  await studentHelpRequests.createIndex(
+    { studentId: 1, assignmentExternalId: 1 },
+    { unique: true }
+  );
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }
