@@ -1,6 +1,8 @@
 # Sharing students with other adults: specification and implementation plan
 
-Status: DRAFT for owner review (2026-11-09). Builds on `docs/parental-access-control.md`.
+Status: APPROVED by the owner on 2026-11-09 (decisions in §8); ready to implement. Builds on
+`docs/parental-access-control.md` and reverses its §2 self-removal rule (see §4.2). Companion:
+`docs/student-review-spec.md`.
 Every "today" statement below was verified in code on main `89d513f`; file:line references are to that commit.
 
 ## 1. The problem, in the owner's words
@@ -101,23 +103,23 @@ API unit tests for the basic parents/contacts routes; Playwright `08-multi-paren
   transfer ownership, or change owner-only preferences.
 - **Member**: an accepted adult without admin. Sees everything, manages only their own alerts.
 - **Label**: `parent | guardian | caregiver`. Display only; permissions never derive from it.
-- UI name for the feature: **People** ("People who can see Ava"). Avoid "household": the code already
-  uses that word for portal accounts (`routes/household`).
+- UI name for the feature: **Family & guardians** ("Family & guardians for Ava"). Avoid "household": the
+  code already uses that word for portal accounts (`routes/household`).
 
-### 4.2 Permission matrix (proposed; items marked ? are decisions for the owner, §8)
+### 4.2 Permission matrix (decided 2026-11-09)
 
 | Action | Owner | Admin | Member |
 |---|---|---|---|
 | View grades, assignments, materials, runs, trends | yes | yes | yes |
 | Receive alerts by email / SMS / push, per own preferences | yes | yes | yes |
 | Alert inbox for the student; acknowledge (per person, see 4.5) | yes | yes | yes |
-| Set own alert preferences (on/off, channels, types) | yes | yes | yes |
-| Request a sync (client-led; the owner's phone completes it) | yes | yes | yes ? |
+| Set own alert preferences (on/off, channels, types); "silence" = all channels off | yes | yes | yes |
+| Request a sync (client-led; a phone with the portal login completes it) | yes | yes | yes |
 | Connect / disconnect a portal, edit credentials | yes | yes | no |
 | Edit student (name, grade, student id) | yes | yes | no |
 | Invite, resend link, remove people, change their label or alert prefs | yes | yes | no |
 | Promote / demote admin | yes | yes (not the owner) | no |
-| Remove themself ("leave") | – | no ? | no ? |
+| Remove themself ("leave"); their alerts and tokens stop at once | – | yes | yes |
 | Remove the student and synced data | yes | no | no |
 | Owner alert prefs, student alert email, student logins | yes | no | no |
 | Transfer ownership (v2) | yes | no | no |
@@ -138,6 +140,9 @@ API unit tests for the basic parents/contacts routes; Playwright `08-multi-paren
   - `POST /api/sharing/invites/accept` `{ inviteGroupId }` or `{ studentIds[] }`;
     `POST /api/sharing/invites/decline` likewise.
   - `POST /api/sharing/invites/:groupId/resend` (canAdmin).
+  - `POST /api/sharing/leave` `{ studentId }` → the caller removes their own accepted row; outstanding
+    tokens invalidated; an audit event and an email to the owner ("Jessica no longer follows Ava").
+    This replaces the self-removal ban in parental-access-control.md §2 (owner decision 2026-11-09).
   - `GET /api/sharing/mine` → for the caller: each accessible student with `access: owner|admin|member`,
     the inviter, and the caller's alert prefs for it.
 - `IStudentListItem` gains `access: 'owner' | 'admin' | 'member'` and `peopleCount`.
@@ -164,9 +169,10 @@ API unit tests for the basic parents/contacts routes; Playwright `08-multi-paren
    invited / opted in. Resend is one tap. Declined entries can be re-invited (BFR-004 behaviour kept).
 
 ### 4.5 Alerts for shared adults
-- `alertChannels` gains `'push'`. Default for a newly accepted adult: `['email']` (owner decision §8
-  may change to `['email','push']`). The phone's Notification settings screen gains a per-student
-  section for shared students.
+- `alertChannels` gains `'push'`. Default for a newly accepted adult: `['email','push']` (decided).
+  Every adult can silence a student (all channels off) or trim channels and types from the phone's
+  Notification settings screen, which gains a per-student section for shared students, and from the
+  web People card ("My alerts").
 - Resolver returns `userId` for accepted adults (they always have one once accepted). Push delivery
   sends to each recipient's registered devices when their channels include `push`. Email/SMS unchanged.
 - Inbox: `GET /api/alerts-api` lists alerts whose `studentId` is one the caller can access (owner or
@@ -199,17 +205,18 @@ their plan."
 ### 4.8 Web UX
 - Dashboard: "Share" button → dialog: person details → multi-select students → send. Pending invites
   banner at the top when any exist, linking to `/dashboard/invites` (Accept / Decline).
-- Student page: tab renamed **People**. Cards per person: name/email, label, Owner/Admin/Member chip,
-  status chip, Texts chip, "My alerts" (for the viewer's own row), Resend link, Make admin, Remove.
-  Controls hidden unless the viewer's `access` allows them (no more hard-coded `isOwner`).
+- Student page: tab renamed **Family & guardians**. Cards per person: name/email, label,
+  Owner/Admin/Member chip, status chip, Texts chip, "My alerts" (for the viewer's own row), Resend
+  link, Make admin, Remove, and "Leave" on the viewer's own row. Controls hidden unless the viewer's
+  `access` allows them (no more hard-coded `isOwner`).
 - `/invite?token=` landing page handles a web click on the email button: not signed in → sign in or
   register with the token preserved → accept; signed in → accept.
 - Students list: "Shared with you · by Ricardo" under a shared student's name.
 
 ### 4.9 Phone UX (JS only; ships as an OTA update)
 ```
-Students                                 ┌ People who can see Ava ──────────┐
-┌──────────────────────────────┐         │ ‹ Back          People   Share + │
+Students                                 ┌ Family & guardians · Ava ────────┐
+┌──────────────────────────────┐         │ ‹ Back                   Share + │
 │ You have 1 invitation  [View]│         │ Ricardo (you)  Owner             │
 ├──────────────────────────────┤         │ Robert Lewis   Member · Accepted │
 │ (A) Ava      Grade 10   ›    │         │   Texts: opted in     [Resend]   │
@@ -226,9 +233,9 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
 ```
 - Students screen: pending-invite banner (Accept / Decline), "Shared with you" line, "Share…" for
   owner/admin.
-- Student → People screen (list, share, resend, make admin, remove; role-aware).
+- Student → Family & guardians screen (list, share, resend, make admin, remove, leave; role-aware).
 - Settings → Notification settings: a section per shared student with the viewer's own channels and
-  types; push on/off here flips `alertChannels` on their contact row.
+  types and a one-tap "Silence Ava"; changes write `alertChannels`/`receiveAlerts` on their row.
 - Dashboard header "Edit" and Settings "Disconnect / remove" hidden for members; remove student hidden
   for admins.
 
@@ -239,7 +246,7 @@ Each phase is one PR, green CI, with the tests named. Effort is for one develope
 ### S0. Security fixes (2–3 days) — ship first, server-only
 - D1, D2: accept/decline/pending use `req.userEmail`; body `email` ignored; 403 on mismatch.
 - D3: `DELETE /:id` owner-only; `PUT /:id` admin. D4: sources add/remove/credentials admin; sync
-  trigger stays `hasAccess` (pending decision Q1).
+  trigger stays `hasAccess` (decided: members may request a sync).
 - Audit events for invite/accept/decline/remove/admin.
 - Tests: API unit tests for each rule (positive and negative); extend `15-blended-family-revocation`
   with "member cannot delete student / add source"; e2e `08-multi-parent` MP-005 variant for accept
@@ -248,7 +255,7 @@ Each phase is one PR, green CI, with the tests named. Effort is for one develope
 ### S1. API foundation (3–4 days)
 - Contracts `sharing.ts`; `access` + `peopleCount` on the student list item.
 - Plan limit counts owned only (D7) + tests.
-- `POST /api/sharing/invites` (multi-student), pending/accept/decline/resend, `GET /api/sharing/mine`.
+- `POST /api/sharing/invites` (multi-student), pending/accept/decline/resend/leave, `GET /api/sharing/mine`.
 - Invite token kind `inviteGroup` in `MagicLoginTokenRepository`; `/api/auth/magic` accepts all
   students in the token; `mustSetPassword` on created users.
 - `InviteEmailSender`: one email per group, working links (D5).
@@ -258,7 +265,7 @@ Each phase is one PR, green CI, with the tests named. Effort is for one develope
 
 ### S2. Web (3–4 days)
 - Share dialog (dashboard + student page); `/dashboard/invites`; `/invite?token=` landing.
-- `ManageParentsCard` → `PeopleCard` on `contacts`, role-aware (D8), status + Texts chips, My alerts.
+- `ManageParentsCard` → `FamilyCard` on `contacts`, role-aware (D8), status + Texts chips, My alerts, Leave.
 - "Shared with you" on the students list; member/admin control hiding.
 - Tests: component tests; Playwright: new `19-sharing-scenario.spec.ts` = the owner's exact scenario
   with throwaway accounts (three people, three students, six grants), each person's view checked,
@@ -273,14 +280,15 @@ Each phase is one PR, green CI, with the tests named. Effort is for one develope
 
 ### S4. Phone (5–7 days, OTA)
 - Client methods for `/sharing/*` and `/contacts/*`; `access` on the list item.
-- Pending-invites banner + Accept/Decline; "Shared with you" line; People screen; Share flow;
-  Notification settings per shared student; role-aware hiding of Edit / Remove / Disconnect.
+- Pending-invites banner + Accept/Decline; "Shared with you" line; Family & guardians screen; Share
+  flow; Leave; Notification settings per shared student with Silence; role-aware hiding of Edit /
+  Remove / Disconnect.
 - Tests: pure view-models + client tests (mocked fetch); Maestro: `share.yaml` (owner invites on the
   simulator against UAT), `accept.yaml` (second account accepts via a pending-invite banner), both
   with throwaway UAT accounts seeded by a script.
 
 ### S5. Later (not in this plan's estimate)
-Transfer ownership; a person leaving on their own; invite expiry reminders; a true household entity
+Transfer ownership; invite expiry reminders; a true household entity
 ("share all my children with X" and plan ownership at household level).
 
 Total for S0–S4: about 4 weeks for one developer. The owner's scenario works on the web after S2
@@ -296,17 +304,19 @@ never the family's real addresses in the public repo).
 4. Jessica accepts on Android → sees three students; as admin she can edit Christian's grade and
    invite; she cannot remove a student.
 5. Jennifer accepts on the web → sees Christian and Gideon only; "Edit" is hidden.
-6. A grade-drop alert for Ava: owner, Robert and Jessica get it by their chosen channels; Jennifer
-   does not. Jessica acknowledges; owner's inbox still shows it unread.
+6. A grade-drop alert for Ava: owner, Robert and Jessica get it by email and push (defaults); Jennifer
+   does not. Jessica acknowledges; owner's inbox still shows it unread. Robert silences Ava; the next
+   alert reaches owner and Jessica only.
+6b. Jennifer leaves Gideon herself: she keeps Christian; owner gets an email; Gideon's alerts stop.
 7. Owner removes Robert from Ava: Robert's app shows no students; his link no longer works.
 8. Jennifer (free plan) adds her own child: allowed; shared students did not count.
 
 ## 7. Out of scope
 Student self-registration; sharing with non-adults; school-side access; per-course sharing.
 
-## 8. Decisions needed from the owner
-- Q1. May a **member** request a sync? (Proposed: yes; the owner's phone still performs it.)
-- Q2. Acknowledgement **per person** (proposed) or shared for the whole family?
-- Q3. May a shared adult **leave** on their own? (Current policy: no; they can mute all alerts.)
-- Q4. Default channels for a newly accepted adult: `email` only (proposed) or `email + push`?
-- Q5. UI name: **People** (proposed), "Family & guardians", or keep "Parents".
+## 8. Decisions (made by the owner, 2026-11-09)
+- Q1. Members may request a sync: **yes**.
+- Q2. Acknowledgement is **per person**.
+- Q3. A shared adult may **leave** on their own: **yes** (reverses parental-access-control.md §2).
+- Q4. Default channels for a newly accepted adult: **email + push**; anyone can silence a student.
+- Q5. UI name: **Family & guardians**.
