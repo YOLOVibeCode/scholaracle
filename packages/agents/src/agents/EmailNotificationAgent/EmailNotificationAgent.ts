@@ -15,11 +15,12 @@ import {
   WorkloadTemplate,
   PositiveTemplate,
   RecommendationTemplate,
+  StudentNeedsHelpTemplate,
   ITemplateResult,
 } from '../../generators/StudentNotificationGenerator/templates';
 
 /**
- * Email-only notification agent. Handles all 7 alert types using student templates; forces EMAIL channel.
+ * Email-only notification agent. Handles every alert type using student templates; forces EMAIL channel.
  */
 export class EmailNotificationAgent extends BaseNotificationAgent {
   private readonly _templates: Record<
@@ -31,6 +32,7 @@ export class EmailNotificationAgent extends BaseNotificationAgent {
     | WorkloadTemplate
     | PositiveTemplate
     | RecommendationTemplate
+    | StudentNeedsHelpTemplate
   >;
 
   constructor() {
@@ -43,6 +45,7 @@ export class EmailNotificationAgent extends BaseNotificationAgent {
         AlertType.WORKLOAD,
         AlertType.POSITIVE,
         AlertType.RECOMMENDATION,
+        AlertType.STUDENT_NEEDS_HELP,
       ],
       AgentType.STUDENT
     );
@@ -54,6 +57,7 @@ export class EmailNotificationAgent extends BaseNotificationAgent {
       [AlertType.WORKLOAD]: new WorkloadTemplate(),
       [AlertType.POSITIVE]: new PositiveTemplate(),
       [AlertType.RECOMMENDATION]: new RecommendationTemplate(),
+      [AlertType.STUDENT_NEEDS_HELP]: new StudentNeedsHelpTemplate(),
     };
   }
 

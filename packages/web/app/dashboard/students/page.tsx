@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, GraduationCap, Edit, Trash2, LayoutDashboard } from 'lucide-react';
+import { Plus, GraduationCap, Edit, Eye, Trash2, LayoutDashboard, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { studentsApi, type IStudent } from '@/lib/api/students';
+import { canEditStudent, canManagePeople, canRemoveStudent } from '@/lib/sharing/access';
 import { ConfirmDialog, ErrorDisplay } from '@/components/common';
 import { AddStudentWizard } from '@/components/dashboard/AddStudentWizard';
+import { ShareDialog } from '@/components/dashboard/sharing/ShareDialog';
+import { SharedWithYouLine } from '@/components/dashboard/sharing/SharedWithYouLine';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<readonly IStudent[]>([]);
@@ -15,6 +18,7 @@ export default function StudentsPage() {
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +65,8 @@ export default function StudentsPage() {
     setDeleteStudentId(null);
   };
 
+  const canShare = students.some((s) => canManagePeople(s.access));
+
   return (
     <div className="space-y-6">
       {actionError && (
@@ -71,10 +77,18 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Student
-        </Button>
+        <div className="flex items-center gap-2">
+          {canShare && (
+            <Button variant="outline" data-testid="button-share" onClick={() => setShareOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+          )}
+          <Button data-testid="button-add-student" onClick={() => setWizardOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Student
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -101,7 +115,7 @@ export default function StudentsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="student-list">
           {students.map((student) => (
-            <Card key={student.id}>
+            <Card key={student.id} data-testid={`student-card-${student.id}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div>
@@ -109,6 +123,11 @@ export default function StudentsPage() {
                     <CardDescription>
                       {student.grade ? `Grade ${student.grade}` : 'No grade specified'}
                     </CardDescription>
+                    <SharedWithYouLine
+                      access={student.access}
+                      sharedByName={student.invitedBy?.name}
+                      className="mt-1"
+                    />
                   </div>
                   <GraduationCap className="h-5 w-5 text-gray-400" />
                 </div>
@@ -145,22 +164,34 @@ export default function StudentsPage() {
                       View as student
                     </Link>
                   </Button>
-                  <Button variant="outline" size="sm" asChild data-testid="button-edit-student">
-                    <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteClick(student.id)}
-                    className="text-red-600 hover:text-red-700"
-                    data-testid="button-delete-student"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
+                  {canEditStudent(student.access) ? (
+                    <Button variant="outline" size="sm" asChild data-testid="button-edit-student">
+                      <Link href={`/dashboard/students/${student.id}`} data-testid="student-link">
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </Link>
+                    </Button>
+                  ) : (
+                    // `asChild` merges props onto the Link, so the test id must live on the Link.
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/students/${student.id}`} data-testid="student-details-link">
+                        <Eye className="mr-2 h-4 w-4" />
+                        Details
+                      </Link>
+                    </Button>
+                  )}
+                  {canRemoveStudent(student.access) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteClick(student.id)}
+                      className="text-red-600 hover:text-red-700"
+                      data-testid="button-delete-student"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -184,7 +215,8 @@ export default function StudentsPage() {
         onClose={() => setWizardOpen(false)}
         onStudentAdded={() => void loadStudents()}
       />
+
+      <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>
   );
 }
-

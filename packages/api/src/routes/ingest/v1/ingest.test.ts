@@ -5,6 +5,7 @@ import { AuthService } from '@scholaracle/auth';
 import { StudentRepository, UserRepository } from '@scholaracle/database';
 import { ingestV1Router } from './ingest';
 import { createErrorHandler } from '../../../middleware/errorHandler';
+import { seedBindingsForEnvelope } from '../../../test-utils/seedIngestBinding';
 
 describe('Ingest v1 API', () => {
   let app: Express;
@@ -12,6 +13,7 @@ describe('Ingest v1 API', () => {
   let mongoClient: MongoClient;
   let authService: AuthService;
   let userToken: string;
+  let ownerUserId: string;
 
   beforeAll(async () => {
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -24,6 +26,9 @@ describe('Ingest v1 API', () => {
     // Clean collections used by ingest
     await database.collection('users').deleteMany({ email: 'slc-user@test.com' });
     await database.collection('slc_device_auth').deleteMany({});
+    await database.collection('slc_devices').deleteMany({});
+    await database.collection('revoked_connector_tokens').deleteMany({});
+    await database.collection('subscriptions').deleteMany({});
     await database.collection('slc_sources').deleteMany({});
     await database.collection('slc_runs').deleteMany({});
     await database.collection('slc_assignments').deleteMany({});
@@ -40,14 +45,36 @@ describe('Ingest v1 API', () => {
     await database.collection('slc_student_profiles').deleteMany({});
     await database.collection('students').deleteMany({});
 
+    process.env['CONNECTOR_JWT_SECRET'] = 'test-secret-connector';
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
-    if (!reg.success || !reg.token) throw new Error('Failed to register test user');
+    if (!reg.success || !reg.token || !reg.user?.id)
+      throw new Error('Failed to register test user');
     userToken = reg.token;
+    ownerUserId = reg.user.id;
+    const now = new Date();
+    await database.collection('subscriptions').insertOne({
+      userId: reg.user.id,
+      plan: 'family',
+      status: 'active',
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      billingCycle: 'monthly',
+      createdAt: now,
+      updatedAt: now,
+      events: [{ type: 'created', toPlan: 'family', timestamp: now }],
+    });
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
     app.use(createErrorHandler());
   });
 
@@ -165,6 +192,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -180,6 +208,74 @@ describe('Ingest v1 API', () => {
     // Verify persisted entities
     const assignmentCount = await database.collection('slc_assignments').countDocuments({});
     expect(assignmentCount).toBeGreaterThan(0);
+  });
+
+  it('normalizes legacy built-in adapterIds to canvas on envelope commit', async () => {
+    const connectorToken = await getConnectorToken();
+    const sourceId = 'src-legacy-adapter';
+    await request(app)
+      .post('/api/ingest/v1/sources')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        sourceId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        displayName: 'Canvas',
+        portalBaseUrl: 'https://school.instructure.com',
+      });
+    const runRes = await request(app)
+      .post('/api/ingest/v1/runs')
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({ sourceId });
+    const runId = runRes.body.runId as string;
+    const now = new Date().toISOString();
+    const envelope = {
+      schemaVersion: 'slc.ingest.v1',
+      run: {
+        runId,
+        startedAt: now,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        adapterVersion: '1.0.0',
+        mode: 'delta',
+        timezone: 'America/Los_Angeles',
+      },
+      source: {
+        sourceId,
+        displayName: 'Canvas',
+        portalBaseUrl: 'https://school.instructure.com',
+      },
+      ops: [
+        {
+          op: 'upsert',
+          entity: 'assignment',
+          key: {
+            provider: 'canvas',
+            adapterId: 'com.instructure.canvas',
+            externalId: 'legacy-a-1',
+            // Same student as the first test: a second student would trip the Free plan limit (#70).
+            studentExternalId: 'stu-1',
+            institutionExternalId: 'inst-legacy',
+            courseExternalId: 'course-legacy',
+          },
+          observedAt: now,
+          record: { title: 'Essay', status: 'missing' },
+        },
+      ],
+    };
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
+    const upload = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send(envelope);
+    expect(upload.status).toBe(200);
+    // The envelope commit finishes after the 200, so poll briefly for the row.
+    let stored = null as Record<string, unknown> | null;
+    for (let i = 0; i < 50 && !stored; i++) {
+      stored = await database.collection('slc_assignments').findOne({ externalId: 'legacy-a-1' });
+      if (!stored) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(stored?.['adapterId']).toBe('canvas');
   });
 
   // ---------------------------------------------------------------------------
@@ -352,7 +448,7 @@ describe('Ingest v1 API', () => {
       .send({
         sourceId: 'src-connector-students',
         provider: 'canvas',
-        adapterId: 'com.instructure.canvas',
+        adapterId: 'canvas',
         displayName: 'Canvas LMS',
         portalBaseUrl: 'https://lincoln.instructure.com',
       });
@@ -574,8 +670,8 @@ describe('Ingest v1 API', () => {
     const baseKey = {
       provider: 'test',
       adapterId: 'com.test.adapter',
-      studentExternalId: 'stu-all',
-      institutionExternalId: 'inst-all',
+      studentExternalId: 'stu-1',
+      institutionExternalId: 'inst-1',
     };
 
     const envelope = {
@@ -733,6 +829,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -820,8 +917,8 @@ describe('Ingest v1 API', () => {
     const baseKey = {
       provider: 'test',
       adapterId: 'com.test.adapter',
-      studentExternalId: 'stu-del',
-      institutionExternalId: 'inst-del',
+      studentExternalId: 'stu-1',
+      institutionExternalId: 'inst-1',
     };
 
     // First upsert a course, then delete it
@@ -854,6 +951,7 @@ describe('Ingest v1 API', () => {
       ],
     };
 
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)

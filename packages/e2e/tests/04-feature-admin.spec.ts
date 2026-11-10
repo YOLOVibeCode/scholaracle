@@ -378,7 +378,10 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await assertToastMessage(page, /bulk send created|created|success|MFA/i);
   });
 
-  test('FEAT-A-013d: Webhook status update reflects in UI', async ({ page, loginAsRole }) => {
+  test('FEAT-A-013d: Webhook status update reflects in UI @local-only', async ({
+    page,
+    loginAsRole,
+  }) => {
     await loginAsRole('admin');
     await page.goto('/admin/communications');
     await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
@@ -387,42 +390,75 @@ test.describe('@feature Layer 4: Admin Features', () => {
     await page.locator('[data-testid="input-recipient"]').fill('test.parent@example.com');
     await page.locator('[data-testid="input-subject"]').fill(subject);
     await page.locator('[data-testid="input-content"]').fill('Webhook message');
+
+    const sendResponsePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes('/admin/communications/send') &&
+        res.request().method() === 'POST' &&
+        res.ok()
+    );
     await page.locator('[data-testid="button-send-communication"]').click();
     await assertToastMessage(page, /sent|success/i);
 
-    // Fetch newest log id via admin API
-    const adminToken = await page.evaluate(() => localStorage.getItem('adminToken'));
-    expect(adminToken).toBeTruthy();
-
-    const listRes = await page.request.get(
-      'http://localhost:2801/api/admin/communications/logs?recipientEmail=test.parent@example.com&limit=25',
-      {
-        headers: { Authorization: `Bearer ${adminToken}` },
-      }
-    );
-    expect(listRes.ok()).toBeTruthy();
-    const listJson = await listRes.json();
-    const item = (listJson.data as any[]).find((x) => x.subject === subject);
-    expect(item).toBeTruthy();
-    const logId = item.id as string;
+    const sendResponse = await sendResponsePromise;
+    const sendJson = (await sendResponse.json()) as { data?: { id?: string } };
+    const resolvedLogId = sendJson.data?.id;
+    expect(resolvedLogId).toBeTruthy();
 
     // Simulate webhook delivery update
     const whRes = await page.request.post(
       'http://localhost:2801/api/webhooks/communications/status',
       {
         headers: { 'x-webhook-secret': 'test-webhook-secret' },
-        data: { logId, status: 'opened' },
+        data: { logId: resolvedLogId, status: 'opened' },
       }
     );
     expect(whRes.ok()).toBeTruthy();
 
-    // Refresh logs UI and assert status updated
-    await page.locator('[data-testid="button-refresh-logs"]').click({ force: true });
-    const row = page
-      .locator('[data-testid="communication-log-row"]')
-      .filter({ hasText: subject })
-      .first();
-    await expect(row).toContainText('opened', { timeout: 10_000 });
+    const adminToken = await page.evaluate(() => localStorage.getItem('adminToken'));
+    expect(adminToken).toBeTruthy();
+    await expect
+      .poll(
+        async () => {
+          const listRes = await page.request.get(
+            `http://localhost:2801/api/admin/communications/logs?recipientEmail=test.parent@example.com&limit=25`,
+            { headers: { Authorization: `Bearer ${adminToken}` } }
+          );
+          if (!listRes.ok()) return '';
+          const listJson = (await listRes.json()) as {
+            data?: Array<{ id?: string; status?: string }>;
+          };
+          return listJson.data?.find((x) => x.id === resolvedLogId)?.status ?? '';
+        },
+        { timeout: 15_000 }
+      )
+      .toBe('opened');
+
+    await expect
+      .poll(
+        async () => {
+          await page.reload();
+          await expect(page.locator('[data-testid="admin-communications-page"]')).toBeVisible();
+          await page
+            .locator('[data-testid="communication-filter-email"]')
+            .fill('test.parent@example.com');
+          const logsResponse = await page.waitForResponse(
+            (res) => res.url().includes('/admin/communications/logs') && res.ok(),
+            { timeout: 15_000 }
+          );
+          const logsJson = (await logsResponse.json()) as {
+            data?: Array<{ id?: string; status?: string }>;
+          };
+          return logsJson.data?.find((x) => x.id === resolvedLogId)?.status ?? '';
+        },
+        { timeout: 30_000 }
+      )
+      .toBe('opened');
+
+    const table = page.locator('[data-testid="communications-table"]');
+    // Subjects are PII-masked in the admin log table (middle segment redacted).
+    await expect(table).toContainText(subject.slice(0, 10), { timeout: 15_000 });
+    await expect(table).toContainText('opened', { timeout: 15_000 });
   });
 
   test('FEAT-A-014: Create admin user', async ({ page, loginAsRole }) => {

@@ -28,16 +28,21 @@ export function calendarYmd(
   return { year: num('year'), month: num('month'), day: num('day') };
 }
 
-function localHourOf(date: Date, timeZone: string): number {
-  const hourPart = new Intl.DateTimeFormat('en-US', {
+/**
+ * Local wall-clock hour and minute. Minutes matter: Asia/Kolkata (+5:30), Australia/Adelaide
+ * (+9:30/+10:30) and Asia/Kathmandu (+5:45) are not whole hours off UTC, and comparing hours
+ * alone converged on 18:30 when 18:00 was asked for.
+ */
+function localTimeOf(date: Date, timeZone: string): { hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hour: 'numeric',
+    minute: '2-digit',
     hourCycle: 'h23',
-  })
-    .formatToParts(date)
-    .find((p) => p.type === 'hour')?.value;
-  const hour = Number(hourPart);
-  return hour === 24 ? 0 : hour;
+  }).formatToParts(date);
+  const part = (type: string): number => Number(parts.find((p) => p.type === type)?.value);
+  const hour = part('hour');
+  return { hour: hour === 24 ? 0 : hour, minute: part('minute') };
 }
 
 /**
@@ -53,9 +58,9 @@ export function zonedLocalDate(
   let utc = Date.UTC(year, month - 1, day, hour, 0, 0);
   for (let i = 0; i < 8; i += 1) {
     const local = calendarYmd(new Date(utc), timeZone);
-    const gotHour = localHourOf(new Date(utc), timeZone);
+    const time = localTimeOf(new Date(utc), timeZone);
     const wanted = Date.UTC(year, month - 1, day, hour);
-    const got = Date.UTC(local.year, local.month - 1, local.day, gotHour);
+    const got = Date.UTC(local.year, local.month - 1, local.day, time.hour, time.minute);
     const delta = wanted - got;
     if (delta === 0) break;
     utc += delta;

@@ -1,4 +1,5 @@
 import type { MailService } from '@sendgrid/mail';
+import { firstNameOf } from '@scholaracle/agents';
 import { buildBrandedEmail } from '../emailTemplate';
 
 export interface ISourceInviteMailerConfig {
@@ -25,11 +26,6 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function firstName(fullName: string): string {
-  const part = fullName.trim().split(/\s+/)[0];
-  return part && part.length > 0 ? part : 'there';
-}
-
 /**
  * SOURCE_INVITE.md §7. Empty apiKey no-ops.
  */
@@ -52,7 +48,7 @@ export class SendGridSourceInviteEmailSender implements ISourceInviteMailer {
   }): Promise<void> {
     if (!this._config.apiKey) return;
     const subject = `Install ${params.providerName} in Scholarmancy`;
-    const name = escapeHtml(firstName(params.studentName));
+    const name = escapeHtml(firstNameOf(params.studentName, 'there'));
     const provider = escapeHtml(params.providerName);
     const link = escapeHtml(params.landingUrl);
     const when = params.expiresAt.toUTCString();

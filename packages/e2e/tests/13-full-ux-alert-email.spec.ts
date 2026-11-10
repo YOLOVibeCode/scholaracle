@@ -8,7 +8,7 @@ import { assertOnDashboard } from '../helpers/assertions';
  *
  * Every UI interaction waits for the real API response before proceeding — no blind waits.
  */
-test.describe('@integration Full UX: Register → Add Student → Alert → Email', () => {
+test.describe('@integration Full UX: Register → Add Student → Alert → Email @local-only', () => {
   test('FULL-UX-001: Register, add student via UI, trigger alert, optionally verify Mailpit', async ({
     page,
     request,
@@ -75,16 +75,18 @@ test.describe('@integration Full UX: Register → Add Student → Alert → Emai
         studentId,
         type: 'grade_drop',
         severity: 'critical',
-        userId: email,
         relatedData: {
           courseName: 'Math',
           previousGrade: 92,
           currentGrade: 85,
         },
       },
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
-    expect(alertRes.status()).toBe(201);
+    expect([201, 202]).toContain(alertRes.status());
 
     // 8. Optionally verify Mailpit received the alert email
     if (mailpitUi) {

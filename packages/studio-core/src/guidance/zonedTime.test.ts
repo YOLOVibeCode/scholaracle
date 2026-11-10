@@ -27,4 +27,22 @@ describe('zonedTime', () => {
     const d = zonedLocalDate('America/Chicago', 2026, 1, 15, 16);
     expect(calendarDayKey(d, 'America/Chicago')).toBe('2026-01-15');
   });
+
+  it.each([
+    ['Asia/Kolkata', '2026-11-08T12:30:00.000Z'], // UTC+5:30
+    ['Asia/Kathmandu', '2026-11-08T12:15:00.000Z'], // UTC+5:45
+    ['Australia/Adelaide', '2026-11-08T07:30:00.000Z'], // ACDT, UTC+10:30
+    ['America/St_Johns', '2026-11-08T21:30:00.000Z'], // NST, UTC-3:30
+    ['UTC', '2026-11-08T18:00:00.000Z'],
+  ])('lands on the exact wall-clock hour in half-hour zones: %s', (zone, iso) => {
+    const d = zonedLocalDate(zone, 2026, 11, 8, 18);
+    expect(d.toISOString()).toBe(iso);
+    const local = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(d);
+    expect(local).toBe('18:00');
+  });
 });
