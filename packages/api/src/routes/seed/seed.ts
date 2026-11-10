@@ -140,6 +140,12 @@ function isDemoDomainEmail(email: string): boolean {
   return normalized.endsWith('@scholarmancy.com');
 }
 
+/** Fixture parent accounts and demo-domain emails allowed on seed maintenance routes. */
+function isSeedFixtureEmail(email: string): boolean {
+  const normalized = email.toLowerCase().trim();
+  return normalized.endsWith('@scholarmancy.com') || normalized.endsWith('@example.com');
+}
+
 type SeedAdminOutcome =
   | { readonly kind: 'created' | 'existing'; readonly id: string }
   | { readonly kind: 'skipped'; readonly reason: string };
