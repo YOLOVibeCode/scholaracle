@@ -59,7 +59,9 @@ export function StudentWorkPackScreen({
           assignmentExternalId,
           pack,
           cache: getSessionAssetCache(),
-          patchStatus: (id, status) => studio.patchStudioAssignmentStatus(id, status),
+          patchStatus: async (id, status): Promise<void> => {
+            await studio.patchStudioAssignmentStatus(id, status);
+          },
           present: async (): Promise<void> => {
             const url = pack.primaryAsset?.downloadUrl;
             if (url !== undefined && url !== '') {

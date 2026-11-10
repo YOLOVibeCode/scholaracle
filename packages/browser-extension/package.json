@@ -7,7 +7,8 @@
     "build": "node esbuild.config.mjs",
     "build:watch": "node esbuild.config.mjs --watch",
     "type-check": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest --passWithNoTests=false",
+    "test:coverage": "jest --coverage --passWithNoTests=false"
   },
   "dependencies": {
     "@scholaracle/contracts": "workspace:*",

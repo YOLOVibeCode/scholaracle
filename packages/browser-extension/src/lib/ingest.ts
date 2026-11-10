@@ -52,7 +52,12 @@ export class ExtensionIngestUploader implements IIngestUploader {
     const completeRes = await fetch(`${this.base}/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
       headers: this.headers,
-      body: JSON.stringify({ runId: serverRunId, status: 'success' }),
+      body: JSON.stringify({
+        runId: serverRunId,
+        status: 'success',
+        ...(envelope.run.coverage !== undefined ? { coverage: envelope.run.coverage } : {}),
+        ...(envelope.run.warnings !== undefined ? { warnings: envelope.run.warnings } : {}),
+      }),
     });
     if (!completeRes.ok) throw new Error(`Run completion failed: ${completeRes.status}`);
   }

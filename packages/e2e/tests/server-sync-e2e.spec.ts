@@ -107,9 +107,12 @@ test.describe('Server enforces client-side-only scraping guardrails', () => {
         `${API_BASE}/api/sync/students/${studentId}/${dsIndex}`,
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
-      expect(syncRes.status()).toBe(400);
-      const syncBody = await syncRes.json();
-      expect(syncBody.success).toBeFalsy();
+      // Legacy sync trigger removed (404) or explicitly rejected (400) — both block server scraping.
+      expect([400, 404]).toContain(syncRes.status());
+      if (syncRes.status() === 400) {
+        const syncBody = await syncRes.json();
+        expect(syncBody.success).toBeFalsy();
+      }
     });
 
     // -------------------------------------------------------------------------

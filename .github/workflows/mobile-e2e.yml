@@ -1,0 +1,193 @@
+# Maestro device E2E: local Release builds on iOS Simulator (macOS) and Android emulator (Linux).
+# Smoke uses UAT parent credentials from repo secrets — never real school portal logins.
+name: Mobile Maestro E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'
+
+concurrency:
+  group: mobile-maestro-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  E2E_API_URL: https://api-uat.scholarmancy.com
+
+jobs:
+  ios-maestro:
+    name: iOS Simulator (launch + smoke)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        run: pnpm --filter @scholaracle/contracts build
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve iOS simulator
+        run: |
+          device="${E2E_IOS_DEVICE:-}"
+          if [[ -z "$device" ]]; then
+            device="$(xcrun simctl list devices available | grep -E 'iPhone [0-9]+ Pro \(' | tail -1 | sed -E 's/^[[:space:]]+([^()]+).*/\1/' | xargs)"
+          fi
+          if [[ -z "$device" ]]; then
+            echo "No iPhone Pro simulator found" >&2
+            exit 1
+          fi
+          echo "E2E_IOS_DEVICE=$device" >> "$GITHUB_ENV"
+          echo "Using simulator: $device"
+
+      - name: Maestro launch (iOS)
+        working-directory: packages/mobile
+        env:
+          E2E_ARTIFACTS_DIR: ${{ github.workspace }}/mobile-maestro-artifacts/ios-launch
+        run: pnpm e2e:ios launch
+
+      - name: Maestro smoke (iOS)
+        working-directory: packages/mobile
+        env:
+          E2E_ARTIFACTS_DIR: ${{ github.workspace }}/mobile-maestro-artifacts/ios-smoke
+          MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}
+          MAESTRO_PARENT_PASSWORD: ${{ secrets.MAESTRO_PARENT_PASSWORD }}
+          MAESTRO_STUDENT_NAME: ${{ secrets.MAESTRO_STUDENT_NAME }}
+        run: pnpm e2e:ios smoke --no-build
+
+      - name: Build fake portal deps
+        run: |
+          pnpm --filter @scholaracle/logger build
+          pnpm --filter @scholaracle/scraper-core build
+
+      - name: Maestro sync-portal fake (iOS)
+        continue-on-error: true
+        timeout-minutes: 15
+        working-directory: packages/mobile
+        env:
+          E2E_ARTIFACTS_DIR: ${{ github.workspace }}/mobile-maestro-artifacts/ios-sync
+          MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}
+          MAESTRO_PARENT_PASSWORD: ${{ secrets.MAESTRO_PARENT_PASSWORD }}
+          MAESTRO_STUDENT_NAME: ${{ secrets.MAESTRO_STUDENT_NAME }}
+          MAESTRO_PORTAL_PROVIDER: skyward
+          MAESTRO_PORTAL_URL: http://127.0.0.1:2855/skyward/login?csp=strict
+          MAESTRO_PORTAL_USERNAME: demo
+          MAESTRO_PORTAL_PASSWORD: demo
+          MAESTRO_USE_FAKE_PORTAL: '1'
+        run: |
+          FAKE_PORTAL_STRICT_CSP=1 FAKE_PORTAL_PORT=2855 node ../../scripts/fake-portal-server.mjs &
+          sleep 3
+          pnpm e2e:ios sync --no-build
+
+      - name: Upload Maestro artifacts (iOS)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-ios-${{ github.run_id }}
+          path: mobile-maestro-artifacts/
+          retention-days: 14
+
+  android-maestro:
+    name: Android emulator (launch + smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        run: pnpm --filter @scholaracle/contracts build
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM for the Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Maestro launch and smoke (Android)
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}
+          MAESTRO_PARENT_PASSWORD: ${{ secrets.MAESTRO_PARENT_PASSWORD }}
+          MAESTRO_STUDENT_NAME: ${{ secrets.MAESTRO_STUDENT_NAME }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          avd-name: scholarmancy-e2e
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash packages/mobile/scripts/ci-android-maestro.sh launch-smoke
+
+      - name: Build fake portal deps
+        run: |
+          pnpm --filter @scholaracle/logger build
+          pnpm --filter @scholaracle/scraper-core build
+
+      - name: Maestro sync-portal fake (Android)
+        continue-on-error: true
+        # Optional flow: never let it hold the job until the 90-minute limit.
+        timeout-minutes: 15
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_PARENT_EMAIL: ${{ secrets.MAESTRO_PARENT_EMAIL }}
+          MAESTRO_PARENT_PASSWORD: ${{ secrets.MAESTRO_PARENT_PASSWORD }}
+          MAESTRO_STUDENT_NAME: ${{ secrets.MAESTRO_STUDENT_NAME }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          avd-name: scholarmancy-e2e
+          force-avd-creation: false
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash packages/mobile/scripts/ci-android-maestro.sh sync
+
+      - name: Upload Maestro artifacts (Android)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-android-${{ github.run_id }}
+          path: mobile-maestro-artifacts/
+          retention-days: 14

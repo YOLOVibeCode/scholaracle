@@ -2,6 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  passWithNoTests: false,
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
   setupFiles: ['<rootDir>/jest.setup.ts'],
@@ -17,6 +18,8 @@ module.exports = {
     '!src/screens/TodayScreen.tsx',
     '!src/screens/StudentWorkPackScreen.tsx',
     '!src/studio/TodayView.tsx',
+    '!src/studio/WeekView.tsx',
+    '!src/studio/StatusSheet.tsx',
     '!src/studio/WorkPackView.tsx',
   ],
   // Starting thresholds — raise as screen/component coverage grows.

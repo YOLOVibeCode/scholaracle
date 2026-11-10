@@ -7,6 +7,7 @@ import {
 
 export interface IIngestDeviceAuthReader {
   findByDeviceCode(deviceCode: string): Promise<IngestDeviceAuth | null>;
+  findPendingByUserCode(userCode: string): Promise<IngestDeviceAuth | null>;
   deliverTokenOnce(
     deviceCode: string
   ): Promise<{ readonly status: IngestDeviceAuthStatus; readonly token?: string }>;
@@ -54,6 +55,17 @@ export class IngestDeviceAuthRepository
 
   async findByDeviceCode(deviceCode: string): Promise<IngestDeviceAuth | null> {
     const doc = await this._collection.findOne({ deviceCode });
+    if (!doc) return null;
+    return new IngestDeviceAuth(doc, doc._id as unknown as ObjectId);
+  }
+
+  async findPendingByUserCode(userCode: string): Promise<IngestDeviceAuth | null> {
+    const now = new Date();
+    const doc = await this._collection.findOne({
+      userCode,
+      status: 'pending',
+      expiresAt: { $gt: now },
+    });
     if (!doc) return null;
     return new IngestDeviceAuth(doc, doc._id as unknown as ObjectId);
   }

@@ -1,0 +1,24 @@
+# Extends the built-in rules (Stripe, etc.) and allowlists known public-demo noise.
+# Run: gitleaks detect --source . --config .gitleaks.toml
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Committed public demo accounts and doc placeholders (not production secrets)"
+paths = [
+  '''^packages/mobile/store-metadata/testflight\.json$''',
+  '''^packages/mobile/src/demo/demoLogin\.ts$''',
+  '''^TRIGGER_DIGEST_GUIDE\.md$''',
+  '''^packages/connector/src/aeries/aeries-adapter\.test\.ts$''',
+  '''^scripts/test-gitleaks-hook\.sh$''',
+  '''^packages/api/src/routes/seed/seed-test-token\.ts$''',
+]
+
+[[allowlists]]
+description = "Known non-secret lines: the temp-password alphabet and Apple's public App Store Connect issuer id"
+regexTarget = "line"
+regexes = [
+  '''TEMP_PASSWORD_ALPHABET\s*=''',
+  '''"ascApiKeyIssuerId"\s*:''',
+]

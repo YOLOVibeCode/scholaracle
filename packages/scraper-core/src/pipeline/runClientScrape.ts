@@ -15,6 +15,7 @@
 import { randomUUID } from './uuid';
 import { SLC_INGEST_SCHEMA_VERSION_V1, type ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 import { validateEnvelope } from '../validator/validator';
+import { resolveCanonicalAdapterId } from '../registry/adapter-aliases';
 import { BuiltinScraperResolver } from '../registry/resolvers';
 import type { IScraperHost } from '../registry/module';
 import { SCRAPER_CORE_PACKAGE_VERSION } from '../version';
@@ -28,6 +29,10 @@ import type {
 } from './types';
 import { SyncError } from './types';
 import { applyEnrichersFailOpen, JoinGapEnricher } from './enrichment';
+import { computeRunCoverage } from './computeRunCoverage';
+import { narrowStudentExtractForTransform } from './narrowStudentExtract';
+import { captureSkeleton } from '../page-fns/captureSkeleton';
+import type { ISanitizedPageSkeletonCapture } from '@scholaracle/contracts';
 
 const defaultResolver = new BuiltinScraperResolver();
 const defaultJoinGapEnricher = new JoinGapEnricher();
@@ -40,8 +45,20 @@ function toSyncError(err: unknown, phase: SyncFailurePhase, fallback: string): S
 
 function buildScraperHost(
   host: IClientScrapeHost,
-  onPhaseProgress: (p: ISyncProgress) => void
+  onPhaseProgress: (p: ISyncProgress) => void,
+  runId: string
 ): IScraperHost {
+  const mayCapture =
+    host.captureSkeletons === true && typeof host.uploader.uploadSkeleton === 'function';
+  const captureSkeletonOnFailure = mayCapture
+    ? async (step: string): Promise<void> => {
+        const payload = (await host.driver.evaluate(captureSkeleton, {
+          step,
+        })) as ISanitizedPageSkeletonCapture;
+        await host.uploader.uploadSkeleton?.(runId, host.config.sourceId, payload);
+      }
+    : undefined;
+
   return {
     driver: host.driver,
     config: {
@@ -55,12 +72,15 @@ function buildScraperHost(
         message: scraperProgress.message,
       });
     },
+    captureSkeletonOnFailure,
+    ...(host.selectorPatch ? { selectorPatch: host.selectorPatch } : {}),
   };
 }
 
 function buildEnvelopeMeta(
   host: IClientScrapeHost,
-  enrichment?: { source: string; patchCount: number; failed: boolean }
+  enrichment?: { source: string; patchCount: number; failed: boolean },
+  rawExtract?: Record<string, unknown>
 ): Readonly<Record<string, string>> {
   const meta: Record<string, string> = {
     clientType: host.clientType,
@@ -72,11 +92,24 @@ function buildEnvelopeMeta(
     meta['enrichmentPatchCount'] = String(enrichment.patchCount);
     meta['enrichmentFailed'] = enrichment.failed ? 'true' : 'false';
   }
+  if (host.appliedSelectorPatchId) {
+    meta['appliedSelectorPatchId'] = host.appliedSelectorPatchId;
+  }
+  const snap = rawExtract?.['canvasSnapshotMeta'] as Readonly<Record<string, string>> | undefined;
+  if (snap && typeof snap === 'object') {
+    for (const [k, v] of Object.entries(snap)) {
+      if (typeof v === 'string') meta[k] = v;
+    }
+  }
   return meta;
 }
 
 export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcIngestEnvelopeV1> {
-  const { config, uploader, recorder, assets, onProgress } = host;
+  const { config: rawConfig, uploader, recorder, assets, onProgress } = host;
+  const config: IClientScrapeConfig = {
+    ...rawConfig,
+    adapterId: resolveCanonicalAdapterId(rawConfig.adapterId),
+  };
   const resolver = host.resolver ?? defaultResolver;
   const runId = randomUUID();
   const coreVersion = config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION;
@@ -84,10 +117,22 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   const phaseStart = { current: Date.now() };
 
+  const postServerTrace = (step: {
+    readonly name: string;
+    readonly startedAt: string;
+    readonly ms: number;
+    readonly ok: boolean;
+    readonly error?: string;
+  }): void => {
+    if (uploader.postTrace) {
+      void uploader.postTrace(runId, step).catch(() => undefined);
+    }
+  };
+
   const emit = async (
     phase: SyncPhase,
     message: string,
-    extra?: { opCount?: number }
+    extra?: { opCount?: number; ok?: boolean; error?: string }
   ): Promise<void> => {
     const now = Date.now();
     const durationMs = now - phaseStart.current;
@@ -101,8 +146,40 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     if (recorder) {
       await recorder.addPhase(runId, record).catch(() => undefined);
     }
+    postServerTrace({
+      name: phase,
+      startedAt: record.timestamp,
+      ms: durationMs,
+      ok: extra?.ok ?? true,
+      ...(extra?.error ? { error: extra.error } : {}),
+    });
     onProgress?.({ phase, message, ...extra });
   };
+
+  const clientMeta = {
+    clientType: host.clientType,
+    coreVersion,
+    adapterVersion: config.adapterVersion,
+  };
+  const startingStep = {
+    name: 'starting',
+    startedAt,
+    ms: 0,
+    ok: true,
+  };
+
+  if (uploader.beginRun) {
+    await uploader
+      .beginRun({
+        runId,
+        sourceId: config.sourceId,
+        clientMeta,
+        startingStep,
+      })
+      .catch(() => undefined);
+  } else {
+    postServerTrace(startingStep);
+  }
 
   // 0. Register run in local recorder (optional)
   if (recorder) {
@@ -127,7 +204,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
 
   let raw: Record<string, unknown>;
   try {
-    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p));
+    const scraperHost = buildScraperHost(host, (p) => onProgress?.(p), runId);
     raw = await module.scrape(scraperHost);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'portal', 'Extract failed');
@@ -143,6 +220,20 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   // 3. Transform (local step)
   await emit('transforming', 'Converting data...');
 
+  let transformInput: Record<string, unknown>;
+  try {
+    transformInput = narrowStudentExtractForTransform(raw, config.studentNameHint);
+  } catch (err: unknown) {
+    const syncErr = toSyncError(err, 'local', 'Student selection failed');
+    if (recorder) {
+      await recorder
+        .completeRun(runId, { status: 'failed', errorMessage: syncErr.message })
+        .catch(() => undefined);
+    }
+    await uploader.reportFailure?.(runId, config.sourceId, syncErr.message).catch(() => undefined);
+    throw syncErr;
+  }
+
   let ops: ReturnType<typeof module.transform>;
   try {
     const ctx = {
@@ -151,7 +242,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
       studentExternalId: config.studentExternalId,
       institutionExternalId: config.institutionExternalId,
     };
-    ops = module.transform(raw, ctx);
+    ops = module.transform(transformInput, ctx);
   } catch (err: unknown) {
     const syncErr = toSyncError(err, 'local', 'Transform failed');
     if (recorder) {
@@ -195,23 +286,30 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   await emit('validating', 'Validating envelope...');
 
   const endedAt = new Date().toISOString();
-  const envelope: ISlcIngestEnvelopeV1 = {
-    schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
-    run: {
-      runId,
-      startedAt,
-      endedAt,
-      provider: config.provider,
-      adapterId: config.adapterId,
-      adapterVersion: config.adapterVersion,
-      mode: 'delta',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      meta: buildEnvelopeMeta(host, {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const runBase = {
+    runId,
+    startedAt,
+    endedAt,
+    provider: config.provider,
+    adapterId: config.adapterId,
+    adapterVersion: config.adapterVersion,
+    mode: 'delta' as const,
+    timezone,
+    meta: buildEnvelopeMeta(
+      host,
+      {
         source: enrichmentSource,
         patchCount: enrichment.patchCount,
         failed: enrichment.failed,
-      }),
-    },
+      },
+      raw
+    ),
+  };
+
+  const draftEnvelope: ISlcIngestEnvelopeV1 = {
+    schemaVersion: SLC_INGEST_SCHEMA_VERSION_V1,
+    run: runBase,
     source: {
       sourceId: config.sourceId,
       displayName: `${config.provider} (${host.clientType})`,
@@ -220,7 +318,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     ops,
   };
 
-  const report = validateEnvelope(envelope);
+  const report = validateEnvelope(draftEnvelope);
   if (!report.passed) {
     const msg = `Envelope validation failed: ${report.errorCount} errors`;
     if (recorder) {
@@ -231,6 +329,31 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
     await uploader.reportFailure?.(runId, config.sourceId, msg).catch(() => undefined);
     throw new SyncError(msg, 'local');
   }
+
+  if (ops.length === 0) {
+    const msg = 'ZERO_ROWS';
+    if (recorder) {
+      await recorder
+        .completeRun(runId, { status: 'failed', opCount: 0, errorMessage: msg })
+        .catch(() => undefined);
+    }
+    await uploader.reportFailure?.(runId, config.sourceId, msg).catch(() => undefined);
+    throw new SyncError(msg, 'local');
+  }
+
+  const validationWarnings = report.checks
+    .filter((c) => c.severity === 'warning')
+    .map((c) => c.message);
+  const coverage = computeRunCoverage(ops);
+
+  const envelope: ISlcIngestEnvelopeV1 = {
+    ...draftEnvelope,
+    run: {
+      ...runBase,
+      coverage,
+      warnings: validationWarnings,
+    },
+  };
 
   // 6. Upload
   await emit('uploading', 'Uploading to Scholaracle...');
@@ -254,7 +377,12 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   // 7. Record success
   if (recorder) {
     await recorder
-      .completeRun(runId, { status: 'success', opCount: ops.length })
+      .completeRun(runId, {
+        status: 'success',
+        opCount: ops.length,
+        coverage,
+        warnings: validationWarnings,
+      })
       .catch(() => undefined);
   }
   await emit('complete', `Sync complete — ${ops.length} ops`, { opCount: ops.length });
@@ -278,6 +406,7 @@ export function buildClientScrapeConfig(
 ): IClientScrapeConfig {
   return {
     ...params,
+    adapterId: resolveCanonicalAdapterId(params.adapterId),
     coreVersion: params.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
   };
 }

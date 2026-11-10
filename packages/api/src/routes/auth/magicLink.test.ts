@@ -20,6 +20,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireParent, requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER } from '../seed/demo-data';
+import { API_TEST_SEED_TOKEN } from '../seed/seed-test-token';
 import { authRouter } from './auth';
 import { studentsRouter } from '../students/students';
 import { studioRouter } from '../studio/studio';
@@ -64,8 +65,15 @@ describe('Magic-link send + consume', () => {
   let sender: ReturnType<typeof makeSenderStub>;
   let parentToken: string;
   let emmaId: string;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -105,7 +113,7 @@ describe('Magic-link send + consume', () => {
     );
     app.use(createErrorHandler());
 
-    await request(app).post('/api/seed/demo').expect(200);
+    await postDemoSeed().expect(200);
 
     const loginRes = await authService.login(DEMO_USER.email, DEMO_USER.password);
     if (!loginRes.success || !loginRes.token) throw new Error('Parent login failed');
@@ -120,6 +128,8 @@ describe('Magic-link send + consume', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   beforeEach(() => {

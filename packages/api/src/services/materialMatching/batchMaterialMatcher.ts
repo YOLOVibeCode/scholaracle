@@ -3,6 +3,7 @@ import type { Db } from 'mongodb';
 import { LlmClient } from '@scholaracle/agents';
 import { mergeCourses, type ISourceCourse } from '@scholaracle/connector';
 import { resolveLlmConfig } from '../llm/resolveLlmConfig';
+import { hasServerAiConsent } from '../consent/serverAiConsent';
 
 export interface IBatchMaterialMatcherResult {
   readonly llmCallCount: number;
@@ -34,6 +35,9 @@ export async function runBatchMaterialMatching(params: {
   readonly userId: string;
   readonly llmClient?: LlmClient;
 }): Promise<IBatchMaterialMatcherResult> {
+  if (!(await hasServerAiConsent(params.database, params.userId))) {
+    return { llmCallCount: 0, matchedCount: 0 };
+  }
   const cfg = resolveLlmConfig();
   const llm =
     params.llmClient ??

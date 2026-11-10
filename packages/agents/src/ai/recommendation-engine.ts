@@ -4,6 +4,7 @@ import { buildRecommendationPrompt } from './prompt-templates';
 
 export interface IRecommendationEngineConfig {
   readonly apiKey?: string;
+  readonly baseUrl?: string;
   readonly model?: string;
 }
 
@@ -18,6 +19,7 @@ export class RecommendationEngine implements IRecommendationEngine {
     if (config.apiKey) {
       this._client = new LlmClient({
         apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
         model: config.model,
       });
     }

@@ -7,11 +7,19 @@ import { resolvePageFn, PAGE_FN_UNREGISTERED } from './resolve';
 
 const SRC = join(__dirname, '..');
 
+/** Istanbul coverage rewrites fn.toString; freshness must use an uninstrumented run (page-fns:check). */
+function isCoverageInstrumented(): boolean {
+  return typeof (globalThis as { __coverage__?: unknown }).__coverage__ !== 'undefined';
+}
+
 describe('build-time page-function table', () => {
-  it('is up to date with the registry (run the page-fns script if this fails)', () => {
-    const committed = readFileSync(join(__dirname, 'pageFns.generated.ts'), 'utf8');
-    expect(renderPageFnSources(PAGE_FNS)).toBe(committed);
-  });
+  (isCoverageInstrumented() ? it.skip : it)(
+    'is up to date with the registry (run the page-fns script if this fails)',
+    () => {
+      const committed = readFileSync(join(__dirname, 'pageFns.generated.ts'), 'utf8');
+      expect(renderPageFnSources(PAGE_FNS)).toBe(committed);
+    }
+  );
 
   it('has a parseable source for every registered function', () => {
     expect(Object.keys(PAGE_FN_SOURCES).sort()).toEqual(Object.keys(PAGE_FNS).sort());

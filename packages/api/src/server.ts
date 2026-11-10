@@ -9,10 +9,13 @@ import { alertsRouter } from './routes/alerts/alerts';
 import { authRouter } from './routes/auth/auth';
 import { cliAuthRouter } from './routes/auth/cli-auth';
 import { studentsRouter } from './routes/students/students';
+import { sharingRouter } from './routes/sharing/sharing';
+import { portalAccountsRouter } from './routes/household/portalAccounts';
 import { integrationsRouter } from './routes/integrations/integrations';
 import { alertsApiRouter } from './routes/alerts-api/alerts-api';
 import { emailHistoryRouter } from './routes/email-history/email-history';
 import { settingsRouter } from './routes/settings/settings';
+import { consentsRouter } from './routes/consents/consents';
 import { authMiddleware } from './middleware/auth';
 import { requireParent, requireStudent } from './middleware/requireRole';
 import { studioRouter } from './routes/studio/studio';
@@ -21,7 +24,15 @@ import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { installProcessHandlers } from './utils/processHandlers';
 import { initSentry } from './sentry';
 import { logger } from './logger';
-import { AuthService, AdminAuthService } from '@scholaracle/auth';
+import { alertAckByOnBoot } from './bootstrap/alertAckByOnBoot';
+import { alertStudentIdOnBoot } from './bootstrap/alertStudentIdOnBoot';
+import { backfillBindingsOnBoot } from './bootstrap/backfillBindingsOnBoot';
+import { rekeyAdapterIdsOnBoot } from './bootstrap/rekeyAdapterIdsOnBoot';
+import {
+  AuthService,
+  AdminAuthService,
+  assertConnectorJwtSecretDistinctFromUserSecret,
+} from '@scholaracle/auth';
 import {
   AdminMFATokenRepository,
   AdminPasswordResetTokenRepository,
@@ -33,10 +44,13 @@ import {
   SessionRepository,
   StudentRepository,
   SourceInviteRepository,
+  createIndexes,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
-import { SendGridInviteEmailSender } from './services/InviteEmailSender';
+import { SendGridEmailTransferConfirmationSender } from './services/EmailTransferConfirmationSender';
 import { MagicLinkSender } from './services/provision/MagicLinkSender';
+import { SharingInviteEmailSender } from './services/sharing/SharingInviteEmailSender';
+import { SharingService } from './services/sharing/SharingService';
 import { SendGridPasswordChangedEmailSender } from './services/PasswordChangedEmailSender';
 import { SendGridSourceInviteEmailSender } from './services/source-invite/SourceInviteEmailSender';
 import { SourceInviteService } from './services/source-invite/SourceInviteService';
@@ -60,9 +74,8 @@ import { auditLogsRouter } from './routes/admin/audit-logs';
 import { communicationsRouter } from './routes/admin/communications';
 import { adminUsersRouter } from './routes/admin/users';
 import { adminSessionsRouter } from './routes/admin/sessions/sessions';
-import { scrapersAdminRouter } from './routes/admin/scrapers/scrapers';
-import { createScrapersRouter } from './routes/scrapers/scrapers';
 import { createDiagnosticsRouter } from './routes/admin/diagnostics';
+import { createAdminAiRouter } from './routes/admin/ai';
 import { communicationsWebhooksRouter } from './routes/webhooks/communications';
 import { noctusoftWebhookRouter } from './routes/webhooks/noctusoft';
 import { twilioWebhookRouter } from './routes/webhooks/twilio';
@@ -79,6 +92,8 @@ import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
+import { createScrapersRepairRouter } from './routes/scrapers/repair';
+import { createScrapersRouter } from './routes/scrapers/registry';
 import { agendaRouter } from './routes/agenda';
 import { sessionsRouter } from './routes/sessions/sessions';
 import {
@@ -97,8 +112,10 @@ import type { IEmailTransport } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import { createSmsStack } from './services/sms/createSmsStack';
+import { maybeBootstrapFirstAdmin } from './bootstrap/maybeBootstrapAdmin';
 
 export interface IServerConfig {
+  readonly connectorJwtSecret?: string;
   readonly port?: number;
   readonly mongodbUri?: string;
   readonly mongodbDbName?: string;
@@ -120,6 +137,31 @@ export interface IServerConfig {
  * @param config - Server configuration
  * @returns SendGrid configuration
  */
+/**
+ * Route the shared @sendgrid/mail client through SENDGRID_BASE_URL (the Noctusoft relay).
+ * The library resets its base URL to api.sendgrid.com on every setApiKey call, and each
+ * email sender calls setApiKey in its constructor (and some routes per request), so a
+ * one-time setDefaultRequest is silently undone. Re-apply it after every setApiKey.
+ */
+export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined): void {
+  if (!baseUrl) return;
+  const m = mail as {
+    client?: { setDefaultRequest(key: 'baseUrl', value: string): void };
+    setApiKey?: (key: string) => void;
+  };
+  const client = m.client;
+  if (!client) return;
+  const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
+  const original = m.setApiKey?.bind(m);
+  if (original) {
+    m.setApiKey = (key: string): void => {
+      original(key);
+      apply();
+    };
+  }
+  apply();
+}
+
 function getSendGridConfig(config: IServerConfig): {
   readonly apiKey: string;
   readonly fromEmail: string;
@@ -281,7 +323,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     if (
       req.path === '/api/webhooks/noctusoft' ||
       req.path.startsWith('/api/webhooks/twilio') ||
-      req.path === '/api/ingest/v1/assets/upload-base64'
+      req.path === '/api/ingest/v1/assets/upload-base64' ||
+      req.path === '/api/ingest/v1/ai/scraper-assist' ||
+      req.path === '/api/scrapers/repair'
     ) {
       next();
       return;
@@ -298,6 +342,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
   if (!jwtSecret) {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
+
+  let connectorJwtSecret = config.connectorJwtSecret ?? process.env['CONNECTOR_JWT_SECRET'];
+  if (!connectorJwtSecret && nodeEnv !== 'production') {
+    connectorJwtSecret = `${jwtSecret}-connector`;
+  }
+  if (!connectorJwtSecret) {
+    throw new Error('CONNECTOR_JWT_SECRET environment variable is required in production');
+  }
+  assertConnectorJwtSecretDistinctFromUserSecret(jwtSecret, connectorJwtSecret);
 
   const notificationInit = initializeNotificationService(config, database);
   const { notificationService, emailTransport, fromEmail, fromName } = notificationInit;
@@ -332,8 +385,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       );
     }
     const sendGrid = sgMail as unknown as MailService;
+    // Invite, password-reset and password-changed emails share this client. Point it at
+    // the Noctusoft relay here; it was only set inside initializeNotificationService, so
+    // these senders called api.sendgrid.com directly and every relay key got a 401.
+    applySendGridBaseUrl(sgMail, process.env['SENDGRID_BASE_URL']);
     const passwordResetEmailSender = new SendGridPasswordResetEmailSender(sendGridConfig, sendGrid);
-    const inviteEmailSender = new SendGridInviteEmailSender(sendGridConfig, sendGrid);
+    const emailTransferConfirmation = new SendGridEmailTransferConfirmationSender(
+      sendGridConfig,
+      sendGrid
+    );
     const passwordChangedEmailSender = new SendGridPasswordChangedEmailSender(
       sendGridConfig,
       sendGrid
@@ -374,16 +434,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/auth/cli', cliAuthRouter({ database, authService, baseUrl }));
     app.use('/api/sessions', sessionsRouter({ database, authService }));
 
-    // Create SyncScheduler once (if available) to be shared by students and sync routes
-    let syncScheduler: import('@scholaracle/agents').SyncScheduler | undefined;
-    try {
-      const { MongoQueue, SyncScheduler } = require('@scholaracle/agents');
-      const syncQueue = new MongoQueue(database);
-      syncScheduler = new SyncScheduler(syncQueue, database);
-    } catch {
-      // Agents package not available — sync routes will be skipped
-    }
-
     const {
       emailTransport: magicEmailTransport,
       fromEmail: magicFromEmail,
@@ -395,19 +445,41 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       { fromEmail: magicFromEmail, fromName: magicFromName },
       guardedSmsSender
     );
+    // Sharing invitations ride the same transport as magic links, so the accept button in the
+    // mail points at the /magic route this server actually serves (sharing-spec D5).
+    const sharingEmailSender = new SharingInviteEmailSender(magicEmailTransport, {
+      fromEmail: magicFromEmail,
+      fromName: magicFromName,
+    });
+    // ONE sharing graph for the process: /api/students/:id/contacts*, /parents* and /api/sharing
+    // share the magic-link issuer, SMS opt-in, rate limiter, audit trail and web origin.
+    const sharing = new SharingService({ database, baseUrl, emailSender: sharingEmailSender });
 
+    app.use(
+      '/api/portal-accounts',
+      authMiddleware(authService),
+      requireParent,
+      portalAccountsRouter({ database })
+    );
     app.use(
       '/api/students',
       authMiddleware(authService),
       requireParent,
       studentsRouter({
         database,
-        baseUrl: baseUrl ?? '',
+        baseUrl,
         jwtSecret,
-        sendInviteEmail: inviteEmailSender,
-        syncScheduler,
+        emailTransferConfirmation,
+        sharing,
         magicLinkSender,
       })
+    );
+    // Sharing across students (invite several at once, pending list, accept/decline, leave, mine).
+    app.use(
+      '/api/sharing',
+      authMiddleware(authService),
+      requireParent,
+      sharingRouter({ database, sharing })
     );
     // Public: a co-parent opts in to texts themselves from a link the inviting parent shares.
     app.use('/api/sms/optin', smsOptInRouter({ database, guardedSmsSender }));
@@ -419,13 +491,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         database,
         baseUrl: baseUrl ?? '',
         jwtSecret,
+        // A student's "Need help" tap enqueues a notify job the same way ingest alerts do.
+        alertQueue: notificationQueue,
       })
     );
     app.use(
       '/api/integrations',
       authMiddleware(authService),
       requireParent,
-      integrationsRouter({ database })
+      integrationsRouter({ database, connectorJwtSecret })
     );
     // Account routes (push tokens for parent and student logins, email transfer).
     // Push registration is any authenticated user; household email transfer is
@@ -436,14 +510,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       createAccountRouter({ database, baseUrl })
     );
     app.use(
-      '/api/scrapers',
-      createScrapersRouter({
-        database,
-        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
-      })
-    );
-
-    app.use(
       '/api/oauth',
       createGoogleOAuthRouter({
         database,
@@ -452,21 +518,6 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         authService,
       })
     );
-
-    // Sync API — trigger and monitor data-source sync jobs (uses syncScheduler created above)
-    if (syncScheduler) {
-      try {
-        const { createSyncRouter } = require('./routes/sync/sync');
-        app.use(
-          '/api/sync',
-          authMiddleware(authService),
-          requireParent,
-          createSyncRouter({ database, syncScheduler })
-        );
-      } catch {
-        // Sync route not available — skip /api/sync
-      }
-    }
 
     // Legacy alerts route (for notification creation) - POST /api/alerts.
     // Auth + ownership-checked per DEF-003.
@@ -506,6 +557,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       requireParent,
       settingsRouter({ database, authService })
     );
+    app.use(
+      '/api/consents',
+      authMiddleware(authService),
+      requireParent,
+      consentsRouter({ database })
+    );
     // Agenda API routes (unified assignments + recurring events)
     app.use('/api/agenda', agendaRouter({ database, notificationService }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
@@ -514,6 +571,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       ingestV1Router({
         database,
         jwtSecret,
+        connectorJwtSecret,
         queue: notificationQueue,
         assetStore: createAssetStore(),
       })
@@ -561,6 +619,21 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     };
     app.use('/api/ingest/v1/assets', createAssetUploadRouter(assetsConfig));
     app.use('/api/assets', createAssetServeRouter(assetsConfig));
+    const scrapersRoutes = express.Router();
+    scrapersRoutes.use(
+      createScrapersRouter({
+        database,
+        publisherUserIds: process.env['SCRAPER_PUBLISHER_USER_IDS']?.split(',').filter(Boolean),
+      })
+    );
+    scrapersRoutes.use(
+      createScrapersRepairRouter({
+        database,
+        jwtSecret,
+        assetStore,
+      })
+    );
+    app.use('/api/scrapers', scrapersRoutes);
 
     // Admin API routes (separate authentication)
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
@@ -640,7 +713,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
     app.use('/api/admin/analytics', analyticsRouter({ database }));
-    app.use('/api/admin/scrapers', scrapersAdminRouter({ database }));
+    app.use('/api/admin/ai', createAdminAiRouter({ database, jwtSecret }));
     app.use('/api/admin/reports', reportsRouter({ database }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
     app.use('/api/admin', notesRouter({ database }));
@@ -698,11 +771,32 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
   installProcessHandlers(logger);
 
   const database = await initializeDatabase(config);
+  await createIndexes(database);
+  await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);
 
   const server = app.listen(port, () => {
     logger.info({ port }, 'server running');
+  });
+
+  // One-time data migration, opt-in via REKEY_ADAPTER_IDS (dry-run | apply). Runs after
+  // listen so health checks pass while it works; failures are logged, never fatal.
+  void rekeyAdapterIdsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'rekey-adapter-ids on boot failed');
+  });
+  void backfillBindingsOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'backfill-bindings on boot failed');
+  });
+  // Sharing S3, two opt-in steps (dry-run | apply), markers in one_time_migrations:
+  //  1. ALERT_STUDENT_ID_MIGRATION rewrites legacy alert rows' portal student ids to Mongo ids
+  //     (scoped by owner) so shared adults can see them;
+  //  2. ALERT_ACK_BY_MIGRATION copies legacy owner acknowledgements into acknowledgedBy[owner].
+  void alertStudentIdOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'alert-student-id on boot failed');
+  });
+  void alertAckByOnBoot(database, logger).catch((err: unknown) => {
+    logger.error({ err }, 'alert-ack-by on boot failed');
   });
 
   // Graceful shutdown: stop accepting connections, then exit. Railway sends

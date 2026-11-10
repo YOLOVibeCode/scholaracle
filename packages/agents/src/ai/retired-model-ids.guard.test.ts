@@ -16,11 +16,6 @@ function shouldSkipDir(dirName: string): boolean {
   return SKIP_DIR_NAMES.has(dirName);
 }
 
-function isExcludedFile(relPath: string): boolean {
-  const normalized = relPath.split(path.sep).join('/');
-  return normalized.includes('packages/api/src/services/scraper-generator/');
-}
-
 function collectSourceFiles(dir: string, acc: string[]): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const ent of entries) {
@@ -56,9 +51,6 @@ describe('retired Claude model id guard', () => {
       collectSourceFiles(srcDir, files);
       for (const filePath of files) {
         const rel = path.relative(root, filePath);
-        if (isExcludedFile(rel)) {
-          continue;
-        }
         const content = fs.readFileSync(filePath, 'utf8');
         for (const banned of BANNED_SUBSTRINGS) {
           if (content.includes(banned)) {

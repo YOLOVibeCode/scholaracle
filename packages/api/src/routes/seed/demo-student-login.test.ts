@@ -15,6 +15,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireParent, requireStudent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
 import { DEMO_USER, DEMO_STUDENT_USER_EMMA, DEMO_STUDENT_USER_LIAM } from './demo-data';
+import { API_TEST_SEED_TOKEN } from './seed-test-token';
 
 describe('Demo seed — student logins', () => {
   jest.setTimeout(60_000);
@@ -23,8 +24,15 @@ describe('Demo seed — student logins', () => {
   let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let authService: AuthService;
+  let savedSeedToken: string | undefined;
+
+  function postDemoSeed() {
+    return request(app).post('/api/seed/demo').set('X-Seed-Token', API_TEST_SEED_TOKEN);
+  }
 
   beforeAll(async () => {
+    savedSeedToken = process.env['SEED_TOKEN'];
+    process.env['SEED_TOKEN'] = API_TEST_SEED_TOKEN;
     mongoServer = await MongoMemoryServer.create();
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
@@ -56,13 +64,15 @@ describe('Demo seed — student logins', () => {
   afterAll(async () => {
     await client.close();
     await mongoServer.stop();
+    if (savedSeedToken === undefined) delete process.env['SEED_TOKEN'];
+    else process.env['SEED_TOKEN'] = savedSeedToken;
   });
 
   it('seeds Emma as role=student scoped to her profile and forbids GET /api/students', async () => {
-    const first = await request(app).post('/api/seed/demo');
+    const first = await postDemoSeed();
     expect(first.status).toBe(200);
 
-    const second = await request(app).post('/api/seed/demo');
+    const second = await postDemoSeed();
     expect(second.status).toBe(200);
 
     const emmaUsers = await database
@@ -123,7 +133,7 @@ describe('Demo seed — student logins', () => {
   });
 
   it('seeds Liam as role=student scoped to his profile; he cannot read Emma’s studio pack', async () => {
-    const seeded = await request(app).post('/api/seed/demo');
+    const seeded = await postDemoSeed();
     expect(seeded.status).toBe(200);
 
     const liamUsers = await database
@@ -171,7 +181,7 @@ describe('Demo seed — student logins', () => {
   });
 
   it('re-seed unsuspends Liam and restores the demo password', async () => {
-    await request(app).post('/api/seed/demo');
+    await postDemoSeed();
     const liamUser = await database.collection('users').findOne({
       email: DEMO_STUDENT_USER_LIAM.email,
     });
@@ -192,7 +202,7 @@ describe('Demo seed — student logins', () => {
     );
     expect(blocked.success).toBe(false);
 
-    const again = await request(app).post('/api/seed/demo');
+    const again = await postDemoSeed();
     expect(again.status).toBe(200);
 
     const restored = await authService.login(

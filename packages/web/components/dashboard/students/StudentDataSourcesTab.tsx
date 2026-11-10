@@ -13,9 +13,15 @@ import { ConnectToIntegrationSheet } from '@/components/dashboard/integrations/C
 export interface StudentDataSourcesTabProps {
   studentId: string;
   onConnectSource?: () => void;
+  /** Owner and admin connect portals and edit credentials; members only look (sharing-spec §4.2). */
+  canManageSources?: boolean;
 }
 
-export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDataSourcesTabProps) {
+export function StudentDataSourcesTab({
+  studentId,
+  onConnectSource,
+  canManageSources = true,
+}: StudentDataSourcesTabProps) {
   const [sources, setSources] = useState<readonly IDataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [openRunSourceId, setOpenRunSourceId] = useState<string | null>(null);
@@ -47,25 +53,27 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Connected Sources</h2>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setConnectToIntegrationOpen(true)}
-            data-testid="button-connect-to-integration"
-          >
-            <Plug className="mr-2 h-4 w-4" />
-            Connect to existing integration
-          </Button>
-          <Button
-            type="button"
-            onClick={onConnectSource}
-            data-testid="button-connect-source"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Connect New Source
-          </Button>
-        </div>
+        {canManageSources && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConnectToIntegrationOpen(true)}
+              data-testid="button-connect-to-integration"
+            >
+              <Plug className="mr-2 h-4 w-4" />
+              Connect to existing integration
+            </Button>
+            <Button
+              type="button"
+              onClick={onConnectSource}
+              data-testid="button-connect-source"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Connect New Source
+            </Button>
+          </div>
+        )}
       </div>
 
       {sources.length === 0 ? (
@@ -74,12 +82,16 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
             <Link2 className="h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No data sources connected</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center">
-              Connect an LMS (Canvas, Skyward, etc.) so we can sync grades and assignments.
+              {canManageSources
+                ? 'Connect an LMS (Canvas, Skyward, etc.) so we can sync grades and assignments.'
+                : 'The owner or an admin can connect a portal so grades and assignments sync.'}
             </p>
-            <Button type="button" onClick={onConnectSource} data-testid="button-connect-source">
-              <Plus className="mr-2 h-4 w-4" />
-              Connect New Source
-            </Button>
+            {canManageSources && (
+              <Button type="button" onClick={onConnectSource} data-testid="button-connect-source">
+                <Plus className="mr-2 h-4 w-4" />
+                Connect New Source
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -90,9 +102,13 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">{source.displayName}</CardTitle>
-                    <CardDescription>
+                    <CardDescription data-testid={`source-desc-${source.id}`}>
                       {source.provider} · {source.schedule.replace('_', ' ')} ·{' '}
-                      {source.lastSuccess ? `Last sync: ${new Date(source.lastSuccess).toLocaleString()}` : 'No sync yet'}
+                      {source.lastSuccessAt || source.lastSuccess
+                        ? `Last sync: ${new Date(
+                            source.lastSuccessAt ?? source.lastSuccess!
+                          ).toLocaleString()}`
+                        : 'No sync yet'}
                     </CardDescription>
                   </div>
                   <span
@@ -112,14 +128,16 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      href={`/dashboard/integrations/${source.id}`}
-                      data-testid={`link-integration-${source.id}`}
-                    >
-                      View in Integrations
-                    </Link>
-                  </Button>
+                  {canManageSources && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/dashboard/integrations/${source.id}`}
+                        data-testid={`link-integration-${source.id}`}
+                      >
+                        View in Integrations
+                      </Link>
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -129,16 +147,18 @@ export function StudentDataSourcesTab({ studentId, onConnectSource }: StudentDat
                   >
                     View Runs
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={() => setCredentialsSource(source)}
-                    data-testid={`button-credentials-${source.id}`}
-                  >
-                    <Key className="h-3.5 w-3.5 mr-1" />
-                    {source.hasCredentials ? 'Update credentials' : 'Add credentials'}
-                  </Button>
+                  {canManageSources && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => setCredentialsSource(source)}
+                      data-testid={`button-credentials-${source.id}`}
+                    >
+                      <Key className="h-3.5 w-3.5 mr-1" />
+                      {source.hasCredentials ? 'Update credentials' : 'Add credentials'}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

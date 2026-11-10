@@ -15,6 +15,7 @@ import {
   WorkloadTemplate,
   PositiveTemplate,
   RecommendationTemplate,
+  StudentNeedsHelpTemplate,
   type ITemplateResult,
   type ITemplateAction,
 } from './templates';
@@ -33,6 +34,7 @@ export class ParentNotificationGenerator implements INotificationGenerator {
     | WorkloadTemplate
     | PositiveTemplate
     | RecommendationTemplate
+    | StudentNeedsHelpTemplate
   >;
 
   constructor() {
@@ -44,6 +46,7 @@ export class ParentNotificationGenerator implements INotificationGenerator {
       [AlertType.WORKLOAD]: new WorkloadTemplate(),
       [AlertType.POSITIVE]: new PositiveTemplate(),
       [AlertType.RECOMMENDATION]: new RecommendationTemplate(),
+      [AlertType.STUDENT_NEEDS_HELP]: new StudentNeedsHelpTemplate(),
     };
   }
 

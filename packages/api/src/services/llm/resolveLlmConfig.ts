@@ -1,32 +1,8 @@
-import { resolveModelForRole } from '@scholaracle/agents';
+import { resolveLlmConfig as resolveForRole, type ILlmConfig } from '@scholaracle/agents';
 
-export interface IResolvedLlmConfig {
-  readonly apiKey: string;
-  readonly baseUrl: string;
-  readonly model: string;
-}
+export type IResolvedLlmConfig = ILlmConfig;
 
-const DEFAULT_LITELLM_BASE = 'https://api.noctusoft.com/v1';
-const DEFAULT_ANTHROPIC_BASE = 'https://api.anthropic.com';
-
-/** Resolve server-side LLM credentials (LiteLLM proxy preferred). */
+/** Server-side LLM config for material matching and vision (relay preferred). */
 export function resolveLlmConfig(): IResolvedLlmConfig | null {
-  const litellmKey = process.env['LITELLM_API_KEY']?.trim();
-  if (litellmKey) {
-    return {
-      apiKey: litellmKey,
-      baseUrl: process.env['LITELLM_BASE_URL']?.trim() || DEFAULT_LITELLM_BASE,
-      model: process.env['AI_MODEL']?.trim() || resolveModelForRole('matching'),
-    };
-  }
-  const anthropicKey =
-    process.env['ANTHROPIC_API_KEY']?.trim() || process.env['AI_API_KEY']?.trim();
-  if (anthropicKey) {
-    return {
-      apiKey: anthropicKey,
-      baseUrl: DEFAULT_ANTHROPIC_BASE,
-      model: process.env['AI_MODEL']?.trim() || resolveModelForRole('matching'),
-    };
-  }
-  return null;
+  return resolveForRole('matching');
 }

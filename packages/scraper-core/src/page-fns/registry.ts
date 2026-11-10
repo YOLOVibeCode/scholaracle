@@ -19,6 +19,7 @@ import * as skyward from '../extractors/skyward/skyward-extractors';
 import * as aeries from '../extractors/aeries/aeries-extractors';
 import { fetchAssetInWebView, fetchPageInWebView } from './asset-fns';
 import { getDocumentOuterHtml, isLoginFormShowing } from './common-fns';
+import { captureSkeleton } from './captureSkeleton';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPageFn = (...args: any[]) => unknown;
@@ -29,6 +30,9 @@ export const PAGE_FNS: Readonly<Record<string, AnyPageFn>> = Object.freeze({
   'canvas.extractCanvasToDoItems': canvas.extractCanvasToDoItems,
   'canvas.extractCanvasUpcomingEvents': canvas.extractCanvasUpcomingEvents,
   'canvas.fetchCanvasCourses': canvas.fetchCanvasCourses,
+  'canvas.fetchCanvasObserveeUserIds': canvas.fetchCanvasObserveeUserIds,
+  'canvas.fetchCanvasCoursesForUser': canvas.fetchCanvasCoursesForUser,
+  'canvas.fetchCanvasPlannerItems': canvas.fetchCanvasPlannerItems,
   'canvas.fetchCanvasCourseAssignments': canvas.fetchCanvasCourseAssignments,
   'canvas.fetchCanvasCourseTeachers': canvas.fetchCanvasCourseTeachers,
   'canvas.fetchCanvasCourseModules': canvas.fetchCanvasCourseModules,
@@ -64,4 +68,5 @@ export const PAGE_FNS: Readonly<Record<string, AnyPageFn>> = Object.freeze({
   'assets.fetchPageInWebView': fetchPageInWebView,
   'common.getDocumentOuterHtml': getDocumentOuterHtml,
   'common.isLoginFormShowing': isLoginFormShowing,
+  'common.captureSkeleton': captureSkeleton,
 });

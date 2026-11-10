@@ -9,11 +9,13 @@ import { AuthService } from '@scholaracle/auth';
 import { ingestV1Router } from './ingest';
 import type { EnrichOpsMode } from './enrichOps';
 import { createErrorHandler } from '../../../middleware/errorHandler';
+import { seedBindingsForEnvelope } from '../../../test-utils/seedIngestBinding';
 
 describe('Ingest v1 envelope enrichment', () => {
   let database: Db;
   let mongoClient: MongoClient;
   let userToken: string;
+  let ownerUserId: string;
 
   beforeAll(async () => {
     const mongodbUri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -33,8 +35,10 @@ describe('Ingest v1 envelope enrichment', () => {
 
     const authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('enrich-ops@test.com', 'password123', 'Enrich User');
-    if (!reg.success || !reg.token) throw new Error('Failed to register enrich test user');
+    if (!reg.success || !reg.token || !reg.user?.id)
+      throw new Error('Failed to register enrich test user');
     userToken = reg.token;
+    ownerUserId = reg.user.id;
   });
 
   afterAll(async () => {
@@ -46,7 +50,12 @@ describe('Ingest v1 envelope enrichment', () => {
     app.use(express.json());
     app.use(
       '/api/ingest/v1',
-      ingestV1Router({ database, jwtSecret: 'test-secret', enrichOpsMode: mode })
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+        enrichOpsMode: mode,
+      })
     );
     app.use(createErrorHandler());
     return app;
@@ -117,6 +126,7 @@ describe('Ingest v1 envelope enrichment', () => {
         },
       ],
     };
+    await seedBindingsForEnvelope(database, ownerUserId, envelope);
     const res = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${token}`)

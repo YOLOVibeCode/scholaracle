@@ -97,14 +97,20 @@ jobs:
           E2E_SEED_TOKEN: ${{ secrets.E2E_SEED_TOKEN }}
         run: |
           # Seed deployed env so tests have deterministic fixtures.
-          curl -fsS -X POST "${{ inputs.api_base_url }}/seed?force=true" \
+          curl -fsS -X POST "${{ inputs.api_base_url }}/api/seed?force=true" \
             -H 'Content-Type: application/json' \
             -H "X-Seed-Token: ${E2E_SEED_TOKEN}" \
             --max-time 120 \
             || (echo "Seed failed"; exit 1)
 
       - name: Run Playwright tests
-        run: pnpm --filter @scholaracle/e2e test ${{ inputs.project && format('--project={0}', inputs.project) || '' }}
+        # Job fails when Playwright exits non-zero (production gate via deploy e2e-dev).
+        run: |
+          args=''
+          if [ -n "${{ inputs.project }}" ]; then
+            args="--project=${{ inputs.project }}"
+          fi
+          pnpm --filter @scholaracle/e2e exec playwright test $args
         env:
           CI: 'true'
           BASE_URL: ${{ inputs.base_url || 'http://localhost:2800' }}

@@ -69,6 +69,22 @@ describe('createLogger', () => {
     expect(lines[1]?.requestId).toBeUndefined();
   });
 
+  it('should not emit full seeded email or phone in log output', () => {
+    const SEED_EMAIL = 'pii-seed-m3-12@example.com';
+    const SEED_PHONE = '+15557654321';
+    const { lines, stream } = makeCapture();
+    const logger = createLogger('api', { level: 'info', destination: stream });
+
+    logger.info(
+      { recipientEmail: SEED_EMAIL, note: `text ${SEED_EMAIL}` },
+      `failed for ${SEED_PHONE}`
+    );
+
+    const raw = lines.map((line) => JSON.stringify(line)).join('\n');
+    expect(raw).not.toContain(SEED_EMAIL);
+    expect(raw).not.toContain('7654321');
+  });
+
   it('should redact sensitive fields', () => {
     // Arrange
     const { lines, stream } = makeCapture();

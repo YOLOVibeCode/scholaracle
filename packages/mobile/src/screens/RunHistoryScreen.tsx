@@ -15,6 +15,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { runLedger, type IRunEntry } from '../ledger/RunLedger';
+import { gapLinesFromCoverage } from './runHistoryCoverage';
 
 interface IRunHistoryScreenProps {
   onBack(): void;
@@ -90,6 +91,23 @@ export function RunHistoryScreen({ onBack }: IRunHistoryScreenProps): React.Reac
   );
 }
 
+function RunGapSection({ run }: { readonly run: IRunEntry }): React.ReactElement | null {
+  const gapLines = gapLinesFromCoverage(run.coverage);
+  if (gapLines.length === 0) {
+    return null;
+  }
+  return (
+    <View style={styles.detailSection} testID="run-detail-gaps">
+      <Text style={styles.sectionTitle}>Could not get</Text>
+      {gapLines.map((line, i) => (
+        <Text key={`${run.runId}-gap-${i}`} style={styles.gapLine} testID="text-run-gap">
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 function RunDetailView({ run, onBack }: { run: IRunEntry; onBack(): void }): React.ReactElement {
   return (
     <View style={styles.container}>
@@ -152,6 +170,8 @@ function RunDetailView({ run, onBack }: { run: IRunEntry; onBack(): void }): Rea
             <Text style={styles.errorText}>{run.errorMessage}</Text>
           </View>
         )}
+
+        <RunGapSection run={run} />
 
         <View style={styles.detailSection}>
           <Text style={styles.sectionTitle}>Phases</Text>
@@ -240,6 +260,13 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 14, color: '#6c757d', width: 100 },
   detailValue: { fontSize: 14, color: '#1a1a2e', fontWeight: '500', flex: 1, textAlign: 'right' },
+  gapLine: {
+    fontSize: 14,
+    color: '#1a1a2e',
+    alignSelf: 'stretch',
+    textAlign: 'left',
+    marginBottom: 4,
+  },
   errorText: { fontSize: 14, color: '#dc3545' },
   phaseRow: {
     flexDirection: 'row',
