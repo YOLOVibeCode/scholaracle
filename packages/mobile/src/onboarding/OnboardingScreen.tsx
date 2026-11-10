@@ -45,14 +45,21 @@ const PROVIDERS: readonly { id: OnboardingProvider; name: string; urlHint: strin
 export interface IOnboardingScreenProps {
   readonly entry: OnboardingEntry;
   onComplete(result: IApplyOnboardingResult): void;
+  /**
+   * Logged-in entry only: leave onboarding from its first step, e.g. back to a sharing
+   * invitation waiting on the Students screen after "Get started" was tapped.
+   */
+  onBack?(): void;
 }
 
 export function OnboardingScreen({
   entry,
   onComplete,
+  onBack,
 }: IOnboardingScreenProps): React.ReactElement {
   const { login, register, isAuthenticating, error } = useAuth();
   const [state, setState] = useState(() => createInitialOnboardingState(entry));
+  const firstStep = useMemo(() => createInitialOnboardingState(entry).step, [entry]);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [alertsDone, setAlertsDone] = useState(false);
@@ -170,11 +177,20 @@ export function OnboardingScreen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {state.step !== 'account' && (
+        {onBack && state.step === firstStep ? (
+          <TouchableOpacity
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            testID="button-onboarding-back"
+          >
+            <Text style={styles.back}>Back</Text>
+          </TouchableOpacity>
+        ) : state.step !== 'account' ? (
           <TouchableOpacity onPress={() => setState((s) => reduceOnboarding(s, { type: 'back' }))}>
             <Text style={styles.back}>Back</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
 
         {state.step === 'account' && (
           <>

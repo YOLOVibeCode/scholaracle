@@ -195,6 +195,7 @@ function defaultEnabledTypes(): Record<string, { enabled: boolean; severity: str
     [AlertType.WORKLOAD]: 'warning',
     [AlertType.POSITIVE]: 'info',
     [AlertType.RECOMMENDATION]: 'info',
+    [AlertType.STUDENT_NEEDS_HELP]: 'info',
   };
   for (const t of types) {
     map[t] = { enabled: true, severity: defaultSeverity[t] ?? 'info' };

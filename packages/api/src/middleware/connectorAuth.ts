@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
 import { ConnectorDeviceRepository } from '@scholaracle/database';
+import { logger } from '../logger';
 
 export interface IConnectorAuthenticatedRequest extends Request {
   connectorUserId?: string;
@@ -67,8 +68,12 @@ export function connectorAuthMiddleware(
           }
           attach();
         })
-        .catch(() => {
-          attach();
+        .catch((err: unknown) => {
+          logger.warn(
+            { error: err instanceof Error ? err.message : String(err) },
+            'Connector token revocation check failed'
+          );
+          res.status(503).json({ success: false, error: 'Token verification unavailable' });
         });
       return;
     }

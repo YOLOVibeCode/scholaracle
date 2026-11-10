@@ -29,6 +29,17 @@ async function createIndexes(): Promise<void> {
   // Students
   await db.collection('students').createIndex({ userId: 1 });
   console.log('  students.userId');
+  await db.collection('students').createIndex({ 'sharedWith.email': 1 });
+  console.log('  students.sharedWith.email');
+  await db.collection('students').createIndex({ 'sharedWith.inviteGroupId': 1 }, { sparse: true });
+  console.log('  students.sharedWith.inviteGroupId (sparse)');
+
+  // Sharing rate-limit counters
+  await db.collection('sharing_rate_limits').createIndex({ key: 1 }, { unique: true });
+  await db
+    .collection('sharing_rate_limits')
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 });
+  console.log('  sharing_rate_limits.key (unique), expiresAt (TTL)');
 
   // Admin users
   await db.collection('admin_users').createIndex({ email: 1 }, { unique: true });
@@ -84,6 +95,17 @@ async function createIndexes(): Promise<void> {
   await db.collection('slc_runs').createIndex({ status: 1, startedAt: 1 });
   console.log('  slc_runs.sourceId+createdAt, status+startedAt');
 
+  await db
+    .collection('repair_candidates')
+    .createIndex(
+      { portalHost: 1, recipeId: 1, step: 1, skeletonHash: 1, gapKind: 1 },
+      { unique: true }
+    );
+  console.log('  repair_candidates.portalHost+recipeId+step+skeletonHash+gapKind (unique)');
+
+  await db.collection('repair_proposals').createIndex({ candidateId: 1, createdAt: -1 });
+  console.log('  repair_proposals.candidateId+createdAt');
+
   await db.collection('sync_requests').createIndex({ syncRequestId: 1 }, { unique: true });
   await db.collection('sync_requests').createIndex({ studentId: 1, sourceId: 1, createdAt: -1 });
   console.log('  sync_requests.syncRequestId (unique), studentId+sourceId+createdAt');
@@ -104,6 +126,10 @@ async function createIndexes(): Promise<void> {
   await db.collection('jobs').createIndex({ status: 1, scheduledAt: 1 });
   await db.collection('jobs').createIndex({ type: 1, status: 1 });
   console.log('  jobs.status+scheduledAt, type+status');
+
+  await db.collection('served_selector_patches').createIndex({ patchId: 1 }, { unique: true });
+  await db.collection('served_selector_patches').createIndex({ portalHost: 1, status: 1, servedAt: -1 });
+  console.log('  served_selector_patches.patchId (unique), portalHost+status+servedAt');
 
   console.log('All indexes created successfully.');
   await client.close();

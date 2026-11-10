@@ -51,9 +51,13 @@ describe('student-mode gate — who sees Sync', () => {
     expect(canNavigateTo('student', 'connect-source')).toBe(false);
     expect(canNavigateTo('student', 'students')).toBe(false);
     expect(canNavigateTo('student', 'today')).toBe(true);
+    expect(canNavigateTo('student', 'week')).toBe(true);
     expect(canNavigateTo('student', 'work-pack')).toBe(true);
     expect(canNavigateTo('parent', 'sync')).toBe(true);
     expect(canNavigateTo('parent', 'today')).toBe(false);
+    expect(canNavigateTo('parent', 'week')).toBe(false);
+    expect(clampNavView('student', 'week')).toBe('week');
+    expect(clampNavView('parent', 'week')).toBe('students');
     expect(clampNavView('student', 'sync')).toBe('today');
     expect(clampNavView('student', 'connect-source')).toBe('today');
     expect(clampNavView('parent', 'sync')).toBe('sync');
@@ -77,6 +81,11 @@ describe('ISP — student studio screens stay off parent-only ports', () => {
       path.join(dir, 'studentMode.ts'),
       path.join(dir, 'openWorkPackPrimary.ts'),
       path.join(dir, 'TodayView.tsx'),
+      path.join(dir, 'WeekView.tsx'),
+      path.join(dir, 'StatusSheet.tsx'),
+      path.join(dir, 'weekViewModel.ts'),
+      path.join(dir, 'statusSheetModel.ts'),
+      path.join(dir, 'studioTabs.ts'),
       path.join(dir, 'WorkPackView.tsx'),
       path.join(screens, 'TodayScreen.tsx'),
       path.join(screens, 'StudentWorkPackScreen.tsx'),

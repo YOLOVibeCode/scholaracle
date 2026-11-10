@@ -7,7 +7,7 @@
  */
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import { studentsRouter } from '../routes/students/students';
 import { authMiddleware } from '../middleware/auth';
@@ -194,6 +194,16 @@ describe('students API contract', () => {
       updatedAt: now,
     });
 
+    await database.collection('slc_bindings').insertOne({
+      userId,
+      portalAccountId: 'pa-contract',
+      studentId: new ObjectId(studentDbId),
+      sourceId: SOURCE_ID,
+      studentExternalId: 'contract-stu-1',
+      createdAt: now,
+      updatedAt: now,
+    });
+
     // An ingest run (drives GET /:id/sources/:sourceId/runs)
     await database.collection('slc_runs').insertOne({
       userId,
@@ -218,9 +228,16 @@ describe('students API contract', () => {
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
     const item = res.body[0] as Record<string, unknown>;
-    // IStudentListItem: id/userId/name required; grade/studentId/stats optional
-    assertKeys(item, ['id', 'userId', 'name'], ['grade', 'studentId', 'stats'], 'IStudentListItem');
+    // IStudentListItem: id/userId/name/access/peopleCount required; grade/studentId/stats optional
+    assertKeys(
+      item,
+      ['id', 'userId', 'name', 'access', 'peopleCount'],
+      ['grade', 'studentId', 'stats'],
+      'IStudentListItem'
+    );
     expect(item['id']).toBe(studentDbId);
+    expect(item['access']).toBe('owner');
+    expect(item['peopleCount']).toBe(1);
     expect(typeof item['grade']).toBe('number');
     expect(item['studentId']).toBe('contract-stu-1');
     assertKeys(
@@ -415,6 +432,7 @@ describe('students API contract', () => {
       ['id', 'pluginId', 'provider', 'displayName', 'enabled', 'schedule', 'dataTypes', 'status'],
       [
         'portalBaseUrl',
+        'portalAccountId',
         'hasCredentials',
         'lastScraped',
         'lastSuccess',
@@ -438,7 +456,19 @@ describe('students API contract', () => {
     assertKeys(
       res.body[0] as Record<string, unknown>,
       ['runId', 'status', 'startedAt', 'error'],
-      ['uploadedAt', 'committedAt', 'abandonedAt', 'sourceId', 'coverage', 'warnings'],
+      [
+        'uploadedAt',
+        'committedAt',
+        'abandonedAt',
+        'sourceId',
+        'coverage',
+        'warnings',
+        'steps',
+        'stats',
+        'lastCursor',
+        'newCursor',
+        'clientMeta',
+      ],
       'IRunListItem'
     );
     expect(res.body[0].runId).toBe('run-contract-1');

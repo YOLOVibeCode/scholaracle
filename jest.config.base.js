@@ -1,6 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  passWithNoTests: false,
   // Use an ephemeral MongoDB for jest runs so test suites are self-contained.
   // This sets process.env.MONGODB_URI + MONGODB_DB_NAME before tests execute.
   // Note: package jest configs set rootDir to their package folder, so we go up to monorepo root.

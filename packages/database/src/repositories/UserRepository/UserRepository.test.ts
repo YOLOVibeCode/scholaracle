@@ -227,4 +227,27 @@ describe('UserRepository Admin Methods', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('findByEmail', () => {
+    it('matches regardless of casing, including rows stored with their original casing', async () => {
+      const repository = new UserRepository(database);
+      await database.collection('users').deleteMany({ email: /casey@example\.com/i });
+      // A legacy row written before emails were normalised on write.
+      const legacy = await repository.create({
+        email: 'Casey@Example.com',
+        passwordHash: 'hash',
+        name: 'Casey',
+      });
+
+      expect((await repository.findByEmail('casey@example.com'))?._id?.toString()).toBe(
+        legacy._id?.toString()
+      );
+      expect((await repository.findByEmail('  CASEY@EXAMPLE.COM '))?._id?.toString()).toBe(
+        legacy._id?.toString()
+      );
+      expect(await repository.findByEmail('casey@example.co')).toBeNull();
+      // Regex metacharacters in an address are matched literally.
+      expect(await repository.findByEmail('c.sey@example.com')).toBeNull();
+    });
+  });
 });

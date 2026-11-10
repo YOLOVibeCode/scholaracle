@@ -104,9 +104,11 @@ describe('Alerts API Routes', () => {
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.length).toBe(2);
-      expect(response.body[0]).toHaveProperty('id');
-      expect(response.body[0]).toHaveProperty('type', 'MISSING_ASSIGNMENT');
-      expect(response.body[1]).toHaveProperty('type', 'GRADE_DROP');
+      const types = response.body.map((alert: { type: string }) => alert.type);
+      expect(types).toEqual(expect.arrayContaining(['MISSING_ASSIGNMENT', 'GRADE_DROP']));
+      expect(response.body.every((alert: { id?: string }) => typeof alert.id === 'string')).toBe(
+        true
+      );
     });
 
     it('should not return other user alerts', async () => {

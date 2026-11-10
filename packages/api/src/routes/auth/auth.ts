@@ -23,6 +23,9 @@ import { parseUserAgent } from '../../utils/parseUserAgent';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { verifyAppleIdentityToken } from './appleIdentityToken';
+import { appleOAuthAudiences } from './appleAudiences';
+import { acceptedSharedWith } from '../../services/sharing/sharedWithOps';
+import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -336,6 +339,58 @@ async function handleStudentMagic(
 }
 
 /**
+ * Find or create the parent account for an invited email and accept its pending entries on the
+ * given students. The lookup is case-insensitive so "Jessica@Example.com" never becomes a second
+ * account. A created account gets a random password it never saw, so `forcePasswordReset` is set
+ * and the clients prompt once to choose one (reset-password, admin set-password and an OAuth
+ * sign-in clear it).
+ */
+async function acceptInvitesByMagic(
+  req: Request,
+  database: Db,
+  email: string,
+  studentIds: readonly string[]
+): Promise<string> {
+  const userRepo = new UserRepository(database);
+  const studentRepo = new StudentRepository(database);
+  const audit = createSharingAuditRecorder(database);
+
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = await userRepo.findByEmail(normalizedEmail);
+  if (!user) {
+    const passwordHash = await UserRepository.hashPassword(
+      `magic-${crypto.randomBytes(32).toString('base64url')}`
+    );
+    user = await userRepo.create({
+      email: normalizedEmail,
+      passwordHash,
+      name: normalizedEmail.split('@')[0] ?? normalizedEmail,
+      role: 'parent',
+      forcePasswordReset: true,
+    });
+  }
+  const userId = user._id!.toString();
+
+  const students = await studentRepo.findByIds(studentIds);
+  await Promise.all(
+    students.map(async (student) => {
+      const updatedShared = acceptedSharedWith(student, normalizedEmail, userId);
+      if (!updatedShared) return;
+      await studentRepo.update(student._id!, { sharedWith: updatedShared });
+      await audit(
+        req,
+        'sharing:accept',
+        student._id!.toString(),
+        normalizedEmail,
+        { via: 'magic' },
+        { userId, email: normalizedEmail }
+      );
+    })
+  );
+  return userId;
+}
+
+/**
  * Generic magic-link consume endpoint (POST /api/auth/magic).
  * Handles students, accepted shared parents, and pending-invite auto-onboarding.
  * The /student-magic route is kept as an alias for backwards compatibility.
@@ -362,45 +417,14 @@ async function handleMagicConsume(
   let userId: string;
 
   if ('pendingInvite' in consumed) {
-    // One-click onboarding: create (or find) a parent user and accept the invite
+    // Legacy single-student invite link: create (or find) a parent user and accept that invite.
     const { studentId, email } = consumed.pendingInvite;
-    const userRepo = new UserRepository(database);
-    const studentRepo = new StudentRepository(database);
-
-    let user = await userRepo.findByEmail(email);
-    if (!user) {
-      const passwordHash = await UserRepository.hashPassword(
-        `magic-${crypto.randomBytes(32).toString('base64url')}`
-      );
-      user = await userRepo.create({
-        email,
-        passwordHash,
-        name: email.split('@')[0] ?? email,
-        role: 'parent',
-      });
-    }
-    userId = user._id!.toString();
-
-    // Bind userId in the sharedWith entry and mark accepted
-    const student = await studentRepo.findById(studentId);
-    if (student) {
-      const inviteIdx = student.sharedWith.findIndex(
-        (sp) => sp.email === email && sp.status === 'pending'
-      );
-      if (inviteIdx !== -1) {
-        const updatedShared = [...student.sharedWith];
-        const current = updatedShared[inviteIdx]!;
-        updatedShared[inviteIdx] = {
-          ...current,
-          userId,
-          status: 'accepted',
-          acceptedAt: new Date(),
-          receiveAlerts: current.receiveAlerts !== false,
-          alertChannels: current.alertChannels ?? ['email'],
-        };
-        await studentRepo.update(student._id!, { sharedWith: updatedShared });
-      }
-    }
+    userId = await acceptInvitesByMagic(req, database, email, [studentId]);
+  } else if ('inviteGroup' in consumed) {
+    // Sharing invitation (one link for several students): accept every pending entry for that
+    // email among the token's students, creating the account if needed (sharing-spec §4.3).
+    const { email, studentIds } = consumed.inviteGroup;
+    userId = await acceptInvitesByMagic(req, database, email, studentIds);
   } else {
     userId = consumed.userId;
   }
@@ -548,14 +572,6 @@ async function resolveOAuthAccount(
   }
 }
 
-function appleOAuthAudiences(): string[] {
-  const raw = process.env['APPLE_OAUTH_AUDIENCE'] ?? 'com.scholarmancy.app';
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 /**
  * Handle OAuth callback from Next.js server (internal).
  * Validates INTERNAL_API_SECRET header; finds/creates user and issues JWT tokens.
@@ -580,6 +596,56 @@ async function handleOAuth(
     email,
     payload.name
   );
+  if (result.success && result.user?.id && result.familyId) {
+    await upsertSession(sessionRepository, result.user.id, result.familyId, req);
+  }
+  if (result.success) {
+    if (result.refreshToken) {
+      setRefreshTokenCookie(res, result.refreshToken, result.rememberMe !== false);
+    }
+    res.status(200).json(result);
+  } else {
+    res.status(400).json(result);
+  }
+}
+
+/**
+ * Native Sign in with Apple for the phone app. No shared secret: the server trusts ONLY the
+ * verified Apple identity token (signature, issuer, audience, nonce). Account id and email come
+ * from the token, never from the request body, so a caller cannot choose whose account to enter.
+ * A token without an email can only sign in an existing link; it cannot create or link by email.
+ */
+async function handleNativeAppleLogin(
+  req: Request,
+  res: Response,
+  authService: AuthService,
+  sessionRepository?: ISessionRepository
+): Promise<void> {
+  const body = (req.body ?? {}) as {
+    appleIdentityToken?: unknown;
+    appleNonce?: unknown;
+    name?: unknown;
+  };
+  const token = typeof body.appleIdentityToken === 'string' ? body.appleIdentityToken.trim() : '';
+  if (token === '') {
+    throw new ValidationError('Missing required field: appleIdentityToken');
+  }
+  const nonce = typeof body.appleNonce === 'string' ? body.appleNonce.trim() : '';
+  let verified: { sub: string; email?: string };
+  try {
+    verified = await verifyAppleIdentityToken({
+      identityToken: token,
+      rawNonce: nonce === '' ? undefined : nonce,
+      audiences: appleOAuthAudiences(),
+    });
+  } catch {
+    throw new AuthenticationError('Invalid Apple identity token');
+  }
+  const email = (verified.email ?? '').trim();
+  const suppliedName = typeof body.name === 'string' ? body.name.trim() : '';
+  const name =
+    suppliedName !== '' ? suppliedName : email !== '' ? email.split('@')[0]! : 'Apple user';
+  const result = await authService.loginOrRegisterOAuth('apple', verified.sub, email, name);
   if (result.success && result.user?.id && result.familyId) {
     await upsertSession(sessionRepository, result.user.id, result.familyId, req);
   }
@@ -722,6 +788,17 @@ export function authRouter(config: IAuthRouterConfig): Router {
     '/oauth',
     asyncHandler((req: Request, res: Response) =>
       handleOAuth(req, res, authService, config.sessionRepository)
+    )
+  );
+
+  /**
+   * POST /api/auth/oauth/apple
+   * Phone-app Sign in with Apple. Public (no shared secret); identity comes from the verified token.
+   */
+  router.post(
+    '/oauth/apple',
+    asyncHandler((req: Request, res: Response) =>
+      handleNativeAppleLogin(req, res, authService, config.sessionRepository)
     )
   );
 

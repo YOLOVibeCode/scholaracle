@@ -9,6 +9,7 @@ export {
   NotFoundError,
   ConflictError,
   RateLimitError,
+  AiBudgetError,
   ExternalServiceError,
   InternalError,
 } from './httpErrors';

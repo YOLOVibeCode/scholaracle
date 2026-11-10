@@ -35,12 +35,13 @@ import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
 import type { GuardedSmsSender } from '@scholaracle/agents';
-import { SyncStalenessMonitor } from './sync-staleness-monitor';
+import { SyncStalenessMonitor, buildSyncStalenessConfigFromEnv } from './sync-staleness-monitor';
 import { logger } from './logger';
 import { initSentry } from './sentry';
 import { safeInterval } from './utils/safeInterval';
 import { installProcessHandlers } from './utils/processHandlers';
 import { abandonStaleStartedRuns } from './abandonStaleIngestRuns';
+import { startRepairNightlySchedule } from './repair-nightly/scheduleRepairNightly';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -574,12 +575,13 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Sync staleness monitor — emails account owners when syncs are overdue
   // -----------------------------------------------------------------------
   const stalenessMonitor = new SyncStalenessMonitor(database, emailTransport, {
-    checkIntervalMs: Number(process.env['STALENESS_CHECK_INTERVAL_MS'] ?? 60 * 60_000), // 1 hour
-    staleThresholdMs: Number(process.env['STALENESS_THRESHOLD_MS'] ?? 48 * 60 * 60_000), // 48 hours
+    ...buildSyncStalenessConfigFromEnv(process.env),
     fromEmail: sendGridConfig.fromEmail,
     fromName: sendGridConfig.fromName,
   });
   stalenessMonitor.start();
+
+  const repairNightlyInterval = startRepairNightlySchedule(database);
 
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
@@ -632,6 +634,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     logger.info('shutting down worker');
     clearInterval(heartbeatInterval);
     clearInterval(staleRunReaperInterval);
+    if (repairNightlyInterval) clearInterval(repairNightlyInterval);
     stalenessMonitor.stop();
     healthServer.close();
     await notificationWorker.stop();
@@ -641,7 +644,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     });
     await mongoClient.close();
     logger.info('worker stopped');
-    process.exit(0);
+    if (process.env['NODE_ENV'] !== 'test') {
+      process.exit(0);
+    }
   };
 
   process.on('SIGTERM', () => {
@@ -652,10 +657,12 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
 }
 
-// Start worker if this file is run directly
-if (require.main === module) {
+// Start worker if this file is run directly (never when Jest imports this module)
+if (require.main === module && process.env['JEST_WORKER_ID'] === undefined) {
   startWorker().catch((error: unknown) => {
     logger.fatal({ err: error }, 'failed to start worker');
-    process.exit(1);
+    if (process.env['JEST_WORKER_ID'] === undefined) {
+      process.exit(1);
+    }
   });
 }

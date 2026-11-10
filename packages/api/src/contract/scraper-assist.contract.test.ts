@@ -6,10 +6,10 @@ import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
 import { ConnectorTokenService } from '@scholaracle/auth';
+import { ConnectorDeviceRepository } from '@scholaracle/database';
 import { createScraperAssistRouter } from '../routes/ingest/v1/scraperAssist';
 import { createErrorHandler } from '../middleware/errorHandler';
 import { assertKeys } from './assertExactKeys';
-import { seedActiveConnectorJti } from '../testHelpers/connectorDeviceTestSeed';
 
 jest.mock('@scholaracle/agents', () => ({
   LlmClient: jest.fn().mockImplementation(() => ({
@@ -45,14 +45,13 @@ describe('scraper-assist API contract (CLI client)', () => {
     connectorToken = tokenService.createToken(
       'contract-cli-user',
       'jti-cli-contract',
-      'contract-cli-device'
+      'contract-device'
     );
-    await seedActiveConnectorJti(
-      database,
-      'contract-cli-user',
-      'contract-cli-device',
-      'jti-cli-contract'
-    );
+    await new ConnectorDeviceRepository(database).upsertActiveToken({
+      userId: 'contract-cli-user',
+      deviceId: 'contract-device',
+      activeJti: 'jti-cli-contract',
+    });
   });
 
   afterAll(async () => {

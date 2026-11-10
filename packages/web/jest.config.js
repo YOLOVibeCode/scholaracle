@@ -33,6 +33,7 @@ module.exports = {
   globalTeardown: undefined,
   maxWorkers: 1,
   forceExit: true,
+  passWithNoTests: false,
   collectCoverageFrom: [
     'lib/**/*.ts',
     'lib/**/*.tsx',

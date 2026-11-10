@@ -1,6 +1,7 @@
 import type { Db, Collection } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { AuditLog, type IAuditLogData, type AuditAction } from '../../models/AuditLog';
+import { maskAuditLogData } from '../../utils/maskAuditLogData';
 
 export interface IPaginationOptions {
   readonly page: number;
@@ -46,9 +47,10 @@ export class AuditLogRepository implements IAuditLogRepository {
    * @returns Created audit log
    */
   public async create(logData: IAuditLogData): Promise<AuditLog> {
+    const masked = maskAuditLogData(logData);
     const document = {
-      ...logData,
-      timestamp: logData.timestamp ?? new Date(),
+      ...masked,
+      timestamp: masked.timestamp ?? new Date(),
     };
 
     const result = await this._collection.insertOne(document);

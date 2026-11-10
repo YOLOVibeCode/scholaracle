@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["N42FM5L5KD.com.scholarmancy.app"],
+        "components": [{ "/": "/magic", "comment": "Magic login links open the app" }]
+      }
+    ]
+  }
+}

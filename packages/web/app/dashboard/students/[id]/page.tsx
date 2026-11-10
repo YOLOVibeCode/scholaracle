@@ -3,22 +3,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, LayoutDashboard, ListTodo } from 'lucide-react';
+import type { StudentAccess } from '@scholaracle/contracts';
+import { ArrowLeft, LayoutDashboard, ListTodo, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { studentsApi, type IStudent } from '@/lib/api/students';
+import { getSessionUser, type ISessionUser } from '@/lib/auth/sessionUser';
+import { canEditStudent, canManagePeople, canManageSources } from '@/lib/sharing/access';
 import { StudentOverviewTab } from '@/components/dashboard/students/StudentOverviewTab';
 import { StudentDataSourcesTab } from '@/components/dashboard/students/StudentDataSourcesTab';
 import { StudentAlertsTab } from '@/components/dashboard/students/StudentAlertsTab';
 import { StudentActivityTab } from '@/components/dashboard/students/StudentActivityTab';
 import { StudentGradesTab } from '@/components/dashboard/students/StudentGradesTab';
 import { ConnectSourceWizard } from '@/components/dashboard/students/ConnectSourceWizard';
-import { ManageParentsCard } from '@/components/dashboard/students/ManageParentsCard';
+import { FamilyCard } from '@/components/dashboard/sharing/FamilyCard';
+import { ShareDialog } from '@/components/dashboard/sharing/ShareDialog';
+import { SharedWithYouLine } from '@/components/dashboard/sharing/SharedWithYouLine';
 import { StudentDocumentsTab } from '@/components/dashboard/students/StudentDocumentsTab';
 import { StudentTrendsTab } from '@/components/dashboard/students/StudentTrendsTab';
 
 type TabId = 'overview' | 'sources' | 'alerts' | 'activity' | 'grades' | 'documents' | 'parents' | 'trends';
 
 const VALID_TABS: TabId[] = ['overview', 'sources', 'alerts', 'activity', 'grades', 'documents', 'parents', 'trends'];
+
+/** Tab ids stay stable (`?tab=parents`, `data-testid="tab-parents"`); only the label changed. */
+const TAB_LABELS: Record<TabId, string> = {
+  overview: 'Overview',
+  sources: 'Data Sources',
+  alerts: 'Alerts',
+  activity: 'Activity',
+  grades: 'Grades',
+  documents: 'Documents',
+  parents: 'Family & guardians',
+  trends: 'Trends',
+};
 
 export default function EditStudentPage() {
   const router = useRouter();
@@ -35,6 +52,23 @@ export default function EditStudentPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [connectWizardOpen, setConnectWizardOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [familyRefresh, setFamilyRefresh] = useState(0);
+  const [viewer, setViewer] = useState<ISessionUser | null>(null);
+
+  // Unknown until the student has loaded: every role-gated control stays hidden until then,
+  // so a member never sees owner controls flash (sharing-spec §4.2).
+  const access: StudentAccess | undefined = student?.access;
+  const mayEdit = access !== undefined && canEditStudent(access);
+  const maySources = access !== undefined && canManageSources(access);
+  const mayShare = access !== undefined && canManagePeople(access);
+  const invitedBy = student?.invitedBy;
+  const ownerName =
+    invitedBy && student && invitedBy.userId === student.userId ? invitedBy.name : undefined;
+
+  useEffect(() => {
+    setViewer(getSessionUser());
+  }, []);
 
   const loadStudent = useCallback(async () => {
     if (!studentId) return;
@@ -150,9 +184,25 @@ export default function EditStudentPage() {
         <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight">{student?.name ?? 'Student'}</h1>
           <p className="text-gray-600 dark:text-gray-400">
-            {student?.grade ? `Grade ${student.grade}` : 'Update student information'}
+            {student?.grade
+              ? `Grade ${student.grade}`
+              : mayEdit
+                ? 'Update student information'
+                : 'Student information'}
           </p>
+          <SharedWithYouLine access={student?.access} sharedByName={invitedBy?.name} />
         </div>
+        {mayShare && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShareOpen(true)}
+            data-testid="button-share-student"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Share
+          </Button>
+        )}
         <Button variant="outline" size="sm" asChild data-testid="button-workflow">
           <Link href={`/dashboard/students/${studentId}/workflow`}>
             <ListTodo className="mr-2 h-4 w-4" />
@@ -167,19 +217,9 @@ export default function EditStudentPage() {
         </Button>
       </div>
 
-      <div role="tablist" aria-label="Student sections" className="flex gap-2" data-testid="student-tabs">
-        {(['overview', 'sources', 'alerts', 'activity', 'grades', 'documents', 'parents', 'trends'] as const).map((tabId) => {
+      <div role="tablist" aria-label="Student sections" className="flex flex-wrap gap-2" data-testid="student-tabs">
+        {VALID_TABS.map((tabId) => {
           const isActive = activeTab === tabId;
-          const labels: Record<TabId, string> = {
-            overview: 'Overview',
-            sources: 'Data Sources',
-            alerts: 'Alerts',
-            activity: 'Activity',
-            grades: 'Grades',
-            documents: 'Documents',
-            parents: 'Parents',
-            trends: 'Trends',
-          };
           const panelId = `tabpanel-${tabId}`;
           const tabIdAttr = `tab-${tabId}`;
           return (
@@ -198,7 +238,7 @@ export default function EditStudentPage() {
               }`}
               onClick={() => setActiveTabWithUrl(tabId)}
             >
-              {labels[tabId]}
+              {TAB_LABELS[tabId]}
             </button>
           );
         })}
@@ -207,28 +247,30 @@ export default function EditStudentPage() {
       {activeTab === 'overview' && (
         <div id="tabpanel-overview" role="tabpanel" aria-labelledby="tab-overview">
           <StudentOverviewTab
-          studentId={studentId}
-          student={student}
-          name={name}
-          grade={grade}
-          studentIdField={studentIdField}
-          error={error}
-          isSaving={isSaving}
-          onNameChange={setName}
-          onGradeChange={setGrade}
-          onStudentIdFieldChange={setStudentIdField}
-          onSubmit={handleSubmit}
-          onCancel={() => router.push('/dashboard/students')}
-        />
+            studentId={studentId}
+            student={student}
+            name={name}
+            grade={grade}
+            studentIdField={studentIdField}
+            error={error}
+            isSaving={isSaving}
+            readOnly={!mayEdit}
+            onNameChange={setName}
+            onGradeChange={setGrade}
+            onStudentIdFieldChange={setStudentIdField}
+            onSubmit={handleSubmit}
+            onCancel={() => router.push('/dashboard/students')}
+          />
         </div>
       )}
 
       {activeTab === 'sources' && (
         <div id="tabpanel-sources" role="tabpanel" aria-labelledby="tab-sources">
-        <StudentDataSourcesTab
-          studentId={studentId}
-          onConnectSource={() => setConnectWizardOpen(true)}
-        />
+          <StudentDataSourcesTab
+            studentId={studentId}
+            canManageSources={maySources}
+            onConnectSource={maySources ? () => setConnectWizardOpen(true) : undefined}
+          />
         </div>
       )}
 
@@ -260,12 +302,17 @@ export default function EditStudentPage() {
         </div>
       )}
 
-      {activeTab === 'parents' && student && (
+      {activeTab === 'parents' && student && access !== undefined && (
         <div id="tabpanel-parents" role="tabpanel" aria-labelledby="tab-parents">
-          <ManageParentsCard
+          <FamilyCard
             studentId={studentId}
             studentName={student.name}
-            isOwner={true}
+            access={access}
+            viewer={viewer}
+            ownerName={ownerName}
+            refreshToken={familyRefresh}
+            onShare={mayShare ? () => setShareOpen(true) : undefined}
+            onLeft={() => router.push('/dashboard/students')}
           />
         </div>
       )}
@@ -276,12 +323,23 @@ export default function EditStudentPage() {
         </div>
       )}
 
-      <ConnectSourceWizard
-        open={connectWizardOpen}
-        studentId={studentId}
-        onClose={() => setConnectWizardOpen(false)}
-        onConnected={loadStudent}
-      />
+      {maySources && (
+        <ConnectSourceWizard
+          open={connectWizardOpen}
+          studentId={studentId}
+          onClose={() => setConnectWizardOpen(false)}
+          onConnected={loadStudent}
+        />
+      )}
+
+      {mayShare && (
+        <ShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          defaultStudentIds={[studentId]}
+          onSent={() => setFamilyRefresh((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

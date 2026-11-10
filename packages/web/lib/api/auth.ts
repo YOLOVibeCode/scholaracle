@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { clearSetPasswordPrompt } from '@/lib/sharing/setPasswordPrompt';
 
 export interface ILoginRequest {
   readonly email: string;
@@ -182,6 +183,8 @@ export const authApi = {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
       sessionStorage.removeItem('refresh_token');
+      // The "Set a password" prompt belongs to the account that just left, not the next one.
+      clearSetPasswordPrompt();
       document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       document.cookie = 'auth_token=; path=/; max-age=0';
