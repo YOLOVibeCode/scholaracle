@@ -134,10 +134,10 @@ function adminSeedSecrets(): { password: string; mfaSecret: string } | null {
   return null;
 }
 
-/** Emails allowed for seed-only parent helpers (demo + fixture domains). */
-function isSeedFixtureEmail(email: string): boolean {
+/** Only scholarmancy.com addresses (demo household + seeded admins). */
+function isDemoDomainEmail(email: string): boolean {
   const normalized = email.toLowerCase().trim();
-  return normalized.endsWith('@scholarmancy.com') || normalized.endsWith('@example.com');
+  return normalized.endsWith('@scholarmancy.com');
 }
 
 type SeedAdminOutcome =
@@ -958,7 +958,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
 
   /**
    * POST /api/seed/set-password
-   * Set password for a user (dev/test only). Email must be @scholarmancy.com or @example.com.
+   * Set password for a user (dev/test only). Email must be @scholarmancy.com.
    * Body: { email: string, password: string }
    */
   router.post(
@@ -974,7 +974,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
         throw new ValidationError('Missing email or password');
       }
 
-      if (!isSeedFixtureEmail(email)) {
+      if (!isDemoDomainEmail(email)) {
         throw new ForbiddenError('Email not allowed for seed password reset');
       }
 
@@ -1041,7 +1041,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
   /**
    * POST /api/seed/add-parent
    * Add a parent with accepted status directly to a student (dev/test only).
-   * Email must be @scholarmancy.com or @example.com (fixture domains).
+   * Email must be @scholarmancy.com (demo domain).
    * Body: { studentId: string, email: string, name: string, role?: string, userId?: string }
    */
   router.post(
@@ -1071,7 +1071,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      if (!isSeedFixtureEmail(normalizedEmail)) {
+      if (!isDemoDomainEmail(normalizedEmail)) {
         throw new ForbiddenError('Email not allowed for seed add-parent');
       }
       const parentRole = (role === 'guardian' || role === 'caregiver' ? role : 'parent') as
