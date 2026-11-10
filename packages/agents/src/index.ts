@@ -14,3 +14,4 @@ export * from './sms';
 export * from './ai';
 export * from './studio';
 export * from './weeklyReview';
+export { firstNameOf } from './text/firstName';

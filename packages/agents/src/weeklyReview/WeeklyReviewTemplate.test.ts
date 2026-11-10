@@ -5,7 +5,6 @@ import {
   buildParentWeeklyReviewCopy,
   buildStudentWeeklyReviewEmail,
   buildStudentWeeklyReviewPush,
-  firstName,
   parentStudentUrl,
   parentSummaryLine,
   studentWeekUrl,
@@ -123,8 +122,6 @@ describe('WeeklyReviewTemplate', () => {
   });
 
   it('helpers: first name, title list cap, urls without double slashes', () => {
-    expect(firstName('  Ava  Marie Smith ')).toBe('Ava');
-    expect(firstName('Cher')).toBe('Cher');
     expect(parentSummaryLine({ due: 0, owed: 2, done: 1 })).toBe(
       '0 due · 2 still owed · 1 finished'
     );

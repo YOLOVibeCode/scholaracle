@@ -2369,6 +2369,46 @@ describe('Students API Routes', () => {
       return studentId;
     }
 
+    it('a shared adult can edit their own prefs by their account email even when the row carries an alias', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({})
+        .expect(200);
+      // The row keeps the address the invitation was sent to (alias / later transfer).
+      await database
+        .collection('students')
+        .updateOne(
+          { _id: new ObjectId(studentId), 'sharedWith.email': CO },
+          { $set: { 'sharedWith.$.email': 'co.alias@example.com' } }
+        );
+
+      const self = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ weeklyReviewCopy: true });
+      expect(self.status).toBe(200);
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const row = (stored?.['sharedWith'] as { email: string; weeklyReviewCopy?: boolean }[])[0];
+      expect(row).toMatchObject({ email: 'co.alias@example.com', weeklyReviewCopy: true });
+
+      // Someone else's address that matches no row is still a 404, for the owner too:
+      // the userId fallback only unlocks when the caller names their own account email.
+      const typo = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('nobody@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(typo.status).toBe(404);
+      const strangerSelf = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(strangerSelf.status).toBe(404);
+    });
+
     it('nobody can accept an invitation addressed to someone else', async () => {
       const studentId = await ownerCreatesStudentAndInvites();
       const hijack = await request(app)

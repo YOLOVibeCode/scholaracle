@@ -16,3 +16,4 @@ export {
 } from './studioTaskClassify';
 export { ASSET_URL_TTL_SECONDS, signAssetUrl, verifyAssetSignature } from './signedUrl';
 export { resolveApiBaseUrl } from './resolveApiBaseUrl';
+export { DEFAULT_STUDENT_TIME_ZONE, resolveStudentTimeZone } from './resolveStudentTimeZone';

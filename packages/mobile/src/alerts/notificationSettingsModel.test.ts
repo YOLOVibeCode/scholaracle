@@ -189,6 +189,7 @@ describe('weekly review copy switches (spec §3.3 Q2)', () => {
         name: 'Zoe',
         access: 'member',
         invitedBy: { userId: 'u-owner', name: 'Ricardo' },
+        contactEmail: 'me+invite@example.com',
         alerts: { receiveAlerts: true, alertChannels: ['email', 'sms'], weeklyReviewCopy: true },
       },
       {
@@ -234,13 +235,21 @@ describe('weekly review copy switches (spec §3.3 Q2)', () => {
     });
   });
 
-  it('shared adult: sends only the toggle to their own contact row', () => {
+  it("shared adult: sends only the toggle, addressed by the row's invite email", () => {
     const zoe = weeklyReviewRows(MINE)[1]!;
+    expect(zoe.contactEmail).toBe('me+invite@example.com');
     expect(weeklyReviewToggleRequest(zoe, false)).toEqual({
       kind: 'contact',
       studentId: 's-zoe',
+      email: 'me+invite@example.com',
       body: { weeklyReviewCopy: false },
     });
+    // An older server that omits contactEmail: no email on the request; the screen falls back.
+    const { contactEmail: _dropped, ...withoutEmail } = zoe;
+    const req = weeklyReviewToggleRequest(withoutEmail, true);
+    expect(req.kind).toBe('contact');
+    expect('email' in req).toBe(false);
+    expect(weeklyReviewRows(MINE)[0]!.contactEmail).toBeUndefined(); // owners have no row
   });
 
   it('flips one row and leaves the others alone', () => {

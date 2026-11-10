@@ -125,6 +125,8 @@ export interface IWeeklyReviewRow {
   readonly receiveAlerts: boolean;
   readonly alertChannels: readonly SharingAlertChannel[];
   readonly alertTypes?: readonly string[];
+  /** The invite address on the caller's own sharedWith row; what the contacts PUT keys on. */
+  readonly contactEmail?: string;
 }
 
 /** One row per accessible student from `GET /api/sharing/mine`, by name. */
@@ -138,6 +140,9 @@ export function weeklyReviewRows(view: IMySharingView): readonly IWeeklyReviewRo
       receiveAlerts: s.alerts.receiveAlerts,
       alertChannels: s.alerts.alertChannels,
       ...(s.alerts.alertTypes !== undefined ? { alertTypes: s.alerts.alertTypes } : {}),
+      ...(s.contactEmail !== undefined && s.contactEmail !== ''
+        ? { contactEmail: s.contactEmail }
+        : {}),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -161,6 +166,8 @@ export type WeeklyReviewToggleRequest =
   | {
       readonly kind: 'contact';
       readonly studentId: string;
+      /** The row's invite address from /api/sharing/mine; absent when the server did not say. */
+      readonly email?: string;
       readonly body: { readonly weeklyReviewCopy: boolean };
     };
 
@@ -180,7 +187,12 @@ export function weeklyReviewToggleRequest(
       },
     };
   }
-  return { kind: 'contact', studentId: row.studentId, body: { weeklyReviewCopy: enabled } };
+  return {
+    kind: 'contact',
+    studentId: row.studentId,
+    ...(row.contactEmail !== undefined ? { email: row.contactEmail } : {}),
+    body: { weeklyReviewCopy: enabled },
+  };
 }
 
 export function setWeeklyReviewEnabled(

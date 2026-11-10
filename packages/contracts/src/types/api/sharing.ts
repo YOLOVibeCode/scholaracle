@@ -122,6 +122,11 @@ export interface IMySharingStudent {
     readonly userId: string;
     readonly name?: string;
   };
+  /**
+   * The email on the caller's own `sharedWith` row (the invite address), which is what
+   * `PUT /api/students/:id/contacts/:email` keys on. Absent for students the caller owns.
+   */
+  readonly contactEmail?: string;
   readonly alerts: ISharingMyAlerts;
 }
 

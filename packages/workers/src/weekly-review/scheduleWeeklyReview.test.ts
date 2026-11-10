@@ -11,7 +11,7 @@ const RESULT: IWeeklyReviewTickResult = {
   considered: 2,
   sent: 1,
   noRecipients: 0,
-  alreadySent: 1,
+  skipped: 1,
   failed: 0,
 };
 
@@ -110,6 +110,29 @@ describe('startWeeklyReviewSchedule', () => {
     expect(runTick).toHaveBeenCalledTimes(2);
     await jest.advanceTimersByTimeAsync(60_000);
     expect(runTick).toHaveBeenCalledTimes(3);
+    handle?.stop();
+  });
+
+  it('never overlaps: an interval tick that lands during a slow catch-up is skipped', async () => {
+    jest.useFakeTimers();
+    const runTick = jest.fn(
+      (): Promise<IWeeklyReviewTickResult> =>
+        new Promise((resolve) => setTimeout(() => resolve(RESULT), 5_000))
+    );
+    const handle = startWeeklyReviewSchedule({} as Db, queue, {
+      webOrigin: 'https://x.test',
+      env: { WEEKLY_REVIEW_ENABLED: 'true', WEEKLY_REVIEW_INTERVAL_MS: '60000' },
+      runTick,
+      initialDelayMs: 59_000,
+    });
+    await jest.advanceTimersByTimeAsync(59_000); // catch-up starts, runs until 64 s
+    expect(runTick).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1_000); // 60 s: interval fires while catch-up runs
+    expect(runTick).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(5_000); // 65 s: catch-up done, nothing else started
+    expect(runTick).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(55_000); // 120 s: next interval tick runs normally
+    expect(runTick).toHaveBeenCalledTimes(2);
     handle?.stop();
   });
 

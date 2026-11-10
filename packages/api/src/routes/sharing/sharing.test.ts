@@ -915,6 +915,7 @@ describe('/api/sharing (S1)', () => {
             name: 'Ava',
             access: 'admin',
             invitedBy: { userId: owner.id, name: 'Ricardo Owner' },
+            contactEmail: JESSICA,
             alerts: {
               receiveAlerts: false,
               alertChannels: ['email', 'push'],

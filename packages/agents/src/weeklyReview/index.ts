@@ -21,11 +21,19 @@ export {
 } from './WeeklyReviewTemplate';
 export {
   WEEKLY_REVIEW_CANDIDATE_FILTER,
+  WEEKLY_REVIEW_MAX_ATTEMPTS,
   WEEKLY_REVIEW_SENDS_COLLECTION,
+  WEEKLY_REVIEW_STALE_RESERVATION_MS,
   WeeklyReviewSender,
+  candidateWeekKeys,
+  deliveryKey,
+  isRowFinalForTick,
   type IWeeklyReviewDelivery,
+  type IWeeklyReviewDeliveryRecord,
   type IWeeklyReviewQueue,
+  type IWeeklyReviewSendRow,
   type IWeeklyReviewSenderDeps,
   type IWeeklyReviewTickResult,
   type WeeklyReviewOutcome,
+  type WeeklyReviewRowStatus,
 } from './WeeklyReviewSender';

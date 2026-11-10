@@ -5,6 +5,7 @@ import {
   WEEKLY_REVIEW_PUSH_TYPE,
 } from '@scholaracle/contracts';
 import { toGsm7 } from './gsm7';
+import { firstNameOf } from '../text/firstName';
 
 /** One GSM-7 segment. */
 export const SMS_SEGMENT_LIMIT = 160;
@@ -75,7 +76,7 @@ function count(value: unknown): string {
 }
 
 function firstName(data: Readonly<Record<string, unknown>>): string {
-  return pick(data, 'studentName').split(' ')[0] || 'Your student';
+  return firstNameOf(pick(data, 'studentName'), 'Your student');
 }
 
 function field(value: string, min: number, fallback = ''): IField {

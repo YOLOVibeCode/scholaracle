@@ -5,6 +5,7 @@ import {
   weekSummaryLine,
   weeklyReviewMessage,
 } from '@scholaracle/studio-core';
+import { firstNameOf } from '../text/firstName';
 
 /**
  * Copy for the Sunday weekly review (student review spec §3.3, R4). Student tone,
@@ -46,9 +47,8 @@ export function parentStudentUrl(webOrigin: string, studentId: string): string {
   return `${origin(webOrigin)}/dashboard/students/${encodeURIComponent(studentId)}`;
 }
 
-export function firstName(name: string): string {
-  const first = name.trim().split(/\s+/)[0];
-  return first !== undefined && first !== '' ? first : name.trim();
+function firstName(name: string): string {
+  return firstNameOf(name, name.trim());
 }
 
 interface ITitled {

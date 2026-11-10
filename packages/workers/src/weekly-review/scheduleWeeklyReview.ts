@@ -64,9 +64,21 @@ export function startWeeklyReviewSchedule(
     options.runTick ??
     ((): Promise<IWeeklyReviewTickResult> =>
       new WeeklyReviewSender({ database, queue, webOrigin: options.webOrigin }).runTick());
+  // One guard for both the catch-up timeout and the interval: safeInterval only knows about
+  // its own ticks, so without this a slow catch-up could overlap the first scheduled tick.
+  let running = false;
   const tick = async (): Promise<void> => {
-    const result = await runTick();
-    logger.info({ ...result, job: 'weekly-review' }, 'weekly review tick');
+    if (running) {
+      logger.warn({ job: 'weekly-review' }, 'weekly review tick skipped: previous still running');
+      return;
+    }
+    running = true;
+    try {
+      const result = await runTick();
+      logger.info({ ...result, job: 'weekly-review' }, 'weekly review tick');
+    } finally {
+      running = false;
+    }
   };
   const initial = setTimeout(() => {
     void tick().catch((err: unknown) => {

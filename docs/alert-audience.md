@@ -57,8 +57,9 @@ When `showGrades` is false (the default), student copy must not include percent,
 Not an `AlertType`: a scheduled student message, `triggerType` / push `data.type` `weekly_review`
 (`WEEKLY_REVIEW_PUSH_TYPE` in contracts). The workers process runs `WeeklyReviewSender`
 (`packages/agents/src/weeklyReview/`) every 15 minutes when `WEEKLY_REVIEW_ENABLED=true`; each
-student whose local clock (their login's stored zone, else the owner's `users.timezone`, else
-UTC) has passed Sunday 18:00 gets, once per ISO week (`weekly_review_sends`): a push to the
+student whose local clock (`resolveStudentTimeZone`: their login's stored zone, else the owner's
+`users.timezone`, else America/New_York — the same rule `GET /api/studio/week` uses) has passed
+Sunday 18:00 gets, once per ISO week (`weekly_review_sends`): a push to the
 student's devices, an email to `alertEmail` when set, and a copy to each adult whose
 `weeklyReviewCopy` toggle is on (owner prefs or `sharedWith` row), by that adult's channels.
 Parents get no copy by default (decision Q2). The view is composed by the same `WeekGuide` and

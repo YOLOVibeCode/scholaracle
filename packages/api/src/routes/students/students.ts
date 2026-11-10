@@ -740,7 +740,19 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const targetEmail = decodeURIComponent(req.params['email'] ?? '')
         .toLowerCase()
         .trim();
-      const idx = student.sharedWith.findIndex((sp) => sp.email === targetEmail);
+      let idx = student.sharedWith.findIndex((sp) => sp.email === targetEmail);
+      if (idx === -1) {
+        // A shared adult editing their own prefs may address the row by their account email
+        // while the row still carries the invite address (alias, transfer). Their accepted
+        // row is theirs by userId; only the caller's own address unlocks this, so an admin's
+        // typo for someone else stays a 404 instead of silently editing the admin's row.
+        const caller = await userRepository.findById(userId).catch(() => null);
+        if (caller?.email.toLowerCase().trim() === targetEmail) {
+          idx = student.sharedWith.findIndex(
+            (sp) => sp.status === 'accepted' && sp.userId === userId
+          );
+        }
+      }
       if (idx === -1) {
         throw new NotFoundError('Contact not found');
       }

@@ -1,9 +1,14 @@
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AgentType, NotificationChannel, type INotificationPayload } from '@scholaracle/contracts';
-import { Student, type IStudentData } from '@scholaracle/database';
+import type { IStudentData } from '@scholaracle/database';
 import {
+  WEEKLY_REVIEW_MAX_ATTEMPTS,
   WEEKLY_REVIEW_SENDS_COLLECTION,
+  WEEKLY_REVIEW_STALE_RESERVATION_MS,
   WeeklyReviewSender,
+  candidateWeekKeys,
+  deliveryKey,
+  isRowFinalForTick,
   type IWeeklyReviewQueue,
 } from './WeeklyReviewSender';
 
@@ -17,7 +22,9 @@ interface IJobRecord {
 
 class FakeQueue implements IWeeklyReviewQueue {
   public readonly jobs: IJobRecord[] = [];
-  public failNext = false;
+  /** 1-based index of the `add` call that throws; 0 = never. */
+  public failOnCall = 0;
+  private _calls = 0;
 
   public async add(
     type: string,
@@ -25,8 +32,8 @@ class FakeQueue implements IWeeklyReviewQueue {
     data: Record<string, unknown>,
     options?: { readonly maxAttempts?: number }
   ): Promise<string> {
-    if (this.failNext) {
-      this.failNext = false;
+    this._calls += 1;
+    if (this._calls === this.failOnCall) {
       throw new Error('queue down');
     }
     this.jobs.push({
@@ -45,6 +52,7 @@ const SUNDAY_1805_CHICAGO = new Date('2026-11-09T00:05:00.000Z');
 /** Sun Nov 8 2026, 17:30 in America/Chicago: not yet due. */
 const SUNDAY_1730_CHICAGO = new Date('2026-11-08T23:30:00.000Z');
 const DAY_MS = 86_400_000;
+const MINUTE_MS = 60_000;
 
 interface IHouseholdOptions {
   readonly ownerTimeZone?: string;
@@ -150,6 +158,28 @@ describe('WeeklyReviewSender', () => {
     return { ownerId, studentId, studentUserId };
   }
 
+  async function seedAdultUser(withDevice: boolean): Promise<ObjectId> {
+    const id = new ObjectId();
+    await db.collection('users').insertOne({
+      _id: id,
+      email: `adult-${id.toString()}@example.com`,
+      name: 'Shared Adult',
+      role: 'parent',
+      devices: withDevice
+        ? [
+            {
+              deviceId: 'adult-phone',
+              type: 'android',
+              pushToken: 'ExponentPushToken[adult]',
+              lastActive: new Date(),
+              audience: 'parent',
+            },
+          ]
+        : [],
+    });
+    return id;
+  }
+
   /** 1 missing, 2 due inside the week, 1 beyond it, 1 graded two days ago → owed 1, due 2, done 1. */
   async function seedWeek(
     home: IHousehold,
@@ -212,6 +242,10 @@ describe('WeeklyReviewSender', () => {
     return db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).find({}).toArray();
   }
 
+  function sentRow(home: IHousehold, weekKey: string, status = 'sent'): Record<string, unknown> {
+    return { studentId: home.studentId.toString(), weekKey, status, attempts: 1, deliveries: [] };
+  }
+
   it('sends once at Sunday 18:00 local: push to the student login, email to alertEmail, no adults', async () => {
     const home = await seedHousehold({
       ownerTimeZone: 'America/Chicago',
@@ -220,7 +254,7 @@ describe('WeeklyReviewSender', () => {
     await seedWeek(home, SUNDAY_1805_CHICAGO);
 
     const result = await sender(SUNDAY_1805_CHICAGO).runTick();
-    expect(result).toEqual({ considered: 1, sent: 1, noRecipients: 0, alreadySent: 0, failed: 0 });
+    expect(result).toEqual({ considered: 1, sent: 1, noRecipients: 0, skipped: 0, failed: 0 });
 
     expect(queue.jobs.map((j) => [j.type, j.name, j.channel, j.maxAttempts])).toEqual([
       ['deliver', 'deliver-one', NotificationChannel.PUSH, 5],
@@ -263,20 +297,36 @@ describe('WeeklyReviewSender', () => {
       localDate: '2026-11-08',
       timeZone: 'America/Chicago',
       status: 'sent',
+      attempts: 1,
     });
     expect((rows[0]!['dueAt'] as Date).toISOString()).toBe('2026-11-09T00:00:00.000Z');
+    const deliveries = rows[0]!['deliveries'] as {
+      key: string;
+      enqueuedAt?: Date;
+      jobId?: string;
+    }[];
+    expect(deliveries.map((d) => d.jobId)).toEqual(['job-1', 'job-2']);
+    expect(deliveries.every((d) => d.enqueuedAt instanceof Date)).toBe(true);
+    // Keys carry no address, only a hash.
+    expect(deliveries[1]!.key).toBe(
+      deliveryKey(NotificationChannel.EMAIL, 'student', 'gideon@school.example')
+    );
+    expect(JSON.stringify(deliveries)).not.toContain('gideon@school.example');
   });
 
-  it('a second tick (and a third) sends nothing more: idempotent per (student, week)', async () => {
+  it('a second tick (and a third) sends nothing more and skips before any zone lookup', async () => {
     const home = await seedHousehold({ ownerTimeZone: 'America/Chicago' });
     await seedWeek(home, SUNDAY_1805_CHICAGO);
     await sender(SUNDAY_1805_CHICAGO).runTick();
     expect(queue.jobs).toHaveLength(1);
 
-    const again = await sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 15 * 60_000)).runTick();
-    expect(again).toMatchObject({ sent: 0, alreadySent: 1 });
+    const again = sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 15 * MINUTE_MS));
+    const zoneLookups = jest.spyOn(again, 'resolveTimeZone');
+    expect(await again.runTick()).toMatchObject({ sent: 0, skipped: 1 });
+    expect(zoneLookups).not.toHaveBeenCalled();
+
     const later = await sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 3 * DAY_MS)).runTick();
-    expect(later).toMatchObject({ sent: 0, alreadySent: 1 });
+    expect(later).toMatchObject({ sent: 0, skipped: 1 });
     expect(queue.jobs).toHaveLength(1);
     expect(await sends()).toHaveLength(1);
   });
@@ -284,19 +334,14 @@ describe('WeeklyReviewSender', () => {
   it("waits for the student's local 18:00: 17:30 on Sunday sends nothing new, 18:05 does", async () => {
     const home = await seedHousehold({ ownerTimeZone: 'America/Chicago' });
     await seedWeek(home, SUNDAY_1730_CHICAGO);
-    // Last week's review already went out.
-    await db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).insertOne({
-      studentId: home.studentId.toString(),
-      weekKey: '2026-W44',
-      status: 'sent',
-    });
+    await db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).insertOne(sentRow(home, '2026-W44'));
 
     const early = await sender(SUNDAY_1730_CHICAGO).runTick();
-    expect(early).toMatchObject({ sent: 0, alreadySent: 1 });
+    expect(early).toMatchObject({ sent: 0, skipped: 1 });
     expect(queue.jobs).toHaveLength(0);
 
     const onTime = await sender(SUNDAY_1805_CHICAGO).runTick();
-    expect(onTime).toMatchObject({ sent: 1, alreadySent: 0 });
+    expect(onTime).toMatchObject({ sent: 1, skipped: 0 });
     expect(queue.jobs).toHaveLength(1);
     expect((await sends()).map((r) => r['weekKey']).sort()).toEqual(['2026-W44', '2026-W45']);
   });
@@ -309,25 +354,30 @@ describe('WeeklyReviewSender', () => {
     await seedWeek(tokyo, now);
     await seedWeek(la, now);
     for (const home of [tokyo, la]) {
-      await db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).insertOne({
-        studentId: home.studentId.toString(),
-        weekKey: '2026-W44',
-        status: 'sent',
-      });
+      await db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).insertOne(sentRow(home, '2026-W44'));
     }
+    // Two possible week keys at this instant, so last week's row alone cannot settle anyone.
+    expect([...candidateWeekKeys(now)].sort()).toEqual(['2026-W44', '2026-W45']);
 
     const result = await sender(now).runTick();
-    expect(result).toMatchObject({ considered: 2, sent: 1, alreadySent: 1 });
+    expect(result).toMatchObject({ considered: 2, sent: 1, skipped: 1 });
     expect(queue.jobs).toHaveLength(1);
     expect(queue.jobs[0]!.payload.userId).toBe(tokyo.studentUserId.toString());
     const rows = await sends();
-    expect(rows.find((r) => r['weekKey'] === '2026-W45')?.['studentId']).toBe(
-      tokyo.studentId.toString()
-    );
-    expect(rows.find((r) => r['weekKey'] === '2026-W45')?.['timeZone']).toBe('Asia/Tokyo');
+    const fresh = rows.find((r) => r['weekKey'] === '2026-W45');
+    expect(fresh?.['studentId']).toBe(tokyo.studentId.toString());
+    expect(fresh?.['timeZone']).toBe('Asia/Tokyo');
   });
 
-  it("the student login's stored zone beats the owner's; neither stored → UTC; junk ignored", async () => {
+  it('candidateWeekKeys collapses to one key once every zone has passed the same Sunday', () => {
+    expect(candidateWeekKeys(new Date('2026-11-11T12:00:00.000Z'))).toEqual(['2026-W45']);
+    expect([...candidateWeekKeys(new Date('2026-11-08T04:00:00.000Z'))].sort()).toEqual([
+      '2026-W44',
+      '2026-W45',
+    ]); // 18:00 Sunday at UTC+14 has just happened; nowhere else has
+  });
+
+  it("the zone rule is the API's: login zone → owner zone → America/New_York", async () => {
     const mixed = await seedHousehold({
       ownerTimeZone: 'Asia/Tokyo',
       studentTimeZone: 'America/Los_Angeles',
@@ -335,13 +385,14 @@ describe('WeeklyReviewSender', () => {
     const none = await seedHousehold({ withLogin: false, alertEmail: 'x@y.example' });
     const junk = await seedHousehold({ ownerTimeZone: 'Mars/Olympus' });
     const s = sender(new Date());
-    const load = async (id: ObjectId): Promise<Student> => {
+    const load = async (id: ObjectId): Promise<Parameters<typeof s.resolveTimeZone>[0]> => {
       const doc = await db.collection('students').findOne({ _id: id });
+      const { Student } = await import('@scholaracle/database');
       return new Student(doc as unknown as IStudentData, id);
     };
     expect(await s.resolveTimeZone(await load(mixed.studentId))).toBe('America/Los_Angeles');
-    expect(await s.resolveTimeZone(await load(none.studentId))).toBe('UTC');
-    expect(await s.resolveTimeZone(await load(junk.studentId))).toBe('UTC');
+    expect(await s.resolveTimeZone(await load(none.studentId))).toBe('America/New_York');
+    expect(await s.resolveTimeZone(await load(junk.studentId))).toBe('America/New_York');
   });
 
   it('catch-up after downtime: a Tuesday tick sends the missed Sunday review once, not per tick', async () => {
@@ -354,10 +405,9 @@ describe('WeeklyReviewSender', () => {
     expect(queue.jobs).toHaveLength(1);
     expect((await sends())[0]).toMatchObject({ weekKey: '2026-W45', localDate: '2026-11-08' });
 
-    // The ticks that would have run while down all collapse into that one send.
     for (let i = 1; i <= 4; i += 1) {
-      const r = await sender(new Date(tuesday.getTime() + i * 15 * 60_000)).runTick();
-      expect(r).toMatchObject({ sent: 0, alreadySent: 1 });
+      const r = await sender(new Date(tuesday.getTime() + i * 15 * MINUTE_MS)).runTick();
+      expect(r).toMatchObject({ sent: 0, skipped: 1 });
     }
     expect(queue.jobs).toHaveLength(1);
   });
@@ -375,7 +425,9 @@ describe('WeeklyReviewSender', () => {
     expect(email.subject).toBe("You're caught up, Gideon");
   });
 
-  it('adults get a copy only when their toggle is on, by their own channels', async () => {
+  it('adults get a copy only when their toggle is on, by their own channels, push included', async () => {
+    const pushAdult = await seedAdultUser(true);
+    const noDeviceAdult = await seedAdultUser(false);
     const home = await seedHousehold({
       ownerTimeZone: 'America/Chicago',
       ownerAlertPrefs: {
@@ -392,6 +444,24 @@ describe('WeeklyReviewSender', () => {
           invitedAt: new Date(),
           phone: '+15125550199',
           alertChannels: ['sms'],
+          weeklyReviewCopy: true,
+        },
+        {
+          userId: pushAdult.toString(),
+          email: 'pushy@example.com',
+          role: 'parent',
+          status: 'accepted',
+          invitedAt: new Date(),
+          alertChannels: ['push'],
+          weeklyReviewCopy: true,
+        },
+        {
+          userId: noDeviceAdult.toString(),
+          email: 'no-phone-yet@example.com',
+          role: 'parent',
+          status: 'accepted',
+          invitedAt: new Date(),
+          alertChannels: ['push'],
           weeklyReviewCopy: true,
         },
         {
@@ -418,6 +488,7 @@ describe('WeeklyReviewSender', () => {
       [NotificationChannel.EMAIL, 'owner@example.com'],
       [NotificationChannel.SMS, '+15125550100'],
       [NotificationChannel.SMS, '+15125550199'],
+      [NotificationChannel.PUSH, pushAdult.toString()],
     ]);
     for (const job of adults) {
       expect(job.payload).toMatchObject({
@@ -431,18 +502,38 @@ describe('WeeklyReviewSender', () => {
       expect(job.payload.body).not.toMatch(/95|%/);
       expect(job.payload.triggerData).toMatchObject({ studentName: 'Gideon Vega', due: 2 });
     }
-    // The student's own push still goes out first.
     expect(queue.jobs[0]!.payload.agentType).toBe(AgentType.STUDENT);
-    expect(queue.jobs).toHaveLength(4);
+    expect(queue.jobs).toHaveLength(5);
   });
 
-  it('nobody to tell: records the week as no_recipients and enqueues nothing', async () => {
+  it('nobody to tell: enqueues nothing and keeps no row, so a toggle later that day still works', async () => {
     const home = await seedHousehold({ ownerTimeZone: 'America/Chicago', withDevice: false });
     await seedWeek(home, SUNDAY_1805_CHICAGO);
     const result = await sender(SUNDAY_1805_CHICAGO).runTick();
     expect(result).toMatchObject({ considered: 1, sent: 0, noRecipients: 1 });
     expect(queue.jobs).toHaveLength(0);
-    expect((await sends())[0]).toMatchObject({ status: 'no_recipients' });
+    expect(await sends()).toHaveLength(0);
+
+    await db.collection('students').updateOne(
+      { _id: home.studentId },
+      {
+        $set: {
+          ownerAlertPrefs: {
+            receiveAlerts: true,
+            alertChannels: ['email'],
+            weeklyReviewCopy: true,
+          },
+        },
+      }
+    );
+    const later = await sender(
+      new Date(SUNDAY_1805_CHICAGO.getTime() + 2 * 60 * MINUTE_MS)
+    ).runTick();
+    expect(later).toMatchObject({ sent: 1 });
+    expect(queue.jobs.map((j) => [j.channel, j.payload.userId])).toEqual([
+      [NotificationChannel.EMAIL, 'owner@example.com'],
+    ]);
+    expect((await sends())[0]).toMatchObject({ status: 'sent', weekKey: '2026-W45' });
   });
 
   it('students with no login, no alertEmail and no adult copy are not even considered', async () => {
@@ -451,25 +542,110 @@ describe('WeeklyReviewSender', () => {
     expect(result.considered).toBe(0);
   });
 
-  it('a failed enqueue releases the reservation so the next tick retries', async () => {
-    const home = await seedHousehold({ ownerTimeZone: 'America/Chicago' });
+  it('an enqueue failure leaves a partial row; the next tick enqueues only the missing delivery', async () => {
+    const home = await seedHousehold({
+      ownerTimeZone: 'America/Chicago',
+      alertEmail: 'gideon@school.example',
+    });
     await seedWeek(home, SUNDAY_1805_CHICAGO);
-    queue.failNext = true;
+    queue.failOnCall = 2; // push goes out, the email add blows up
+
     const failed = await sender(SUNDAY_1805_CHICAGO).runTick();
     expect(failed).toMatchObject({ failed: 1, sent: 0 });
-    expect(await sends()).toHaveLength(0);
+    expect(queue.jobs.map((j) => j.channel)).toEqual([NotificationChannel.PUSH]);
+    const partial = (await sends())[0]!;
+    expect(partial).toMatchObject({ status: 'partial', attempts: 1, lastError: 'queue down' });
+    const recs = partial['deliveries'] as { channel: string; enqueuedAt?: Date }[];
+    expect(recs.map((d) => [d.channel, d.enqueuedAt instanceof Date])).toEqual([
+      [NotificationChannel.PUSH, true],
+      [NotificationChannel.EMAIL, false],
+    ]);
 
-    const retry = await sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 15 * 60_000)).runTick();
+    const retry = await sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 15 * MINUTE_MS)).runTick();
     expect(retry).toMatchObject({ sent: 1 });
-    expect(queue.jobs).toHaveLength(1);
+    // No duplicate push: exactly one job per (channel, recipient).
+    expect(queue.jobs.map((j) => j.channel)).toEqual([
+      NotificationChannel.PUSH,
+      NotificationChannel.EMAIL,
+    ]);
+    const done = (await sends())[0]!;
+    expect(done).toMatchObject({ status: 'sent', attempts: 2 });
+    expect(done['lastError']).toBeUndefined();
+    expect(
+      (done['deliveries'] as { enqueuedAt?: Date }[]).every((d) => d.enqueuedAt instanceof Date)
+    ).toBe(true);
   });
 
-  it('fails closed on a grade leak: a title carrying a score sends nothing', async () => {
+  it('a reservation left in `sending` by a crash is taken over after 15 minutes, not before', async () => {
+    const home = await seedHousehold({ ownerTimeZone: 'America/Chicago' });
+    await seedWeek(home, SUNDAY_1805_CHICAGO);
+    const fresh = {
+      ...sentRow(home, '2026-W45', 'sending'),
+      reservedAt: new Date(SUNDAY_1805_CHICAGO.getTime() - MINUTE_MS),
+    };
+    await db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).insertOne(fresh);
+
+    // Another worker holds it: hands off.
+    expect(await sender(SUNDAY_1805_CHICAGO).runTick()).toMatchObject({ skipped: 1, sent: 0 });
+    expect(queue.jobs).toHaveLength(0);
+
+    // The same row 20 minutes later is a corpse: take it over and finish the week.
+    const later = new Date(SUNDAY_1805_CHICAGO.getTime() + 20 * MINUTE_MS);
+    expect(WEEKLY_REVIEW_STALE_RESERVATION_MS).toBe(15 * MINUTE_MS);
+    expect(await sender(later).runTick()).toMatchObject({ sent: 1 });
+    expect(queue.jobs).toHaveLength(1);
+    expect((await sends())[0]).toMatchObject({ status: 'sent', attempts: 2 });
+  });
+
+  it('fails closed on a grade leak and gives up after three attempts for the week', async () => {
     const home = await seedHousehold({ ownerTimeZone: 'America/Chicago' });
     await seedWeek(home, SUNDAY_1805_CHICAGO, { missing: 'Quiz retake (scored 95%)' });
-    const result = await sender(SUNDAY_1805_CHICAGO).runTick();
-    expect(result).toMatchObject({ failed: 1, sent: 0 });
+    expect(WEEKLY_REVIEW_MAX_ATTEMPTS).toBe(3);
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const now = new Date(SUNDAY_1805_CHICAGO.getTime() + attempt * 15 * MINUTE_MS);
+      expect(await sender(now).runTick()).toMatchObject({ failed: 1, sent: 0 });
+      expect((await sends())[0]).toMatchObject({ status: 'failed', attempts: attempt });
+    }
     expect(queue.jobs).toHaveLength(0);
-    expect(await sends()).toHaveLength(0);
+
+    // Attempt four never happens: the row is final and nothing is even looked up.
+    const quiet = sender(new Date(SUNDAY_1805_CHICAGO.getTime() + 60 * MINUTE_MS));
+    const zoneLookups = jest.spyOn(quiet, 'resolveTimeZone');
+    expect(await quiet.runTick()).toMatchObject({ skipped: 1, failed: 0 });
+    expect(zoneLookups).not.toHaveBeenCalled();
+    expect((await sends())[0]).toMatchObject({ status: 'failed', attempts: 3 });
+  });
+
+  it('isRowFinalForTick: sent and exhausted rows are final; partial and stale never are', () => {
+    const now = new Date('2026-11-09T01:00:00.000Z');
+    const base = { studentId: 's', weekKey: '2026-W45', deliveries: [] };
+    expect(isRowFinalForTick({ ...base, status: 'sent', attempts: 1 }, now)).toBe(true);
+    expect(isRowFinalForTick({ ...base, status: 'failed', attempts: 3 }, now)).toBe(true);
+    expect(isRowFinalForTick({ ...base, status: 'failed', attempts: 2 }, now)).toBe(false);
+    expect(isRowFinalForTick({ ...base, status: 'partial', attempts: 1 }, now)).toBe(false);
+    expect(
+      isRowFinalForTick(
+        {
+          ...base,
+          status: 'sending',
+          attempts: 1,
+          reservedAt: new Date(now.getTime() - MINUTE_MS),
+        },
+        now
+      )
+    ).toBe(true);
+    expect(
+      isRowFinalForTick(
+        {
+          ...base,
+          status: 'sending',
+          attempts: 1,
+          reservedAt: new Date(now.getTime() - 16 * MINUTE_MS),
+        },
+        now
+      )
+    ).toBe(false);
+    expect(isRowFinalForTick({ ...base, status: 'sending', attempts: 1 }, now)).toBe(false);
   });
 });

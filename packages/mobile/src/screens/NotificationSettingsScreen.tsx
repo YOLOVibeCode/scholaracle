@@ -91,9 +91,11 @@ export function NotificationSettingsScreen({
       if (req.kind === 'owner') {
         await apiClient.updateOwnerAlertPrefs(req.studentId, req.body);
       } else {
-        const me = await apiClient.getSessionUser();
-        if (!me?.email) throw new Error('Sign in again to change this');
-        await apiClient.updateStudentContact(req.studentId, me.email, req.body);
+        // The row is keyed by the invite address; the account email is only a fallback
+        // (the server then matches the caller's own row by user id).
+        const email = req.email ?? (await apiClient.getSessionUser())?.email;
+        if (!email) throw new Error('Sign in again to change this');
+        await apiClient.updateStudentContact(req.studentId, email, req.body);
       }
     } catch (err: unknown) {
       setWeeklyRows((rows) =>

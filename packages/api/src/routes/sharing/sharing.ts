@@ -63,6 +63,7 @@ function myStudentView(
     name: student.name,
     access,
     invitedBy: { userId: inviterId, ...(inviterName ? { name: inviterName } : {}) },
+    ...(row !== undefined ? { contactEmail: row.email } : {}),
     alerts,
   };
 }
