@@ -427,12 +427,12 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           hasStuckJobs: stuckJobs.length > 0,
           issue:
             jobStats.pending > 0 && recentSyncRuns.length === 0
-              ? 'Jobs are pending but SyncWorker has never processed any - workers service may not be running'
+              ? 'Legacy sync_jobs are pending but no sync_runs were written (server sync is disabled; ignore unless migrating old data)'
               : stuckJobs.length > 0
-                ? 'Jobs are stuck in processing - workers may have crashed'
+                ? 'Legacy sync jobs are stuck in processing'
                 : recentJobs.length === 0
-                  ? 'No sync jobs found - syncScheduler.triggerNow() may not be called'
-                  : 'System appears healthy',
+                  ? 'No legacy sync_jobs in window — client-led ingest uses slc_runs and sync_requests'
+                  : 'Legacy sync job pipeline only; client ingest health is slc_runs',
         },
       });
     })
