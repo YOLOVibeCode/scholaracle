@@ -56,6 +56,7 @@ describe('Integrations API Routes', () => {
       await database.collection('scraper_generation_jobs').deleteMany({});
       await database.collection('ai_usage').deleteMany({});
       await database.collection('subscriptions').deleteMany({});
+      await database.collection('sync_requests').deleteMany({});
       await database.collection('users').deleteMany({ email: 'integrations@example.com' });
 
       const registerResult = await authService.register(
@@ -785,6 +786,30 @@ describe('Integrations API Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.revoked).toBe(true);
+    });
+  });
+
+  describe('GET /api/integrations/sync-requests/pending', () => {
+    it('should return pending parent sync requests', async () => {
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
+      const userId = user?._id?.toString() ?? '';
+      await database.collection('sync_requests').insertOne({
+        syncRequestId: 'sync-pending-int-1',
+        studentId: 'stu-1',
+        sourceId: 'src-1',
+        requestedByUserId: userId,
+        createdAt: new Date(),
+        fulfilledAt: null,
+      });
+      const res = await request(app)
+        .get('/api/integrations/sync-requests/pending')
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.pending).toHaveLength(1);
+      expect(res.body.pending[0].syncRequestId).toBe('sync-pending-int-1');
     });
   });
 
