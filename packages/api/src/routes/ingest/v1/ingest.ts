@@ -1266,12 +1266,13 @@ export function ingestV1Router(config: IIngestV1RouterConfig): Router {
       if (!sourceId || !provider || !adapterId || !displayName) {
         throw new ValidationError('Missing required fields');
       }
+      const canonicalAdapterId = resolveCanonicalAdapterId(String(adapterId));
 
       const stored = await sourceRepo.upsert({
         userId,
         sourceId,
         provider,
-        adapterId,
+        adapterId: canonicalAdapterId,
         displayName,
         portalBaseUrl,
       });
