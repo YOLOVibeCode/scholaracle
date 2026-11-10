@@ -65,8 +65,6 @@ describe('Admin Customer Routes', () => {
     if (!testHarness) {
       throw new Error('Expected createTestApp to connect in customers tests');
     }
-    database = testHarness.database;
-    app = testHarness.app;
 
     const adminResult = await createTestAdmin(database, 'test-secret', {
       email: 'admin@test.com',
