@@ -268,7 +268,9 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
   the caller's `alertTypes`; acknowledgement is per person (`acknowledgedBy`); legacy fields follow the owner;
   delete stays owner-only. Ingest now writes the student's account id on alert rows; two env-gated boot
   migrations (`ALERT_STUDENT_ID_MIGRATION`, then `ALERT_ACK_BY_MIGRATION`; dry-run → apply) rewrote legacy
-  rows (UAT: 0 and 4 rows, 2026-11-10).
+  rows (UAT: 0 and 4 rows; production: 7 and 0 rows, both applied 2026-11-10). Operational note: on the
+  production Railway environment a variable change alone does not deploy and a plain redeploy waits forever;
+  use `railway redeploy --from-source` after setting the variable with `--skip-deploys`.
 - Test fixture: `POST /api/seed/set-plan` (seed-gated) puts an e2e owner on a paid plan.
 
 ## 4.12 As built (S4 #147 phone)
