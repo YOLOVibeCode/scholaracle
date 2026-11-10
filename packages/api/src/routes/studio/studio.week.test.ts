@@ -298,6 +298,27 @@ describe('GET /api/studio/week — student session', () => {
     expect((await patchStatus(emmaToken, MISSING_ALG2_1, null)).status).toBe(200);
   });
 
+  it("buckets days in the student login's own zone when one is stored, else the owner's (same rule as the weekly review)", async () => {
+    // 15:00Z on Sun Nov 8: still Nov 8 in New York (the owner default), already Nov 9 in Auckland.
+    clockOverride = new Date('2026-11-08T15:00:00.000Z');
+    const users = database.collection('users');
+    try {
+      await users.updateOne(
+        { email: DEMO_STUDENT_USER_EMMA.email },
+        { $set: { timezone: 'Pacific/Auckland' } }
+      );
+      const auckland = parseWeekView((await getWeek(emmaToken)).body);
+      expect(auckland.days[0]?.date).toBe('2026-11-09');
+
+      await users.updateOne({ email: DEMO_STUDENT_USER_EMMA.email }, { $unset: { timezone: '' } });
+      const ownerZone = parseWeekView((await getWeek(emmaToken)).body);
+      expect(ownerZone.days[0]?.date).toBe(calendarDayKey(clockOverride, await ownerTimeZone()));
+    } finally {
+      clockOverride = undefined;
+      await users.updateOne({ email: DEMO_STUDENT_USER_EMMA.email }, { $unset: { timezone: '' } });
+    }
+  });
+
   it('uses one clock per request: a task due just after local midnight lands on Tomorrow, never on Today', async () => {
     const timeZone = await ownerTimeZone();
     const todayAt2300 = atLocalHourOnCalendarDay(new Date(), timeZone, 23);

@@ -13,10 +13,13 @@ import {
   NEED_HELP_SAVED_MESSAGE,
   STATUS_SAVE_ERROR,
   WEEK_EMPTY_MESSAGE,
+  WEEKLY_REVIEW_TAP_HINT,
   clampNote,
   doneSectionTitle,
   formatDueDay,
   isWeekClear,
+  isWeekEmpty,
+  weeklyReviewMessage,
   needGlyphs,
   needHelpOutcomeMessage,
   needHelpPrompt,
@@ -159,6 +162,31 @@ describe('weekCopy', () => {
     it('resolvedTimeZone always answers with a zone', () => {
       expect(typeof resolvedTimeZone()).toBe('string');
       expect(resolvedTimeZone().length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('weeklyReviewMessage (R4 push body)', () => {
+    it('reads the summary line with the tap hint', () => {
+      expect(weeklyReviewMessage({ due: 3, owed: 1, done: 4 })).toBe(
+        'This week: 3 due · 1 still owed · you finished 4. Tap to see the plan.'
+      );
+      expect(WEEKLY_REVIEW_TAP_HINT).toBe('Tap to see the plan.');
+    });
+
+    it('says "You\'re caught up." only when nothing is owed, due, or finished', () => {
+      expect(weeklyReviewMessage({ due: 0, owed: 0, done: 0 })).toBe(WEEK_EMPTY_MESSAGE);
+      expect(isWeekEmpty({ due: 0, owed: 0, done: 0 })).toBe(true);
+      // Finished work still earns the full line (isWeekClear is true here, isWeekEmpty is not).
+      expect(isWeekClear({ due: 0, owed: 0, done: 2 })).toBe(true);
+      expect(isWeekEmpty({ due: 0, owed: 0, done: 2 })).toBe(false);
+      expect(weeklyReviewMessage({ due: 0, owed: 0, done: 2 })).toBe(
+        'This week: 0 due · 0 still owed · you finished 2. Tap to see the plan.'
+      );
+      expect(isWeekEmpty({ due: 1, owed: 0, done: 0 })).toBe(false);
+    });
+
+    it('never carries a score: counts only', () => {
+      expect(weeklyReviewMessage({ due: 12, owed: 7, done: 30 })).not.toMatch(/%|\b[A-F][+-]?\b/);
     });
   });
 });

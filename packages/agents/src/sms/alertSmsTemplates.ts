@@ -1,5 +1,11 @@
-import { AlertType, SCHOLARMANCY_SMS_BRAND, SMS_STOP_SUFFIX } from '@scholaracle/contracts';
+import {
+  AlertType,
+  SCHOLARMANCY_SMS_BRAND,
+  SMS_STOP_SUFFIX,
+  WEEKLY_REVIEW_PUSH_TYPE,
+} from '@scholaracle/contracts';
 import { toGsm7 } from './gsm7';
+import { firstNameOf } from '../text/firstName';
 
 /** One GSM-7 segment. */
 export const SMS_SEGMENT_LIMIT = 160;
@@ -64,8 +70,13 @@ function percent(value: unknown): string {
   return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)}%` : '';
 }
 
+/** A whole-number count, '' when absent (the template then falls back). */
+function count(value: unknown): string {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? String(value) : '';
+}
+
 function firstName(data: Readonly<Record<string, unknown>>): string {
-  return pick(data, 'studentName').split(' ')[0] || 'Your student';
+  return firstNameOf(pick(data, 'studentName'), 'Your student');
 }
 
 function field(value: string, min: number, fallback = ''): IField {
@@ -170,6 +181,17 @@ const TEMPLATES: Readonly<Record<string, ISmsTemplate>> = {
       course: field(course(d), 6, 'a class'),
     }),
     render: (v) => `${v['name']} asked for help with ${v['title']} in ${v['course']}.`,
+  },
+  // Parent copy of the student's weekly review (student review §3.3); counts only, never a score.
+  [WEEKLY_REVIEW_PUSH_TYPE]: {
+    fields: (d) => ({
+      name: field(firstName(d), 4),
+      due: field(count(d['due']), 0, '0'),
+      owed: field(count(d['owed']), 0, '0'),
+      done: field(count(d['done']), 0, '0'),
+    }),
+    render: (v) =>
+      `${v['name']}'s week: ${v['due']} due, ${v['owed']} still owed, ${v['done']} finished.`,
   },
   [AGENDA_REMINDER_TRIGGER]: {
     fields: (d) => ({

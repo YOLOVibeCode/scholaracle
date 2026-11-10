@@ -1,6 +1,7 @@
-import type { IUserSettingsResponse } from '@scholaracle/contracts';
+import type { IMySharingView, IUserSettingsResponse } from '@scholaracle/contracts';
 import {
   ALERT_TYPE_KEYS,
+  WEEKLY_REVIEW_SWITCH_LABEL,
   alertTypeToggleLabel,
   buildUpdate,
   deviceTimezone,
@@ -11,9 +12,12 @@ import {
   pushPermissionView,
   quietHoursSummary,
   setTypeEnabled,
+  setWeeklyReviewEnabled,
   stepTime,
   timezoneMismatch,
   toHhmm,
+  weeklyReviewRows,
+  weeklyReviewToggleRequest,
 } from './notificationSettingsModel';
 
 const SETTINGS: IUserSettingsResponse = {
@@ -174,5 +178,92 @@ describe('permission + timezone', () => {
   it('labels alert types', () => {
     expect(alertTypeToggleLabel('grade_drop')).toBe('Grade drops');
     expect(alertTypeToggleLabel('some_new_one')).toBe('some new one');
+  });
+});
+
+describe('weekly review copy switches (spec §3.3 Q2)', () => {
+  const MINE: IMySharingView = {
+    students: [
+      {
+        studentId: 's-zoe',
+        name: 'Zoe',
+        access: 'member',
+        invitedBy: { userId: 'u-owner', name: 'Ricardo' },
+        contactEmail: 'me+invite@example.com',
+        alerts: { receiveAlerts: true, alertChannels: ['email', 'sms'], weeklyReviewCopy: true },
+      },
+      {
+        studentId: 's-ava',
+        name: 'Ava',
+        access: 'owner',
+        alerts: {
+          receiveAlerts: false,
+          alertChannels: ['sms'],
+          alertTypes: ['grade_drop'],
+          weeklyReviewCopy: false,
+        },
+      },
+    ],
+  };
+
+  it('builds one row per student, by name, off unless the server says true', () => {
+    const rows = weeklyReviewRows(MINE);
+    expect(rows.map((r) => [r.name, r.access, r.enabled])).toEqual([
+      ['Ava', 'owner', false],
+      ['Zoe', 'member', true],
+    ]);
+    expect(rows[0]).toMatchObject({
+      receiveAlerts: false,
+      alertChannels: ['sms'],
+      alertTypes: ['grade_drop'],
+    });
+    expect('alertTypes' in rows[1]!).toBe(false);
+    expect(WEEKLY_REVIEW_SWITCH_LABEL).toBe('Send me the weekly review');
+  });
+
+  it("owner: replaces the whole prefs object, carrying today's channels with the toggle", () => {
+    const [ava] = weeklyReviewRows(MINE);
+    expect(weeklyReviewToggleRequest(ava!, true)).toEqual({
+      kind: 'owner',
+      studentId: 's-ava',
+      body: {
+        receiveAlerts: false,
+        alertChannels: ['sms'],
+        alertTypes: ['grade_drop'],
+        weeklyReviewCopy: true,
+      },
+    });
+  });
+
+  it("shared adult: sends only the toggle, addressed by the row's invite email", () => {
+    const zoe = weeklyReviewRows(MINE)[1]!;
+    expect(zoe.contactEmail).toBe('me+invite@example.com');
+    expect(weeklyReviewToggleRequest(zoe, false)).toEqual({
+      kind: 'contact',
+      studentId: 's-zoe',
+      email: 'me+invite@example.com',
+      body: { weeklyReviewCopy: false },
+    });
+    // An older server that omits contactEmail: no email on the request; the screen falls back.
+    const { contactEmail: _dropped, ...withoutEmail } = zoe;
+    const req = weeklyReviewToggleRequest(withoutEmail, true);
+    expect(req.kind).toBe('contact');
+    expect('email' in req).toBe(false);
+    expect(weeklyReviewRows(MINE)[0]!.contactEmail).toBeUndefined(); // owners have no row
+  });
+
+  it('flips one row and leaves the others alone', () => {
+    const rows = weeklyReviewRows(MINE);
+    const next = setWeeklyReviewEnabled(rows, 's-ava', true);
+    expect(next.map((r) => r.enabled)).toEqual([true, true]);
+    expect(setWeeklyReviewEnabled(next, 's-zoe', false).map((r) => r.enabled)).toEqual([
+      true,
+      false,
+    ]);
+    expect(rows.map((r) => r.enabled)).toEqual([false, true]); // input untouched
+  });
+
+  it('an empty household has no rows', () => {
+    expect(weeklyReviewRows({ students: [] })).toEqual([]);
   });
 });

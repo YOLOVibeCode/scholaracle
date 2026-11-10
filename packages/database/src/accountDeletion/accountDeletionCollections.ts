@@ -57,6 +57,8 @@ export const STUDENT_SCOPED_DELETION_COLLECTIONS = [
   'sync_requests',
   'sms_contact_optin_invites',
   'magic_login_tokens',
+  'student_help_requests',
+  'weekly_review_sends',
 ] as const;
 
 export const EXTRA_USER_SCOPED_JOB_FILTER = 'jobs';

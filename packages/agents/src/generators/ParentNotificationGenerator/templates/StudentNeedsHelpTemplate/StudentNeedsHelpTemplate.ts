@@ -1,5 +1,6 @@
 import { Alert } from '@scholaracle/contracts';
 import { ITemplateResult, ITemplateAction } from '../../../StudentNotificationGenerator/templates';
+import { firstNameOf } from '../../../../text/firstName';
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -43,8 +44,7 @@ export class StudentNeedsHelpTemplate {
   public generate(alert: Alert): ITemplateResult {
     const rd = alert.relatedData as Record<string, unknown>;
 
-    const studentName = text(rd['studentName']);
-    const firstName = studentName ? (studentName.split(/\s+/)[0] ?? studentName) : 'Your student';
+    const firstName = firstNameOf(text(rd['studentName']), 'Your student');
     const title = text(rd['title']) || text(rd['assignment']) || 'an assignment';
     const course = text(rd['courseName']) || text(rd['course']);
     const note = text(rd['note']);

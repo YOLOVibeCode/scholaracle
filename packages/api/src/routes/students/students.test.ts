@@ -1768,6 +1768,7 @@ describe('Students API Routes', () => {
       expect(res.body.ownerAlertPrefs).toEqual({
         receiveAlerts: true,
         alertChannels: ['email', 'push'],
+        weeklyReviewCopy: false,
       });
       const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
       const prefs = doc?.['ownerAlertPrefs'] as Record<string, unknown>;
@@ -1905,6 +1906,7 @@ describe('Students API Routes', () => {
       expect(res.body.ownerAlertPrefs).toMatchObject({
         receiveAlerts: true,
         alertChannels: ['email', 'sms'],
+        weeklyReviewCopy: false,
       });
     });
 
@@ -1943,6 +1945,94 @@ describe('Students API Routes', () => {
         .set('Authorization', `Bearer ${testToken}`)
         .send({ receiveAlerts: true });
       expect(defaulted.body.ownerAlertPrefs.alertChannels).toEqual(['email']);
+    });
+
+    it('stores the weekly review copy toggle, off unless sent as true (spec §3.3 Q2)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const on = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email'], weeklyReviewCopy: true });
+      expect(on.status).toBe(200);
+      expect(on.body.ownerAlertPrefs.weeklyReviewCopy).toBe(true);
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      expect(stored?.['ownerAlertPrefs']).toMatchObject({ weeklyReviewCopy: true });
+
+      const listed = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(listed.status).toBe(200);
+      const ownerRow = (listed.body as { isOwner: boolean; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.isOwner
+      );
+      expect(ownerRow?.weeklyReviewCopy).toBe(true);
+
+      // Whole-object replace: a PUT that omits the toggle turns it back off.
+      const off = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email'] });
+      expect(off.body.ownerAlertPrefs.weeklyReviewCopy).toBe(false);
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: 'yes' });
+      expect(bad.status).toBe(400);
+    });
+  });
+
+  describe('PUT /api/students/:id/contacts/:email weeklyReviewCopy', () => {
+    it('an admin sets the copy toggle on a shared adult; the contact list shows it', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'copy-me@example.com', role: 'guardian' });
+
+      const before = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const rowBefore = (before.body as { email?: string; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.email === 'copy-me@example.com'
+      );
+      expect(rowBefore?.weeklyReviewCopy).toBe(false);
+
+      const res = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('copy-me@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: true });
+      expect(res.status).toBe(200);
+
+      const after = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const rowAfter = (after.body as { email?: string; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.email === 'copy-me@example.com'
+      );
+      expect(rowAfter?.weeklyReviewCopy).toBe(true);
+      // The owner's own toggle is untouched.
+      const ownerRow = (after.body as { isOwner: boolean; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.isOwner
+      );
+      expect(ownerRow?.weeklyReviewCopy).toBe(false);
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('copy-me@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: 1 });
+      expect(bad.status).toBe(400);
     });
   });
 
@@ -2279,6 +2369,46 @@ describe('Students API Routes', () => {
       expect(inviteRes.status).toBe(201);
       return studentId;
     }
+
+    it('a shared adult can edit their own prefs by their account email even when the row carries an alias', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({})
+        .expect(200);
+      // The row keeps the address the invitation was sent to (alias / later transfer).
+      await database
+        .collection('students')
+        .updateOne(
+          { _id: new ObjectId(studentId), 'sharedWith.email': CO },
+          { $set: { 'sharedWith.$.email': 'co.alias@example.com' } }
+        );
+
+      const self = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ weeklyReviewCopy: true });
+      expect(self.status).toBe(200);
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const row = (stored?.['sharedWith'] as { email: string; weeklyReviewCopy?: boolean }[])[0];
+      expect(row).toMatchObject({ email: 'co.alias@example.com', weeklyReviewCopy: true });
+
+      // Someone else's address that matches no row is still a 404, for the owner too:
+      // the userId fallback only unlocks when the caller names their own account email.
+      const typo = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('nobody@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(typo.status).toBe(404);
+      const strangerSelf = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(strangerSelf.status).toBe(404);
+    });
 
     it('nobody can accept an invitation addressed to someone else', async () => {
       const studentId = await ownerCreatesStudentAndInvites();

@@ -1,6 +1,7 @@
 import type { Collection, Db, Document } from 'mongodb';
 import { AlertType } from '@scholaracle/contracts';
 import { AlertRepository, type Student } from '@scholaracle/database';
+import { firstNameOf } from '@scholaracle/agents';
 
 /**
  * The one queue method the studio needs. `MongoQueue` (agents) satisfies it; tests pass a fake.
@@ -65,10 +66,6 @@ type Reservation =
 export function parentBoardUrl(webOrigin: string, studentId: string): string {
   const origin = webOrigin.replace(/\/+$/, '');
   return `${origin}/dashboard/students/${encodeURIComponent(studentId)}?board=needs_attention#action-board`;
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] ?? name;
 }
 
 /**
@@ -190,7 +187,7 @@ export class StudentHelpRequests {
       studentId: externalId,
       type: AlertType.STUDENT_NEEDS_HELP,
       severity: 'info',
-      message: `${firstName(student.name)} asked for help with ${assignment.title}`,
+      message: `${firstNameOf(student.name, student.name)} asked for help with ${assignment.title}`,
       relatedData,
     });
     if (this._queue) {

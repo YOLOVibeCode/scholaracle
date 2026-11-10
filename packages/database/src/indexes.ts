@@ -284,6 +284,11 @@ export async function createIndexes(database: Db): Promise<void> {
     { unique: true }
   );
 
+  // Weekly review: one send per (student, ISO week); the unique index is the idempotency guard
+  // across worker ticks and restarts (student review §3.3, R4).
+  const weeklyReviewSends = database.collection('weekly_review_sends');
+  await weeklyReviewSends.createIndex({ studentId: 1, weekKey: 1 }, { unique: true });
+
   // eslint-disable-next-line no-console
   console.log('Database indexes created successfully');
 }
