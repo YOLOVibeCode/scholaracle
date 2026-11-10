@@ -21,7 +21,6 @@ import {
   integrationsApi,
   type IIntegration,
   type IAssignStudentCredentials,
-  type ITestConnectionResult,
 } from '@/lib/api/integrations';
 import { useAsyncData } from '@/lib/hooks';
 import { findProviderById } from '@/lib/providers';
@@ -69,7 +68,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
   const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
-  const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
 
   // Created student tracking
   const [createdStudentId, setCreatedStudentId] = useState<string | null>(null);
@@ -85,10 +83,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   // Helpers
   // ---------------------------------------------------------------------------
 
-  const resetCredentials = () => {
-    setTestResult(null);
-  };
-
   const resetAll = () => {
     setName('');
     setGrade('');
@@ -99,7 +93,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setConnections([]);
     setBundle([]);
     setCurrentIntegration(null);
-    resetCredentials();
     setConnectProviderWizardOpen(false);
     setCreatedStudentId(null);
     setCreatedStudentName('');
@@ -148,7 +141,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   const handleSelectIntegration = (integration: IIntegration) => {
     setCurrentIntegration(integration);
-    resetCredentials();
     setStep('credentials');
   };
 
@@ -188,7 +180,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           },
         ]);
         setCurrentIntegration(null);
-        resetCredentials();
         setStep('done');
       } else {
         setError('Failed to connect student to service.');
@@ -223,7 +214,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setConnections([]);
     setBundle([]);
     setCurrentIntegration(null);
-    resetCredentials();
     setCreatedStudentId(null);
     setCreatedStudentName('');
   };
@@ -246,8 +236,11 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto" data-testid="add-student-wizard">
-        <SheetHeader>
+      <SheetContent
+        className="flex h-full max-h-dvh w-full flex-col gap-0 p-0 sm:max-w-lg"
+        data-testid="add-student-wizard"
+      >
+        <SheetHeader className="shrink-0 px-4 pt-4">
           <SheetTitle>
             {step === 'student-info' && 'Add Student'}
             {step === 'connect-services' && 'Connect Services'}
@@ -257,9 +250,12 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           </SheetTitle>
         </SheetHeader>
 
-        <div className="py-4 space-y-4">
+        <div
+          className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto overscroll-contain px-4 pb-4 pt-2"
+          data-testid="wizard-scroll-body"
+        >
           {/* ── Progress indicator ── */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span
               className={
                 step === 'student-info'
@@ -551,7 +547,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   className="gap-1 text-muted-foreground -ml-2"
                   onClick={() => {
                     setCurrentIntegration(null);
-                    resetCredentials();
                     setStep('connect-services');
                   }}
                 >
@@ -605,31 +600,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                     </li>
                   </ul>
                 </div>
-
-                {/* Test Connection result */}
-                {testResult && (
-                  <div
-                    className={`flex items-start gap-2 rounded-md p-3 text-sm ${
-                      testResult.success
-                        ? 'border border-green-200 bg-green-50/50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200'
-                        : 'border border-red-200 bg-red-50/50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200'
-                    }`}
-                    data-testid="test-connection-result"
-                  >
-                    {testResult.success ? (
-                      <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <span className="text-red-600 shrink-0 mt-0.5">✗</span>
-                    )}
-                    <div>
-                      <p className="font-medium">{testResult.success ? 'Connection successful!' : 'Connection failed'}</p>
-                      <p className="text-xs mt-0.5 opacity-80">{testResult.message}</p>
-                      {testResult.durationMs > 0 && (
-                        <p className="text-[10px] mt-0.5 opacity-60">{testResult.durationMs}ms</p>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex gap-2 pt-2 flex-wrap">
                   <div className="flex gap-2 ml-auto">

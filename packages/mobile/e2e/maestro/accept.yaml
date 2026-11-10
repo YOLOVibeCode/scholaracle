@@ -1,0 +1,57 @@
+# Co-parent signs in and accepts the invitation from the Students screen banner, then sees the
+# student with "Shared with you". Run after share.yaml. Re-runnable: when the invitation was
+# already accepted there is no banner, and the flow only checks the shared student is listed.
+# Needs MAESTRO_COPARENT_EMAIL/PASSWORD (second throwaway UAT account) and MAESTRO_STUDENT_NAME.
+appId: com.scholarmancy.app
+name: Accept a shared student (co-parent)
+tags: [share]
+---
+- runFlow:
+    file: subflows/login.yaml
+    env:
+      MAESTRO_PARENT_EMAIL: ${MAESTRO_COPARENT_EMAIL}
+      MAESTRO_PARENT_PASSWORD: ${MAESTRO_COPARENT_PASSWORD}
+- assertVisible:
+    id: students-list
+
+# Pending invitation → Invitations → Accept.
+- runFlow:
+    when:
+      visible:
+        id: banner-invitations
+    commands:
+      - takeScreenshot: accept-banner
+      - tapOn:
+          id: banner-invitations
+      - extendedWaitUntil:
+          visible:
+            id: invitations-screen
+          timeout: 20000
+      - assertVisible:
+          text: ${MAESTRO_STUDENT_NAME}
+      - tapOn:
+          id: button-accept-invitation
+      - extendedWaitUntil:
+          visible:
+            id: invitations-notice
+          timeout: 30000
+      - assertNotVisible:
+          id: invitations-error
+      - takeScreenshot: accept-done
+      - tapOn:
+          id: button-invitations-back
+      - extendedWaitUntil:
+          visible:
+            id: students-list
+          timeout: 20000
+
+# The shared student is listed and marked as shared.
+- extendedWaitUntil:
+    visible:
+      text: ${MAESTRO_STUDENT_NAME}
+    timeout: 30000
+- assertVisible:
+    id: text-student-shared
+- assertVisible:
+    text: "Shared with you.*"
+- takeScreenshot: accept-students

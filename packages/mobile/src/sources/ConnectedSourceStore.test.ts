@@ -93,4 +93,20 @@ describe('ConnectedSourceStore', () => {
   it('should build credential keys without secrets', () => {
     expect(buildCredentialKey('canvas', 'https://x.com/')).toBe('slc_creds_canvas_x.com');
   });
+
+  it('builds SecureStore-safe keys for portal URLs with a path, port or query', () => {
+    const safe = /^[A-Za-z0-9._-]+$/;
+    const aeries = buildCredentialKey('aeries', 'https://school.aeries.net/student/');
+    const skyward = buildCredentialKey(
+      'skyward',
+      'https://skyward.example.org/scripts/wsisa.dll/WService=wsEAplus/fwemnu01.w'
+    );
+    const fake = buildCredentialKey('skyward', 'http://127.0.0.1:2855/skyward/login?csp=strict');
+    for (const key of [aeries, skyward, fake]) expect(key).toMatch(safe);
+    expect(aeries).toBe('slc_creds_aeries_school.aeries.net_student');
+    // Keys that were already valid are unchanged, so saved credentials keep working.
+    expect(buildCredentialKey('canvas', 'https://school.instructure.com')).toBe(
+      'slc_creds_canvas_school.instructure.com'
+    );
+  });
 });

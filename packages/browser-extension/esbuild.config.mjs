@@ -8,10 +8,9 @@
  */
 
 import esbuild from 'esbuild';
-import { copyFileSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
-
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 const isWatch = process.argv.includes('--watch');
+const isE2eBuild = process.env.SCHOLARMANCY_EXTENSION_E2E === '1';
 
 const sharedOptions = {
   bundle: true,
@@ -27,8 +26,11 @@ const sharedOptions = {
 
 mkdirSync('dist', { recursive: true });
 
+const manifestSource = isE2eBuild && existsSync('manifest.e2e.json') ? 'manifest.e2e.json' : 'manifest.json';
+copyFileSync(manifestSource, 'dist/manifest.json');
+
 // Copy static assets
-for (const f of ['manifest.json', 'popup.html', 'options.html', 'icons/icon-48.png', 'icons/icon-128.png']) {
+for (const f of ['popup.html', 'options.html', 'icons/icon-48.png', 'icons/icon-128.png']) {
   try {
     mkdirSync(`dist/${f.includes('/') ? f.split('/')[0] : ''}`, { recursive: true });
     copyFileSync(f, `dist/${f}`);
@@ -37,36 +39,39 @@ for (const f of ['manifest.json', 'popup.html', 'options.html', 'icons/icon-48.p
   }
 }
 
-const contexts = await Promise.all([
-  esbuild.context({
+/** @type {import('esbuild').BuildOptions[]} */
+const entryBuilds = [
+  {
     ...sharedOptions,
     entryPoints: ['src/background/service-worker.ts'],
     outfile: 'dist/background.js',
-    platform: 'browser',
-    format: 'iife',
-  }),
-  esbuild.context({
+  },
+  {
     ...sharedOptions,
     entryPoints: ['src/content/content-script.ts'],
     outfile: 'dist/content.js',
-    platform: 'browser',
-    format: 'iife',
-  }),
-  esbuild.context({
+  },
+  {
     ...sharedOptions,
     entryPoints: ['src/popup/popup.ts'],
     outfile: 'dist/popup.js',
-    platform: 'browser',
-    format: 'iife',
-  }),
-  esbuild.context({
+  },
+  {
     ...sharedOptions,
     entryPoints: ['src/options/options.ts'],
     outfile: 'dist/options.js',
-    platform: 'browser',
-    format: 'iife',
-  }),
-]);
+  },
+];
+
+if (isE2eBuild) {
+  entryBuilds.push({
+    ...sharedOptions,
+    entryPoints: ['src/content/e2e-conformance.ts'],
+    outfile: 'dist/e2e-conformance.js',
+  });
+}
+
+const contexts = await Promise.all(entryBuilds.map((opts) => esbuild.context(opts)));
 
 if (isWatch) {
   await Promise.all(contexts.map((ctx) => ctx.watch()));

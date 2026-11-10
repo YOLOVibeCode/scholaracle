@@ -17,7 +17,7 @@ import { generateUniqueEmail } from '../../fixtures/test-data';
  * request and extract the reset link from the mocked email.
  */
 test.describe('Reset Password - Success Flow', () => {
-  test('RESET-004: Full reset flow via intercepted email link', async ({ page }) => {
+  test('RESET-004: Full reset flow via intercepted email link @local-only', async ({ page }) => {
     const apiBase = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
     const email = generateUniqueEmail('reset');
     const password = 'OldPass123!';
@@ -67,7 +67,10 @@ test.describe('Reset Password - Success Flow', () => {
       await resetPage.submitNewPassword(newPassword);
 
       // Should show success or redirect to login
-      const successVisible = await page.locator('[data-testid="message-success"]').isVisible().catch(() => false);
+      const successVisible = await page
+        .locator('[data-testid="message-success"]')
+        .isVisible()
+        .catch(() => false);
       const redirectedToLogin = page.url().includes('/login');
 
       expect(successVisible || redirectedToLogin).toBe(true);

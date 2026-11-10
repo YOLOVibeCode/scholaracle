@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { UserRepository } from '@scholaracle/database';
+import { AlertRepository, UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
@@ -533,6 +533,144 @@ describe('Students API Routes', () => {
         needsAttention?.items.some((i) => i.assignmentExternalId === 'a-expired-missing')
       ).toBe(false);
     });
+
+    it('puts a need_help item in needs_attention even when only due soon, with askedForHelpAt and the note (R3)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Help Student', grade: 8 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      const now = Date.now();
+      const dueIn24h = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+      const askedAt = new Date(now - 2 * 60 * 60 * 1000);
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'test',
+        adapterId: 'com.test',
+        externalId: 'course-help',
+        deletedAt: null,
+        record: { name: 'Math' },
+      });
+      await database.collection('slc_assignments').insertMany([
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          studentNote: "I don't get #7",
+          record: { title: 'Ch. 5 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-plain',
+          deletedAt: null,
+          studentStatus: 'working_on_it',
+          record: { title: 'Ch. 6 problems', status: 'not_started', dueAt: dueIn24h },
+        },
+        {
+          userId,
+          studentId,
+          courseExternalId: 'course-help',
+          externalId: 'a-help-turned-in',
+          deletedAt: null,
+          studentStatus: 'need_help',
+          studentHelpRequestedAt: askedAt,
+          record: { title: 'Old ask', status: 'submitted', dueAt: dueIn24h },
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/action-board`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(res.status).toBe(200);
+      const buckets = res.body.buckets as Array<{
+        id: string;
+        items: Array<{
+          assignmentExternalId: string;
+          studentStatus?: string;
+          askedForHelpAt?: string;
+          studentNote?: string;
+        }>;
+      }>;
+      const byId = (id: string) => buckets.find((b) => b.id === id)!;
+      const help = byId('needs_attention').items.find((i) => i.assignmentExternalId === 'a-help');
+      expect(help).toBeDefined();
+      expect(help!.studentStatus).toBe('need_help');
+      expect(help!.askedForHelpAt).toBe(askedAt.toISOString());
+      expect(help!.studentNote).toBe("I don't get #7");
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-help')).toBe(false);
+      expect(byId('due_soon').items.some((i) => i.assignmentExternalId === 'a-plain')).toBe(true);
+      // Once the portal shows the work in, a stale ask no longer demands attention.
+      expect(
+        byId('needs_attention').items.some((i) => i.assignmentExternalId === 'a-help-turned-in')
+      ).toBe(false);
+    });
+  });
+
+  describe('PUT /api/students/:id/assignments/:externalId/status (parent side, R3)', () => {
+    async function seedAsk(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Put Student', grade: 7 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+      await database.collection('slc_assignments').deleteMany({ externalId: 'a-put' });
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId: 'course-put',
+        externalId: 'a-put',
+        deletedAt: null,
+        studentStatus: 'need_help',
+        studentHelpRequestedAt: new Date(),
+        studentNote: 'stuck on #3',
+        studentNoteAt: new Date(),
+        record: { title: 'Put HW', status: 'not_started' },
+      });
+      return studentId;
+    }
+
+    it('rejects need_help with 400: only the student can ask for help', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'need_help' });
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(JSON.stringify(res.body)).toMatch(/Only the student can ask for help/);
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentNote']).toBe('stuck on #3');
+    });
+
+    it('any other status is accepted and ends the ask (note and ask time cleared)', async () => {
+      const studentId = await seedAsk();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/assignments/a-put/status`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ status: 'working_on_it' });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ success: true, studentStatus: 'working_on_it' });
+      const doc = await database.collection('slc_assignments').findOne({ externalId: 'a-put' });
+      expect(doc?.['studentStatus']).toBe('working_on_it');
+      expect(doc?.['studentNote']).toBeUndefined();
+      expect(doc?.['studentNoteAt']).toBeUndefined();
+      expect(doc?.['studentHelpRequestedAt']).toBeUndefined();
+    });
   });
 
   describe('GET /api/students/:id/grade-history', () => {
@@ -1017,6 +1155,75 @@ describe('Students API Routes', () => {
       expect(row.officialGrade).toBe(expectedPercent);
       expect(row.gradeSource).toBe('sis');
     });
+
+    it('prefers gradeSnapshot percentGrade over zeroed assignment computation', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Snapshot Vs Zero Assignments', grade: 10 });
+      const studentId = createRes.body.id as string;
+      const userId =
+        (
+          await database.collection('users').findOne({ email: 'students@example.com' })
+        )?._id?.toString() ?? '';
+
+      const courseExternalId = 'm2-08-lms-snap-course';
+      const todayYMD = new Date().toISOString().slice(0, 10);
+      const snapshotPercent = 92.1;
+      const recentDue = new Date().toISOString();
+
+      await database.collection('slc_courses').insertOne({
+        userId,
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        externalId: courseExternalId,
+        deletedAt: null,
+        record: { name: 'Algebra', title: 'Algebra' },
+      });
+
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        externalId: 'a-zero-earned',
+        deletedAt: null,
+        record: {
+          title: 'Homework 1',
+          status: 'graded',
+          pointsPossible: 100,
+          pointsEarned: 0,
+          dueAt: recentDue,
+        },
+      });
+
+      await database.collection('slc_grade_snapshots').insertOne({
+        userId,
+        studentId,
+        courseExternalId,
+        provider: 'canvas',
+        deletedAt: null,
+        record: {
+          courseExternalId,
+          percentGrade: snapshotPercent,
+          asOfDate: todayYMD,
+          sourceType: 'lms',
+        },
+      });
+
+      const res = await request(app)
+        .get(`/api/students/${studentId}/grades`)
+        .set('Authorization', `Bearer ${testToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.courseGrades).toHaveLength(1);
+      const row = res.body.courseGrades[0] as {
+        officialGrade: number;
+        gradeSource: string;
+      };
+      expect(row.officialGrade).toBe(snapshotPercent);
+      expect(row.officialGrade).not.toBe(0);
+      expect(row.gradeSource).toBe('lms');
+    });
   });
 
   describe('GET /api/students/:id/sources', () => {
@@ -1144,6 +1351,106 @@ describe('Students API Routes', () => {
     });
   });
 
+  describe('GET /api/students/:id/alerts for shared adults (sharing S3)', () => {
+    const MEMBER = 'member-alerts-s3@example.com';
+    let memberToken: string;
+    let memberUserId: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: MEMBER });
+      const member = await authService.register(MEMBER, 'password123', 'Member');
+      if (!member.token || !member.user) {
+        throw new Error('Failed to register member');
+      }
+      memberToken = member.token;
+      memberUserId = member.user.id;
+    });
+
+    it("an accepted adult sees the student's alerts (incl. ingest rows keyed by portal id), filtered by their alertTypes, acknowledged per person; a removed adult gets 404", async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Ava', grade: 10, studentId: 'skyward:12345' });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+      const ownerUserId = (
+        await database.collection('students').findOne({ _id: new ObjectId(studentId) })
+      )?.['userId'];
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            sharedWith: [
+              {
+                userId: memberUserId,
+                email: MEMBER,
+                role: 'parent',
+                status: 'accepted',
+                invitedAt: new Date(),
+                acceptedAt: new Date(),
+                alertTypes: ['grade_drop'],
+              },
+            ],
+          },
+        }
+      );
+      const alerts = new AlertRepository(database);
+      const owner = String(ownerUserId);
+      const gradeDrop = await alerts.create({
+        userId: owner,
+        studentId,
+        type: 'grade_drop',
+        severity: 'warning',
+        message: 'Math fell',
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+      });
+      await alerts.create({
+        userId: owner,
+        studentId,
+        type: 'missing_assignment',
+        severity: 'critical',
+        message: 'Lab 4 missing',
+      });
+      // A legacy row still keyed by the portal id: not part of the per-student view (it stays
+      // in the owner's inbox only until ALERT_STUDENT_ID_MIGRATION rewrites it).
+      await alerts.create({
+        userId: owner,
+        studentId: '12345',
+        type: 'missing_assignment',
+        severity: 'critical',
+        message: 'Legacy row',
+      });
+
+      const ownerRes = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(ownerRes.status).toBe(200);
+      expect(ownerRes.body).toHaveLength(2);
+      expect(ownerRes.body.map((a: { message: string }) => a.message)).not.toContain('Legacy row');
+      expect(ownerRes.body.find((a: { id: string }) => a.id === gradeDrop.id)).toMatchObject({
+        acknowledged: true,
+      });
+
+      const memberRes = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(memberRes.status).toBe(200);
+      // alertTypes narrows the member to grade drops; the owner's legacy ack is not theirs.
+      expect(memberRes.body).toEqual([
+        expect.objectContaining({ id: gradeDrop.id, type: 'grade_drop', acknowledged: false }),
+      ]);
+
+      await database
+        .collection('students')
+        .updateOne({ _id: new ObjectId(studentId) }, { $set: { sharedWith: [] } });
+      const revoked = await request(app)
+        .get(`/api/students/${studentId}/alerts`)
+        .set('Authorization', `Bearer ${memberToken}`);
+      expect(revoked.status).toBe(404);
+    });
+  });
+
   describe('GET /api/students/invites/pending', () => {
     it('should return 401 without token', async () => {
       const res = await request(app).get('/api/students/invites/pending');
@@ -1237,8 +1544,9 @@ describe('Students API Routes', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('should call sendInviteEmail when configured after successful invite', async () => {
-      const mockSendInvite = jest.fn().mockResolvedValue(undefined);
+    it('sends ONE sharing email with a working /magic link (single-student invite group)', async () => {
+      const sendInvite = jest.fn().mockResolvedValue(undefined);
+      const sendLeftNotice = jest.fn().mockResolvedValue(undefined);
       const appWithInvite = express();
       appWithInvite.use(express.json());
       appWithInvite.use(
@@ -1247,7 +1555,7 @@ describe('Students API Routes', () => {
         studentsRouter({
           database,
           baseUrl: 'http://test.example',
-          sendInviteEmail: { sendInvite: mockSendInvite },
+          sharingEmailSender: { sendInvite, sendLeftNotice },
         })
       );
 
@@ -1264,14 +1572,35 @@ describe('Students API Routes', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(mockSendInvite).toHaveBeenCalledTimes(1);
-      expect(mockSendInvite).toHaveBeenCalledWith({
-        to: 'parent@example.com',
-        studentName: 'Invite Email Student',
-        studentId,
-        inviteEmail: 'parent@example.com',
-        baseUrl: 'http://test.example',
+      expect(res.body.message).toBe('Invitation sent to parent@example.com');
+      expect(res.body.invite).toEqual({
+        email: 'parent@example.com',
+        role: 'parent',
+        status: 'pending',
       });
+      expect(typeof res.body.inviteGroupId).toBe('string');
+      expect(sendInvite).toHaveBeenCalledTimes(1);
+      const mail = sendInvite.mock.calls[0]![0] as {
+        to: string;
+        studentNames: string[];
+        inviteUrl: string;
+        baseUrl: string;
+        inviterName: string;
+      };
+      expect(mail.to).toBe('parent@example.com');
+      expect(mail.studentNames).toEqual(['Invite Email Student']);
+      expect(mail.inviteUrl).toMatch(/^http:\/\/test\.example\/magic\?token=/);
+      expect(mail.baseUrl).toBe('http://test.example');
+      expect(mail.inviterName).toBe('Students User');
+      // The entry carries the group and the inviter.
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const entry = (
+        stored?.['sharedWith'] as { inviteGroupId?: string; invitedByUserId?: string }[]
+      )[0]!;
+      expect(entry.inviteGroupId).toBe(res.body.inviteGroupId);
+      expect(entry.invitedByUserId).toBeDefined();
     });
   });
 
@@ -1308,6 +1637,142 @@ describe('Students API Routes', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThanOrEqual(1);
       expect(res.body[0]).toMatchObject({ isOwner: true, status: 'accepted' });
+    });
+
+    it("carries the owner's account name and email so the row never renders as just 'Owner'", async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Contact Test Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      for (const path of ['contacts', 'parents']) {
+        const res = await request(app)
+          .get(`/api/students/${studentId}/${path}`)
+          .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body[0]).toMatchObject({
+          isOwner: true,
+          name: 'Students User',
+          email: 'students@example.com',
+        });
+      }
+    });
+  });
+
+  describe('PUT /api/students/:id/contacts/:email alertTypes patch', () => {
+    const SELF = 'self-prefs@example.com';
+    let selfToken: string;
+    let selfUserId: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: SELF });
+      const self = await authService.register(SELF, 'password123', 'Self Prefs');
+      if (!self.token || !self.user) {
+        throw new Error('Failed to register contact user');
+      }
+      selfToken = self.token;
+      selfUserId = self.user.id;
+    });
+
+    async function seedAcceptedContact(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Prefs Student', grade: 8 });
+      const studentId = createRes.body.id as string;
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            sharedWith: [
+              {
+                userId: selfUserId,
+                email: SELF,
+                role: 'parent',
+                status: 'accepted',
+                invitedAt: new Date(),
+                acceptedAt: new Date(),
+                alertChannels: ['email', 'push'],
+                alertTypes: ['grade_drop'],
+              },
+            ],
+          },
+        }
+      );
+      return studentId;
+    }
+
+    async function storedAlertTypes(studentId: string): Promise<unknown> {
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      const row = (doc?.['sharedWith'] as Record<string, unknown>[])[0];
+      return row === undefined ? 'missing' : 'alertTypes' in row ? row['alertTypes'] : 'absent';
+    }
+
+    it('the person themself: an array narrows, null restores every type (key removed), absent leaves it', async () => {
+      const studentId = await seedAcceptedContact();
+      const url = `/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`;
+
+      const narrowed = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ alertTypes: ['deadline', 'test'] });
+      expect(narrowed.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toEqual(['deadline', 'test']);
+
+      const untouched = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ receiveAlerts: true });
+      expect(untouched.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toEqual(['deadline', 'test']);
+
+      const cleared = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ alertTypes: null, alertChannels: ['email'] });
+      expect(cleared.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toBe('absent');
+
+      // What the list reports: no alertTypes means every type.
+      const list = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${selfToken}`);
+      expect(list.status).toBe(200);
+      const me = (list.body as { email?: string; alertTypes?: unknown }[]).find(
+        (p) => p.email === SELF
+      );
+      expect(me).toBeDefined();
+      expect(me?.alertTypes).toBeUndefined();
+    });
+
+    it('owner / admin editing a contact: null clears the list the same way', async () => {
+      const studentId = await seedAcceptedContact();
+      const url = `/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`;
+      const cleared = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertTypes: null, name: 'Renamed' });
+      expect(cleared.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toBe('absent');
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      expect((doc?.['sharedWith'] as { name?: string }[])[0]?.name).toBe('Renamed');
+    });
+
+    it('owner alert prefs: null or absent alertTypes stores no key', async () => {
+      const studentId = await seedAcceptedContact();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email', 'push'], alertTypes: null });
+      expect(res.status).toBe(200);
+      expect(res.body.ownerAlertPrefs).toEqual({
+        receiveAlerts: true,
+        alertChannels: ['email', 'push'],
+        weeklyReviewCopy: false,
+      });
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      const prefs = doc?.['ownerAlertPrefs'] as Record<string, unknown>;
+      expect('alertTypes' in prefs).toBe(false);
     });
   });
 
@@ -1441,22 +1906,153 @@ describe('Students API Routes', () => {
       expect(res.body.ownerAlertPrefs).toMatchObject({
         receiveAlerts: true,
         alertChannels: ['email', 'sms'],
+        weeklyReviewCopy: false,
       });
     });
-  });
 
-  describe('POST /api/students/:id/contacts/accept', () => {
-    it('should return 404 when no pending invite for email', async () => {
+    it('validates alertChannels like the sharing routes: unknown channels are rejected, duplicates collapse', async () => {
       const createRes = await request(app)
         .post('/api/students')
         .set('Authorization', `Bearer ${testToken}`)
         .send({ name: 'Student', grade: 9 });
       const studentId = createRes.body.id as string;
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'fax'] });
+      expect(bad.status).toBe(400);
+      const notArray = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: 'email' });
+      expect(notArray.status).toBe(400);
+      expect(
+        (await database.collection('students').findOne({ _id: new ObjectId(studentId) }))?.[
+          'ownerAlertPrefs'
+        ]
+      ).toBeUndefined();
+
+      const deduped = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertChannels: ['email', 'email', 'push'] });
+      expect(deduped.status).toBe(200);
+      expect(deduped.body.ownerAlertPrefs.alertChannels).toEqual(['email', 'push']);
+
+      const defaulted = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true });
+      expect(defaulted.body.ownerAlertPrefs.alertChannels).toEqual(['email']);
+    });
+
+    it('stores the weekly review copy toggle, off unless sent as true (spec §3.3 Q2)', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+
+      const on = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email'], weeklyReviewCopy: true });
+      expect(on.status).toBe(200);
+      expect(on.body.ownerAlertPrefs.weeklyReviewCopy).toBe(true);
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      expect(stored?.['ownerAlertPrefs']).toMatchObject({ weeklyReviewCopy: true });
+
+      const listed = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(listed.status).toBe(200);
+      const ownerRow = (listed.body as { isOwner: boolean; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.isOwner
+      );
+      expect(ownerRow?.weeklyReviewCopy).toBe(true);
+
+      // Whole-object replace: a PUT that omits the toggle turns it back off.
+      const off = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email'] });
+      expect(off.body.ownerAlertPrefs.weeklyReviewCopy).toBe(false);
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: 'yes' });
+      expect(bad.status).toBe(400);
+    });
+  });
+
+  describe('PUT /api/students/:id/contacts/:email weeklyReviewCopy', () => {
+    it('an admin sets the copy toggle on a shared adult; the contact list shows it', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: 'copy-me@example.com', role: 'guardian' });
+
+      const before = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const rowBefore = (before.body as { email?: string; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.email === 'copy-me@example.com'
+      );
+      expect(rowBefore?.weeklyReviewCopy).toBe(false);
+
       const res = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('copy-me@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: true });
+      expect(res.status).toBe(200);
+
+      const after = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`);
+      const rowAfter = (after.body as { email?: string; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.email === 'copy-me@example.com'
+      );
+      expect(rowAfter?.weeklyReviewCopy).toBe(true);
+      // The owner's own toggle is untouched.
+      const ownerRow = (after.body as { isOwner: boolean; weeklyReviewCopy?: boolean }[]).find(
+        (c) => c.isOwner
+      );
+      expect(ownerRow?.weeklyReviewCopy).toBe(false);
+
+      const bad = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('copy-me@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: 1 });
+      expect(bad.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/students/:id/contacts/accept', () => {
+    it("refuses an email that is not the caller's, and returns 404 when the caller has no pending invite", async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      const foreign = await request(app)
         .post(`/api/students/${studentId}/contacts/accept`)
         .set('Authorization', `Bearer ${testToken}`)
         .send({ email: 'nopending@example.com' });
-      expect(res.status).toBe(404);
+      expect(foreign.status).toBe(403);
+      const own = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({});
+      expect(own.status).toBe(404);
     });
   });
 
@@ -1738,6 +2334,216 @@ describe('Students API Routes', () => {
       expect(second.status).toBe(403);
       expect(second.body.code).toBe('PLAN_LIMIT_REACHED');
       expect(second.body.currentPlan).toBe('free');
+    });
+  });
+
+  describe('sharing security (S0)', () => {
+    const CO = 'coparent-s0@example.com';
+    const STRANGER = 'stranger-s0@example.com';
+    let coToken: string;
+    let strangerToken: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: { $in: [CO, STRANGER] } });
+      await database.collection('audit_logs').deleteMany({ entityType: 'student_sharing' });
+      const co = await authService.register(CO, 'password123', 'Co Parent');
+      const stranger = await authService.register(STRANGER, 'password123', 'Stranger');
+      if (!co.token || !stranger.token) {
+        throw new Error('Failed to register sharing test users');
+      }
+      coToken = co.token;
+      strangerToken = stranger.token;
+    });
+
+    async function ownerCreatesStudentAndInvites(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Shared Kid', grade: 8 });
+      expect(createRes.status).toBe(201);
+      const studentId = createRes.body.id as string;
+      const inviteRes = await request(app)
+        .post(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO, name: 'Co Parent', role: 'parent' });
+      expect(inviteRes.status).toBe(201);
+      return studentId;
+    }
+
+    it('a shared adult can edit their own prefs by their account email even when the row carries an alias', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({})
+        .expect(200);
+      // The row keeps the address the invitation was sent to (alias / later transfer).
+      await database
+        .collection('students')
+        .updateOne(
+          { _id: new ObjectId(studentId), 'sharedWith.email': CO },
+          { $set: { 'sharedWith.$.email': 'co.alias@example.com' } }
+        );
+
+      const self = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ weeklyReviewCopy: true });
+      expect(self.status).toBe(200);
+      const stored = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      const row = (stored?.['sharedWith'] as { email: string; weeklyReviewCopy?: boolean }[])[0];
+      expect(row).toMatchObject({ email: 'co.alias@example.com', weeklyReviewCopy: true });
+
+      // Someone else's address that matches no row is still a 404, for the owner too:
+      // the userId fallback only unlocks when the caller names their own account email.
+      const typo = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent('nobody@example.com')}`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(typo.status).toBe(404);
+      const strangerSelf = await request(app)
+        .put(`/api/students/${studentId}/contacts/${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ weeklyReviewCopy: false });
+      expect(strangerSelf.status).toBe(404);
+    });
+
+    it('nobody can accept an invitation addressed to someone else', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const hijack = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ email: CO });
+      expect(hijack.status).toBe(403);
+      const ownerTries = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: CO });
+      expect(ownerTries.status).toBe(403);
+      // A stranger with no invitation of their own gets "nothing pending", not someone else's invite.
+      const strangerOwn = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(strangerOwn.status).toBe(404);
+      const stillPending = await database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) });
+      expect((stillPending?.['sharedWith'] as { status: string }[])[0]?.status).toBe('pending');
+    });
+
+    it('the invitee accepts with no email in the body, sees the student, and an audit row is written', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const accept = await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      expect(accept.status).toBe(200);
+      const list = await request(app)
+        .get('/api/students')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(list.status).toBe(200);
+      expect((list.body as { id: string }[]).map((s) => s.id)).toContain(studentId);
+      const audit = await database
+        .collection('audit_logs')
+        .find({ entityType: 'student_sharing', entityId: studentId })
+        .toArray();
+      expect(audit.map((a) => a['action']).sort()).toEqual(['sharing:accept', 'sharing:invite']);
+      // The audit store masks addresses; the actor is still identifiable by its first letter + domain.
+      expect(audit.find((a) => a['action'] === 'sharing:accept')?.['adminEmail']).toMatch(
+        /^c\*+@example\.com$/
+      );
+    });
+
+    it('pending invites are listed for the caller only; a query email is ignored', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      const mine = await request(app)
+        .get('/api/students/invites/pending')
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(mine.status).toBe(200);
+      expect((mine.body as { studentId: string }[]).map((i) => i.studentId)).toEqual([studentId]);
+      const peek = await request(app)
+        .get(`/api/students/invites/pending?email=${encodeURIComponent(CO)}`)
+        .set('Authorization', `Bearer ${strangerToken}`);
+      expect(peek.status).toBe(200);
+      expect(peek.body).toEqual([]);
+    });
+
+    it('a member cannot edit, remove, or manage sources; an admin can edit; only the owner removes', async () => {
+      const studentId = await ownerCreatesStudentAndInvites();
+      await request(app)
+        .post(`/api/students/${studentId}/contacts/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({});
+      const asMember = (): request.Test => request(app).put(`/api/students/${studentId}`);
+      expect(
+        (await asMember().set('Authorization', `Bearer ${coToken}`).send({ name: 'X' })).status
+      ).toBe(403);
+      const removeAsMember = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsMember.status).toBe(403);
+      const addSource = await request(app)
+        .post(`/api/students/${studentId}/sources`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({
+          provider: 'canvas',
+          adapterId: 'canvas',
+          displayName: 'Canvas',
+          dataTypes: ['grades'],
+        });
+      expect(addSource.status).toBe(403);
+      // Someone with no access at all gets 404, not 403 (no existence leak).
+      const strangerEdit = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({ name: 'X' });
+      expect(strangerEdit.status).toBe(404);
+      // Promote to admin: edit works, remove still does not.
+      const promote = await request(app)
+        .put(`/api/students/${studentId}/parents/${encodeURIComponent(CO)}/admin`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ isAdmin: true });
+      expect(promote.status).toBe(200);
+      const editAsAdmin = await request(app)
+        .put(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ name: 'Renamed Kid' });
+      expect(editAsAdmin.status).toBe(200);
+      expect(editAsAdmin.body.name).toBe('Renamed Kid');
+      const removeAsAdmin = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${coToken}`);
+      expect(removeAsAdmin.status).toBe(403);
+      const removeAsOwner = await request(app)
+        .delete(`/api/students/${studentId}`)
+        .set('Authorization', `Bearer ${testToken}`);
+      expect(removeAsOwner.status).toBe(200);
+    });
+
+    it('/parents/accept applies the same identity rule', async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Parents Route Kid', grade: 5 });
+      const studentId = createRes.body.id as string;
+      const invite = await request(app)
+        .post(`/api/students/${studentId}/parents/invite`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ email: STRANGER, role: 'guardian' });
+      expect(invite.status).toBe(201);
+      const wrongPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${coToken}`)
+        .send({ email: STRANGER });
+      expect(wrongPerson.status).toBe(403);
+      const rightPerson = await request(app)
+        .post(`/api/students/${studentId}/parents/accept`)
+        .set('Authorization', `Bearer ${strangerToken}`)
+        .send({});
+      expect(rightPerson.status).toBe(200);
     });
   });
 });

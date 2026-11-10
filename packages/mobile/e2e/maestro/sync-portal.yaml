@@ -1,0 +1,77 @@
+# Full phone sync: connect the portal on this device, sign in to it inside the
+# app, scrape, upload, and check that courses come back with real grades.
+# Needs the smoke variables plus MAESTRO_PORTAL_PROVIDER (skyward | canvas),
+# MAESTRO_PORTAL_URL, MAESTRO_PORTAL_USERNAME, MAESTRO_PORTAL_PASSWORD.
+appId: com.scholarmancy.app
+name: Sync portal
+tags: [sync]
+---
+- runFlow: subflows/login.yaml
+- tapOn:
+    id: text-student-name
+    text: ${MAESTRO_STUDENT_NAME}
+- extendedWaitUntil:
+    visible:
+      id: button-sync
+    timeout: 30000
+- tapOn:
+    id: button-sync
+# A fresh install has no saved portal: the app asks to connect one first. The alert
+# appears after an async lookup, so wait for it instead of checking once.
+- extendedWaitUntil:
+    visible: "No portal connected"
+    timeout: 15000
+    optional: true
+- takeScreenshot: after-sync-tap
+- runFlow:
+    when:
+      visible: "No portal connected"
+    file: subflows/connect-portal.yaml
+- extendedWaitUntil:
+    visible:
+      id: text-login-host
+    timeout: 60000
+- takeScreenshot: sync-portal-login
+- runFlow:
+    when:
+      true: ${MAESTRO_USE_FAKE_PORTAL == '1'}
+    file: subflows/portal-signin-fake-skyward.yaml
+- runFlow:
+    when:
+      true: ${MAESTRO_PORTAL_PROVIDER == 'skyward' && MAESTRO_USE_FAKE_PORTAL != '1'}
+    file: subflows/portal-signin-skyward.yaml
+- runFlow:
+    when:
+      true: ${MAESTRO_PORTAL_PROVIDER == 'canvas'}
+    file: subflows/portal-signin-canvas.yaml
+# The app starts by itself when it sees the signed-in page; otherwise continue.
+- runFlow:
+    when:
+      visible:
+        id: button-signed-in-continue
+    commands:
+      - waitForAnimationToEnd:
+          timeout: 10000
+      - runFlow:
+          when:
+            visible:
+              id: button-signed-in-continue
+          commands:
+            - tapOn:
+                id: button-signed-in-continue
+- extendedWaitUntil:
+    visible:
+      id: text-sync-complete
+    timeout: 300000
+- takeScreenshot: sync-portal-done
+- tapOn:
+    id: button-sync-done
+- extendedWaitUntil:
+    visible:
+      id: card-course
+    timeout: 30000
+# At least one course shows a real grade, not N/A.
+- assertVisible:
+    id: text-course-grade
+    text: '^(?!N/A$).+'
+- takeScreenshot: sync-portal-courses

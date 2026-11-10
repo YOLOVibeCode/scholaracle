@@ -12,7 +12,7 @@ import {
 import type { IWorkPack, IWorkPackAssignment, IWorkPackSource } from '@scholaracle/interfaces';
 import { extractDescriptionLinks, stripHtmlToText } from './descriptionLinks';
 import { humanAssignmentStatus } from './humanAssignmentStatus';
-import { partitionMaterials } from './resourcePartition';
+import { isHostedMaterial, partitionMaterials } from './resourcePartition';
 import { isSameNormalizedUrl, isSchoolLoginHost, isInteractiveHomeworkHost } from './urlHost';
 
 export function createStaticWorkPackSource(input: {
@@ -30,13 +30,8 @@ export function createStaticWorkPackSource(input: {
   };
 }
 
-function isHosted(material: ICourseMaterial): boolean {
-  if (material.downloadUrl != null && material.downloadUrl !== '') return true;
-  return Boolean(material.assetId) && Boolean(material.contentHash);
-}
-
 function toAsset(material: ICourseMaterial): IWorkPackAsset | null {
-  if (!isHosted(material)) return null;
+  if (!isHostedMaterial(material)) return null;
   const assetId = material.assetId;
   if (assetId == null || assetId === '') return null;
   const contentHash =

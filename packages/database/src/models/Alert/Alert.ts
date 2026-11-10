@@ -12,8 +12,11 @@ export class Alert {
   public readonly severity: string;
   public readonly message: string;
   public readonly relatedData: Record<string, unknown>;
+  /** Legacy, follows the owner. Kept one release beside `acknowledgedBy`. */
   public readonly acknowledged: boolean;
   public readonly acknowledgedAt?: Date;
+  /** Per-person acknowledgement: user id -> ISO date. */
+  public readonly acknowledgedBy: Readonly<Record<string, string>>;
   public readonly createdAt: Date;
 
   constructor(data: IAlertData, id?: ObjectId) {
@@ -26,6 +29,7 @@ export class Alert {
     this.relatedData = data.relatedData ?? {};
     this.acknowledged = data.acknowledged ?? false;
     this.acknowledgedAt = data.acknowledgedAt;
+    this.acknowledgedBy = data.acknowledgedBy ?? {};
     this.createdAt = data.createdAt ?? new Date();
   }
 }

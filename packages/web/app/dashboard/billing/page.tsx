@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { billingApi, type ISubscriptionInfo, type IInvoice } from '@/lib/api/billing';
+import { TrialCountdownBanner } from '@/components/billing/TrialCountdownBanner';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
@@ -169,6 +170,13 @@ function BillingPageContent() {
         <p className="text-gray-600 dark:text-gray-400">Manage your subscription and billing</p>
       </div>
 
+      {subscription?.status === 'trialing' &&
+        (subscription.trialEnd ?? subscription.currentPeriodEnd) && (
+          <TrialCountdownBanner
+            trialEndIso={subscription.trialEnd ?? subscription.currentPeriodEnd ?? ''}
+          />
+        )}
+
       {toast && (
         <div
           role="alert"
@@ -233,6 +241,7 @@ function BillingPageContent() {
                 <button
                   type="button"
                   role="switch"
+                  aria-label="Bill annually"
                   aria-checked={billingCycle === 'annual'}
                   onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'annual' : 'monthly'))}
                   className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 aria-[checked=true]:bg-blue-600"
@@ -334,7 +343,7 @@ function BillingPageContent() {
         </CardHeader>
         <CardContent>
           {invoices.length === 0 ? (
-            <p className="text-sm text-gray-500" data-testid="no-invoices">
+            <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="no-invoices">
               No invoices yet
             </p>
           ) : (
@@ -349,7 +358,7 @@ function BillingPageContent() {
                     <p className="text-sm font-medium">
                       ${invoice.amount.toFixed(2)} {invoice.currency.toUpperCase()}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(invoice.date).toLocaleDateString()}
                     </p>
                   </div>

@@ -89,6 +89,7 @@ describe('runSyncPipeline', () => {
         if (failUpload) throw new Error('Upload failed');
       }),
       reportRunFailure: jest.fn(async () => undefined),
+      uploadRunSkeleton: jest.fn(async () => undefined),
     };
   }
 
@@ -159,6 +160,15 @@ describe('runSyncPipeline', () => {
       );
     }
 
+    it('does not upload a skeleton when scrape succeeds', async () => {
+      const uploader = makeUploader();
+      const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+      await runSyncPipeline(driver, config, uploader, 'token', makeRecorder(), undefined, {
+        resolver: stubResolver({}),
+      });
+      expect(uploader.uploadRunSkeleton).not.toHaveBeenCalled();
+    });
+
     it('should tag scrape failures as phase "portal" and preserve the cause', async () => {
       const underlying = new Error('portal timed out');
       const err = await captureError(
@@ -225,6 +235,7 @@ describe('runSyncPipeline', () => {
           throw underlying;
         }),
         reportRunFailure: jest.fn(async () => undefined),
+        uploadRunSkeleton: jest.fn(async () => undefined),
       };
       const err = await captureError(uploader, makeRecorder(), stubResolver({}));
       expect(err).toBeInstanceOf(SyncError);
@@ -259,6 +270,80 @@ describe('runSyncPipeline', () => {
     }
   });
 
+  it('passes selectorPatch through to the scrape host', async () => {
+    let capturedPatch: Readonly<Record<string, string>> | undefined;
+    const resolver: IScraperResolver = {
+      async resolve() {
+        const module: IScraperModule = {
+          metadata: {
+            id: 'canvas',
+            name: 'Canvas',
+            adapterId: 'com.instructure.canvas',
+            version: '0.1.0',
+            hosts: ['*.instructure.com'],
+            entities: ['course'],
+            entry: 'builtin:canvas',
+            publisher: 'scholaracle',
+          },
+          scrape: async (host) => {
+            capturedPatch = host.selectorPatch;
+            return { user: 'Test Student', courses: [], timestamp: NOW };
+          },
+          transform: () => [courseOp()],
+        };
+        return { module, canRun: true, checkErrors: [] };
+      },
+    };
+    const recorder = makeRecorder();
+    const uploader = makeUploader();
+    const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+    await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {
+      resolver,
+      selectorPatch: { row: 'FixedRow' },
+      appliedSelectorPatchId: 'patch-abc',
+    });
+    expect(capturedPatch).toEqual({ row: 'FixedRow' });
+  });
+
+  it('passes studentNameHint through to the scrape host config', async () => {
+    let capturedHint: string | undefined;
+    const resolver: IScraperResolver = {
+      async resolve() {
+        const module: IScraperModule = {
+          metadata: {
+            id: 'canvas',
+            name: 'Canvas',
+            adapterId: 'com.instructure.canvas',
+            version: '0.1.0',
+            hosts: ['*.instructure.com'],
+            entities: ['course'],
+            entry: 'builtin:canvas',
+            publisher: 'scholaracle',
+          },
+          scrape: async (host) => {
+            capturedHint = host.config.studentNameHint;
+            return { user: 'Test Student', courses: [], timestamp: NOW };
+          },
+          transform: () => [courseOp()],
+        };
+        return { module, canRun: true, checkErrors: [] };
+      },
+    };
+    const recorder = makeRecorder();
+    const uploader = makeUploader();
+    const driver = new FakePageDriver({ initialUrl: config.baseUrl });
+    await runSyncPipeline(
+      driver,
+      { ...config, studentNameHint: 'Ben Example' },
+      uploader,
+      'token',
+      recorder,
+      undefined,
+      { resolver }
+    );
+    expect(capturedHint).toBe('Ben Example');
+  });
+
   it('should resolve addPhase before the next pipeline step runs', async () => {
     const events: string[] = [];
     const recorder: IRunRecorder = {
@@ -278,6 +363,7 @@ describe('runSyncPipeline', () => {
         events.push('uploadEnvelope');
       }),
       reportRunFailure: jest.fn(async () => undefined),
+      uploadRunSkeleton: jest.fn(async () => undefined),
     };
     const driver = new FakePageDriver({ initialUrl: config.baseUrl });
     await runSyncPipeline(driver, config, uploader, 'token', recorder, undefined, {

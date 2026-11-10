@@ -9,19 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { settingsApi, type IUserSettingsResponse, type INotificationHistoryItem, type IDigestSlotApi } from '@/lib/api/settings';
+import { consentsApi } from '@/lib/api/consents';
+import { AlertType, SERVER_AI_CONSENT_LABEL, alertTypeLabel } from '@scholaracle/contracts';
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 
-const ALERT_TYPE_KEYS = [
-  'missing_assignment',
-  'deadline',
-  'grade_drop',
-  'test',
-  'workload',
-  'positive',
-  'recommendation',
-] as const;
+/** Every alert type the API knows, in the contracts' order; labels come from contracts too. */
+const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
 
 export default function SettingsPage() {
   const [name, setName] = useState('');
@@ -29,6 +24,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('');
   const [smsConsent, setSmsConsent] = useState(false);
 
+  const [serverAiEnabled, setServerAiEnabled] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
@@ -82,7 +78,11 @@ export default function SettingsPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const s = (await settingsApi.get()) as IUserSettingsResponse;
+        const [s, consents] = await Promise.all([
+          settingsApi.get() as Promise<IUserSettingsResponse>,
+          consentsApi.get(),
+        ]);
+        setServerAiEnabled(consents.serverAi);
         if (s.profile) {
           setName(s.profile.name ?? '');
           setEmail(s.profile.email ?? '');
@@ -145,7 +145,8 @@ export default function SettingsPage() {
     setIsSaving(true);
     setToast(null);
 
-    const ok = await settingsApi.update({
+    const [settingsOk, consentsResult] = await Promise.all([
+      settingsApi.update({
       timezone,
       profile: {
         phone,
@@ -186,8 +187,11 @@ export default function SettingsPage() {
         celebrateWins,
         enabledTypes: Object.keys(enabledTypes).length > 0 ? enabledTypes : undefined,
       },
-    });
+    }),
+      consentsApi.setServerAi(serverAiEnabled).catch(() => null),
+    ]);
 
+    const ok = settingsOk && consentsResult != null;
     setIsSaving(false);
     setToast(ok ? 'Saved' : 'Failed to save');
   };
@@ -331,6 +335,31 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Server-side analysis</CardTitle>
+            <CardDescription>
+              Optional AI processing of synced materials (off by default). See our privacy policy.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="server-ai">Analyze course files on Scholarmancy servers</Label>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{SERVER_AI_CONSENT_LABEL}</p>
+              </div>
+              <Switch
+                id="server-ai"
+                checked={serverAiEnabled}
+                onCheckedChange={setServerAiEnabled}
+                disabled={isSaving || !isLoaded}
+                data-testid="switch-server-ai"
+                aria-label="Enable server-side analysis of course materials"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Notifications</CardTitle>
             <CardDescription>Configure how you receive notifications</CardDescription>
           </CardHeader>
@@ -363,9 +392,11 @@ export default function SettingsPage() {
                 name="notify-email"
                 data-testid="toggle-email"
                 type="checkbox"
+                className="h-6 w-6 shrink-0 rounded border-gray-300"
                 checked={emailNotifications}
                 onChange={(e) => setEmailNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="Email notifications"
               />
             </div>
             <div className="flex items-center justify-between">
@@ -378,9 +409,11 @@ export default function SettingsPage() {
                 name="notify-sms"
                 data-testid="toggle-sms"
                 type="checkbox"
+                className="h-6 w-6 shrink-0 rounded border-gray-300"
                 checked={smsNotifications}
                 onChange={(e) => setSmsNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
+                aria-label="SMS notifications"
               />
             </div>
 
@@ -390,6 +423,7 @@ export default function SettingsPage() {
                 <Label htmlFor="quiet-hours-enabled">Do Not Disturb</Label>
                 <Switch
                   id="quiet-hours-enabled"
+                  aria-label="Do Not Disturb"
                   checked={quietHoursEnabled}
                   onCheckedChange={setQuietHoursEnabled}
                   disabled={isSaving || !isLoaded}
@@ -443,6 +477,7 @@ export default function SettingsPage() {
                 </div>
                 <Switch
                   id="auto-send"
+                  aria-label="Auto-Send Digests"
                   checked={autoSend}
                   onCheckedChange={setAutoSend}
                   disabled={isSaving || !isLoaded}
@@ -482,6 +517,7 @@ export default function SettingsPage() {
                       Enter email addresses (one per line) that should receive digest emails.
                     </p>
                     <textarea
+                      aria-label="Digest recipient email addresses"
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       rows={3}
                       placeholder="parent@example.com&#10;guardian@example.com"
@@ -532,6 +568,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2">
                       <Input
                         type="date"
+                        aria-label="Snooze digests until date"
                         value={snoozeInput}
                         onChange={(e) => setSnoozeInput(e.target.value)}
                         min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
@@ -584,6 +621,7 @@ export default function SettingsPage() {
               </p>
               <select
                 data-testid="select-timezone"
+                aria-label="Timezone"
                 className="w-full rounded-md border px-3 py-2 text-sm bg-background"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
@@ -606,6 +644,7 @@ export default function SettingsPage() {
                 <Switch
                   id="glance-enabled"
                   data-testid="toggle-glance"
+                  aria-label="Student at a Glance"
                   checked={glanceEnabled}
                   onCheckedChange={setGlanceEnabled}
                   disabled={isSaving || !isLoaded}
@@ -671,6 +710,8 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           disabled={isSaving || !isLoaded}
+                          aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                          aria-pressed={slot.enabled}
                           onClick={() => {
                             setWeekdaySlots((prev) =>
                               prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -742,6 +783,8 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             disabled={isSaving || !isLoaded}
+                            aria-label={`${slot.label} digest at ${displayTime}, ${slot.enabled ? 'enabled' : 'disabled'}`}
+                            aria-pressed={slot.enabled}
                             onClick={() => {
                               setWeekendSlots((prev) =>
                                 prev.map((s, i) => (i === index ? { ...s, enabled: !s.enabled } : s))
@@ -866,7 +909,12 @@ export default function SettingsPage() {
                 <h5 className="text-sm font-medium text-gray-500 dark:text-gray-400">Advanced</h5>
                 <div className="flex items-center justify-between">
                   <Label>Custom Daily Digest</Label>
-                  <Switch checked={dailyDigestEnabled} onCheckedChange={setDailyDigestEnabled} disabled={isSaving || !isLoaded} />
+                  <Switch
+                    aria-label="Custom Daily Digest"
+                    checked={dailyDigestEnabled}
+                    onCheckedChange={setDailyDigestEnabled}
+                    disabled={isSaving || !isLoaded}
+                  />
                 </div>
                 {dailyDigestEnabled && (
                   <div className="space-y-2">
@@ -883,7 +931,12 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between">
                 <Label>Weekly Digest</Label>
-                <Switch checked={weeklyDigestEnabled} onCheckedChange={setWeeklyDigestEnabled} disabled={isSaving || !isLoaded} />
+                <Switch
+                  aria-label="Weekly Digest"
+                  checked={weeklyDigestEnabled}
+                  onCheckedChange={setWeeklyDigestEnabled}
+                  disabled={isSaving || !isLoaded}
+                />
               </div>
               {weeklyDigestEnabled && (
                 <div className="grid grid-cols-2 gap-4">
@@ -1020,13 +1073,15 @@ export default function SettingsPage() {
                       <input
                         id={`alert-${key}`}
                         type="checkbox"
+                        className="h-6 w-6 shrink-0 rounded border-gray-300"
                         checked={val.enabled}
                         onChange={(e) => setAlertType(key, e.target.checked, val.severity)}
                         disabled={isSaving || !isLoaded}
                       />
-                      <Label htmlFor={`alert-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
+                      <Label htmlFor={`alert-${key}`}>{alertTypeLabel(key)}</Label>
                       <select
                         value={val.severity}
+                        aria-label={`${alertTypeLabel(key)} alert severity`}
                         onChange={(e) => setAlertType(key, val.enabled, e.target.value)}
                         disabled={isSaving || !isLoaded}
                         className="flex h-8 rounded-md border border-input bg-transparent px-2 text-sm"
@@ -1048,6 +1103,7 @@ export default function SettingsPage() {
                 <input
                   id="prioritize-high"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={prioritizeHighImpact}
                   onChange={(e) => setPrioritizeHighImpact(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1058,6 +1114,7 @@ export default function SettingsPage() {
                 <input
                   id="emphasize-weak"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={emphasizeWeakSubjects}
                   onChange={(e) => setEmphasizeWeakSubjects(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1068,6 +1125,7 @@ export default function SettingsPage() {
                 <input
                   id="celebrate-wins"
                   type="checkbox"
+                  className="h-6 w-6 shrink-0 rounded border-gray-300"
                   checked={celebrateWins}
                   onChange={(e) => setCelebrateWins(e.target.checked)}
                   disabled={isSaving || !isLoaded}
@@ -1084,6 +1142,24 @@ export default function SettingsPage() {
           </CardFooter>
         </Card>
       </form>
+
+      <Card data-testid="card-delete-account">
+        <CardHeader>
+          <CardTitle>Danger zone</CardTitle>
+          <CardDescription>
+            Permanently delete your Scholarmancy account and all household data on our servers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/delete-account"
+            className="text-sm font-semibold text-red-600 hover:underline dark:text-red-400"
+            data-testid="link-delete-account"
+          >
+            Delete account
+          </Link>
+        </CardContent>
+      </Card>
 
       <Card data-testid="notification-history">
         <CardHeader>
