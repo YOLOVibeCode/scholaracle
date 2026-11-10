@@ -8,6 +8,7 @@ import type {
   ISharingPendingInvite,
   SharingLabel,
 } from '@scholaracle/contracts';
+import { joinNames } from './common';
 
 export interface IInvitationCard {
   readonly key: string;
@@ -29,13 +30,6 @@ const LABEL_TEXT: Readonly<Record<SharingLabel, string>> = {
 
 export function labelText(label: SharingLabel): string {
   return LABEL_TEXT[label];
-}
-
-/** "Ava" · "Ava and Christian" · "Ava, Christian and Gideon". */
-export function joinNames(names: readonly string[]): string {
-  if (names.length === 0) return '';
-  if (names.length === 1) return names[0]!;
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
 }
 
 function cardKey(invite: ISharingPendingInvite): string {

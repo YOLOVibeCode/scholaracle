@@ -75,6 +75,7 @@ import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit'
 import { getUserEmail, getUserId, requireOwnEmail } from '../../services/sharing/sharingIdentity';
 import { inviterIdFor, inviterNameMap } from '../../services/sharing/inviterNames';
 import { acceptedSharedWith, declinedSharedWith } from '../../services/sharing/sharedWithOps';
+import { parseAlertTypesPatch, withAlertTypes } from './contactAlertTypes';
 import { toIsoDate } from '../studio/studioTaskClassify';
 import { HELP_FIELDS_UNSET } from '../studio/studentHelpRequests';
 import { listStudentAlerts } from '../../services/alerts/alertInbox';
@@ -537,13 +538,19 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
     if (!student || !student.hasAccess(userId)) {
       throw new NotFoundError('Student not found');
     }
-    const smsStatuses = await Promise.all(
-      student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
-    );
+    const [smsStatuses, owner] = await Promise.all([
+      Promise.all(
+        student.sharedWith.map((sp) => contactSmsOptIn.statusFor(student._id!.toString(), sp))
+      ),
+      // The owner has no sharedWith row: their name and email come from the account.
+      userRepository.findById(student.userId.toString()).catch(() => null),
+    ]);
     // Defaults come from the Student model so what people see is what delivery uses.
     const contacts: ISharingPerson[] = [
       {
         userId: student.userId.toString(),
+        ...(owner?.email ? { email: owner.email } : {}),
+        ...(owner?.name ? { name: owner.name } : {}),
         role: 'parent',
         status: 'accepted',
         isOwner: true,
@@ -745,32 +752,35 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         role?: string;
         receiveAlerts?: boolean;
         alertChannels?: unknown;
-        alertTypes?: readonly string[];
+        alertTypes?: unknown;
       };
       // Reject unknown channels and deduplicate before anything is stored.
       const alertChannels = parseChannels(body.alertChannels);
+      // absent = unchanged, array = set, null = every type again (clears a narrowed list).
+      const alertTypes = parseAlertTypesPatch(body.alertTypes);
       const updatedShared = [...student.sharedWith];
       const current = updatedShared[idx]!;
+      const prefsPatch = {
+        ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
+        ...(alertChannels !== undefined && { alertChannels }),
+      };
       if (isOwnerOrAdmin) {
-        updatedShared[idx] = {
-          ...current,
-          ...(body.name !== undefined && { name: body.name?.trim() }),
-          ...(body.phone !== undefined && { phone: body.phone?.trim() }),
-          ...(body.role !== undefined && {
-            role: (body.role === 'guardian' || body.role === 'caregiver' ? body.role : 'parent') as
-              'parent' | 'guardian' | 'caregiver',
-          }),
-          ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
-          ...(alertChannels !== undefined && { alertChannels }),
-          ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
-        };
+        updatedShared[idx] = withAlertTypes(
+          {
+            ...current,
+            ...(body.name !== undefined && { name: body.name?.trim() }),
+            ...(body.phone !== undefined && { phone: body.phone?.trim() }),
+            ...(body.role !== undefined && {
+              role: (body.role === 'guardian' || body.role === 'caregiver'
+                ? body.role
+                : 'parent') as 'parent' | 'guardian' | 'caregiver',
+            }),
+            ...prefsPatch,
+          },
+          alertTypes
+        );
       } else if (isSelf) {
-        updatedShared[idx] = {
-          ...current,
-          ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
-          ...(alertChannels !== undefined && { alertChannels }),
-          ...(body.alertTypes !== undefined && { alertTypes: body.alertTypes }),
-        };
+        updatedShared[idx] = withAlertTypes({ ...current, ...prefsPatch }, alertTypes);
       } else {
         throw new ForbiddenError('You can only edit your own contact prefs');
       }
@@ -1132,13 +1142,15 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
       const body = req.body as {
         receiveAlerts?: boolean;
         alertChannels?: unknown;
-        alertTypes?: readonly string[];
+        alertTypes?: unknown;
       };
       // Same validation as the sharing routes: only email | sms | push, deduplicated.
+      // alertTypes: an array narrows; null or absent means every type (no key stored).
+      const alertTypes = parseAlertTypesPatch(body.alertTypes);
       const prefs: IOwnerAlertPrefs = {
         receiveAlerts: body.receiveAlerts ?? true,
         alertChannels: parseChannels(body.alertChannels) ?? DEFAULT_OWNER_ALERT_CHANNELS,
-        alertTypes: body.alertTypes,
+        ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
       };
       await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
       res.status(200).json({ success: true, ownerAlertPrefs: prefs });

@@ -1,8 +1,10 @@
 /**
- * "Set a password" banner for accounts created by accepting a sharing invitation: the server
- * gave them a random password and flags the session with `forcePasswordReset`. The banner opens
+ * "Set a password" banner for a session flagged `forcePasswordReset`: an account the server
+ * created from a sharing invitation (random password) or one an admin flagged. The banner opens
  * the web forgot-password page (the reset flow sets the password and clears the flag server
- * side). Dismissal is remembered per user on this device.
+ * side). The flag on this device is a snapshot from the last sign-in, so the Students screen
+ * re-reads the session user on launch and on every foreground and hides the banner once the
+ * flag is gone. Dismissal is remembered per user on this device.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,8 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const DISMISS_KEY_PREFIX = 'slc_set_password_dismissed:';
 
 export const SET_PASSWORD_BANNER_TITLE = 'Set a password';
-export const SET_PASSWORD_BANNER_TEXT =
-  'Your account was created from an invitation. Set a password so you can sign in without a link.';
+export const SET_PASSWORD_BANNER_TEXT = 'Set a password so you can sign in next time.';
 export const SET_PASSWORD_BANNER_ACTION = 'Set password';
 
 export function shouldShowSetPasswordBanner(

@@ -3,9 +3,15 @@
  * (sharing-spec §4.2, §4.9). Pure: no React, no network.
  */
 
-import type { ContactSmsStatus, ISharingPerson, StudentAccess } from '@scholaracle/contracts';
+import type {
+  ContactSmsStatus,
+  ISharingContactUpdateResult,
+  ISharingPerson,
+  StudentAccess,
+} from '@scholaracle/contracts';
 import { accessLabel, accessOf, canManagePeople } from './accessMatrix';
 import { labelText } from './invitationGroups';
+import { smsOptInShareMessage } from './shareForm';
 
 export type FamilyAction =
   'resend' | 'reinvite' | 'make-admin' | 'remove-admin' | 'remove' | 'my-alerts' | 'leave';
@@ -14,6 +20,8 @@ export interface IFamilyViewer {
   readonly userId: string;
   readonly email: string;
   readonly access: StudentAccess;
+  /** Session user's name: the fallback for the viewer's own row when the server sent none. */
+  readonly name?: string;
 }
 
 export interface IFamilyRow {
@@ -87,21 +95,28 @@ function sortRank(person: ISharingPerson): number {
   return person.isOwner ? 0 : ORDER[person.status];
 }
 
-export function displayNameOf(person: ISharingPerson): string {
+/**
+ * Server name, else email; the viewer's own row (an owner row from an older API without
+ * name / email) falls back to the session user.
+ */
+export function displayNameOf(person: ISharingPerson, viewer?: IFamilyViewer): string {
   const name = person.name?.trim();
   if (name) return name;
   if (person.email) return person.email;
+  if (viewer && isViewer(person, viewer)) return viewer.name?.trim() || viewer.email || 'You';
   return person.isOwner ? 'Owner' : 'Someone';
 }
 
 export function familyRow(person: ISharingPerson, viewer: IFamilyViewer): IFamilyRow {
-  const name = person.name?.trim();
+  const isYou = isViewer(person, viewer);
+  const displayName = displayNameOf(person, viewer);
+  const email = person.email ?? (isYou && viewer.email ? viewer.email : undefined);
   return {
     key: person.email ?? `owner:${person.userId ?? ''}`,
     person,
-    displayName: displayNameOf(person),
-    ...(name && person.email ? { secondary: person.email } : {}),
-    isYou: isViewer(person, viewer),
+    displayName,
+    ...(email && email !== displayName ? { secondary: email } : {}),
+    isYou,
     roleChip: accessLabel(accessOf(person)),
     labelChip: labelText(person.role),
     statusChip: person.isOwner ? null : STATUS_CHIP[person.status],
@@ -159,6 +174,25 @@ export function leaveConfirmText(studentName: string): string {
 
 export function removePersonConfirmText(displayName: string, studentName: string): string {
   return `${displayName} will lose access to ${studentName} right away, and their alerts and sign-in links stop. You can invite them again later.`;
+}
+
+/**
+ * After saving "My alerts": when the server issued an SMS opt-in link (an admin turned texts on
+ * for a phone that has not opted in), the sentence to pass on through the share sheet. The
+ * person must opt in themselves; nothing is texted before.
+ */
+export function myAlertsFollowUp(
+  result:
+    Pick<ISharingContactUpdateResult, 'smsOptInUrl'> | ISharingContactUpdateResult | undefined,
+  person: Pick<ISharingPerson, 'name'>,
+  studentName: string
+): string | null {
+  if (!result?.smsOptInUrl) return null;
+  return smsOptInShareMessage({
+    ...(person.name ? { inviteeName: person.name } : {}),
+    studentNames: [studentName],
+    url: result.smsOptInUrl,
+  });
 }
 
 export function adminChangeConfirmText(displayName: string, makeAdmin: boolean): string {

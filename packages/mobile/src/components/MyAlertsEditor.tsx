@@ -6,8 +6,8 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import { ALERT_CHANNELS } from '../sharing/common';
 import {
-  MY_ALERT_CHANNELS,
   alertTypeRows,
   alertsSummary,
   isSilenced,
@@ -36,6 +36,9 @@ export function MyAlertsEditor({
   save,
 }: IMyAlertsEditorProps): React.ReactElement {
   const [draft, setDraft] = useState<IMyAlertsDraft>(saved);
+  // What the server last accepted. `saved` is only the starting point: comparing against the
+  // prop would leave the editor "unsaved" forever after the first successful save.
+  const [lastSaved, setLastSaved] = useState<IMyAlertsDraft>(saved);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -48,6 +51,7 @@ export function MyAlertsEditor({
     try {
       await save(next);
       setDraft(next);
+      setLastSaved(next);
       setSavedFlash(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save your alert settings');
@@ -62,7 +66,7 @@ export function MyAlertsEditor({
   };
 
   const silenced = isSilenced(draft);
-  const dirty = myAlertsDirty(draft, saved);
+  const dirty = myAlertsDirty(draft, lastSaved);
 
   return (
     <View style={styles.container} testID={testID}>
@@ -87,7 +91,7 @@ export function MyAlertsEditor({
       </TouchableOpacity>
 
       <Text style={styles.sectionHeader}>Channels</Text>
-      {MY_ALERT_CHANNELS.map((channel) => (
+      {ALERT_CHANNELS.map((channel) => (
         <View key={channel.value} style={styles.row}>
           <Text style={styles.rowText}>{channel.text}</Text>
           <Switch

@@ -27,8 +27,9 @@ export type SharingInviteStatus = 'pending' | 'accepted' | 'declined';
 export interface ISharingPerson {
   /** Set for the owner and for accepted adults; absent while an invitation is pending. */
   readonly userId?: string;
-  /** Absent for the owner row (the owner is identified by `userId`). */
+  /** The invited address; for the owner row, the owner's account email. */
   readonly email?: string;
+  /** For the owner row, the owner's account name. */
   readonly name?: string;
   readonly role: SharingLabel;
   readonly status: SharingInviteStatus;
@@ -154,7 +155,7 @@ export interface ISharingResendResult {
 /**
  * Request body of `PUT /api/students/:id/contacts/:email`. An owner or admin may send any field;
  * the person themself only `receiveAlerts`, `alertChannels` and `alertTypes` (the server rejects
- * anyone else). An absent `alertTypes` means every type.
+ * anyone else). The route is a patch: an absent field is left unchanged.
  */
 export interface ISharingContactUpdateRequest {
   readonly name?: string;
@@ -162,7 +163,8 @@ export interface ISharingContactUpdateRequest {
   readonly role?: SharingLabel;
   readonly receiveAlerts?: boolean;
   readonly alertChannels?: readonly SharingAlertChannel[];
-  readonly alertTypes?: readonly string[];
+  /** An array = exactly these types; `null` = every type (clears a narrowed list); absent = unchanged. */
+  readonly alertTypes?: readonly string[] | null;
 }
 
 /** Response of `PUT /api/students/:id/contacts/:email`. */
@@ -194,7 +196,8 @@ export interface ISharingLoginLinkResult {
 export interface ISharingOwnerAlertPrefsRequest {
   readonly receiveAlerts?: boolean;
   readonly alertChannels?: readonly SharingAlertChannel[];
-  readonly alertTypes?: readonly string[];
+  /** An array = exactly these types; `null` or absent = every type. */
+  readonly alertTypes?: readonly string[] | null;
 }
 
 /** Response of `PUT /api/students/:id/owner-alert-prefs`. */

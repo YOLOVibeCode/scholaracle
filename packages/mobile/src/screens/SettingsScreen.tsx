@@ -32,14 +32,18 @@ import {
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
-import { apiClient } from '../api/client';
-import { accessMapFromStudents, canDisconnectOnServerAs } from '../sharing/accessMatrix';
+import { canDisconnectOnServerAs } from '../sharing/accessMatrix';
 import type { StudentAccess } from '@scholaracle/contracts';
 
 interface ISettingsScreenProps {
   onBack(): void;
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
+  /**
+   * Student id -> the viewer's access, from App's home data: members may only disconnect
+   * "this phone only". Absent (unknown) keeps the server option; the server still decides.
+   */
+  readonly accessById?: ReadonlyMap<string, StudentAccess>;
   onSyncAll?(sources: readonly IConnectedSource[]): void;
   /** Opens the read-only Plan & usage screen (parent sessions only). */
   onOpenPlan?(): void;
@@ -50,6 +54,7 @@ interface ISettingsScreenProps {
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
+  accessById,
   onSyncAll,
   onOpenPlan,
   onOpenNotificationSettings,
@@ -62,8 +67,6 @@ export function SettingsScreen({
   const [serverAiEnabled, setServerAiEnabled] = useState(false);
   const [isServerAiLoading, setIsServerAiLoading] = useState(true);
   const [isServerAiSaving, setIsServerAiSaving] = useState(false);
-  // Student id -> the viewer's access: members may only disconnect "this phone only".
-  const [accessById, setAccessById] = useState<ReadonlyMap<string, StudentAccess>>(new Map());
 
   const loadSources = useCallback(async () => {
     if (hideHousehold) {
@@ -71,15 +74,11 @@ export function SettingsScreen({
       return;
     }
     setSources(await connectedSourceStore.list());
-    void apiClient
-      .getStudents()
-      .then((rows) => setAccessById(accessMapFromStudents(rows)))
-      .catch(() => undefined);
   }, [hideHousehold]);
 
   const serverDisconnectAllowed = (source: IConnectedSource): boolean =>
     canDisconnectOnServer(source) &&
-    canDisconnectOnServerAs(accessById.get(source.studentId ?? ''));
+    canDisconnectOnServerAs(accessById?.get(source.studentId ?? ''));
 
   useEffect(() => {
     void loadSources();

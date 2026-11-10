@@ -24,7 +24,7 @@ describe('mobile logged-out + student home', () => {
     expect(APP).toMatch(/if \(studentMode\) \{/);
     expect(APP).toMatch(/<TodayScreen/);
     expect(APP).toMatch(/<StudentWorkPackScreen/);
-    expect(APP).toMatch(/setStudentCount\(0\)/);
+    expect(APP).toMatch(/setHome\(emptyHomeReady\(\)\)/);
   });
 
   it('student mode has Today and This week tabs, controlled by App nav so a push can pick one', () => {

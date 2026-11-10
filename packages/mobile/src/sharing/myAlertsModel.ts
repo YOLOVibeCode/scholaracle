@@ -11,6 +11,7 @@ import type {
   SharingAlertChannel,
 } from '@scholaracle/contracts';
 import { ALERT_TYPE_KEYS, alertTypeToggleLabel } from '../alerts/notificationSettingsModel';
+import { ALERT_CHANNELS, channelText, joinNames, toggleInList } from './common';
 
 export interface IMyAlertsDraft {
   readonly receiveAlerts: boolean;
@@ -18,15 +19,6 @@ export interface IMyAlertsDraft {
   /** null = every alert type (the server's meaning of an absent `alertTypes`). */
   readonly types: readonly string[] | null;
 }
-
-export const MY_ALERT_CHANNELS: readonly {
-  readonly value: SharingAlertChannel;
-  readonly text: string;
-}[] = [
-  { value: 'email', text: 'Email' },
-  { value: 'push', text: 'Push' },
-  { value: 'sms', text: 'Text' },
-];
 
 /** Channels restored by "Turn alerts back on" when the row had none (owner decision: email + push). */
 export const DEFAULT_MY_CHANNELS: readonly SharingAlertChannel[] = ['email', 'push'];
@@ -68,9 +60,7 @@ export function unsilence(draft: IMyAlertsDraft): IMyAlertsDraft {
 }
 
 export function toggleChannel(draft: IMyAlertsDraft, channel: SharingAlertChannel): IMyAlertsDraft {
-  const channels = draft.channels.includes(channel)
-    ? draft.channels.filter((c) => c !== channel)
-    : [...draft.channels, channel];
+  const channels = toggleInList(draft.channels, channel);
   // Turning a channel on also turns alerts on: that is what the tap meant.
   return { ...draft, channels, receiveAlerts: channels.length > 0 ? true : draft.receiveAlerts };
 }
@@ -95,12 +85,16 @@ export function setTypeEnabled(
   return { ...draft, types: allOn ? null : next };
 }
 
-/** Body for PUT /api/students/:id/contacts/:email (self) or /owner-alert-prefs. */
+/**
+ * Body for PUT /api/students/:id/contacts/:email (self) or /owner-alert-prefs. The routes are
+ * patches, so "every type" is sent as an explicit `alertTypes: null`: an absent key would leave
+ * a previously narrowed list in place and the person could never widen it again.
+ */
 export function buildContactPrefsUpdate(draft: IMyAlertsDraft): ISharingContactUpdateRequest {
   return {
     receiveAlerts: draft.receiveAlerts,
     alertChannels: draft.channels,
-    ...(draft.types !== null ? { alertTypes: draft.types } : {}),
+    alertTypes: draft.types,
   };
 }
 
@@ -108,19 +102,13 @@ export function myAlertsDirty(a: IMyAlertsDraft, b: IMyAlertsDraft): boolean {
   return JSON.stringify(a) !== JSON.stringify(b);
 }
 
-function channelWord(channel: SharingAlertChannel): string {
-  return MY_ALERT_CHANNELS.find((c) => c.value === channel)?.text.toLowerCase() ?? channel;
-}
-
-/** "Silenced" · "Email and push" · "Email, text and push · 3 of 8 types". */
+/** "Silenced" · "Email and push" · "Email, push and text · 3 of 8 types". */
 export function alertsSummary(draft: IMyAlertsDraft): string {
   if (isSilenced(draft)) return 'Silenced';
-  const ordered = MY_ALERT_CHANNELS.map((c) => c.value).filter((c) => draft.channels.includes(c));
-  const words = ordered.map(channelWord);
-  const channels =
-    words.length === 1
-      ? words[0]!
-      : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]!}`;
+  const words = ALERT_CHANNELS.map((c) => c.value)
+    .filter((c) => draft.channels.includes(c))
+    .map((c) => channelText(c).toLowerCase());
+  const channels = joinNames(words);
   const capitalized = channels.charAt(0).toUpperCase() + channels.slice(1);
   if (draft.types === null) return capitalized;
   return `${capitalized} · ${draft.types.length} of ${ALERT_TYPE_KEYS.length} types`;

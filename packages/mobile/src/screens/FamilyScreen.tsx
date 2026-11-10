@@ -6,7 +6,7 @@
  * Logic: src/sharing/familyViewModel.ts, src/sharing/myAlertsModel.ts.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Share,
 } from 'react-native';
 import type { ISharingPerson } from '@scholaracle/contracts';
 import { apiClient, type IStudentListItem } from '../api/client';
@@ -27,6 +28,7 @@ import {
   familyTitle,
   isDestructiveAction,
   leaveConfirmText,
+  myAlertsFollowUp,
   peopleSummary,
   removePersonConfirmText,
   type FamilyAction,
@@ -62,6 +64,14 @@ export function FamilyScreen({
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [alertsOpenFor, setAlertsOpenFor] = useState<string | null>(null);
+  // Leave navigates away mid-action: no state updates after unmount.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -70,12 +80,19 @@ export function FamilyScreen({
         apiClient.getStudentContacts(student.id),
         apiClient.getSessionUser(),
       ]);
+      if (!mounted.current) return;
       setPeople(rows);
-      setViewer({ userId: user?.id ?? '', email: user?.email ?? '', access: student.access });
+      setViewer({
+        userId: user?.id ?? '',
+        email: user?.email ?? '',
+        access: student.access,
+        ...(user?.name ? { name: user.name } : {}),
+      });
     } catch (err: unknown) {
+      if (!mounted.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load people');
     } finally {
-      setIsRefreshing(false);
+      if (mounted.current) setIsRefreshing(false);
     }
   }, [student.id, student.access]);
 
@@ -83,17 +100,19 @@ export function FamilyScreen({
     void load();
   }, [load]);
 
-  const run = async (key: string, work: () => Promise<void>): Promise<void> => {
+  /** Runs one action; `reload` is false for Leave, after which this student is gone for us. */
+  const run = async (key: string, work: () => Promise<void>, reload = true): Promise<void> => {
     if (busyKey) return;
     setBusyKey(key);
     setActionError(null);
     try {
       await work();
-      await load();
+      if (reload) await load();
     } catch (err: unknown) {
+      if (!mounted.current) return;
       setActionError(err instanceof Error ? err.message : 'Could not complete that action');
     } finally {
-      setBusyKey(null);
+      if (mounted.current) setBusyKey(null);
     }
   };
 
@@ -162,10 +181,15 @@ export function FamilyScreen({
         return;
       case 'leave':
         confirmThen(`Leave ${student.name}?`, leaveConfirmText(student.name), 'Leave', () => {
-          void run(row.key, async () => {
-            await apiClient.leaveStudent(student.id);
-            onLeft();
-          });
+          // No reload: after leaving, the student is no longer ours to read (404).
+          void run(
+            row.key,
+            async () => {
+              await apiClient.leaveStudent(student.id);
+              onLeft();
+            },
+            false
+          );
         });
         return;
       default:
@@ -179,9 +203,13 @@ export function FamilyScreen({
       const body = buildContactPrefsUpdate(draft);
       if (row.person.isOwner) {
         await apiClient.updateOwnerAlertPrefs(student.id, body);
-      } else if (row.person.email) {
-        await apiClient.updateStudentContact(student.id, row.person.email, body);
+        return;
       }
+      if (!row.person.email) return;
+      const result = await apiClient.updateStudentContact(student.id, row.person.email, body);
+      // An admin turning texts on for an un-opted-in phone gets the consent link to pass on.
+      const followUp = myAlertsFollowUp(result, row.person, student.name);
+      if (followUp) void Share.share({ message: followUp }).catch(() => undefined);
     };
 
   const rows = people && viewer ? familyRows(people, viewer) : [];

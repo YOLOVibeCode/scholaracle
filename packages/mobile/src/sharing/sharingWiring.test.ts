@@ -20,6 +20,7 @@ const NOTIF = read('src', 'screens', 'NotificationSettingsScreen.tsx');
 const INVITES = read('src', 'screens', 'InvitationsScreen.tsx');
 const SHARE = read('src', 'screens', 'ShareStudentScreen.tsx');
 const FAMILY = read('src', 'screens', 'FamilyScreen.tsx');
+const ONBOARDING = read('src', 'onboarding', 'OnboardingScreen.tsx');
 const SHARED_ALERTS = read('src', 'components', 'SharedStudentAlertsSection.tsx');
 const EDITOR = read('src', 'components', 'MyAlertsEditor.tsx');
 const E2E_SH = read('scripts', 'e2e.sh');
@@ -52,14 +53,49 @@ describe('navigation', () => {
       expect(clampNavView('student', view)).toBe('today');
     }
   });
+});
 
-  it('a new co-parent with only a pending invitation lands on Students, not onboarding', () => {
-    expect(APP).toMatch(
-      /showOnboardingGate\(\{ studentCount, pendingInviteCount, setupRequested \}\)/
-    );
-    expect(APP).toMatch(/loadHomeCounts\(apiClient\)/);
+describe('home data lives in App (one fetch per session)', () => {
+  it('App owns the home state, loads it once, and hands it to the screens', () => {
+    expect(APP).toMatch(/useState<IHomeData>\(INITIAL_HOME\)/);
+    expect(APP).toMatch(/loadHomeData\(apiClient\)/);
+    expect(APP).toMatch(/setHome\(homeLoaded\(loaded\)\)/);
+    expect(APP).toMatch(/home=\{home\}/);
+    expect(APP).toMatch(/isRefreshing=\{isHomeRefreshing\}/);
+    expect(APP).toMatch(/onRefresh=\{refreshHome\}/);
+    expect(APP).toMatch(/accessById=\{accessMapOf\(home\)\}/);
+    expect(APP).toMatch(/students=\{home\.students\}/);
+    expect(APP).toMatch(/onChanged=\{refreshHome\}/);
+  });
+
+  it('a failed load keeps the previous data: never a reset to zero', () => {
+    expect(APP).toMatch(/homeLoadFailed\(h, /);
+    expect(APP).not.toMatch(/setStudentCount/);
+    expect(APP).not.toMatch(/setPendingInviteCount/);
+  });
+
+  it('Students, Settings and Share read the lifted data instead of refetching', () => {
+    expect(STUDENTS).toMatch(/readonly home: IHomeData/);
+    expect(STUDENTS).not.toMatch(/apiClient\.getStudents\(/);
+    expect(STUDENTS).not.toMatch(/apiClient\.getPendingSharingInvites\(/);
+    expect(STUDENTS).not.toMatch(/apiClient\.getMySharing\(/);
+    expect(STUDENTS).toMatch(/onPress=\{onRefresh\}/);
+    expect(SETTINGS).toMatch(/readonly accessById\?: ReadonlyMap<string, StudentAccess>/);
+    expect(SETTINGS).not.toMatch(/apiClient\.getStudents\(/);
+    expect(SHARE).toMatch(/readonly students: readonly IStudentListItem\[\]/);
+    expect(SHARE).toMatch(/students\.filter\(\(row\) => canInvite\(row\.access\)\)/);
+    expect(SHARE).not.toMatch(/apiClient\.getStudents\(/);
+  });
+
+  it('a new co-parent with only a pending invitation lands on Students; Back from onboarding returns there', () => {
+    expect(APP).toMatch(/showOnboardingGate\(home, setupRequested\)/);
     expect(APP).toMatch(/setSetupRequested\(true\)/);
-    expect(APP).toMatch(/onChanged=\{refreshHomeCounts\}/);
+    expect(APP).toMatch(
+      /canReturnToInvitations\(home, setupRequested\)\s*\?\s*\(\): void => setSetupRequested\(false\)\s*:\s*undefined/
+    );
+    expect(ONBOARDING).toMatch(/onBack\?\(\): void/);
+    expect(ONBOARDING).toMatch(/onBack && state\.step === firstStep/);
+    expect(ONBOARDING).toContain('testID="button-onboarding-back"');
   });
 });
 
@@ -72,7 +108,15 @@ describe('Students screen', () => {
     expect(STUDENTS).toContain('testID="banner-set-password"');
     expect(STUDENTS).toContain('testID="button-set-password-dismiss"');
     expect(STUDENTS).toMatch(/Linking\.openURL\(forgotPasswordUrl\(setPassword\.email\)\)/);
-    expect(STUDENTS).toMatch(/apiClient\.getPendingSharingInvites\(\)\.catch\(\(\) => \[\]\)/);
+  });
+
+  it('re-reads the session user on launch and on foreground, hiding the banner once the flag is gone', () => {
+    expect(STUDENTS).toMatch(/apiClient\.getSessionUser\(\)/);
+    expect(STUDENTS).toMatch(/AppState\.addEventListener\('change'/);
+    expect(STUDENTS).toMatch(/if \(state === 'active'\) void checkSetPassword\(\);/);
+    expect(STUDENTS).toMatch(
+      /shouldShowSetPasswordBanner\(user, dismissed\) \? \{ userId: user\.id, email: user\.email \} : null/
+    );
   });
 
   it('long-press edit is offered only to owners and admins', () => {
@@ -96,7 +140,7 @@ describe('role-aware hiding (sharing-spec §4.2)', () => {
 
   it('server-side disconnect is hidden for members in Settings', () => {
     expect(SETTINGS).toMatch(
-      /canDisconnectOnServerAs\(accessById\.get\(source\.studentId \?\? ''\)\)/
+      /canDisconnectOnServerAs\(accessById\?\.get\(source\.studentId \?\? ''\)\)/
     );
     expect(SETTINGS).toMatch(/disconnectConfirmText\(source, serverOption\)/);
     // The phone-only option stays for everyone.
@@ -129,9 +173,9 @@ describe('screens use the client and expose stable test ids', () => {
   it('Share: required channels, preselection, result and the opt-in share sheet', () => {
     expect(SHARE).toMatch(/apiClient\.sendSharingInvite\(built\.request\)/);
     expect(SHARE).toMatch(/initialShareForm\(preselectStudentId\)/);
-    expect(SHARE).toMatch(/rows\.filter\(\(row\) => canInvite\(row\.access\)\)/);
     expect(SHARE).toMatch(/Share\.share\(\{/);
     expect(SHARE).toMatch(/smsOptInShareMessage\(/);
+    expect(SHARE).toMatch(/ALERT_CHANNELS\.map/);
     for (const id of [
       'share-screen',
       'input-share-email',
@@ -183,6 +227,23 @@ describe('screens use the client and expose stable test ids', () => {
     expect(FAMILY).toMatch(/testID=\{`button-family-\$\{action\}`\}/);
   });
 
+  it('Family: Leave navigates away without reloading, and no state is set after unmount', () => {
+    expect(FAMILY).toMatch(/const mounted = useRef\(true\)/);
+    expect(FAMILY).toMatch(/mounted\.current = false/);
+    expect(FAMILY).toMatch(/if \(!mounted\.current\) return;/);
+    expect(FAMILY).toMatch(/if \(reload\) await load\(\);/);
+    // The leave action passes reload = false and calls onLeft right after the server call.
+    expect(FAMILY).toMatch(
+      /await apiClient\.leaveStudent\(student\.id\);\s*onLeft\(\);\s*\},\s*false\s*\)/
+    );
+  });
+
+  it('Family: an SMS opt-in link from saving My alerts goes out through the share sheet', () => {
+    expect(FAMILY).toMatch(/myAlertsFollowUp\(result, row\.person, student\.name\)/);
+    expect(FAMILY).toMatch(/Share\.share\(\{ message: followUp \}\)/);
+    expect(FAMILY).toMatch(/name: user\.name/);
+  });
+
   it('Notification settings gains a per-shared-student section with Silence', () => {
     expect(NOTIF).toMatch(/<SharedStudentAlertsSection \/>/);
     expect(SHARED_ALERTS).toMatch(/apiClient\.getMySharing\(\)/);
@@ -192,6 +253,14 @@ describe('screens use the client and expose stable test ids', () => {
     expect(EDITOR).toMatch(/silenced \? unsilence\(draft\) : silence\(draft\)/);
     expect(EDITOR).toMatch(/testID=\{`\$\{testID\}-silence`\}/);
     expect(EDITOR).toMatch(/testID=\{`\$\{testID\}-channel-\$\{channel\.value\}`\}/);
+  });
+
+  it('My alerts editor compares against what was last saved, so a save clears "unsaved"', () => {
+    expect(EDITOR).toMatch(/const \[lastSaved, setLastSaved\] = useState<IMyAlertsDraft>\(saved\)/);
+    expect(EDITOR).toMatch(/setLastSaved\(next\)/);
+    expect(EDITOR).toMatch(/myAlertsDirty\(draft, lastSaved\)/);
+    expect(EDITOR).not.toMatch(/myAlertsDirty\(draft, saved\)/);
+    expect(EDITOR).toMatch(/ALERT_CHANNELS\.map/);
   });
 });
 

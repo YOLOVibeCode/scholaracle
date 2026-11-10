@@ -1,4 +1,5 @@
 import type { ISharingPendingInvite } from '@scholaracle/contracts';
+import { joinNames } from './common';
 import {
   acceptedMessage,
   groupPendingInvites,
@@ -6,7 +7,6 @@ import {
   invitationSelection,
   invitationSubtitle,
   invitationTitle,
-  joinNames,
   labelText,
 } from './invitationGroups';
 

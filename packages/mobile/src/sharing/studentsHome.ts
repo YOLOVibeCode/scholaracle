@@ -1,15 +1,10 @@
 /**
- * Students screen copy and gates for sharing: the "Shared with you · by …" line, the people
- * count, the invitations banner, and the onboarding gate (a new co-parent with no students of
- * their own but a pending invitation must see the Students screen, not onboarding).
- * Pure except `loadHomeCounts`, which takes the client as a parameter.
+ * Students screen copy for sharing: the "Shared with you · by …" line, the people count and
+ * the empty-state text. The data itself (students, invitations, inviter names) lives in
+ * App's home state: see homeData.ts. Pure.
  */
 
-import type {
-  IMySharingStudent,
-  ISharingPendingInvite,
-  IStudentListItem,
-} from '@scholaracle/contracts';
+import type { IMySharingStudent, IStudentListItem } from '@scholaracle/contracts';
 import { canInvite } from './accessMatrix';
 
 /** The web phase adds `invitedBy` to the list item; tolerate builds of the API without it. */
@@ -63,40 +58,6 @@ export function needsInviterNames(items: readonly IStudentListItemWithInviter[])
 /** The "Share…" entry shows when the viewer can share at least one student. */
 export function anyShareable(items: readonly Pick<IStudentListItem, 'access'>[]): boolean {
   return items.some((item) => canInvite(item.access));
-}
-
-export interface IHomeCounts {
-  readonly students: number;
-  readonly pendingInvites: number;
-}
-
-export interface IHomeCountsApi {
-  getStudents(): Promise<readonly IStudentListItem[]>;
-  getPendingSharingInvites(): Promise<readonly ISharingPendingInvite[]>;
-}
-
-/**
- * Students on the account and, only when there are none, pending invitations (so the
- * onboarding gate can let an invitee through). A failing invites call counts as zero.
- */
-export async function loadHomeCounts(api: IHomeCountsApi): Promise<IHomeCounts> {
-  const students = (await api.getStudents()).length;
-  if (students > 0) return { students, pendingInvites: 0 };
-  const pending = await api.getPendingSharingInvites().catch(() => []);
-  return { students, pendingInvites: pending.length };
-}
-
-/**
- * Show onboarding (no students yet) unless an invitation is waiting; "Get started" on the
- * Students screen sets `setupRequested` to reach onboarding anyway.
- */
-export function showOnboardingGate(args: {
-  readonly studentCount: number;
-  readonly pendingInviteCount: number;
-  readonly setupRequested: boolean;
-}): boolean {
-  if (args.studentCount !== 0) return false;
-  return args.pendingInviteCount === 0 || args.setupRequested;
 }
 
 /** Empty-state copy on the Students screen. */

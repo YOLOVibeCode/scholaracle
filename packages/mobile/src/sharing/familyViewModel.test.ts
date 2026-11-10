@@ -7,6 +7,7 @@ import {
   isDestructiveAction,
   isViewer,
   leaveConfirmText,
+  myAlertsFollowUp,
   peopleSummary,
   removePersonConfirmText,
   rowActions,
@@ -62,12 +63,14 @@ const asAdmin: IFamilyViewer = { userId: 'u-admin', email: 'admin@example.com', 
 describe('rows', () => {
   it('orders owner, accepted, invited, declined and fills the chips', () => {
     const rows = familyRows(people, asOwner);
+    // The owner row from an older API has no name / email: the viewer's own session fills it.
     expect(rows.map((r) => r.displayName)).toEqual([
-      'Owner',
+      'owner@example.com',
       'Robert Lewis',
       'Jessica Lewis',
       'jennifer@example.com',
     ]);
+    expect(rows[0]?.secondary).toBeUndefined();
     expect(rows[0]).toMatchObject({
       isYou: true,
       roleChip: 'Owner',
@@ -106,6 +109,43 @@ describe('rows', () => {
   it('texts chip copy', () => {
     expect(textsChipText(undefined)).toBe('Texts: none');
     expect(textsChipText('opted_out')).toBe('Texts: opted out');
+  });
+
+  it("names the owner row from the server's name and email, else the viewer's session", () => {
+    const named = { ...owner, name: 'Ricardo Vega', email: 'owner@example.com' };
+    expect(familyRows([named], asOwner)[0]).toMatchObject({
+      displayName: 'Ricardo Vega',
+      secondary: 'owner@example.com',
+      isYou: true,
+    });
+    // Another adult looking at a nameless owner row still sees the email when the server has it.
+    expect(familyRows([{ ...owner, email: 'owner@example.com' }], asRobert)[0]).toMatchObject({
+      displayName: 'owner@example.com',
+      isYou: false,
+    });
+    // Older API (no name / email): the viewer's own session name, then email, then "You".
+    expect(familyRows([owner], { ...asOwner, name: 'Ricardo' })[0]).toMatchObject({
+      displayName: 'Ricardo',
+      secondary: 'owner@example.com',
+    });
+    expect(familyRows([owner], { ...asOwner, email: '' })[0]?.displayName).toBe('You');
+    // Someone else's nameless owner row keeps the generic word.
+    expect(familyRows([owner], asRobert)[0]?.displayName).toBe('Owner');
+  });
+
+  it('passes on the SMS opt-in link after saving My alerts, in the consent sentence', () => {
+    expect(myAlertsFollowUp(undefined, robert, 'Ava')).toBeNull();
+    expect(myAlertsFollowUp({ success: true }, robert, 'Ava')).toBeNull();
+    const text = myAlertsFollowUp(
+      { smsOptInUrl: 'https://scholarmancy.com/sms/optin/tok' },
+      robert,
+      'Ava'
+    );
+    expect(text).toContain('Hi Robert Lewis,');
+    expect(text).toContain('about Ava');
+    expect(text).toContain('https://scholarmancy.com/sms/optin/tok');
+    expect(text).toMatch(/opt in yourself/);
+    expect(myAlertsFollowUp({ smsOptInUrl: 'u' }, { name: undefined }, 'Ava')).toMatch(/^Hi, /);
   });
 });
 

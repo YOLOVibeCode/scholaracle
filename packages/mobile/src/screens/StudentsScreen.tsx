@@ -1,8 +1,10 @@
 /**
- * StudentsScreen — lists students on the account with sync status.
+ * StudentsScreen — lists students on the account with sync status. The data (students,
+ * pending sharing invitations, inviter names) is App's home state, loaded once per session
+ * and refreshed on request; this screen only renders it and asks App to refresh.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,17 +14,13 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
+  AppState,
 } from 'react-native';
-import type { IMySharingStudent } from '@scholaracle/contracts';
 import { apiClient, type IStudentListItem } from '../api/client';
 import { canEditStudent } from '../sharing/accessMatrix';
 import { invitationBannerText } from '../sharing/invitationGroups';
-import {
-  anyShareable,
-  emptyStudentsText,
-  needsInviterNames,
-  studentSubline,
-} from '../sharing/studentsHome';
+import type { IHomeData } from '../sharing/homeData';
+import { anyShareable, emptyStudentsText, studentSubline } from '../sharing/studentsHome';
 import {
   SET_PASSWORD_BANNER_ACTION,
   SET_PASSWORD_BANNER_TEXT,
@@ -33,6 +31,10 @@ import {
 import { forgotPasswordUrl } from '../auth/forgotPasswordUrl';
 
 interface IStudentsScreenProps {
+  /** Students, pending invitations and inviter names, owned by App. */
+  readonly home: IHomeData;
+  readonly isRefreshing: boolean;
+  onRefresh(): void;
   onSelectStudent(student: IStudentListItem): void;
   onAddSource(): void;
   onStartSetup?(): void;
@@ -52,6 +54,9 @@ interface ISetPasswordState {
 }
 
 export function StudentsScreen({
+  home,
+  isRefreshing,
+  onRefresh,
   onSelectStudent,
   onAddSource,
   onStartSetup,
@@ -61,56 +66,33 @@ export function StudentsScreen({
   onOpenInvitations,
   onShare,
 }: IStudentsScreenProps): React.ReactElement {
-  const [students, setStudents] = useState<IStudentListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingInviteCount, setPendingInviteCount] = useState(0);
-  const [mine, setMine] = useState<readonly IMySharingStudent[] | null>(null);
   const [setPassword, setSetPassword] = useState<ISetPasswordState | null>(null);
+  const students = home.students;
+  const pendingInviteCount = home.pendingInvites.length;
+  const error = home.error;
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    setError(null);
-    try {
-      // Invitations are secondary: a failing call must not blank the list.
-      const [data, pending] = await Promise.all([
-        apiClient.getStudents(),
-        apiClient.getPendingSharingInvites().catch(() => []),
-      ]);
-      setStudents([...data]);
-      setPendingInviteCount(pending.length);
-      if (needsInviterNames(data)) {
-        setMine(
-          await apiClient
-            .getMySharing()
-            .then((view) => view.students)
-            .catch(() => null)
-        );
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load students');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+  // "Set a password" for a session flagged forcePasswordReset. The stored flag is a snapshot
+  // from the last sign-in, so re-read it on launch and whenever the app comes to the foreground
+  // and hide the banner as soon as it is gone or dismissed.
+  const checkSetPassword = useCallback(async (): Promise<void> => {
+    const user = await apiClient.getSessionUser().catch(() => null);
+    if (!user) {
+      setSetPassword(null);
+      return;
     }
+    const dismissed = await setPasswordBannerStore.isDismissed(user.id);
+    setSetPassword(
+      shouldShowSetPasswordBanner(user, dismissed) ? { userId: user.id, email: user.email } : null
+    );
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  // "Set a password" for an account the server created from an invitation (random password).
-  useEffect(() => {
-    void (async (): Promise<void> => {
-      const user = await apiClient.getSessionUser().catch(() => null);
-      if (!user) return;
-      const dismissed = await setPasswordBannerStore.isDismissed(user.id);
-      if (shouldShowSetPasswordBanner(user, dismissed)) {
-        setSetPassword({ userId: user.id, email: user.email });
-      }
-    })();
-  }, []);
+    void checkSetPassword();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void checkSetPassword();
+    });
+    return () => sub.remove();
+  }, [checkSetPassword]);
 
   const dismissSetPassword = (): void => {
     if (!setPassword) return;
@@ -177,12 +159,7 @@ export function StudentsScreen({
       </TouchableOpacity>
     ) : null;
 
-  const handleRefresh = (): void => {
-    setIsRefreshing(true);
-    void load(true);
-  };
-
-  if (isLoading) {
+  if (home.status === 'loading') {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#4361ee" />
@@ -233,13 +210,13 @@ export function StudentsScreen({
       <FlatList
         data={students}
         keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
         contentContainerStyle={students.length === 0 ? styles.emptyContainer : undefined}
         ListHeaderComponent={listHeader}
         ListFooterComponent={listFooter}
         renderItem={({ item }) => {
           const editable = onEditStudent !== undefined && canEditStudent(item.access);
-          const subline = studentSubline(item, mine);
+          const subline = studentSubline(item, home.mine);
           return (
             <TouchableOpacity
               style={styles.card}
@@ -276,7 +253,7 @@ export function StudentsScreen({
             <View style={styles.empty} testID="students-error">
               <Text style={styles.emptyTitle}>Could not load students</Text>
               <Text style={styles.emptyText}>{error}</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={() => void load()}>
+              <TouchableOpacity style={styles.emptyButton} onPress={onRefresh}>
                 <Text style={styles.emptyButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>

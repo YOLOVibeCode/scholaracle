@@ -97,9 +97,12 @@ describe('channels and types', () => {
 
 describe('update body and summary', () => {
   it('builds the PUT body, omitting alertTypes for "all"', () => {
+    // "All types" travels as an explicit null: the PUT is a patch, and an absent key could
+    // never widen a previously narrowed list.
     expect(buildContactPrefsUpdate(base)).toEqual({
       receiveAlerts: true,
       alertChannels: ['email', 'push'],
+      alertTypes: null,
     });
     expect(buildContactPrefsUpdate({ ...base, types: ['grade_drop'] })).toEqual({
       receiveAlerts: true,
@@ -109,6 +112,7 @@ describe('update body and summary', () => {
     expect(buildContactPrefsUpdate(silence(base))).toEqual({
       receiveAlerts: false,
       alertChannels: [],
+      alertTypes: null,
     });
   });
 

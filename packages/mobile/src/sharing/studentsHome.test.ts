@@ -1,13 +1,11 @@
-import type { IMySharingStudent, IStudentListItem } from '@scholaracle/contracts';
+import type { IMySharingStudent } from '@scholaracle/contracts';
 import {
   anyShareable,
   emptyStudentsText,
   inviterName,
-  loadHomeCounts,
   needsInviterNames,
   peopleLine,
   sharedWithYouLine,
-  showOnboardingGate,
   studentSubline,
   type IStudentListItemWithInviter,
 } from './studentsHome';
@@ -77,56 +75,6 @@ describe('shared-with-you line', () => {
     expect(anyShareable([])).toBe(false);
     expect(anyShareable([{ access: 'member' }])).toBe(false);
     expect(anyShareable([{ access: 'member' }, { access: 'admin' }])).toBe(true);
-  });
-});
-
-describe('home counts and onboarding gate', () => {
-  const students: IStudentListItem[] = [item({})];
-
-  it('does not call for invites when the account has students', async () => {
-    const getPendingSharingInvites = jest.fn();
-    const counts = await loadHomeCounts({
-      getStudents: async () => students,
-      getPendingSharingInvites,
-    });
-    expect(counts).toEqual({ students: 1, pendingInvites: 0 });
-    expect(getPendingSharingInvites).not.toHaveBeenCalled();
-  });
-
-  it('counts pending invites for an account with no students; a failure counts as zero', async () => {
-    await expect(
-      loadHomeCounts({
-        getStudents: async () => [],
-        getPendingSharingInvites: async () => [
-          { studentId: 's1' } as unknown as Awaited<
-            ReturnType<Parameters<typeof loadHomeCounts>[0]['getPendingSharingInvites']>
-          >[number],
-        ],
-      })
-    ).resolves.toEqual({ students: 0, pendingInvites: 1 });
-    await expect(
-      loadHomeCounts({
-        getStudents: async () => [],
-        getPendingSharingInvites: async () => {
-          throw new Error('offline');
-        },
-      })
-    ).resolves.toEqual({ students: 0, pendingInvites: 0 });
-  });
-
-  it('shows onboarding only with no students and no invites, or when setup was requested', () => {
-    expect(
-      showOnboardingGate({ studentCount: 0, pendingInviteCount: 0, setupRequested: false })
-    ).toBe(true);
-    expect(
-      showOnboardingGate({ studentCount: 0, pendingInviteCount: 2, setupRequested: false })
-    ).toBe(false);
-    expect(
-      showOnboardingGate({ studentCount: 0, pendingInviteCount: 2, setupRequested: true })
-    ).toBe(true);
-    expect(
-      showOnboardingGate({ studentCount: 3, pendingInviteCount: 0, setupRequested: true })
-    ).toBe(false);
   });
 
   it('empty-state copy points at the invitations when there are any', () => {

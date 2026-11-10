@@ -23,7 +23,13 @@ describe('set-password banner', () => {
     expect(await setPasswordBannerStore.isDismissed('u2')).toBe(false);
   });
 
-  it('explains why in the copy', () => {
-    expect(SET_PASSWORD_BANNER_TEXT).toMatch(/created from an invitation/);
+  it('uses neutral copy: the flag is also set by admins, not only by invitations', () => {
+    expect(SET_PASSWORD_BANNER_TEXT).toBe('Set a password so you can sign in next time.');
+    expect(SET_PASSWORD_BANNER_TEXT).not.toMatch(/invitation/);
+  });
+
+  it('hides again once a re-read session no longer carries the flag', () => {
+    expect(shouldShowSetPasswordBanner({ forcePasswordReset: true }, false)).toBe(true);
+    expect(shouldShowSetPasswordBanner({ forcePasswordReset: undefined }, false)).toBe(false);
   });
 });

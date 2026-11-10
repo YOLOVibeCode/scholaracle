@@ -11,7 +11,7 @@ import type {
   SharingLabel,
 } from '@scholaracle/contracts';
 import { ApiError } from '../api/ApiError';
-import { joinNames } from './invitationGroups';
+import { joinNames, toggleInList } from './common';
 
 export interface IShareFormState {
   readonly email: string;
@@ -27,15 +27,6 @@ export const SHARE_LABELS: readonly { readonly value: SharingLabel; readonly tex
   { value: 'parent', text: 'Parent' },
   { value: 'guardian', text: 'Guardian' },
   { value: 'caregiver', text: 'Caregiver' },
-];
-
-export const SHARE_CHANNELS: readonly {
-  readonly value: SharingAlertChannel;
-  readonly text: string;
-}[] = [
-  { value: 'email', text: 'Email' },
-  { value: 'push', text: 'Push' },
-  { value: 'sms', text: 'Text' },
 ];
 
 /** Email and push on by default (owner decision 2026-11-09); text needs a phone. */
@@ -54,20 +45,14 @@ export function initialShareForm(preselectStudentId?: string): IShareFormState {
 }
 
 export function toggleStudent(state: IShareFormState, studentId: string): IShareFormState {
-  const studentIds = state.studentIds.includes(studentId)
-    ? state.studentIds.filter((id) => id !== studentId)
-    : [...state.studentIds, studentId];
-  return { ...state, studentIds };
+  return { ...state, studentIds: toggleInList(state.studentIds, studentId) };
 }
 
 export function toggleChannel(
   state: IShareFormState,
   channel: SharingAlertChannel
 ): IShareFormState {
-  const channels = state.channels.includes(channel)
-    ? state.channels.filter((c) => c !== channel)
-    : [...state.channels, channel];
-  return { ...state, channels };
+  return { ...state, channels: toggleInList(state.channels, channel) };
 }
 
 /** Texting can only be picked once a phone number is typed. */

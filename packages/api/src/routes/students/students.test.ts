@@ -1638,6 +1638,141 @@ describe('Students API Routes', () => {
       expect(res.body.length).toBeGreaterThanOrEqual(1);
       expect(res.body[0]).toMatchObject({ isOwner: true, status: 'accepted' });
     });
+
+    it("carries the owner's account name and email so the row never renders as just 'Owner'", async () => {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Contact Test Student', grade: 9 });
+      const studentId = createRes.body.id as string;
+      for (const path of ['contacts', 'parents']) {
+        const res = await request(app)
+          .get(`/api/students/${studentId}/${path}`)
+          .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body[0]).toMatchObject({
+          isOwner: true,
+          name: 'Students User',
+          email: 'students@example.com',
+        });
+      }
+    });
+  });
+
+  describe('PUT /api/students/:id/contacts/:email alertTypes patch', () => {
+    const SELF = 'self-prefs@example.com';
+    let selfToken: string;
+    let selfUserId: string;
+
+    beforeEach(async () => {
+      await database.collection('users').deleteMany({ email: SELF });
+      const self = await authService.register(SELF, 'password123', 'Self Prefs');
+      if (!self.token || !self.user) {
+        throw new Error('Failed to register contact user');
+      }
+      selfToken = self.token;
+      selfUserId = self.user.id;
+    });
+
+    async function seedAcceptedContact(): Promise<string> {
+      const createRes = await request(app)
+        .post('/api/students')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ name: 'Prefs Student', grade: 8 });
+      const studentId = createRes.body.id as string;
+      await database.collection('students').updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            sharedWith: [
+              {
+                userId: selfUserId,
+                email: SELF,
+                role: 'parent',
+                status: 'accepted',
+                invitedAt: new Date(),
+                acceptedAt: new Date(),
+                alertChannels: ['email', 'push'],
+                alertTypes: ['grade_drop'],
+              },
+            ],
+          },
+        }
+      );
+      return studentId;
+    }
+
+    async function storedAlertTypes(studentId: string): Promise<unknown> {
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      const row = (doc?.['sharedWith'] as Record<string, unknown>[])[0];
+      return row === undefined ? 'missing' : 'alertTypes' in row ? row['alertTypes'] : 'absent';
+    }
+
+    it('the person themself: an array narrows, null restores every type (key removed), absent leaves it', async () => {
+      const studentId = await seedAcceptedContact();
+      const url = `/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`;
+
+      const narrowed = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ alertTypes: ['deadline', 'test'] });
+      expect(narrowed.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toEqual(['deadline', 'test']);
+
+      const untouched = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ receiveAlerts: true });
+      expect(untouched.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toEqual(['deadline', 'test']);
+
+      const cleared = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${selfToken}`)
+        .send({ alertTypes: null, alertChannels: ['email'] });
+      expect(cleared.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toBe('absent');
+
+      // What the list reports: no alertTypes means every type.
+      const list = await request(app)
+        .get(`/api/students/${studentId}/contacts`)
+        .set('Authorization', `Bearer ${selfToken}`);
+      expect(list.status).toBe(200);
+      const me = (list.body as { email?: string; alertTypes?: unknown }[]).find(
+        (p) => p.email === SELF
+      );
+      expect(me).toBeDefined();
+      expect(me?.alertTypes).toBeUndefined();
+    });
+
+    it('owner / admin editing a contact: null clears the list the same way', async () => {
+      const studentId = await seedAcceptedContact();
+      const url = `/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`;
+      const cleared = await request(app)
+        .put(url)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ alertTypes: null, name: 'Renamed' });
+      expect(cleared.status).toBe(200);
+      expect(await storedAlertTypes(studentId)).toBe('absent');
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      expect((doc?.['sharedWith'] as { name?: string }[])[0]?.name).toBe('Renamed');
+    });
+
+    it('owner alert prefs: null or absent alertTypes stores no key', async () => {
+      const studentId = await seedAcceptedContact();
+      const res = await request(app)
+        .put(`/api/students/${studentId}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ receiveAlerts: true, alertChannels: ['email', 'push'], alertTypes: null });
+      expect(res.status).toBe(200);
+      expect(res.body.ownerAlertPrefs).toEqual({
+        receiveAlerts: true,
+        alertChannels: ['email', 'push'],
+      });
+      const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+      const prefs = doc?.['ownerAlertPrefs'] as Record<string, unknown>;
+      expect('alertTypes' in prefs).toBe(false);
+    });
   });
 
   describe('POST /api/students/:id/contacts', () => {

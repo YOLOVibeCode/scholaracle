@@ -7,7 +7,7 @@
  * Logic: src/sharing/shareForm.ts.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,13 +17,12 @@ import {
   StyleSheet,
   Switch,
   Share,
-  ActivityIndicator,
 } from 'react-native';
 import type { ISharingInviteResult } from '@scholaracle/contracts';
 import { apiClient, type IStudentListItem } from '../api/client';
 import { canInvite } from '../sharing/accessMatrix';
+import { ALERT_CHANNELS } from '../sharing/common';
 import {
-  SHARE_CHANNELS,
   SHARE_LABELS,
   buildShareInvite,
   initialShareForm,
@@ -39,6 +38,8 @@ import {
 } from '../sharing/shareForm';
 
 interface IShareStudentScreenProps {
+  /** The account's students (App's home data); only those the viewer may administer are offered. */
+  readonly students: readonly IStudentListItem[];
   /** Preselected when opened from a student's Family & guardians screen. */
   readonly preselectStudentId?: string;
   onBack(): void;
@@ -47,29 +48,20 @@ interface IShareStudentScreenProps {
 }
 
 export function ShareStudentScreen({
+  students,
   preselectStudentId,
   onBack,
   onDone,
 }: IShareStudentScreenProps): React.ReactElement {
-  const [students, setStudents] = useState<readonly IStudentListItem[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const shareable = useMemo(() => students.filter((row) => canInvite(row.access)), [students]);
   const [form, setForm] = useState<IShareFormState>(() => initialShareForm(preselectStudentId));
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [result, setResult] = useState<ISharingInviteResult | null>(null);
 
-  useEffect(() => {
-    apiClient
-      .getStudents()
-      .then((rows) => setStudents(rows.filter((row) => canInvite(row.access))))
-      .catch((err: unknown) =>
-        setLoadError(err instanceof Error ? err.message : 'Failed to load students')
-      );
-  }, []);
-
   const namesById = useMemo(
-    () => new Map((students ?? []).map((s) => [s.id, s.name] as const)),
-    [students]
+    () => new Map(shareable.map((s) => [s.id, s.name] as const)),
+    [shareable]
   );
 
   const handleSend = async (): Promise<void> => {
@@ -241,19 +233,13 @@ export function ShareStudentScreen({
         </View>
 
         <Text style={styles.label}>Students</Text>
-        {loadError ? (
-          <Text style={styles.error} testID="share-students-error">
-            {loadError}
-          </Text>
-        ) : students === null ? (
-          <ActivityIndicator color="#4361ee" />
-        ) : students.length === 0 ? (
+        {shareable.length === 0 ? (
           <Text style={styles.hint} testID="share-students-empty">
             You can only share students you own or manage.
           </Text>
         ) : (
           <View style={styles.card}>
-            {students.map((student) => {
+            {shareable.map((student) => {
               const checked = form.studentIds.includes(student.id);
               return (
                 <TouchableOpacity
@@ -280,7 +266,7 @@ export function ShareStudentScreen({
 
         <Text style={styles.label}>Alerts</Text>
         <View style={styles.card}>
-          {SHARE_CHANNELS.map((channel) => {
+          {ALERT_CHANNELS.map((channel) => {
             const isText = channel.value === 'sms';
             const available = !isText || textChannelAvailable(form);
             return (
