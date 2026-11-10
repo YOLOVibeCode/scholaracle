@@ -204,7 +204,8 @@ describe('AuthService', () => {
     it('should return null for a connector token signed with the same secret', async () => {
       const connectorToken = new ConnectorTokenService(TEST_SECRET).createToken(
         'user-123',
-        'jti-123'
+        'jti-123',
+        'auth-test-device'
       );
       const decoded = await authService.verifyToken(connectorToken);
       expect(decoded).toBeNull();

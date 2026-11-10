@@ -12,7 +12,6 @@ import {
   MessageSquare,
   Settings,
   ClipboardList,
-  Code2,
   LogOut,
   Menu,
   X,
@@ -71,7 +70,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/coupons', icon: Tag, label: 'Coupons' },
     { href: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
     { href: '/admin/reports', icon: ClipboardList, label: 'Reports' },
-    { href: '/admin/scrapers', icon: Code2, label: 'Scrapers' },
     { href: '/admin/communications', icon: MessageSquare, label: 'Communications' },
     { href: '/admin/settings', icon: Settings, label: 'Settings' },
     { href: '/admin/audit-logs', icon: ClipboardList, label: 'Audit Logs' },
@@ -131,7 +129,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Mobile menu toggle */}
       <button
+        type="button"
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        aria-label={isSidebarOpen ? 'Close admin menu' : 'Open admin menu'}
+        data-testid="admin-mobile-menu-toggle"
         className="fixed top-4 left-4 z-50 lg:hidden p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg"
       >
         {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

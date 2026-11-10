@@ -1,3 +1,10 @@
+import type {
+  ITriggerSyncResponse,
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+  ISourceIngestLastCounts,
+} from '@scholaracle/contracts';
 import { apiClient } from './client';
 
 export interface IDataSource {
@@ -13,6 +20,9 @@ export interface IDataSource {
   readonly hasCredentials?: boolean;
   readonly lastScraped?: string;
   readonly lastSuccess?: string;
+  readonly lastSuccessAt?: string;
+  readonly lastRunId?: string;
+  readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
 }
 
@@ -34,11 +44,18 @@ export interface IAddSourceRequest {
 
 export interface IIngestRun {
   readonly runId: string;
-  readonly status: 'started' | 'uploaded' | 'committed' | 'failed';
+  readonly sourceId?: string;
+  readonly status: 'started' | 'uploaded' | 'committed' | 'failed' | 'abandoned';
   readonly startedAt: string;
   readonly uploadedAt?: string;
   readonly committedAt?: string;
+  readonly abandonedAt?: string;
   readonly error?: string | null;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly stats?: ISlcIngestRunStats;
+  readonly clientMeta?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -99,9 +116,9 @@ export const sourcesApi = {
     }
   },
 
-  async triggerSync(studentId: string, sourceId: string): Promise<IIngestRun | null> {
+  async triggerSync(studentId: string, sourceId: string): Promise<ITriggerSyncResponse | null> {
     try {
-      return await apiClient.post<IIngestRun>(
+      return await apiClient.post<ITriggerSyncResponse>(
         `/students/${studentId}/sources/${sourceId}/runs/trigger`,
         {}
       );

@@ -11,12 +11,27 @@ function expectedMatchFingerprint(): string {
   return hashPayload(`Homework.pdf\0fractions\0${assignHash}`);
 }
 
+function mockConsentsCollection(userId: string, opts?: { active?: boolean }) {
+  const isActive = opts?.active ?? true;
+  return {
+    findOne: async (query: { userId: string; purpose: string }) => {
+      if (!isActive || query.userId !== userId) {
+        return null;
+      }
+      return { userId, purpose: query.purpose, consentedAt: new Date() };
+    },
+  };
+}
+
 describe('runBatchMaterialMatching', () => {
   it('returns zero LLM calls when no unmatched materials exist', async () => {
     const complete = jest.fn();
     const llm = { complete } as unknown as LlmClient;
     const database = {
       collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1');
+        }
         if (name === 'slc_course_materials') {
           return {
             find: () => ({
@@ -73,6 +88,9 @@ describe('runBatchMaterialMatching', () => {
     const updateOne = jest.fn().mockResolvedValue({});
     const database = {
       collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1');
+        }
         if (name === 'slc_course_materials') {
           return {
             find: () => ({
@@ -152,6 +170,9 @@ describe('runBatchMaterialMatching', () => {
 
     const database = {
       collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1');
+        }
         if (name === 'slc_course_materials') {
           return {
             find: () => ({
@@ -188,6 +209,42 @@ describe('runBatchMaterialMatching', () => {
       llmClient: llm,
     });
 
+    expect(complete).not.toHaveBeenCalled();
+    expect(result.llmCallCount).toBe(0);
+  });
+
+  it('skips LLM when server AI consent is off', async () => {
+    const complete = jest.fn();
+    const llm = { complete } as unknown as LlmClient;
+    const materials = [
+      {
+        externalId: 'mat-1',
+        userId: 'user-1',
+        courseExternalId: 'course-1',
+        record: { title: 'Homework.pdf', extractedText: 'fractions' },
+      },
+    ];
+    const database = {
+      collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1', { active: false });
+        }
+        if (name === 'slc_course_materials') {
+          return {
+            find: () => ({
+              toArray: async () => materials,
+            }),
+          };
+        }
+        throw new Error(`unexpected ${name}`);
+      },
+    };
+
+    const result = await runBatchMaterialMatching({
+      database: database as never,
+      userId: 'user-1',
+      llmClient: llm,
+    });
     expect(complete).not.toHaveBeenCalled();
     expect(result.llmCallCount).toBe(0);
   });

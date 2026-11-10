@@ -37,3 +37,10 @@ export function getTokenRole(token: string | null): 'parent' | 'student' | null 
   if (typeof payload['userId'] === 'string') return 'parent';
   return null;
 }
+
+/** Returns the `userId` claim, or null if absent / unreadable. */
+export function getTokenUserId(token: string | null): string | null {
+  if (!token || typeof token !== 'string') return null;
+  const payload = decodePayload(token);
+  return typeof payload?.['userId'] === 'string' ? (payload['userId'] as string) : null;
+}

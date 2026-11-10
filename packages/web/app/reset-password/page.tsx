@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api/auth';
+import { clearSetPasswordPrompt } from '@/lib/sharing/setPasswordPrompt';
+import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -42,6 +44,7 @@ function ResetPasswordForm() {
         const result = await authApi.resetPassword(token, newPassword);
 
         if (result.success) {
+          clearSetPasswordPrompt();
           setSuccess(true);
           setTimeout(() => {
             router.push('/login?reset=success');
@@ -75,21 +78,11 @@ function ResetPasswordForm() {
         </CardHeader>
         <form data-testid="form-reset-password" onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && (
-              <div
-                data-testid="message-error"
-                className="rounded-md bg-red-50 p-3 text-sm text-red-800 dark:bg-red-900/20 dark:text-red-200"
-              >
-                {error}
-              </div>
-            )}
+            {error && <FormErrorAlert>{error}</FormErrorAlert>}
             {success && (
-              <div
-                data-testid="message-success"
-                className="rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/20 dark:text-green-200"
-              >
+              <FormStatusAlert variant="success" data-testid="message-success">
                 Password updated. Redirecting to sign in...
-              </div>
+              </FormStatusAlert>
             )}
             {hasToken && !success && (
               <>

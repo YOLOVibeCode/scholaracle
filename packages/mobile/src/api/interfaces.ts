@@ -4,7 +4,9 @@
  */
 
 import type {
+  ISanitizedPageSkeletonCapture,
   ISlcIngestEnvelopeV1,
+  ISlcRunCoverage,
   IStudentListItem,
   IStudentCreateRequest,
   IStudentGradesResponse,
@@ -12,7 +14,10 @@ import type {
   IAuthLoginResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
+  StudentStatus,
   ISourceInviteIssueRequest,
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
@@ -29,11 +34,13 @@ export interface IAuthSession {
 /** Student studio slice. Parent screens must not depend on this. */
 export interface IStudioApi {
   getStudioToday(): Promise<ITodayView>;
+  getStudioWeek(): Promise<IWeekView>;
   getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView>;
   patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-  ): Promise<void>;
+    status: StudentStatus | null,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse>;
 }
 
 export interface IConnectorTokenProvider {
@@ -57,6 +64,12 @@ export interface IEnvelopeUploader {
     readonly connectorToken: string;
     readonly error: string;
     readonly clientMeta?: Readonly<Record<string, string>>;
+  }): Promise<void>;
+  uploadRunSkeleton(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly connectorToken: string;
+    readonly payload: ISanitizedPageSkeletonCapture;
   }): Promise<void>;
 }
 
@@ -83,6 +96,8 @@ export interface IRunRecorder {
       status: 'success' | 'failed' | 'in_progress';
       opCount?: number;
       errorMessage?: string;
+      coverage?: ISlcRunCoverage;
+      warnings?: readonly string[];
     }
   ): Promise<void>;
 }

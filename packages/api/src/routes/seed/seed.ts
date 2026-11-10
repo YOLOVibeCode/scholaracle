@@ -41,6 +41,11 @@ import {
 } from './demo-data';
 import type { ISharedParent, IStudentLogin } from '@scholaracle/database';
 import type { IAssetStore } from '../../services/assets/IAssetStore';
+import {
+  SEED_DEFAULT_ADMIN_MFA_SECRET,
+  SEED_DEFAULT_ADMIN_PASSWORD,
+  SEED_TEST_PARENT_PASSWORD,
+} from './seed-constants';
 
 export interface ISeedRouterConfig {
   readonly database: Db;
@@ -51,37 +56,29 @@ export interface ISeedRouterConfig {
 /**
  * Test users configuration matching E2E test data.
  */
-/**
- * Known TOTP secret for E2E testing. Admin accounts are seeded with MFA pre-configured
- * using this secret so E2E tests can generate valid TOTP codes.
- */
-const E2E_MFA_SECRET = 'JBSWY3DPEHPK3PXP';
-
 const TEST_USERS = {
   parent: {
     email: 'test.parent@example.com',
-    password: 'TestPass123!',
+    password: SEED_TEST_PARENT_PASSWORD,
     name: 'Test Parent',
   },
   parent2: {
     email: 'test.parent2@example.com',
-    password: 'TestPass123!',
+    password: SEED_TEST_PARENT_PASSWORD,
     name: 'Test Parent 2',
   },
   parent3: {
     email: 'test.parent3@example.com',
-    password: 'TestPass123!',
+    password: SEED_TEST_PARENT_PASSWORD,
     name: 'Test Parent 3',
   },
   admin: {
     email: 'admin@scholarmancy.com',
-    password: 'Admin123!',
     name: 'Admin User',
     role: 'admin' as AdminRole,
   },
   analyst: {
     email: 'analyst@scholarmancy.com',
-    password: 'Admin123!',
     name: 'Analyst',
     role: 'admin' as AdminRole,
   },
@@ -118,15 +115,29 @@ function requireSeedAccess(req: Request, _res: Response, next: NextFunction): vo
   next(new ForbiddenError('Seed routes are not available on this server'));
 }
 
-/**
- * Admin seed credentials. The repo's values are public, so they are used only
- * on a local server; deployed environments must supply their own.
- */
-function adminSeedSecrets(localPassword: string): { password: string; mfaSecret: string } | null {
-  const password = process.env['SEED_ADMIN_PASSWORD'] ?? '';
-  const mfaSecret = process.env['SEED_ADMIN_MFA_SECRET'] ?? '';
-  if (password.length >= 12 && mfaSecret.length >= 16) return { password, mfaSecret };
-  return isLocalDevServer() ? { password: localPassword, mfaSecret: E2E_MFA_SECRET } : null;
+function adminSeedSecrets(): { password: string; mfaSecret: string } | null {
+  const fromEnvPassword = process.env['SEED_ADMIN_PASSWORD'] ?? '';
+  const fromEnvMfaSecret = process.env['SEED_ADMIN_MFA_SECRET'] ?? '';
+  if (fromEnvPassword.length >= 12 && fromEnvMfaSecret.length >= 16) {
+    return { password: fromEnvPassword, mfaSecret: fromEnvMfaSecret };
+  }
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDeployed = Boolean(
+    process.env['RAILWAY_ENVIRONMENT_ID'] ?? process.env['RAILWAY_ENVIRONMENT_NAME']
+  );
+  if ((nodeEnv === 'test' || nodeEnv === 'development') && !isDeployed) {
+    return {
+      password: SEED_DEFAULT_ADMIN_PASSWORD,
+      mfaSecret: SEED_DEFAULT_ADMIN_MFA_SECRET,
+    };
+  }
+  return null;
+}
+
+/** Emails allowed for seed-only parent helpers (demo + fixture domains). */
+function isSeedFixtureEmail(email: string): boolean {
+  const normalized = email.toLowerCase().trim();
+  return normalized.endsWith('@scholarmancy.com') || normalized.endsWith('@example.com');
 }
 
 type SeedAdminOutcome =
@@ -136,14 +147,14 @@ type SeedAdminOutcome =
 async function upsertSeedAdmin(
   database: Db,
   adminRepository: AdminUserRepository,
-  userConfig: { email: string; password: string; name: string; role: AdminRole },
+  userConfig: { email: string; name: string; role: AdminRole },
   options: { shouldForce: boolean }
 ): Promise<SeedAdminOutcome> {
   const existing = await adminRepository.findByEmail(userConfig.email);
   if (existing && !options.shouldForce) {
     return { kind: 'existing', id: existing._id!.toString() };
   }
-  const secrets = adminSeedSecrets(userConfig.password);
+  const secrets = adminSeedSecrets();
   if (!secrets) {
     return { kind: 'skipped', reason: 'SEED_ADMIN_PASSWORD and SEED_ADMIN_MFA_SECRET not set' };
   }
@@ -931,6 +942,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
    */
   router.post(
     '/demo',
+    requireSeedAccess,
     asyncHandler((req: Request, res: Response) => handleDemoSeed(req, res, config))
   );
 
@@ -946,7 +958,7 @@ export function seedRouter(config: ISeedRouterConfig): Router {
 
   /**
    * POST /api/seed/set-password
-   * Set password for a user (dev/test only).
+   * Set password for a user (dev/test only). Email must be @scholarmancy.com or @example.com.
    * Body: { email: string, password: string }
    */
   router.post(
@@ -960,6 +972,10 @@ export function seedRouter(config: ISeedRouterConfig): Router {
       const { email, password } = req.body as { email?: string; password?: string };
       if (!email || !password) {
         throw new ValidationError('Missing email or password');
+      }
+
+      if (!isSeedFixtureEmail(email)) {
+        throw new ForbiddenError('Email not allowed for seed password reset');
       }
 
       const userRepository = new UserRepository(config.database);
@@ -976,8 +992,56 @@ export function seedRouter(config: ISeedRouterConfig): Router {
   );
 
   /**
+   * POST /api/seed/set-plan
+   * Put a fixture account on a plan so an E2E owner can hold several students (dev/test only).
+   * Email must be @scholarmancy.com or @example.com (fixture domains).
+   * Body: { email: string, plan: 'free' | 'starter' | 'premium' | 'family' }
+   */
+  router.post(
+    '/set-plan',
+    requireSeedAccess,
+    asyncHandler(async (req: Request, res: Response) => {
+      if (!isDemoAllowed()) {
+        throw new ForbiddenError('Not allowed in production');
+      }
+      const { email, plan } = req.body as { email?: unknown; plan?: unknown };
+      if (typeof email !== 'string' || email.trim() === '') {
+        throw new ValidationError('Missing email');
+      }
+      const allowedPlans = ['free', 'starter', 'premium', 'family'] as const;
+      type SeedPlan = (typeof allowedPlans)[number];
+      if (!allowedPlans.includes(plan as SeedPlan)) {
+        throw new ValidationError(`plan must be one of ${allowedPlans.join(', ')}`);
+      }
+      const normalizedEmail = email.toLowerCase().trim();
+      if (!isSeedFixtureEmail(normalizedEmail)) {
+        throw new ForbiddenError('Email not allowed for seed set-plan');
+      }
+      const userRepository = new UserRepository(config.database);
+      const subscriptionRepository = new SubscriptionRepository(config.database);
+      const user = await userRepository.findByEmail(normalizedEmail);
+      if (!user?._id) {
+        throw new NotFoundError('User not found');
+      }
+      const userId = user._id.toString();
+      await config.database.collection('subscriptions').deleteMany({ userId });
+      const start = new Date();
+      const sub = await subscriptionRepository.create({
+        userId,
+        plan: plan as SeedPlan,
+        status: 'active',
+        currentPeriodStart: start,
+        currentPeriodEnd: new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000),
+        billingCycle: 'monthly',
+      });
+      res.json({ success: true, plan: sub.plan, subscriptionId: sub._id?.toString() });
+    })
+  );
+
+  /**
    * POST /api/seed/add-parent
    * Add a parent with accepted status directly to a student (dev/test only).
+   * Email must be @scholarmancy.com or @example.com (fixture domains).
    * Body: { studentId: string, email: string, name: string, role?: string, userId?: string }
    */
   router.post(
@@ -1007,6 +1071,9 @@ export function seedRouter(config: ISeedRouterConfig): Router {
       }
 
       const normalizedEmail = email.toLowerCase().trim();
+      if (!isSeedFixtureEmail(normalizedEmail)) {
+        throw new ForbiddenError('Email not allowed for seed add-parent');
+      }
       const parentRole = (role === 'guardian' || role === 'caregiver' ? role : 'parent') as
         'parent' | 'guardian' | 'caregiver';
 

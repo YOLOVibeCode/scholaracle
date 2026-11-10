@@ -17,15 +17,17 @@ import { TEST_USERS } from '../fixtures/test-data';
  * Verified against `packages/web/app/dashboard/` directory layout.
  */
 test.describe('@a11y WCAG 2.2 AA baseline', () => {
-  test('A11Y-001: /login has no serious/critical axe violations (golden path)', async ({ page }) => {
+  test('A11Y-001: /login has no serious/critical axe violations (golden path)', async ({
+    page,
+  }) => {
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+    await expect(page.locator('[data-testid="input-email"]')).toBeVisible({ timeout: 30_000 });
     await expectNoA11yViolations(page);
   });
 
   test('A11Y-002: /register has no serious/critical axe violations', async ({ page }) => {
     await page.goto('/register');
-    await expect(page.getByRole('heading', { name: /create an account/i })).toBeVisible();
+    await expect(page.locator('[data-testid="input-email"]')).toBeVisible({ timeout: 30_000 });
     await expectNoA11yViolations(page);
   });
 
@@ -41,7 +43,6 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.goto();
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
-    // Excluding any third-party iframes — we test those separately.
     await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
@@ -54,14 +55,22 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
-  test('A11Y-006: /dashboard/settings has no serious/critical axe violations', async ({
-    page,
-  }) => {
+  test('A11Y-006: /dashboard/settings has no serious/critical axe violations', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
     await page.waitForURL(/\/dashboard/);
     await page.goto('/dashboard/settings');
+    await expectNoA11yViolations(page, { exclude: ['iframe'] });
+  });
+
+  test('A11Y-006b: /dashboard/billing has no serious/critical axe violations', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+    await loginPage.login(TEST_USERS.parent.email, TEST_USERS.parent.password);
+    await page.waitForURL(/\/dashboard/);
+    await page.goto('/dashboard/billing');
+    await expect(page.getByTestId('billing-page')).toBeVisible();
     await expectNoA11yViolations(page, { exclude: ['iframe'] });
   });
 
@@ -73,7 +82,6 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     await loginPage.login('nonexistent@example.com', 'WrongPassword123!', {
       waitForDashboard: false,
     });
-    // Wait for error UI before scanning — covers the error-state branch (often forgotten).
     await expect(page.getByTestId('message-error')).toBeVisible();
     await expectNoA11yViolations(page);
   });
@@ -82,15 +90,16 @@ test.describe('@a11y WCAG 2.2 AA baseline', () => {
     page,
   }) => {
     await page.goto('/register');
-    // Tab through and confirm focusable order is sane (each input gets focus).
     const inputs = await page.locator('input').count();
     for (let i = 0; i < Math.min(inputs, 6); i++) {
       await page.keyboard.press('Tab');
     }
-    // Submit empty: native validation kicks in. Page must remain a11y-clean.
-    await page.getByTestId('button-register').click().catch(() => {
-      // Native validation may block submission; that's fine.
-    });
+    await page
+      .getByTestId('button-register')
+      .click()
+      .catch(() => {
+        /* native validation may block */
+      });
     await expectNoA11yViolations(page);
   });
 });

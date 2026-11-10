@@ -4,27 +4,69 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Linking,
+  Switch,
+  ActivityIndicator,
+} from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '../auth/AuthContext';
 import { connectedSourceStore, type IConnectedSource } from '../sources/ConnectedSourceStore';
+import { groupSourcesByPortalAccount, portalAccountGroupKey } from '../sync/syncAllByPortalAccount';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
+import {
+  DISCONNECT_LOCAL_LABEL,
+  DISCONNECT_SERVER_LABEL,
+  canDisconnectOnServer,
+  disconnectConfirmText,
+  disconnectFailureMessage,
+  disconnectSource,
+  type DisconnectMode,
+} from '../sources/disconnectSource';
+import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
+import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
+import { DeleteAccountSheet } from './DeleteAccountSheet';
+import { canDisconnectOnServerAs } from '../sharing/accessMatrix';
+import type { StudentAccess } from '@scholaracle/contracts';
 
 interface ISettingsScreenProps {
   onBack(): void;
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
+  /**
+   * Student id -> the viewer's access, from App's home data: members may only disconnect
+   * "this phone only". Absent (unknown) keeps the server option; the server still decides.
+   */
+  readonly accessById?: ReadonlyMap<string, StudentAccess>;
+  onSyncAll?(sources: readonly IConnectedSource[]): void;
+  /** Opens the read-only Plan & usage screen (parent sessions only). */
+  onOpenPlan?(): void;
+  /** Parent sessions: opens the notification preferences screen. */
+  onOpenNotificationSettings?(): void;
 }
 
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
+  accessById,
+  onSyncAll,
+  onOpenPlan,
+  onOpenNotificationSettings,
 }: ISettingsScreenProps): React.ReactElement {
   const { logout } = useAuth();
   const [sources, setSources] = useState<readonly IConnectedSource[]>([]);
   const [pushStatus, setPushStatus] = useState<string>('unknown');
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
+  const [serverAiEnabled, setServerAiEnabled] = useState(false);
+  const [isServerAiLoading, setIsServerAiLoading] = useState(true);
+  const [isServerAiSaving, setIsServerAiSaving] = useState(false);
 
   const loadSources = useCallback(async () => {
     if (hideHousehold) {
@@ -34,31 +76,65 @@ export function SettingsScreen({
     setSources(await connectedSourceStore.list());
   }, [hideHousehold]);
 
+  const serverDisconnectAllowed = (source: IConnectedSource): boolean =>
+    canDisconnectOnServer(source) &&
+    canDisconnectOnServerAs(accessById?.get(source.studentId ?? ''));
+
   useEffect(() => {
     void loadSources();
     Notifications.getPermissionsAsync()
       .then(({ status }) => setPushStatus(status))
       .catch(() => setPushStatus('unknown'));
-  }, [loadSources]);
+    if (!hideHousehold) {
+      void fetchServerAiConsent()
+        .then(setServerAiEnabled)
+        .catch(() => setServerAiEnabled(false))
+        .finally(() => setIsServerAiLoading(false));
+    } else {
+      setIsServerAiLoading(false);
+    }
+  }, [loadSources, hideHousehold]);
+
+  const handleServerAiToggle = (next: boolean): void => {
+    if (isServerAiSaving) return;
+    setIsServerAiSaving(true);
+    void updateServerAiConsent(next)
+      .then(setServerAiEnabled)
+      .catch(() => {
+        Alert.alert('Could not save', 'Try again when you are back online.');
+      })
+      .finally(() => setIsServerAiSaving(false));
+  };
+
+  const runDisconnect = (source: IConnectedSource, mode: DisconnectMode): void => {
+    void disconnectSource(source, mode)
+      .catch((err: unknown) => {
+        Alert.alert('Could not disconnect', disconnectFailureMessage(err));
+      })
+      .finally(() => void loadSources());
+  };
 
   const handleDisconnect = (source: IConnectedSource): void => {
+    const serverOption = serverDisconnectAllowed(source);
+    const localOnly = {
+      text: serverOption ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
+      style: 'destructive' as const,
+      onPress: (): void => runDisconnect(source, 'local-only'),
+    };
     Alert.alert(
       'Disconnect portal?',
-      `Removes ${source.provider} (${source.institutionExternalId}) and its saved credentials from this device. Already-synced data stays in your account.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: (): void => {
-            void (async (): Promise<void> => {
-              await SecureStore.deleteItemAsync(source.credentialKey).catch(() => undefined);
-              await connectedSourceStore.remove(source.sourceId);
-              await loadSources();
-            })();
-          },
-        },
-      ]
+      disconnectConfirmText(source, serverOption),
+      serverOption
+        ? [
+            { text: 'Cancel', style: 'cancel' },
+            localOnly,
+            {
+              text: DISCONNECT_SERVER_LABEL,
+              style: 'destructive',
+              onPress: (): void => runDisconnect(source, 'server-and-local'),
+            },
+          ]
+        : [{ text: 'Cancel', style: 'cancel' }, localOnly]
     );
   };
 
@@ -86,20 +162,13 @@ export function SettingsScreen({
   };
 
   const handleDeleteAccount = (): void => {
-    Alert.alert(
-      'Delete account?',
-      'This opens the account deletion page. Confirming there permanently removes your Scholarmancy data within 30 days. School portal passwords stay on this device until you uninstall.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: (): void => {
-            void Linking.openURL(STORE_LEGAL_URLS.deleteAccount);
-          },
-        },
-      ]
-    );
+    setShowDeleteSheet(true);
+  };
+
+  const handleAccountDeleted = (): void => {
+    setShowDeleteSheet(false);
+    // The server removed the account; purge this phone (credentials, ledger, tokens) and leave.
+    void logout().catch(() => undefined);
   };
 
   return (
@@ -121,39 +190,89 @@ export function SettingsScreen({
                 <Text style={styles.emptyText}>No portals connected on this device.</Text>
               </View>
             ) : (
-              sources.map((source) => (
-                <View key={source.sourceId} style={styles.card}>
-                  <View style={styles.sourceRow}>
-                    <View style={styles.sourceInfo}>
-                      <Text style={styles.sourceName}>{source.provider}</Text>
-                      <Text style={styles.sourceSub}>{source.institutionExternalId}</Text>
-                      <Text style={styles.sourceSub}>Student: {source.studentExternalId}</Text>
-                    </View>
+              [...groupSourcesByPortalAccount(sources).entries()].map(([groupKey, grouped]) => (
+                <View key={groupKey} style={styles.card}>
+                  <Text style={styles.sourceName}>{grouped[0]?.provider ?? 'Portal'}</Text>
+                  <Text style={styles.sourceSub}>{grouped[0]?.institutionExternalId}</Text>
+                  {grouped.map((source) => (
+                    <Text key={source.sourceId} style={styles.sourceSub}>
+                      Student: {source.studentExternalId}
+                    </Text>
+                  ))}
+                  {onSyncAll && grouped.length > 1 ? (
                     <TouchableOpacity
-                      style={styles.disconnectBtn}
-                      onPress={() => handleDisconnect(source)}
-                      testID={`button-disconnect-${source.sourceId}`}
+                      style={styles.syncAllBtn}
+                      onPress={() => onSyncAll(grouped)}
+                      testID={`button-sync-all-${portalAccountGroupKey(grouped[0]!)}`}
                     >
-                      <Text style={styles.disconnectText}>Disconnect</Text>
+                      <Text style={styles.syncAllText}>Sync all ({grouped.length})</Text>
                     </TouchableOpacity>
-                  </View>
+                  ) : null}
+                  {grouped.map((source) => (
+                    <View key={source.sourceId} style={styles.sourceRow}>
+                      <TouchableOpacity
+                        style={styles.disconnectBtn}
+                        onPress={() => handleDisconnect(source)}
+                        testID={`button-disconnect-${source.sourceId}`}
+                      >
+                        <Text style={styles.disconnectText}>Disconnect</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
               ))
             )}
           </>
         )}
 
+        {hideHousehold ? null : (
+          <>
+            <Text style={styles.sectionHeader}>Server-side analysis</Text>
+            <View style={styles.card}>
+              <Text style={styles.rowText}>{SERVER_AI_CONSENT_LABEL}</Text>
+              <Text style={styles.hintText}>Off by default. You can change this anytime.</Text>
+              <View style={styles.serverAiRow}>
+                {isServerAiLoading ? (
+                  <ActivityIndicator testID="loading-server-ai" />
+                ) : (
+                  <Switch
+                    value={serverAiEnabled}
+                    onValueChange={handleServerAiToggle}
+                    disabled={isServerAiSaving}
+                    testID="switch-server-ai"
+                  />
+                )}
+              </View>
+            </View>
+          </>
+        )}
+
         <Text style={styles.sectionHeader}>Notifications</Text>
-        <View style={styles.card}>
-          <Text style={styles.rowText}>
-            Permission: <Text style={styles.rowValue}>{pushStatus}</Text>
-          </Text>
-          {pushStatus !== 'granted' && (
-            <Text style={styles.hintText}>
-              Enable notifications in iOS Settings to receive grade alerts.
+        {onOpenNotificationSettings ? (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={onOpenNotificationSettings}
+            accessibilityRole="button"
+            accessibilityLabel={`Notification settings, device permission ${pushStatus}`}
+            testID="link-notification-settings"
+          >
+            <Text style={styles.rowText}>
+              Notification settings ›{' '}
+              <Text style={styles.rowValue}>{pushStatus === 'granted' ? '' : pushStatus}</Text>
             </Text>
-          )}
-        </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.rowText}>
+              Permission: <Text style={styles.rowValue}>{pushStatus}</Text>
+            </Text>
+            {pushStatus !== 'granted' && (
+              <Text style={styles.hintText}>
+                Enable notifications in iOS Settings to receive grade alerts.
+              </Text>
+            )}
+          </View>
+        )}
 
         <Text style={styles.sectionHeader}>Legal</Text>
         <TouchableOpacity
@@ -177,6 +296,14 @@ export function SettingsScreen({
         >
           <Text style={styles.rowText}>Support</Text>
         </TouchableOpacity>
+
+        {!hideHousehold && onOpenPlan ? (
+          <TouchableOpacity style={styles.card} onPress={onOpenPlan} testID="link-plan-usage">
+            <Text style={styles.rowText}>Plan & usage</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity
           style={styles.card}
           onPress={handleDeleteAccount}
@@ -184,8 +311,6 @@ export function SettingsScreen({
         >
           <Text style={styles.deleteAccountText}>Delete account</Text>
         </TouchableOpacity>
-
-        <Text style={styles.sectionHeader}>Account</Text>
         <TouchableOpacity
           style={styles.signOutBtn}
           onPress={handleSignOut}
@@ -195,6 +320,11 @@ export function SettingsScreen({
           <Text style={styles.signOutText}>{isSigningOut ? 'Signing out…' : 'Sign Out'}</Text>
         </TouchableOpacity>
       </ScrollView>
+      <DeleteAccountSheet
+        visible={showDeleteSheet}
+        onClose={() => setShowDeleteSheet(false)}
+        onDeleted={handleAccountDeleted}
+      />
     </View>
   );
 }
@@ -245,9 +375,20 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   disconnectText: { color: '#dc3545', fontWeight: '600', fontSize: 13 },
+  syncAllBtn: {
+    marginTop: 10,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#4361ee',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  syncAllText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   rowText: { fontSize: 14, color: '#1a1a2e' },
   rowValue: { fontWeight: '600', textTransform: 'capitalize' },
   hintText: { fontSize: 13, color: '#6c757d', marginTop: 6 },
+  serverAiRow: { marginTop: 12, alignItems: 'flex-start' },
   signOutBtn: {
     backgroundColor: '#fff',
     borderWidth: 1,

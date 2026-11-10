@@ -5,7 +5,13 @@
  * browser-extension (content-script), and CLI (BaseScraper adapters).
  */
 
-import type { ISlcIngestEnvelopeV1, ISlcDeltaOp } from '@scholaracle/contracts';
+import type {
+  ISanitizedPageSkeletonCapture,
+  ISlcIngestEnvelopeV1,
+  ISlcDeltaOp,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+} from '@scholaracle/contracts';
 import type { IPageDriver } from '../driver/IPageDriver';
 import type { IScraperResolver } from '../registry/module';
 
@@ -28,7 +34,11 @@ export type SyncProgressCallback = (progress: ISyncProgress) => void;
 // Failure
 // ---------------------------------------------------------------------------
 
-export type SyncFailurePhase = 'portal' | 'upload' | 'local';
+export type SyncFailurePhase = 'portal' | 'upload' | 'local' | 'STUDENT_MISMATCH';
+
+/** Parent-facing message when portal extract has no child matching studentNameHint. */
+export const STUDENT_MISMATCH_MESSAGE =
+  'The school portal does not show a student matching the child you selected. Check the name on the child profile, then try again.';
 
 export class SyncError extends Error {
   readonly phase: SyncFailurePhase;
@@ -81,6 +91,20 @@ export interface IClientScrapeConfig {
  */
 export interface IIngestUploader {
   /**
+   * Register the run server-side before portal extract (optional).
+   * When present, `upload()` should skip duplicate POST /runs.
+   */
+  beginRun?(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly clientMeta?: Readonly<Record<string, string>>;
+    readonly startingStep?: ISlcIngestRunStep;
+  }): Promise<void>;
+
+  /** Append one timed step to the server run record (optional, fail-open). */
+  postTrace?(runId: string, step: ISlcIngestRunStep): Promise<void>;
+
+  /**
    * Upload the complete envelope. Implementations handle run registration,
    * envelope delivery, and run completion internally.
    */
@@ -91,6 +115,16 @@ export interface IIngestUploader {
    * before upload). Optional — implementations may no-op this.
    */
   reportFailure?(runId: string, sourceId: string, error: string): Promise<void>;
+
+  /**
+   * Upload a sanitized page skeleton captured after a failed portal recipe step.
+   * Optional — mobile implements; other clients may no-op.
+   */
+  uploadSkeleton?(
+    runId: string,
+    sourceId: string,
+    payload: ISanitizedPageSkeletonCapture
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +179,8 @@ export interface IRunResult {
   readonly status: 'success' | 'failed';
   readonly opCount?: number;
   readonly errorMessage?: string;
+  readonly coverage?: ISlcRunCoverage;
+  readonly warnings?: readonly string[];
 }
 
 export interface IRunRecorder {
@@ -192,4 +228,9 @@ export interface IClientScrapeHost {
   readonly resolver?: IScraperResolver;
   /** Emit progress events back to the caller UI. */
   readonly onProgress?: SyncProgressCallback;
+  /** When true, failed portal steps capture a sanitized DOM skeleton and upload it. */
+  readonly captureSkeletons?: boolean;
+  /** Served selector patch applied for this sync only. */
+  readonly selectorPatch?: Readonly<Record<string, string>>;
+  readonly appliedSelectorPatchId?: string;
 }

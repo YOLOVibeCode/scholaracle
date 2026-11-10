@@ -53,7 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Sidebar />
           <div className="flex flex-1 flex-col">
             <header className="flex h-16 items-center gap-4 border-b px-4">
-              <SidebarTrigger />
+              <SidebarTrigger data-testid="mobile-menu-toggle" aria-label="Open navigation menu" />
               <div className="flex flex-1 items-center justify-end gap-4">
                 <Button
                   variant="outline"

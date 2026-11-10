@@ -6,8 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc --build",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "test": "jest --passWithNoTests=false",
+    "test:coverage": "jest --coverage --passWithNoTests=false",
     "lint": "eslint src --ext .ts",
     "lint:strict": "eslint src --ext .ts --max-warnings=0",
     "lint:fix": "eslint src --ext .ts --fix",

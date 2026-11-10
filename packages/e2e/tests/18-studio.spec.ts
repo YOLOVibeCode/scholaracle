@@ -1,10 +1,11 @@
 import { devices } from '@playwright/test';
 import { test, expect, login, loginStudent } from '../fixtures/auth';
-import { DEMO_USERS } from '../fixtures/test-data';
+import { DEMO_USERS, seedHeaders } from '../fixtures/test-data';
 import { assertOnDashboard, assertOnStudio } from '../helpers/assertions';
 
 /**
- * Phone-width student studio: Emma’s Today → hosted PDF in-page → blob Download → cache hit.
+ * Phone-width student studio: Emma’s Today → hosted PDF in-page → blob Download → cache hit;
+ * This week (owed / days / done) with the status sheet and the Need-help note.
  * Parent and student sessions stay on their own homes.
  *
  * Depends on: Layer 0 (@critical)
@@ -30,7 +31,9 @@ test.describe('@studio Student studio (phone-width)', () => {
     if (isRemoteApi(API_BASE)) {
       return;
     }
-    const res = await request.post(`${API_BASE}/api/seed/demo`);
+    const res = await request.post(`${API_BASE}/api/seed/demo`, {
+      headers: seedHeaders(),
+    });
     expect(res.status(), await res.text()).toBe(200);
   });
 
@@ -48,7 +51,9 @@ test.describe('@studio Student studio (phone-width)', () => {
     await expect(page.locator('[data-testid="studio-encouragement"]')).toBeVisible();
     await expect(page.locator('[data-testid="studio-primary-cta"]')).toHaveText('Open worksheet');
     await expect(page.locator('[data-testid="studio-today"]')).not.toContainText(/GPA/i);
-    await expect(page.locator('[data-testid="studio-also-today"]')).toContainText('Unit 9 Homework');
+    await expect(page.locator('[data-testid="studio-also-today"]')).toContainText(
+      'Unit 9 Homework'
+    );
 
     await page.locator('[data-testid="studio-primary-cta"]').click({ force: true });
     await expect(page.locator('[data-testid="studio-pack-page"]')).toBeVisible();
@@ -99,6 +104,110 @@ test.describe('@studio Student studio (phone-width)', () => {
     const viewer = page.locator('[data-testid="studio-asset-viewer"]');
     await expect(viewer).toBeVisible({ timeout: 15_000 });
     await expect(viewer).toHaveAttribute('data-from-cache', 'true');
+  });
+
+  test('STUDIO-004: This week lists what Emma owes, status taps stick, Need help takes a note', async ({
+    page,
+  }) => {
+    await loginStudent(page, DEMO_USERS.emma.email, DEMO_USERS.emma.password);
+    await assertOnStudio(page);
+
+    // "This week" sits beside Today.
+    await page.locator('[data-testid="studio-tab-week"]').click({ force: true });
+    await expect(page).toHaveURL(/\/studio\/week$/);
+    const week = page.locator('[data-testid="studio-week"]');
+    await expect(week).toBeVisible();
+    await expect(page.locator('[data-testid="studio-tab-week"]')).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    await expect(page.locator('[data-testid="studio-encouragement"]')).toBeVisible();
+    await expect(page.locator('[data-testid="studio-week-summary"]')).toContainText(/still owed/);
+
+    // Seeded Emma: Algebra II "Missing assignment 1" is the oldest missing item → first in Still owed.
+    const owed = page.locator('[data-testid="studio-week-owed"]');
+    await expect(owed).toBeVisible();
+    await expect(owed.locator('li').first()).toContainText('Missing assignment 1');
+    await expect(owed).toContainText('Not turned in');
+    await expect(owed).toContainText('📄 saved');
+    // No scores on the student's week.
+    await expect(week).not.toContainText(/\d+\s*%/);
+    await expect(week).not.toContainText(/GPA/i);
+
+    // Status taps use "Missing assignment 2": the shared demo DB is not reset between tests and
+    // STUDIO-001/003 open the Today primary (missing 1), which marks it working_on_it. The chip's
+    // starting state is whatever the last run left, so only the change is asserted.
+    const statusChip = page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-2"]');
+    await expect(statusChip).toBeVisible();
+    await statusChip.click({ force: true });
+    const sheet = page.locator('[data-testid="status-sheet"]');
+    await expect(sheet).toBeVisible();
+    const patch = page.waitForResponse(
+      (r) =>
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
+        r.request().method() === 'PATCH'
+    );
+    await page.locator('[data-testid="status-option-working_on_it"]').click({ force: true });
+    expect((await patch).status()).toBe(200);
+    await expect(sheet).toBeHidden();
+    await expect(statusChip).toContainText('Working on it');
+
+    // Need help: note is capped at 140 with a counter; Send → the server's own answer.
+    await statusChip.click({ force: true });
+    await page.locator('[data-testid="status-option-need_help"]').click({ force: true });
+    await expect(page.locator('[data-testid="status-sheet-note"]')).toBeVisible();
+    await expect(page.locator('[data-testid="need-help-counter"]')).toHaveText('0/140');
+    await page.locator('[data-testid="need-help-note"]').fill("I don't get #7");
+    await expect(page.locator('[data-testid="need-help-counter"]')).toHaveText('14/140');
+    const helpPatch = page.waitForResponse(
+      (r) =>
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
+        r.request().method() === 'PATCH'
+    );
+    await page.locator('[data-testid="need-help-send"]').click({ force: true });
+    const helpResponse = await helpPatch;
+    expect(helpResponse.status()).toBe(200);
+    expect(helpResponse.request().postDataJSON()).toEqual({
+      status: 'need_help',
+      note: "I don't get #7",
+    });
+    // The server decides what the sheet may claim: told this time, or already told today
+    // (the 24 h rule when the shared demo row was asked about earlier).
+    const answer = (await helpResponse.json()) as { notified?: boolean };
+    expect(typeof answer.notified).toBe('boolean');
+    await expect(page.locator('[data-testid="need-help-outcome"]')).toHaveText(
+      answer.notified === true
+        ? 'Your grown-ups were told'
+        : 'You already asked today. Your grown-ups know.'
+    );
+    await page.locator('[data-testid="need-help-ok"]').click({ force: true });
+    await expect(sheet).toBeHidden();
+    await expect(statusChip).toContainText('Need help');
+
+    // The server kept it: a reload shows the same status.
+    await page.reload();
+    await expect(
+      page.locator('[data-testid="studio-week-status-demo-emma-alg2-missing-2"]')
+    ).toContainText('Need help');
+
+    // Leave the shared demo row as it was seeded.
+    await statusChip.click({ force: true });
+    const reset = page.waitForResponse(
+      (r) =>
+        r.url().includes('/studio/assignments/demo-emma-alg2-missing-2/status') &&
+        r.request().method() === 'PATCH'
+    );
+    await page.locator('[data-testid="status-option-not_started"]').click({ force: true });
+    expect((await reset).status()).toBe(200);
+    await expect(statusChip).toContainText('Not started');
+    // The PATCH is followed by router.refresh(); let it land before navigating away, or the
+    // refresh can swallow the tab navigation.
+    await page.waitForLoadState('networkidle');
+
+    // Back to Today from the tab.
+    await page.locator('[data-testid="studio-tab-today"]').click({ force: true });
+    await expect(page).toHaveURL(/\/studio$/);
+    await expect(page.locator('[data-testid="studio-today"]')).toBeVisible();
   });
 
   test('STUDIO-002: parent and student sessions stay on their own homes', async ({ browser }) => {

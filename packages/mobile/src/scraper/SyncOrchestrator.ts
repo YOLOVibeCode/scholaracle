@@ -16,7 +16,7 @@ import {
   type IAIEnricher,
   type IAssetHost,
 } from '@scholaracle/scraper-core';
-import type { ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
+import type { ISanitizedPageSkeletonCapture, ISlcIngestEnvelopeV1 } from '@scholaracle/contracts';
 // Re-export pipeline types for existing callers
 export type {
   SyncPhase,
@@ -42,6 +42,7 @@ export interface ISyncOrchestratorConfig {
   readonly institutionExternalId: string;
   readonly sourceId: string;
   readonly adapterVersion: string;
+  readonly studentNameHint?: string;
   readonly coreVersion?: string;
 }
 
@@ -50,6 +51,8 @@ export interface ISyncPipelineOverrides {
   readonly resolver?: IScraperResolver;
   readonly enricher?: IAIEnricher;
   readonly enricherTimeoutMs?: number;
+  readonly selectorPatch?: Readonly<Record<string, string>>;
+  readonly appliedSelectorPatchId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,20 @@ function buildMobileUploader(uploader: IEnvelopeUploader, connectorToken: string
         })
         .catch(() => undefined);
     },
+    async uploadSkeleton(
+      runId: string,
+      sourceId: string,
+      payload: ISanitizedPageSkeletonCapture
+    ): Promise<void> {
+      await uploader
+        .uploadRunSkeleton({
+          runId,
+          sourceId,
+          connectorToken,
+          payload,
+        })
+        .catch(() => undefined);
+    },
   };
 }
 
@@ -90,7 +107,13 @@ function buildMobileRecorder(mobileRecorder: IMobileRunRecorder): IRunRecorder {
       await mobileRecorder.addPhase(runId, phase);
     },
     async completeRun(runId: string, result: IRunResult): Promise<void> {
-      await mobileRecorder.completeRun(runId, result);
+      await mobileRecorder.completeRun(runId, {
+        status: result.status,
+        opCount: result.opCount,
+        errorMessage: result.errorMessage,
+        ...(result.coverage !== undefined ? { coverage: result.coverage } : {}),
+        ...(result.warnings !== undefined ? { warnings: result.warnings } : {}),
+      });
     },
   };
 }
@@ -119,9 +142,11 @@ export async function runSyncPipeline(
       sourceId: config.sourceId,
       studentExternalId: config.studentExternalId,
       institutionExternalId: config.institutionExternalId,
+      studentNameHint: config.studentNameHint,
       coreVersion: config.coreVersion ?? SCRAPER_CORE_PACKAGE_VERSION,
     },
     clientType: 'mobile',
+    captureSkeletons: true,
     uploader: buildMobileUploader(uploader, connectorToken),
     recorder: buildMobileRecorder(recorder),
     onProgress,
@@ -129,5 +154,9 @@ export async function runSyncPipeline(
     enricher: overrides?.enricher,
     enricherTimeoutMs: overrides?.enricherTimeoutMs,
     assets,
+    ...(overrides?.selectorPatch ? { selectorPatch: overrides.selectorPatch } : {}),
+    ...(overrides?.appliedSelectorPatchId
+      ? { appliedSelectorPatchId: overrides.appliedSelectorPatchId }
+      : {}),
   });
 }

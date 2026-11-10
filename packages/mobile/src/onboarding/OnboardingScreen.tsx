@@ -8,6 +8,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -32,6 +33,8 @@ import {
   type OnboardingProvider,
 } from './onboardingMachine';
 import { registerForPushNotifications } from '../notifications/pushSetup';
+import { STORE_LEGAL_URLS } from '../store/legalUrls';
+import { isUsStorefrontLocale, resolvedDeviceLocale } from '../utils/usStorefrontLocale';
 
 const PROVIDERS: readonly { id: OnboardingProvider; name: string; urlHint: string }[] = [
   { id: 'skyward', name: 'Skyward Family Access', urlHint: 'https://skyward.iscorp.com' },
@@ -42,20 +45,28 @@ const PROVIDERS: readonly { id: OnboardingProvider; name: string; urlHint: strin
 export interface IOnboardingScreenProps {
   readonly entry: OnboardingEntry;
   onComplete(result: IApplyOnboardingResult): void;
+  /**
+   * Logged-in entry only: leave onboarding from its first step, e.g. back to a sharing
+   * invitation waiting on the Students screen after "Get started" was tapped.
+   */
+  onBack?(): void;
 }
 
 export function OnboardingScreen({
   entry,
   onComplete,
+  onBack,
 }: IOnboardingScreenProps): React.ReactElement {
   const { login, register, isAuthenticating, error } = useAuth();
   const [state, setState] = useState(() => createInitialOnboardingState(entry));
+  const firstStep = useMemo(() => createInitialOnboardingState(entry).step, [entry]);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [alertsDone, setAlertsDone] = useState(false);
   const [applyResult, setApplyResult] = useState<IApplyOnboardingResult | null>(null);
 
   const ready = useMemo(() => canAdvance(state), [state]);
+  const isUsLocale = useMemo(() => isUsStorefrontLocale(resolvedDeviceLocale()), []);
 
   const submitAccount = async (): Promise<void> => {
     const email = state.email.trim();
@@ -119,11 +130,22 @@ export function OnboardingScreen({
           can change this later in Settings.
         </Text>
         {applyResult.planLimitReached && (
-          <Text style={styles.warn}>
-            Your plan allows one student on this account.{' '}
-            {applyResult.students[0]?.name ?? 'The first child'} is set up — upgrade later to add
-            another.
-          </Text>
+          <>
+            <Text style={styles.warn}>
+              This account currently supports one student.{' '}
+              {applyResult.students[0]?.name ?? 'The first child'} is set up. To add another
+              student, manage membership on the web — not in this app.
+            </Text>
+            {isUsLocale && (
+              <TouchableOpacity
+                style={styles.plansLinkRow}
+                onPress={() => void Linking.openURL(STORE_LEGAL_URLS.pricing)}
+                testID="link-see-plans-scholarmancy"
+              >
+                <Text style={styles.plansLinkText}>See plans on scholarmancy.com</Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
         <TouchableOpacity
           style={styles.button}
@@ -155,11 +177,20 @@ export function OnboardingScreen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {state.step !== 'account' && (
+        {onBack && state.step === firstStep ? (
+          <TouchableOpacity
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            testID="button-onboarding-back"
+          >
+            <Text style={styles.back}>Back</Text>
+          </TouchableOpacity>
+        ) : state.step !== 'account' ? (
           <TouchableOpacity onPress={() => setState((s) => reduceOnboarding(s, { type: 'back' }))}>
             <Text style={styles.back}>Back</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
 
         {state.step === 'account' && (
           <>
@@ -409,6 +440,13 @@ const styles = StyleSheet.create({
   link: { color: '#4361ee', fontWeight: '600', marginBottom: 20, textAlign: 'center' },
   error: { color: '#dc3545', marginBottom: 12, textAlign: 'center' },
   warn: { color: '#b45309', marginBottom: 16, lineHeight: 22 },
+  plansLinkRow: { marginBottom: 16, alignItems: 'center' },
+  plansLinkText: {
+    color: '#4361ee',
+    fontWeight: '600',
+    fontSize: 16,
+    textDecorationLine: 'underline',
+  },
   button: {
     backgroundColor: '#4361ee',
     height: 52,

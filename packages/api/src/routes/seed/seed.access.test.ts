@@ -2,15 +2,20 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { MongoClient, type Db } from 'mongodb';
+import { ObjectId } from 'mongodb';
+import { UserRepository, StudentRepository } from '@scholaracle/database';
 import { seedRouter } from './seed';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { DEMO_USER } from './demo-data';
 
 const SEED_TOKEN = 'seed-token-for-tests-0123456789';
 const ENV_KEYS = [
   'RAILWAY_ENVIRONMENT_ID',
+  'RAILWAY_ENVIRONMENT_NAME',
   'SEED_TOKEN',
   'SEED_ADMIN_PASSWORD',
   'SEED_ADMIN_MFA_SECRET',
+  'NODE_ENV',
 ] as const;
 
 describe('Seed route access', () => {
@@ -49,7 +54,7 @@ describe('Seed route access', () => {
       process.env['RAILWAY_ENVIRONMENT_ID'] = 'env-123';
     });
 
-    it.each(['/', '/demo/reset', '/set-password', '/add-parent'])(
+    it.each(['/', '/demo', '/demo/reset', '/set-password', '/add-parent'])(
       'refuses POST %s without SEED_TOKEN configured',
       async (path) => {
         delete process.env['SEED_TOKEN'];
@@ -67,7 +72,7 @@ describe('Seed route access', () => {
       expect(res.status).toBe(403);
     });
 
-    it('lets the matching seed token through', async () => {
+    it('lets the matching seed token through set-password (missing body)', async () => {
       process.env['SEED_TOKEN'] = SEED_TOKEN;
       const res = await request(app)
         .post('/api/seed/set-password')
@@ -76,8 +81,107 @@ describe('Seed route access', () => {
       expect(res.status).toBe(400);
     });
 
+    it('lets POST /demo through with matching seed token', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const res = await request(app)
+        .post('/api/seed/demo')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({});
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects set-password for non-fixture email domains', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const unique = `victim-${Date.now()}@evil.test`;
+      const userRepo = new UserRepository(database);
+      await userRepo.create({
+        email: unique,
+        passwordHash: await UserRepository.hashPassword('SomePass123!'),
+        name: 'Victim',
+        role: 'parent',
+      });
+      const res = await request(app)
+        .post('/api/seed/set-password')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({ email: unique, password: 'NewPass456!' });
+      expect(res.status).toBe(403);
+    });
+
+    it('allows set-password for @example.com fixture emails', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const unique = `fixture.user.${Date.now()}@example.com`;
+      const userRepo = new UserRepository(database);
+      await userRepo.create({
+        email: unique,
+        passwordHash: await UserRepository.hashPassword('OldPass123!'),
+        name: 'Fixture',
+        role: 'parent',
+      });
+      const res = await request(app)
+        .post('/api/seed/set-password')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({ email: unique, password: 'NewPass456!' });
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects add-parent for non-fixture email domains', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const studentRepo = new StudentRepository(database);
+      const inserted = await studentRepo.create({
+        userId: new ObjectId(),
+        name: 'Only',
+        grade: 9,
+        studentId: `stu-only-${Date.now()}`,
+        sharedWith: [],
+      });
+      const res = await request(app)
+        .post('/api/seed/add-parent')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({
+          studentId: inserted._id!.toString(),
+          email: `bad-${Date.now()}@blended-e2e.test`,
+          name: 'Bad',
+        });
+      expect(res.status).toBe(403);
+    });
+
+    it('allows add-parent for @scholarmancy.com emails', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const userRepo = new UserRepository(database);
+      const ownerEmail = `owner-${Date.now()}@scholarmancy.com`;
+      const owner = await userRepo.create({
+        email: ownerEmail,
+        passwordHash: await UserRepository.hashPassword(DEMO_USER.password),
+        name: DEMO_USER.name,
+        role: 'parent',
+      });
+      const studentRepo = new StudentRepository(database);
+      const student = await studentRepo.create({
+        userId: owner._id!,
+        name: 'Seed Child',
+        grade: 8,
+        studentId: `seed-child-${Date.now()}`,
+        sharedWith: [],
+      });
+      const res = await request(app)
+        .post('/api/seed/add-parent')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({
+          studentId: student._id!.toString(),
+          email: `coparent-${Date.now()}@scholarmancy.com`,
+          name: 'Co',
+        });
+      expect(res.status).toBe(200);
+    });
+
     it('skips admin accounts when no admin credentials are configured', async () => {
       process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['RAILWAY_ENVIRONMENT_ID'] = 'deployed-sim-no-admin-secrets';
       delete process.env['SEED_ADMIN_PASSWORD'];
       delete process.env['SEED_ADMIN_MFA_SECRET'];
       const res = await request(app)

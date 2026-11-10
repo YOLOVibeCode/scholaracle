@@ -1,5 +1,6 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
+import crypto from 'node:crypto';
 import { MongoClient, type Db } from 'mongodb';
 import {
   OAuthAccountRepository,
@@ -8,6 +9,7 @@ import {
 } from '@scholaracle/database';
 import { authRouter } from './auth';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { APPLE_ISSUER, resetAppleJwksCacheForTests } from './appleIdentityToken';
 
 const noOpEmailSender = {
   sendResetLink: async (): Promise<void> => {},
@@ -73,6 +75,8 @@ describe('Auth API Routes', () => {
             'authdup@example.com',
             'nonexistent@example.com',
             'forcereset@example.com',
+            'apple.oauth.valid@example.com',
+            'apple.oauth@example.com',
           ],
         },
       });
@@ -363,6 +367,149 @@ describe('Auth API Routes', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.token).toBeDefined();
     });
+
+    it('should return 400 for Apple OAuth without identity token', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', 'test-internal-secret')
+        .send({
+          provider: 'apple',
+          providerAccountId: 'ignored',
+          email: 'apple.oauth@example.com',
+          name: 'Apple User',
+        });
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/appleIdentityToken/i);
+    });
+
+    it('should return 401 for forged Apple identity token', async () => {
+      resetAppleJwksCacheForTests();
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const { publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+      const jwk: crypto.JsonWebKey & { kid: string } = {
+        ...(publicKey.export({ format: 'jwk' }) as crypto.JsonWebKey),
+        kid: 'integration-kid-forged',
+      };
+
+      const now = Math.floor(Date.now() / 1000);
+      const rawNonce = 'nonce-raw-forged';
+      const nonceHash = crypto.createHash('sha256').update(rawNonce, 'utf8').digest('hex');
+      const headerB64 = base64UrlJson({ alg: 'ES256', kid: jwk.kid });
+      const payloadB64 = base64UrlJson({
+        iss: APPLE_ISSUER,
+        aud: 'com.scholarmancy.app',
+        exp: now + 3600,
+        iat: now,
+        sub: 'apple.sub.forged',
+        nonce: nonceHash,
+      });
+      const signingInput = `${headerB64}.${payloadB64}`;
+      const identityToken = `${signingInput}.${base64UrlBuf(crypto.randomBytes(64))}`;
+
+      const oldFetch = global.fetch;
+      global.fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.includes('/auth/keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [jwk] }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      });
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', 'test-internal-secret')
+        .send({
+          provider: 'apple',
+          providerAccountId: 'ignored',
+          email: 'apple.oauth@example.com',
+          name: 'Apple User',
+          appleIdentityToken: identityToken,
+          appleNonce: rawNonce,
+        });
+
+      global.fetch = oldFetch;
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return session tokens for valid Apple identity token', async () => {
+      resetAppleJwksCacheForTests();
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+      const jwk: crypto.JsonWebKey & { kid: string } = {
+        ...(publicKey.export({ format: 'jwk' }) as crypto.JsonWebKey),
+        kid: 'integration-kid-valid',
+      };
+      const kid = jwk.kid;
+
+      const now = Math.floor(Date.now() / 1000);
+      const rawNonce = 'nonce-raw-valid';
+      const nonceHash = crypto.createHash('sha256').update(rawNonce, 'utf8').digest('hex');
+      const sub = '001122.applesub';
+      const headerB64 = base64UrlJson({ alg: 'ES256', kid });
+      const payloadB64 = base64UrlJson({
+        iss: APPLE_ISSUER,
+        aud: 'com.scholarmancy.app',
+        exp: now + 3600,
+        iat: now,
+        sub,
+        nonce: nonceHash,
+        email: 'apple.oauth.valid@example.com',
+      });
+      const signingInput = `${headerB64}.${payloadB64}`;
+      const sig = crypto.sign('sha256', Buffer.from(signingInput, 'utf8'), {
+        key: privateKey,
+        dsaEncoding: 'ieee-p1363',
+      });
+      const identityToken = `${signingInput}.${base64UrlBuf(sig)}`;
+
+      const oldFetch = global.fetch;
+      global.fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.includes('/auth/keys')) {
+          return {
+            ok: true,
+            json: async () => ({ keys: [jwk] }),
+          } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      });
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', 'test-internal-secret')
+        .send({
+          provider: 'apple',
+          providerAccountId: 'ignored',
+          email: 'wrong@example.com',
+          name: 'Apple Valid',
+          appleIdentityToken: identityToken,
+          appleNonce: rawNonce,
+        });
+
+      global.fetch = oldFetch;
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.token).toBeDefined();
+      expect(response.body.user?.email).toBe('apple.oauth.valid@example.com');
+    });
   });
 
   describe('POST /api/auth/logout', () => {
@@ -394,3 +541,11 @@ describe('Auth API Routes', () => {
     });
   });
 });
+
+function base64UrlJson(obj: unknown): string {
+  return base64UrlBuf(Buffer.from(JSON.stringify(obj), 'utf8'));
+}
+
+function base64UrlBuf(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}

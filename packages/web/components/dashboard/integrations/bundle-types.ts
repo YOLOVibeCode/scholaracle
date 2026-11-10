@@ -1,6 +1,6 @@
 /**
- * Types for the scraper bundle flow: multiple platform connections
- * collected into one script download.
+ * Types for multi-platform connect flow: connections added during onboarding
+ * or integrations are completed on the phone (no server-side download).
  */
 
 export interface IBundleConnection {

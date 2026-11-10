@@ -15,6 +15,7 @@ const ALL_ALERT_TYPES: AlertType[] = [
   AlertType.WORKLOAD,
   AlertType.POSITIVE,
   AlertType.RECOMMENDATION,
+  AlertType.STUDENT_NEEDS_HELP,
 ];
 
 describe('ParentEmailNotificationAgent', () => {
@@ -25,7 +26,8 @@ describe('ParentEmailNotificationAgent', () => {
   });
 
   describe('handles', () => {
-    it('returns true for all 7 alert types', () => {
+    it('returns true for every alert type', () => {
+      expect(ALL_ALERT_TYPES).toEqual(Object.values(AlertType));
       for (const alertType of ALL_ALERT_TYPES) {
         const alert = new Alert({
           type: alertType,
