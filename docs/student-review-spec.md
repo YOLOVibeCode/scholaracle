@@ -111,6 +111,20 @@ Student · This week                    ┌ Need help? ────────�
   rolls the optimistic row back. Marking a portal-flagged `missing` item done keeps it in Still owed with a
   warning (matching the server).
 
+## 3.7 As built (R4 #151 weekly review)
+- A workers schedule (every 15 min, `WEEKLY_REVIEW_ENABLED=true` per environment, default off) sends the review
+  once per student per ISO week when their local clock passes Sunday 18:00. Zone: the student login's zone →
+  the owner's zone → America/New_York (one shared resolver, also used by `GET /api/studio/week`).
+- Same composer and Mongo source as the API (moved into the agents package; the API keeps shims).
+- Reservation rows (`weekly_review_sends`) are taken atomically; a row stuck in `sending` for 15 min is retaken;
+  deliveries are recorded per channel so a partial failure re-sends only what is missing; compose failures stop
+  after 3 attempts per week; when there is nothing to send no row is written, so a toggle later that evening
+  still works.
+- Recipients: the student's own devices (push) and `alertEmail` (email); adults only when their per-student
+  `weeklyReviewCopy` toggle is on (owner prefs or their contact row), by their own channels incl. push.
+- Phone Notification settings gained a "Weekly review" switch per student; the web has no per-student prefs
+  screen yet. The fixed Sunday 18:00 is not yet parent-adjustable (spec 3.3 allows it; follow-up).
+
 ## 4. Implementation plan (one developer)
 - **R1. Core + API (2–3 days).** `IWeekView` in contracts; `WeekGuide` with table-driven tests (owed
   ordering, 7-day bucketing across a month boundary, done-then-missing rule, needs glyphs, no grade
