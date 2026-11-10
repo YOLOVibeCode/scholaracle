@@ -27,8 +27,9 @@ export type SharingInviteStatus = 'pending' | 'accepted' | 'declined';
 export interface ISharingPerson {
   /** Set for the owner and for accepted adults; absent while an invitation is pending. */
   readonly userId?: string;
-  /** Absent for the owner row (the owner is identified by `userId`). */
+  /** The invited address; for the owner row, the owner's account email. */
   readonly email?: string;
+  /** For the owner row, the owner's account name. */
   readonly name?: string;
   readonly role: SharingLabel;
   readonly status: SharingInviteStatus;
@@ -137,4 +138,75 @@ export interface ISharingInviteSelectionResult {
 /** Request body of `POST /api/sharing/leave`. */
 export interface ISharingLeaveRequest {
   readonly studentId: string;
+}
+
+/** Response of `POST /api/sharing/leave`. */
+export interface ISharingLeaveResult {
+  readonly success: boolean;
+}
+
+/** Response of `POST /api/sharing/invites/:groupId/resend`. */
+export interface ISharingResendResult {
+  readonly success: boolean;
+  readonly studentIds: readonly string[];
+  readonly expiresAt: string;
+}
+
+/**
+ * Request body of `PUT /api/students/:id/contacts/:email`. An owner or admin may send any field;
+ * the person themself only `receiveAlerts`, `alertChannels` and `alertTypes` (the server rejects
+ * anyone else). The route is a patch: an absent field is left unchanged.
+ */
+export interface ISharingContactUpdateRequest {
+  readonly name?: string;
+  readonly phone?: string;
+  readonly role?: SharingLabel;
+  readonly receiveAlerts?: boolean;
+  readonly alertChannels?: readonly SharingAlertChannel[];
+  /** An array = exactly these types; `null` = every type (clears a narrowed list); absent = unchanged. */
+  readonly alertTypes?: readonly string[] | null;
+}
+
+/** Response of `PUT /api/students/:id/contacts/:email`. */
+export interface ISharingContactUpdateResult {
+  readonly success: boolean;
+  /** Present when the update turned texting on for a phone that has not opted in yet. */
+  readonly smsOptInUrl?: string;
+}
+
+/** Request body of `PUT /api/students/:id/contacts/:email/admin`. */
+export interface ISharingContactAdminRequest {
+  readonly isAdmin: boolean;
+}
+
+/** Request body of `POST /api/students/:id/contacts/:email/magic-link/send`. */
+export interface ISharingLoginLinkRequest {
+  readonly channel: 'email' | 'sms';
+  /** Overrides the contact's stored email / phone. */
+  readonly to?: string;
+}
+
+/** Response of `POST /api/students/:id/contacts/:email/magic-link/send`. */
+export interface ISharingLoginLinkResult {
+  readonly success: boolean;
+  readonly expiresAt: string;
+}
+
+/** Request body of `PUT /api/students/:id/owner-alert-prefs` (owner only). */
+export interface ISharingOwnerAlertPrefsRequest {
+  readonly receiveAlerts?: boolean;
+  readonly alertChannels?: readonly SharingAlertChannel[];
+  /** An array = exactly these types; `null` or absent = every type. */
+  readonly alertTypes?: readonly string[] | null;
+}
+
+/** Response of `PUT /api/students/:id/owner-alert-prefs`. */
+export interface ISharingOwnerAlertPrefsResult {
+  readonly success: boolean;
+  readonly ownerAlertPrefs: ISharingMyAlerts;
+}
+
+/** `{ success }` envelope of the contact admin and removal routes. */
+export interface ISharingSuccessResult {
+  readonly success: boolean;
 }

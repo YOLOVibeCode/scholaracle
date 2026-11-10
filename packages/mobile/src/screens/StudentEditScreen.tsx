@@ -23,6 +23,7 @@ import {
   type IStudentEditFields,
 } from '../students/studentEditForm';
 import { removeStudent, removeStudentConfirmText } from '../students/removeStudent';
+import { canRemoveStudent } from '../sharing/accessMatrix';
 
 interface IStudentEditScreenProps {
   readonly student: IStudentListItem;
@@ -85,6 +86,8 @@ export function StudentEditScreen({
   };
 
   const dirty = hasStudentEditChanges(student, fields);
+  // Removing the student (and its synced data) is the owner's alone; admins only edit.
+  const allowRemove = canRemoveStudent(student.access);
 
   return (
     <View style={styles.container} testID="student-edit-screen">
@@ -145,16 +148,22 @@ export function StudentEditScreen({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.removeBtn}
-          onPress={handleRemove}
-          disabled={busy !== null}
-          testID="button-remove-student"
-        >
-          <Text style={styles.removeText}>
-            {busy === 'remove' ? 'Removing…' : 'Remove student'}
+        {allowRemove ? (
+          <TouchableOpacity
+            style={styles.removeBtn}
+            onPress={handleRemove}
+            disabled={busy !== null}
+            testID="button-remove-student"
+          >
+            <Text style={styles.removeText}>
+              {busy === 'remove' ? 'Removing…' : 'Remove student'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.ownerOnly} testID="text-remove-owner-only">
+            Only the owner can remove this student.
           </Text>
-        </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -212,4 +221,5 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   removeText: { color: '#dc3545', fontWeight: '700', fontSize: 16 },
+  ownerOnly: { color: '#6c757d', fontSize: 13, textAlign: 'center', marginTop: 28 },
 });

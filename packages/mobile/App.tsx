@@ -26,6 +26,27 @@ import { NotificationSettingsScreen } from './src/screens/NotificationSettingsSc
 import { TodayScreen } from './src/screens/TodayScreen';
 import { StudentWorkPackScreen } from './src/screens/StudentWorkPackScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { InvitationsScreen } from './src/screens/InvitationsScreen';
+import { ShareStudentScreen } from './src/screens/ShareStudentScreen';
+import { FamilyScreen } from './src/screens/FamilyScreen';
+import {
+  canEditStudent,
+  canManagePortals,
+  connectPortalBlockedMessage,
+} from './src/sharing/accessMatrix';
+import {
+  INITIAL_HOME,
+  accessMapOf,
+  canReturnToInvitations,
+  emptyHomeReady,
+  homeLoadFailed,
+  homeLoaded,
+  homeWithStudents,
+  loadHomeData,
+  showOnboardingGate,
+  studentCountOf,
+  type IHomeData,
+} from './src/sharing/homeData';
 import { registerForPushNotifications } from './src/notifications/pushSetup';
 import { usePushTapNavigation } from './src/notifications/usePushTapNavigation';
 import { seedSecureStoreFromDevEnv } from './src/credentials/devCredentialSeed';
@@ -78,6 +99,8 @@ interface INavState {
   readonly editReturn?: 'dashboard' | 'students';
   /** Which studio tab the work pack returns to. */
   readonly studioReturn?: 'today' | 'week';
+  /** Where the Share screen returns to (Family & guardians preselects `student`). */
+  readonly shareReturn?: 'students' | 'family';
 }
 
 function AppContent(): React.ReactElement {
@@ -85,7 +108,14 @@ function AppContent(): React.ReactElement {
   const studentMode = isStudentSession(role);
   const [loggedOutSurface, setLoggedOutSurface] = useState<'login' | 'onboarding'>('login');
   const [nav, setNav] = useState<INavState>({ view: 'students' });
-  const [studentCount, setStudentCount] = useState<number | null>(null);
+  // Parent home data (students, pending sharing invitations, inviter names): loaded once per
+  // session here and handed to the screens, which ask for a refresh instead of refetching.
+  const [home, setHome] = useState<IHomeData>(INITIAL_HOME);
+  const [isHomeRefreshing, setIsHomeRefreshing] = useState(false);
+  const studentCount = studentCountOf(home);
+  // Sharing: an invitee with no students of their own sees the Students screen (banner), not
+  // onboarding, until they tap "Get started" (setupRequested); Back from there undoes it.
+  const [setupRequested, setSetupRequested] = useState(false);
   const linkingUrl = useLinkingURL();
   const handledDemoUrl = useRef<string | null>(null);
   const handledDiagUrl = useRef<string | null>(null);
@@ -207,20 +237,32 @@ function AppContent(): React.ReactElement {
     })();
   }, [isLoggedIn, studentMode, accountEpoch]);
 
+  // A failed load keeps the previous data (never zero): a transient error must not flip a
+  // parent into onboarding. Only the very first failure shows the Students error state.
+  const refreshHome = useCallback((): void => {
+    setIsHomeRefreshing(true);
+    void loadHomeData(apiClient)
+      .then((loaded) => setHome(homeLoaded(loaded)))
+      .catch((err: unknown) =>
+        setHome((h) =>
+          homeLoadFailed(h, err instanceof Error ? err.message : 'Failed to load students')
+        )
+      )
+      .finally(() => setIsHomeRefreshing(false));
+  }, []);
+
   useEffect(() => {
     if (!isLoggedIn) {
-      setStudentCount(null);
+      setHome(INITIAL_HOME);
+      setSetupRequested(false);
       return;
     }
     if (studentMode) {
-      setStudentCount(0);
+      setHome(emptyHomeReady());
       return;
     }
-    void apiClient
-      .getStudents()
-      .then((rows) => setStudentCount(rows.length))
-      .catch(() => setStudentCount(0));
-  }, [isLoggedIn, studentMode, accountEpoch]);
+    refreshHome();
+  }, [isLoggedIn, studentMode, accountEpoch, refreshHome]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -269,6 +311,11 @@ function AppContent(): React.ReactElement {
       return;
     }
     if (!source) {
+      // Members may request a sync but not connect a portal (sharing-spec §4.2).
+      if (!canManagePortals(student.access)) {
+        Alert.alert('No portal connected', connectPortalBlockedMessage(student.name));
+        return;
+      }
       Alert.alert(
         'No portal connected',
         `Connect a school portal for ${student.name} first, then sync.`,
@@ -279,20 +326,25 @@ function AppContent(): React.ReactElement {
     setNav({ view: 'sync', student, syncSource: source });
   }, []);
 
-  const finishOnboarding = useCallback(async (result: IApplyOnboardingResult) => {
-    setStudentCount(result.students.length);
-    const first = result.students[0];
-    if (!first) {
-      setNav({ view: 'students' });
-      return;
-    }
-    const source = await connectedSourceStore.getForStudentRecord(first);
-    if (source) {
-      setNav({ view: 'sync', student: first, syncSource: source });
-      return;
-    }
-    setNav({ view: 'dashboard', student: first });
-  }, []);
+  const finishOnboarding = useCallback(
+    async (result: IApplyOnboardingResult) => {
+      // Show the new students at once; the refresh brings access / people counts.
+      setHome((h) => homeWithStudents(h, result.students));
+      refreshHome();
+      const first = result.students[0];
+      if (!first) {
+        setNav({ view: 'students' });
+        return;
+      }
+      const source = await connectedSourceStore.getForStudentRecord(first);
+      if (source) {
+        setNav({ view: 'sync', student: first, syncSource: source });
+        return;
+      }
+      setNav({ view: 'dashboard', student: first });
+    },
+    [refreshHome]
+  );
 
   if (isLoading) return <View style={styles.loading} />;
 
@@ -363,13 +415,18 @@ function AppContent(): React.ReactElement {
     return <View style={styles.loading} />;
   }
 
-  if (studentCount === 0 && nav.view === 'students') {
+  if (showOnboardingGate(home, setupRequested) && nav.view === 'students') {
     return (
       <OnboardingScreen
         entry="logged-in"
         onComplete={(result) => {
           void finishOnboarding(result);
         }}
+        onBack={
+          canReturnToInvitations(home, setupRequested)
+            ? (): void => setSetupRequested(false)
+            : undefined
+        }
       />
     );
   }
@@ -393,10 +450,51 @@ function AppContent(): React.ReactElement {
           })
         }
         onRunHistory={() => setNav({ view: 'run-history', student: nav.student })}
-        onEditStudent={() =>
-          setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+        onEditStudent={
+          canEditStudent(nav.student.access)
+            ? (): void =>
+                setNav({ view: 'student-edit', student: nav.student, editReturn: 'dashboard' })
+            : undefined
         }
+        onOpenFamily={() => setNav({ view: 'family', student: nav.student })}
       />
+    );
+  }
+
+  if (nav.view === 'family' && nav.student) {
+    return (
+      <FamilyScreen
+        student={nav.student}
+        onBack={() => setNav({ view: 'dashboard', student: nav.student })}
+        onShare={() => setNav({ view: 'share', student: nav.student, shareReturn: 'family' })}
+        onLeft={() => {
+          setNav({ view: 'students' });
+          refreshHome();
+        }}
+      />
+    );
+  }
+
+  if (nav.view === 'share') {
+    const back = (): void =>
+      setNav(
+        nav.shareReturn === 'family' && nav.student
+          ? { view: 'family', student: nav.student }
+          : { view: 'students' }
+      );
+    return (
+      <ShareStudentScreen
+        students={home.students}
+        preselectStudentId={nav.shareReturn === 'family' ? nav.student?.id : undefined}
+        onBack={back}
+        onDone={back}
+      />
+    );
+  }
+
+  if (nav.view === 'invitations') {
+    return (
+      <InvitationsScreen onBack={() => setNav({ view: 'students' })} onChanged={refreshHome} />
     );
   }
 
@@ -490,10 +588,7 @@ function AppContent(): React.ReactElement {
         }
         onRemoved={() => {
           setNav({ view: 'students' });
-          void apiClient
-            .getStudents()
-            .then((rows) => setStudentCount(rows.length))
-            .catch(() => undefined);
+          refreshHome();
         }}
       />
     );
@@ -510,6 +605,7 @@ function AppContent(): React.ReactElement {
   if (nav.view === 'settings') {
     return (
       <SettingsScreen
+        accessById={accessMapOf(home)}
         onOpenPlan={() => setNav({ view: 'plan' })}
         onBack={() => setNav({ view: 'students' })}
         onOpenNotificationSettings={() => setNav({ view: 'notification-settings' })}
@@ -548,12 +644,20 @@ function AppContent(): React.ReactElement {
   return (
     <StudentsScreen
       key={accountEpoch}
+      home={home}
+      isRefreshing={isHomeRefreshing}
+      onRefresh={refreshHome}
       onSelectStudent={(student) => setNav({ view: 'dashboard', student })}
       onAddSource={() => setNav({ view: 'connect-source' })}
-      onStartSetup={() => setNav({ view: 'students' })}
+      onStartSetup={() => {
+        setSetupRequested(true);
+        setNav({ view: 'students' });
+      }}
       onOpenSettings={() => setNav({ view: 'settings' })}
       onEditStudent={(student) => setNav({ view: 'student-edit', student, editReturn: 'students' })}
       onOpenAlerts={() => setNav({ view: 'alerts' })}
+      onOpenInvitations={() => setNav({ view: 'invitations' })}
+      onShare={() => setNav({ view: 'share', shareReturn: 'students' })}
     />
   );
 }

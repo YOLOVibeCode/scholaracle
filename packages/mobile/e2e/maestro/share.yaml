@@ -1,0 +1,76 @@
+# Owner shares the test student with the co-parent account: Students → student → Family &
+# guardians → Share + → email → Send. Re-runnable: an email already invited or accepted is
+# reported per student ("Already invited" / "Already has access"), never an error.
+# Needs MAESTRO_PARENT_EMAIL/PASSWORD, MAESTRO_STUDENT_NAME and MAESTRO_COPARENT_EMAIL
+# (a second throwaway UAT account; never a real family address).
+appId: com.scholarmancy.app
+name: Share a student (owner invites a co-parent)
+tags: [share]
+---
+- runFlow: subflows/login.yaml
+- tapOn:
+    text: ${MAESTRO_STUDENT_NAME}
+- extendedWaitUntil:
+    visible:
+      id: button-family
+    timeout: 30000
+- tapOn:
+    id: button-family
+- extendedWaitUntil:
+    visible:
+      id: family-screen
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: family-row
+    timeout: 20000
+- assertNotVisible:
+    id: family-error
+- takeScreenshot: share-family
+
+# Share from this student: the student is preselected.
+- tapOn:
+    id: button-family-share
+- extendedWaitUntil:
+    visible:
+      id: share-screen
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: text-share-selected
+    timeout: 20000
+- assertVisible:
+    text: "1 student selected: ${MAESTRO_STUDENT_NAME}"
+- tapOn:
+    id: input-share-email
+- inputText:
+    text: ${MAESTRO_COPARENT_EMAIL}
+    label: Type co-parent email
+- hideKeyboard
+# Defaults: Parent, not admin, email + push. Nothing else is changed.
+- scrollUntilVisible:
+    element:
+      id: button-share-send
+    visibilityPercentage: 100
+    centerElement: true
+- tapOn:
+    id: button-share-send
+- extendedWaitUntil:
+    visible:
+      id: share-result
+    timeout: 30000
+- assertNotVisible:
+    id: share-error
+- takeScreenshot: share-result
+- tapOn:
+    id: button-share-done
+- extendedWaitUntil:
+    visible:
+      id: family-screen
+    timeout: 20000
+- tapOn:
+    id: button-family-back
+- extendedWaitUntil:
+    visible:
+      id: button-sync
+    timeout: 20000

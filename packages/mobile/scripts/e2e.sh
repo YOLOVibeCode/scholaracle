@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the Maestro end-to-end flows on the iOS Simulator or the Android Emulator.
 #
-#   scripts/e2e.sh ios|android [launch|smoke|tour|sync|all] [--no-build]
+#   scripts/e2e.sh ios|android [launch|smoke|tour|sync|share|all] [--no-build]
 #
 # Builds a local Release app (no EAS credits) pointed at E2E_API_URL
 # (default: the UAT API), installs it, then runs the flows in e2e/maestro.
@@ -10,6 +10,8 @@
 # op:// references in E2E_ENV_FILE (default ~/.config/scholarmancy/e2e.env,
 # template: e2e/e2e.env.example). The script runs Maestro under `opx run --env-file`.
 # In CI, export MAESTRO_PARENT_EMAIL (and related vars) directly — opx is skipped.
+# The "share" suite (owner invites, co-parent accepts) also needs a second UAT account in
+# MAESTRO_COPARENT_EMAIL / MAESTRO_COPARENT_PASSWORD; it is not part of "all".
 # Maestro's per-step logs can contain typed text; they are deleted after the run.
 # Screenshots go to E2E_ARTIFACTS_DIR (outside the repo by default).
 set -euo pipefail
@@ -17,7 +19,7 @@ set -euo pipefail
 platform="${1:-}"; suite="${2:-launch}"; build=1
 [[ "${3:-}" == "--no-build" || "${2:-}" == "--no-build" ]] && build=0
 [[ "$suite" == "--no-build" ]] && suite=launch
-case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|tour|sync|all] [--no-build]" >&2; exit 2;; esac
+case "$platform" in ios|android) ;; *) echo "usage: $0 ios|android [launch|smoke|tour|sync|share|all] [--no-build]" >&2; exit 2;; esac
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
@@ -103,9 +105,26 @@ case "$suite" in
   smoke) flows=(e2e/maestro/launch.yaml e2e/maestro/smoke.yaml) ;;
   tour) flows=(e2e/maestro/login-screen.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml) ;;
   sync) flows=(e2e/maestro/sync-portal.yaml) ;;
+  share) flows=(e2e/maestro/share.yaml e2e/maestro/accept.yaml) ;;
   all) flows=(e2e/maestro/launch.yaml e2e/maestro/login-screen.yaml e2e/maestro/smoke.yaml e2e/maestro/tour.yaml e2e/maestro/student-edit.yaml e2e/maestro/sync-portal.yaml) ;;
   *) echo "unknown suite: $suite" >&2; exit 2 ;;
 esac
+
+# The share suite needs a second account. Check that the variables are present (names only:
+# in the direct-env case that they are exported, in the opx case that the file names them).
+if [[ "$suite" == share ]]; then
+  if [[ -n "${MAESTRO_PARENT_EMAIL:-}" ]]; then
+    [[ -n "${MAESTRO_COPARENT_EMAIL:-}" && -n "${MAESTRO_COPARENT_PASSWORD:-}" ]] || {
+      echo "share suite needs MAESTRO_COPARENT_EMAIL and MAESTRO_COPARENT_PASSWORD (a second UAT account)" >&2
+      exit 2
+    }
+  elif [[ -f "$env_file" ]]; then
+    grep -q '^MAESTRO_COPARENT_EMAIL=' "$env_file" && grep -q '^MAESTRO_COPARENT_PASSWORD=' "$env_file" || {
+      echo "share suite needs MAESTRO_COPARENT_EMAIL and MAESTRO_COPARENT_PASSWORD in $env_file (see e2e/e2e.env.example)" >&2
+      exit 2
+    }
+  fi
+fi
 
 start_device
 [[ $build -eq 1 ]] && build_app

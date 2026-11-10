@@ -32,11 +32,18 @@ import {
 import { SERVER_AI_CONSENT_LABEL } from '@scholaracle/contracts';
 import { fetchServerAiConsent, updateServerAiConsent } from '../api/serverAiConsent';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
+import { canDisconnectOnServerAs } from '../sharing/accessMatrix';
+import type { StudentAccess } from '@scholaracle/contracts';
 
 interface ISettingsScreenProps {
   onBack(): void;
   /** Student sessions: sign out + notifications only. No portal disconnect. */
   readonly hideHousehold?: boolean;
+  /**
+   * Student id -> the viewer's access, from App's home data: members may only disconnect
+   * "this phone only". Absent (unknown) keeps the server option; the server still decides.
+   */
+  readonly accessById?: ReadonlyMap<string, StudentAccess>;
   onSyncAll?(sources: readonly IConnectedSource[]): void;
   /** Opens the read-only Plan & usage screen (parent sessions only). */
   onOpenPlan?(): void;
@@ -47,6 +54,7 @@ interface ISettingsScreenProps {
 export function SettingsScreen({
   onBack,
   hideHousehold = false,
+  accessById,
   onSyncAll,
   onOpenPlan,
   onOpenNotificationSettings,
@@ -67,6 +75,10 @@ export function SettingsScreen({
     }
     setSources(await connectedSourceStore.list());
   }, [hideHousehold]);
+
+  const serverDisconnectAllowed = (source: IConnectedSource): boolean =>
+    canDisconnectOnServer(source) &&
+    canDisconnectOnServerAs(accessById?.get(source.studentId ?? ''));
 
   useEffect(() => {
     void loadSources();
@@ -103,15 +115,16 @@ export function SettingsScreen({
   };
 
   const handleDisconnect = (source: IConnectedSource): void => {
+    const serverOption = serverDisconnectAllowed(source);
     const localOnly = {
-      text: canDisconnectOnServer(source) ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
+      text: serverOption ? DISCONNECT_LOCAL_LABEL : 'Disconnect',
       style: 'destructive' as const,
       onPress: (): void => runDisconnect(source, 'local-only'),
     };
     Alert.alert(
       'Disconnect portal?',
-      disconnectConfirmText(source),
-      canDisconnectOnServer(source)
+      disconnectConfirmText(source, serverOption),
+      serverOption
         ? [
             { text: 'Cancel', style: 'cancel' },
             localOnly,

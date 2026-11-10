@@ -41,9 +41,16 @@ export class DisconnectError extends Error {
 export const DISCONNECT_SERVER_LABEL = 'Disconnect and remove from account';
 export const DISCONNECT_LOCAL_LABEL = 'Disconnect on this phone only';
 
-export function disconnectConfirmText(source: IConnectedSource): string {
+/**
+ * `serverOption` defaults to whether the source is bound to a student; Settings passes false for
+ * a member of a shared student, who may only remove the phone copy (sharing-spec §4.2).
+ */
+export function disconnectConfirmText(
+  source: IConnectedSource,
+  serverOption: boolean = canDisconnectOnServer(source)
+): string {
   const what = `${source.provider} (${source.institutionExternalId})`;
-  if (!canDisconnectOnServer(source)) {
+  if (!serverOption) {
     return `Removes ${what} and its saved credentials from this phone. Already-synced data stays in your account.`;
   }
   return (
