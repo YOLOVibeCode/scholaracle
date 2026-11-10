@@ -45,7 +45,18 @@ export type AuditAction =
   | 'coupon:disable'
   // System actions
   | 'system:config_change'
-  | 'system:export';
+  | 'system:export'
+  // Sharing a student with other adults. The actor is a PARENT (owner or admin), recorded in the
+  // adminUserId/adminEmail fields so support can answer "who removed Robert from Ava?".
+  | 'sharing:invite'
+  | 'sharing:accept'
+  | 'sharing:decline'
+  | 'sharing:remove'
+  | 'sharing:admin_changed'
+  // The adult removed themself from a student (owner decision 2026-11-09, sharing-spec Q3).
+  | 'sharing:leave'
+  // An invitation link was (re)sent for an invite group.
+  | 'sharing:link_sent';
 
 /**
  * Audit severity levels.
@@ -191,6 +202,13 @@ export class AuditLog {
       'coupon:disable': 'Disabled coupon',
       'system:config_change': 'Changed system configuration',
       'system:export': 'Exported data',
+      'sharing:invite': 'Invited an adult to follow a student',
+      'sharing:accept': 'Accepted a student-sharing invitation',
+      'sharing:decline': 'Declined a student-sharing invitation',
+      'sharing:remove': 'Removed an adult from a student',
+      'sharing:admin_changed': "Changed an adult's admin rights on a student",
+      'sharing:leave': 'An adult stopped following a student',
+      'sharing:link_sent': 'Sent or re-sent a student-sharing invitation link',
     };
     return descriptions[this.action];
   }

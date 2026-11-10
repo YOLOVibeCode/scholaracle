@@ -15,6 +15,8 @@ export interface StudentOverviewTabProps {
   studentIdField: string;
   error: string;
   isSaving: boolean;
+  /** Members may look but not edit (sharing-spec §4.2): fields disabled, no Save. */
+  readOnly?: boolean;
   onNameChange: (value: string) => void;
   onGradeChange: (value: string) => void;
   onStudentIdFieldChange: (value: string) => void;
@@ -30,18 +32,24 @@ export function StudentOverviewTab({
   studentIdField,
   error,
   isSaving,
+  readOnly = false,
   onNameChange,
   onGradeChange,
   onStudentIdFieldChange,
   onSubmit,
   onCancel: _onCancel, // eslint-disable-line @typescript-eslint/no-unused-vars -- required by interface
 }: StudentOverviewTabProps) {
+  const disabled = isSaving || readOnly;
   return (
-    <Card className="max-w-2xl">
-      <form onSubmit={onSubmit}>
+    <Card className="max-w-2xl" data-testid={readOnly ? 'student-overview-readonly' : undefined}>
+      <form onSubmit={readOnly ? (e) => e.preventDefault() : onSubmit}>
         <CardHeader>
           <CardTitle>Student Information</CardTitle>
-          <CardDescription>Update the student&apos;s information</CardDescription>
+          <CardDescription>
+            {readOnly
+              ? 'Only the owner or an admin can edit this student.'
+              : "Update the student's information"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -63,7 +71,7 @@ export function StudentOverviewTab({
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               required
-              disabled={isSaving}
+              disabled={disabled}
             />
           </div>
           <div className="space-y-2">
@@ -78,7 +86,7 @@ export function StudentOverviewTab({
               max={12}
               value={grade}
               onChange={(e) => onGradeChange(e.target.value)}
-              disabled={isSaving}
+              disabled={disabled}
             />
           </div>
           <div className="space-y-2">
@@ -91,7 +99,7 @@ export function StudentOverviewTab({
               placeholder="Optional external ID"
               value={studentIdField}
               onChange={(e) => onStudentIdFieldChange(e.target.value)}
-              disabled={isSaving}
+              disabled={disabled}
             />
           </div>
           {student?.stats && (
@@ -113,11 +121,13 @@ export function StudentOverviewTab({
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button variant="outline" type="button" asChild disabled={isSaving}>
-            <Link href="/dashboard/students">Cancel</Link>
+            <Link href="/dashboard/students">{readOnly ? 'Back to Students' : 'Cancel'}</Link>
           </Button>
-          <Button type="submit" disabled={isSaving} data-testid="button-save-student">
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
+          {!readOnly && (
+            <Button type="submit" disabled={isSaving} data-testid="button-save-student">
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          )}
         </CardFooter>
       </form>
     </Card>

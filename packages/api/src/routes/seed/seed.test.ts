@@ -381,7 +381,7 @@ describe('Seed API Routes', () => {
           .findOne({ action: 'system:export' });
 
         expect(auditLog).not.toBeNull();
-        expect(auditLog!['adminEmail']).toBe('admin@scholarmancy.com');
+        expect(auditLog!['adminEmail']).toBe('a***@scholarmancy.com');
         expect(auditLog!['entityType']).toBe('system');
         expect(auditLog!['entityId']).toBe('seed');
         expect(auditLog!['reason']).toBe('Seed baseline audit entry');
@@ -740,6 +740,48 @@ describe('Seed API Routes', () => {
         expect(relatedData['previousGrade']).toBe(90);
         expect(relatedData['currentGrade']).toBe(80);
         expect(relatedData['dropPercentage']).toBe(10);
+      });
+    });
+
+    describe('POST /api/seed/set-plan', () => {
+      it('puts a fixture account on the requested plan, replacing any earlier subscription', async () => {
+        await request(app).post('/api/seed');
+
+        const res = await request(app)
+          .post('/api/seed/set-plan')
+          .send({ email: 'Test.Parent@example.com', plan: 'family' });
+        expect(res.status).toBe(200);
+        expect(res.body.plan).toBe('family');
+
+        const user = await database
+          .collection('users')
+          .findOne({ email: 'test.parent@example.com' });
+        const subs = await database
+          .collection('subscriptions')
+          .find({ userId: user!['_id']!.toString() })
+          .toArray();
+        expect(subs).toHaveLength(1);
+        expect(subs[0]!['plan']).toBe('family');
+        expect(subs[0]!['status']).toBe('active');
+      });
+
+      it('refuses non-fixture emails, unknown users and unknown plans', async () => {
+        await request(app).post('/api/seed');
+
+        const foreign = await request(app)
+          .post('/api/seed/set-plan')
+          .send({ email: 'someone@gmail.com', plan: 'family' });
+        expect(foreign.status).toBe(403);
+
+        const unknown = await request(app)
+          .post('/api/seed/set-plan')
+          .send({ email: 'nobody.here@example.com', plan: 'family' });
+        expect(unknown.status).toBe(404);
+
+        const badPlan = await request(app)
+          .post('/api/seed/set-plan')
+          .send({ email: 'test.parent@example.com', plan: 'enterprise' });
+        expect(badPlan.status).toBe(400);
       });
     });
   });

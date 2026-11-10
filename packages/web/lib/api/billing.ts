@@ -7,6 +7,7 @@ export interface ISubscriptionInfo {
   readonly effectivePlan?: string;
   readonly currentPeriodStart?: string;
   readonly currentPeriodEnd?: string;
+  readonly trialEnd?: string;
   readonly billingCycle?: string;
   readonly cancelAtPeriodEnd?: boolean;
 }

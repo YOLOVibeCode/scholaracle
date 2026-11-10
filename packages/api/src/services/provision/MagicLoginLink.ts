@@ -7,10 +7,13 @@ import {
   StudentRepository,
   UserRepository,
   type IMagicLoginTokenStore,
+  type MagicLoginConsumeResult,
 } from '@scholaracle/database';
 
 export const STUDENT_MAGIC_TTL_MS = 15 * 60 * 1000;
 export const SENT_MAGIC_TTL_MS = 24 * 60 * 60 * 1000;
+/** A sharing invitation link lives 7 days (sharing-spec §4.7). */
+export const INVITE_GROUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface IMagicLoginLinkIssued {
   readonly loginUrl: string;
@@ -18,10 +21,7 @@ export interface IMagicLoginLinkIssued {
   readonly qrDataUrl: string;
 }
 
-export type MagicConsumeResult =
-  | { readonly userId: string }
-  | { readonly pendingInvite: { readonly studentId: string; readonly email: string } }
-  | null;
+export type MagicConsumeResult = MagicLoginConsumeResult;
 
 export interface IMagicLoginLinkDeps {
   readonly database: Db;
@@ -29,6 +29,7 @@ export interface IMagicLoginLinkDeps {
   readonly now?: () => Date;
   readonly studentTtlMs?: number;
   readonly sentTtlMs?: number;
+  readonly inviteGroupTtlMs?: number;
   readonly qr?: (text: string) => Promise<string>;
   readonly tokens?: IMagicLoginTokenStore;
 }
@@ -52,6 +53,7 @@ export class MagicLoginLink {
   private readonly _now: () => Date;
   private readonly _studentTtlMs: number;
   private readonly _sentTtlMs: number;
+  private readonly _inviteGroupTtlMs: number;
   private readonly _qr: (text: string) => Promise<string>;
 
   constructor(deps: IMagicLoginLinkDeps) {
@@ -62,6 +64,7 @@ export class MagicLoginLink {
     this._now = deps.now ?? ((): Date => new Date());
     this._studentTtlMs = deps.studentTtlMs ?? STUDENT_MAGIC_TTL_MS;
     this._sentTtlMs = deps.sentTtlMs ?? SENT_MAGIC_TTL_MS;
+    this._inviteGroupTtlMs = deps.inviteGroupTtlMs ?? INVITE_GROUP_TTL_MS;
     this._qr = deps.qr ?? qrPngDataUrl;
   }
 
@@ -98,9 +101,10 @@ export class MagicLoginLink {
     inviteEmail: string | null
   ): Promise<IMagicLoginLinkIssued> {
     if (userId !== null) {
-      await this._tokens.invalidateUnusedForUser('sharedParent', userId);
+      // Links are per student: a fresh link for Christian must not kill the one for Ava.
+      await this._tokens.invalidateUnusedForUser('sharedParent', userId, studentId);
       return this._mintToken(this._sentTtlMs, async (tokenHash, expiresAt) => {
-        await this._tokens.createForUser('sharedParent', userId, tokenHash, expiresAt);
+        await this._tokens.createForUser('sharedParent', userId, tokenHash, expiresAt, studentId);
       });
     }
 
@@ -111,6 +115,40 @@ export class MagicLoginLink {
     return this._mintToken(this._sentTtlMs, async (tokenHash, expiresAt) => {
       await this._tokens.createForPendingInvite(studentId, inviteEmail, tokenHash, expiresAt);
     });
+  }
+
+  /**
+   * Issue the 7-day link of one sharing invitation: bound to the invited email and every student
+   * in the group. Earlier unused links of the same group are dropped first (re-send semantics).
+   */
+  public async issueForInviteGroup(
+    inviteEmail: string,
+    studentIds: readonly string[],
+    inviteGroupId: string
+  ): Promise<IMagicLoginLinkIssued> {
+    await this._tokens.invalidateUnusedForInviteGroup(inviteGroupId);
+    return this._mintToken(this._inviteGroupTtlMs, async (tokenHash, expiresAt) => {
+      await this._tokens.createForInviteGroup(
+        inviteEmail,
+        studentIds,
+        tokenHash,
+        expiresAt,
+        inviteGroupId
+      );
+    });
+  }
+
+  /** Drop every unused invitation link (group or legacy per-student) for this email + student. */
+  public async invalidateInviteTokens(inviteEmail: string, studentId: string): Promise<void> {
+    await this._tokens.invalidateUnusedForInviteEmailAndStudent(inviteEmail, studentId);
+  }
+
+  /**
+   * Drop the unused 24-h sign-in links an accepted shared adult holds for ONE student (removal /
+   * leave). Links issued for other students stay valid; legacy links without a student go too.
+   */
+  public async invalidateContactLoginTokens(userId: string, studentId: string): Promise<void> {
+    await this._tokens.invalidateUnusedForUser('sharedParent', userId, studentId);
   }
 
   public async consume(rawToken: string): Promise<MagicConsumeResult> {

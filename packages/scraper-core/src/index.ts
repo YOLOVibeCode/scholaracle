@@ -40,6 +40,8 @@ export { buildAdapterVersion } from './types';
 export { PAGE_FNS } from './page-fns/registry';
 export { resolvePageFn, PageFnUnregisteredError, PAGE_FN_UNREGISTERED } from './page-fns/resolve';
 export { getDocumentOuterHtml, isLoginFormShowing } from './page-fns/common-fns';
+export { captureSkeleton, type ICaptureSkeletonResult } from './page-fns/captureSkeleton';
+export { runPortalStep } from './pipeline/runPortalStep';
 export { fetchAssetInWebView, fetchPageInWebView } from './page-fns/asset-fns';
 export type {
   IFetchedAsset,
@@ -77,6 +79,7 @@ export { mergeSelectorRecord } from './selectors/mergeSelectorTables';
 
 // Test harness: M4-02 fake portal HTML (Playwright / Express)
 export * from './fixtures/fakePortalM402';
+export * from './fixtures/fakePortalConformance';
 
 // Validator
 export { validateEnvelope, validateOp } from './validator/validator';
@@ -105,6 +108,11 @@ export type {
   ResourceAction,
   IClassifyResourceParams,
 } from './pipeline';
+export { mapGapKindToRecipeStep, uniqueGapKindsFromCoverage } from './repair/gapKindToRecipeStep';
+export { selectorTableJsonForRecipe } from './repair/selectorTableJson';
+export { meetsAeriesCountStandard } from './repair/replayCountStandard';
+// Replay and promote helpers use node:fs and jsdom: import them from
+// '@scholaracle/scraper-core/dist/node' (see node.ts). The mobile app bundles this index.
 export {
   SyncError,
   runClientScrape,

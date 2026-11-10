@@ -128,3 +128,6 @@ local/
 # Google Play API service-account JSON (local / EAS credentials only)
 **/play-service-account.json
 **/*-play-service-account.json
+
+# Claude Code worktrees
+.claude/worktrees/

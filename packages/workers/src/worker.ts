@@ -41,6 +41,7 @@ import { initSentry } from './sentry';
 import { safeInterval } from './utils/safeInterval';
 import { installProcessHandlers } from './utils/processHandlers';
 import { abandonStaleStartedRuns } from './abandonStaleIngestRuns';
+import { startRepairNightlySchedule } from './repair-nightly/scheduleRepairNightly';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -580,6 +581,8 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
   stalenessMonitor.start();
 
+  const repairNightlyInterval = startRepairNightlySchedule(database);
+
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
   const healthServer = createServer((req, res) => {
@@ -631,6 +634,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     logger.info('shutting down worker');
     clearInterval(heartbeatInterval);
     clearInterval(staleRunReaperInterval);
+    if (repairNightlyInterval) clearInterval(repairNightlyInterval);
     stalenessMonitor.stop();
     healthServer.close();
     await notificationWorker.stop();
@@ -640,7 +644,9 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     });
     await mongoClient.close();
     logger.info('worker stopped');
-    process.exit(0);
+    if (process.env['NODE_ENV'] !== 'test') {
+      process.exit(0);
+    }
   };
 
   process.on('SIGTERM', () => {
@@ -651,10 +657,12 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   });
 }
 
-// Start worker if this file is run directly
-if (require.main === module) {
+// Start worker if this file is run directly (never when Jest imports this module)
+if (require.main === module && process.env['JEST_WORKER_ID'] === undefined) {
   startWorker().catch((error: unknown) => {
     logger.fatal({ err: error }, 'failed to start worker');
-    process.exit(1);
+    if (process.env['JEST_WORKER_ID'] === undefined) {
+      process.exit(1);
+    }
   });
 }

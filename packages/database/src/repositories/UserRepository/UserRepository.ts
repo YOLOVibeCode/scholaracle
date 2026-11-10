@@ -92,13 +92,26 @@ export class UserRepository implements IUserRepository {
   }
 
   /**
-   * Find user by email.
+   * Find user by email. New accounts store the address lower-cased and trimmed; rows written
+   * before that rule keep their original casing, so an exact miss falls back to a
+   * case-insensitive match. "Jessica@Example.com" and "jessica@example.com" are one account.
    *
-   * @param email - User email
+   * @param email - User email (any casing)
    * @returns User or null if not found
    */
   public async findByEmail(email: string): Promise<User | null> {
-    const document = await this._collection.findOne({ email });
+    const normalized = email.trim().toLowerCase();
+    const exact = await this._collection.findOne({ email: normalized });
+    if (exact?._id) {
+      return new User(exact, exact._id);
+    }
+    if (normalized === '') {
+      return null;
+    }
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const document = await this._collection.findOne({
+      email: { $regex: `^${escaped}$`, $options: 'i' },
+    });
 
     if (!document || !document._id) {
       return null;

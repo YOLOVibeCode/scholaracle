@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { SubscriptionRepository, PaymentRepository, CouponRepository } from '@scholaracle/database';
+import {
+  SubscriptionRepository,
+  PaymentRepository,
+  CouponRepository,
+  PLAN_FEATURES,
+} from '@scholaracle/database';
 import { AuthenticationError, ConflictError, ValidationError } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
@@ -236,18 +241,26 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     if (!subscription) {
       res.json({
         success: true,
-        subscription: { plan: 'free', status: 'active', effectivePlan: 'free' },
+        subscription: {
+          plan: 'free',
+          status: 'active',
+          effectivePlan: 'free',
+          maxStudents: PLAN_FEATURES.free.maxStudents,
+        },
       });
       return;
     }
 
+    const effectivePlan = subscription.effectivePlan();
     res.json({
       success: true,
       subscription: {
         plan: subscription.plan,
         status: subscription.status,
         /** The plan whose limits apply now (free once cancelled, paused or lapsed). */
-        effectivePlan: subscription.effectivePlan(),
+        effectivePlan,
+        /** Student cap of effectivePlan; -1 means unlimited. */
+        maxStudents: PLAN_FEATURES[effectivePlan].maxStudents,
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
         billingCycle: subscription.billingCycle,

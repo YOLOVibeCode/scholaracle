@@ -113,7 +113,11 @@ export interface IUserData {
   readonly suspendedReason?: string;
   readonly suspendedAt?: Date;
   readonly suspendedBy?: string;
-  /** When true, client should redirect to reset-password on next login. */
+  /**
+   * When true, client should redirect to reset-password on next login. Also set for an account
+   * created by accepting a sharing invitation (random password the person never saw); cleared
+   * wherever a password is set or the person signs in through an OAuth provider.
+   */
   readonly forcePasswordReset?: boolean;
   /** Email transfer request. When populated, a transfer is pending for this account. */
   readonly emailTransferRequest?: {

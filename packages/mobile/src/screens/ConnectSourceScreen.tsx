@@ -9,7 +9,7 @@
  * The connector token is minted from the server and stored separately in SecureStore.
  */
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,8 @@ import {
   sourceIdForStudent,
 } from '../sources/ConnectedSourceStore';
 import { saveCredential } from '../credentials/saveCredential';
-import { apiClient } from '../api/client';
+import { apiClient, type IStudentListItem } from '../api/client';
+import { registerHouseholdBinding } from '../sources/registerHouseholdBinding';
 import { extractHostname } from '../utils/urlNormalize';
 import type { ISourceInvitePayload } from '@scholaracle/contracts';
 import { connectSourceInitialState } from '../install/connectSourceInitialState';
@@ -86,7 +87,15 @@ export function ConnectSourceScreen({
   onCancel,
 }: IConnectSourceScreenProps): React.ReactElement {
   const initial = connectSourceInitialState(invite);
-  const [step, setStep] = useState<'provider' | 'url' | 'credentials'>(initial.step);
+  const [step, setStep] = useState<'provider' | 'url' | 'child' | 'credentials'>(initial.step);
+  const [householdStudents, setHouseholdStudents] = useState<readonly IStudentListItem[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<IStudentListItem | null>(null);
+  const [resolvedStudentId, setResolvedStudentId] = useState<string | undefined>(
+    invite?.studentId ?? studentId
+  );
+  const [resolvedExternalId, setResolvedExternalId] = useState<string | undefined>(
+    invite?.studentExternalId ?? studentExternalId
+  );
   const [selectedProvider, setSelectedProvider] = useState<IProviderInfo | null>(
     () => PROVIDERS.find((p) => p.id === initial.provider) ?? null
   );
@@ -103,6 +112,23 @@ export function ConnectSourceScreen({
     setStep('url');
   };
 
+  const needsChildStep = !resolvedStudentId;
+
+  const loadStudents = useCallback(async (): Promise<void> => {
+    try {
+      const list = await apiClient.getStudents();
+      setHouseholdStudents(list);
+    } catch {
+      setHouseholdStudents([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (step === 'child') {
+      void loadStudents();
+    }
+  }, [step, loadStudents]);
+
   const handleUrlNext = (): void => {
     const trimmed = portalUrl.trim();
     // Pure string parsing — RN's URL polyfill never throws and returns ''
@@ -113,6 +139,13 @@ export function ConnectSourceScreen({
     }
     setUrlError(null);
     setPortalUrl(trimmed);
+    setStep(needsChildStep ? 'child' : 'credentials');
+  };
+
+  const handleSelectChild = (student: IStudentListItem): void => {
+    setSelectedStudent(student);
+    setResolvedStudentId(student.id);
+    setResolvedExternalId(student.studentId ?? student.id);
     setStep('credentials');
   };
 
@@ -124,9 +157,9 @@ export function ConnectSourceScreen({
     }
 
     const institutionExternalId = extractHostname(portalUrl);
-    const mongoId = invite?.studentId ?? studentId;
-    const externalId = invite?.studentExternalId ?? studentExternalId ?? mongoId;
-    if (!externalId) {
+    const mongoId = resolvedStudentId;
+    const externalId = resolvedExternalId ?? mongoId;
+    if (!externalId || !mongoId) {
       Alert.alert(
         'Add a student first',
         'Create a child profile before connecting a school portal.'
@@ -152,7 +185,7 @@ export function ConnectSourceScreen({
         ? sourceIdForStudent(selectedProvider.id, institutionExternalId, mongoId)
         : `local-${selectedProvider.id}-${institutionExternalId}`;
       const adapterId = ADAPTER_IDS[selectedProvider.id] ?? `com.${selectedProvider.id}`;
-      await connectedSourceStore.upsert({
+      const connectedSource = {
         provider: selectedProvider.id,
         adapterId,
         baseUrl: portalUrl,
@@ -162,21 +195,24 @@ export function ConnectSourceScreen({
         institutionExternalId,
         studentId: mongoId,
         adapterVersion: '0.1.0',
-      });
+      } as const;
+      const displayName = `${selectedProvider.name} (${institutionExternalId})`;
 
-      // Register the source server-side so it appears in GET /:id/sources and
-      // sync history. Non-fatal: SyncScreen re-registers before every upload.
+      let portalAccountId: string | undefined;
       try {
-        await apiClient.registerIngestSource({
-          sourceId,
-          provider: selectedProvider.id,
-          adapterId,
-          displayName: `${selectedProvider.name} (${institutionExternalId})`,
-          portalBaseUrl: portalUrl,
+        portalAccountId = await registerHouseholdBinding({
+          source: connectedSource,
+          displayName,
+          registrar: apiClient,
         });
       } catch {
-        // Offline or token issue — the sync-time re-register heals this.
+        // Offline — local connect still works; sync re-registers.
       }
+
+      await connectedSourceStore.upsert({
+        ...connectedSource,
+        portalAccountId,
+      });
 
       Alert.alert(
         'Connected!',
@@ -192,7 +228,12 @@ export function ConnectSourceScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      // Without this the first tap on Next/Save only dismisses the keyboard.
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -209,6 +250,7 @@ export function ConnectSourceScreen({
               key={p.id}
               style={styles.providerCard}
               onPress={() => handleSelectProvider(p)}
+              testID={`button-provider-${p.id}`}
             >
               <Text style={styles.providerName}>{p.name}</Text>
               <Text style={styles.chevron}>›</Text>
@@ -229,16 +271,25 @@ export function ConnectSourceScreen({
               setUrlError(null);
             }}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="url"
             returnKeyType="next"
+            // The field starts as a template URL; select it so typing replaces it
+            // instead of leaving the template's tail after the cursor.
+            selectTextOnFocus
             onSubmitEditing={handleUrlNext}
+            testID="input-connect-url"
           />
           {urlError && (
             <Text style={styles.urlError} testID="url-error">
               {urlError}
             </Text>
           )}
-          <TouchableOpacity style={styles.button} onPress={handleUrlNext}>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleUrlNext}
+            testID="button-connect-url-next"
+          >
             <Text style={styles.buttonText}>Next</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.back} onPress={() => setStep('provider')}>
@@ -247,9 +298,43 @@ export function ConnectSourceScreen({
         </View>
       )}
 
+      {step === 'child' && (
+        <View>
+          <Text style={styles.stepTitle}>Which child?</Text>
+          <Text style={styles.stepHint}>
+            This portal login will sync data for the child you pick.
+          </Text>
+          {householdStudents.length === 0 ? (
+            <Text style={styles.stepHint}>
+              No students yet. Add a child from the student list first.
+            </Text>
+          ) : (
+            householdStudents.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={styles.providerCard}
+                onPress={() => handleSelectChild(s)}
+                testID={`connect-child-${s.id}`}
+              >
+                <Text style={styles.providerName}>{s.name}</Text>
+                <Text style={styles.chevron}>›</Text>
+              </TouchableOpacity>
+            ))
+          )}
+          <TouchableOpacity style={styles.back} onPress={() => setStep('url')}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {step === 'credentials' && selectedProvider && (
         <View>
           <Text style={styles.stepTitle}>Sign in to {selectedProvider.name}</Text>
+          {selectedStudent ? (
+            <Text style={styles.stepHint} testID="connect-selected-child">
+              Child: {selectedStudent.name}
+            </Text>
+          ) : null}
           {initial.urlLocked ? <Text style={styles.stepHint}>{portalUrl}</Text> : null}
           <View style={styles.securityBadge}>
             <Text style={styles.securityText}>
@@ -267,6 +352,7 @@ export function ConnectSourceScreen({
             returnKeyType="next"
             placeholder="your.email@school.edu"
             placeholderTextColor="#999"
+            testID="input-connect-username"
           />
 
           <Text style={styles.label}>Password</Text>
@@ -279,12 +365,14 @@ export function ConnectSourceScreen({
             onSubmitEditing={handleSaveCredentials}
             placeholder="••••••••"
             placeholderTextColor="#999"
+            testID="input-connect-password"
           />
 
           <TouchableOpacity
             style={[styles.button, isSaving && styles.buttonDisabled]}
             onPress={handleSaveCredentials}
             disabled={isSaving}
+            testID="button-connect-save"
           >
             {isSaving ? (
               <ActivityIndicator color="#fff" />

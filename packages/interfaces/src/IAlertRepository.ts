@@ -8,9 +8,24 @@ export interface IAlertData {
   readonly severity: string;
   readonly message: string;
   readonly relatedData?: Record<string, unknown>;
+  /** Legacy, follows the alert's owner (`userId`). Kept one release beside `acknowledgedBy`. */
   readonly acknowledged?: boolean;
+  /** Legacy, follows the alert's owner (`userId`). */
   readonly acknowledgedAt?: Date;
+  /** Per-person acknowledgement: user id -> ISO date (sharing-spec §4.5). */
+  readonly acknowledgedBy?: Readonly<Record<string, string>>;
   readonly createdAt?: Date;
+}
+
+/**
+ * One student the viewer may see alerts for: its owner (alert rows carry the owner's `userId`)
+ * and its Mongo id (what `studentId` holds on every row ingest writes today and the
+ * ALERT_STUDENT_ID_MIGRATION rewrote on legacy rows). Rows that still carry an unresolvable
+ * portal id are visible to their owner only, through the owner's own `userId`.
+ */
+export interface IAlertVisibilityScope {
+  readonly ownerUserId: string;
+  readonly studentId: string;
 }
 
 /**
@@ -25,6 +40,24 @@ export interface IAlertReader {
    * @returns Array of alerts
    */
   findByUserId(userId: string): Promise<readonly IAlertData[]>;
+
+  /**
+   * Find every alert the viewer may see: rows they own plus rows inside the given scopes.
+   *
+   * @param viewerUserId - The caller
+   * @param scopes - Students the caller can access (owner or accepted adult)
+   */
+  findVisibleTo(
+    viewerUserId: string,
+    scopes: readonly IAlertVisibilityScope[]
+  ): Promise<readonly IAlertData[]>;
+
+  /**
+   * Find the alerts of one student (rows carrying its owner and one of its ids).
+   *
+   * @param scope - The student's owner and ids
+   */
+  findByStudentScope(scope: IAlertVisibilityScope): Promise<readonly IAlertData[]>;
 
   /**
    * Find alert by ID.
@@ -55,6 +88,17 @@ export interface IAlertWriter {
    * @returns True if acknowledged, false if not found
    */
   acknowledge(id: string): Promise<boolean>;
+
+  /**
+   * Acknowledge an alert for one person. Writes `acknowledgedBy[userId]`; when that person is
+   * the alert's owner the legacy `acknowledged` / `acknowledgedAt` fields are written too.
+   *
+   * @param id - Alert ID (string)
+   * @param userId - The person acknowledging
+   * @param ownerUserId - The alert's owner (`userId` on the row)
+   * @returns True if acknowledged, false if not found
+   */
+  acknowledgeFor(id: string, userId: string, ownerUserId: string): Promise<boolean>;
 
   /**
    * Delete an alert.

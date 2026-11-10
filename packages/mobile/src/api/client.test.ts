@@ -1018,6 +1018,81 @@ describe('ScholarmancyApiClient auth', () => {
       expect(call[1].method).toBe('PATCH');
       expect(JSON.parse(call[1].body)).toEqual({ status: 'working_on_it' });
     });
+
+    it('patchStudioAssignmentStatus sends a trimmed note only when there is one, and parses the answer', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence(
+        { status: 200, body: { success: true, studentStatus: 'need_help', notified: true } },
+        {
+          status: 200,
+          body: {
+            success: true,
+            studentStatus: 'need_help',
+            notified: false,
+            nextAllowedAt: '2026-11-10T18:00:00.000Z',
+          },
+        },
+        { status: 200, body: { success: true, studentStatus: 'done' } }
+      );
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', "  I don't get #7 ")
+      ).resolves.toEqual({ success: true, studentStatus: 'need_help', notified: true });
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'need_help', '   ')
+      ).resolves.toMatchObject({ notified: false, nextAllowedAt: '2026-11-10T18:00:00.000Z' });
+      // An older server answers without `notified`; the client does not invent it.
+      await expect(
+        client.patchStudioAssignmentStatus('demo-emma-ap-bio-a5', 'done', undefined)
+      ).resolves.toEqual({ success: true, studentStatus: 'done' });
+      const bodies = fetchMock.mock.calls.map((c) =>
+        JSON.parse((c as [string, { body: string }])[1].body)
+      );
+      expect(bodies).toEqual([
+        { status: 'need_help', note: "I don't get #7" },
+        { status: 'need_help' },
+        { status: 'done' },
+      ]);
+    });
+
+    const week = {
+      encouragement: 'Nice work on Reading response 8.',
+      owed: [
+        {
+          assignmentExternalId: 'demo-emma-alg2-missing-1',
+          title: 'Missing assignment 1',
+          courseName: 'Algebra II',
+          dueAt: '2026-11-05T16:00:00.000Z',
+          humanStatus: 'Not turned in',
+          studentStatus: 'not_started',
+          needs: ['saved_file'],
+          primaryCtaLabel: 'Open worksheet',
+        },
+      ],
+      days: [{ date: '2026-11-09', label: 'Today', items: [] }],
+      doneThisWeek: [],
+      counts: { owed: 1, due: 0, done: 0 },
+    };
+
+    it('getStudioWeek GETs /api/studio/week and parses the view', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      const fetchMock = mockFetchSequence({ status: 200, body: week });
+      await expect(client.getStudioWeek()).resolves.toEqual(week);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/api/studio/week`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer jwt-ok' }),
+        })
+      );
+    });
+
+    it('getStudioWeek rejects a payload carrying a score', async () => {
+      secureStoreData.set('slc_access_token', 'jwt-ok');
+      mockFetchSequence({
+        status: 200,
+        body: { ...week, owed: [{ ...week.owed[0], percent: '92%' }] },
+      });
+      await expect(client.getStudioWeek()).rejects.toThrow(/unexpected percent/);
+    });
   });
 });
 
@@ -1248,5 +1323,79 @@ describe('ScholarmancyApiClient course tutorial', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/api/students/stu-db/courses/merged-alg/tutorial');
     expect(init.method).toBe('DELETE');
+  });
+});
+
+describe('ScholarmancyApiClient Apple login and account deletion', () => {
+  let client: ScholarmancyApiClient;
+
+  beforeEach(() => {
+    secureStoreData.clear();
+    wireSecureStoreMock();
+    client = new ScholarmancyApiClient(BASE_URL);
+  });
+
+  it('loginWithApple posts only the token and nonce to /api/auth/oauth/apple, with no secret header', async () => {
+    const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+
+    await client.loginWithApple('apple.jwt', 'raw-nonce', ' Pat Parent ');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE_URL}/api/auth/oauth/apple`);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+      name: 'Pat Parent',
+    });
+    const headers = init.headers as Record<string, string>;
+    expect(Object.keys(headers).map((k) => k.toLowerCase())).not.toContain('x-internal-api-secret');
+    expect(secureStoreData.get('slc_access_token')).toBe('jwt-access-token-1');
+  });
+
+  it('loginWithApple omits a blank name', async () => {
+    const fetchMock = mockFetchSequence({ status: 200, body: makeLoginBody() });
+    await client.loginWithApple('apple.jwt', 'raw-nonce', '  ');
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('name');
+  });
+
+  it('deleteAccount sends DELETE /api/account with the password', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    const typedByUser = 'typed-by-user';
+    await client.deleteAccount({ password: typedByUser });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE_URL}/api/account`);
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(String(init.body))).toEqual({ password: typedByUser });
+  });
+
+  it('deleteAccount sends an Apple proof for accounts without a password', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    await client.deleteAccount({ appleIdentityToken: 'apple.jwt', appleNonce: 'raw-nonce' });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+    });
+  });
+
+  it('getServedSelectorPatches GETs connector selector-patches for portal host', async () => {
+    const fetchMock = mockFetchSequence({
+      status: 200,
+      body: {
+        success: true,
+        flags: { remoteSelectorPatches: true, killSwitch: false },
+        patches: [],
+      },
+    });
+    const result = await client.getServedSelectorPatches('district.aeries.net', 'connector-jwt');
+    expect(result.patches).toEqual([]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/api/ingest/v1/selector-patches?portalHost=');
+    expect(url).toContain(encodeURIComponent('district.aeries.net'));
+    expect(init.method).toBe('GET');
   });
 });

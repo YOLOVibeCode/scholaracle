@@ -15,6 +15,9 @@ import type {
   ISlcIngestEnvelopeV1,
   IStudentListItem,
   IStudentCreateRequest,
+  IStudentUpdateRequest,
+  ISubscriptionWire,
+  ISubscriptionResponse,
   IStudentGradesResponse,
   IStudentMaterialsResponse,
   IActionBoardResponse,
@@ -24,7 +27,10 @@ import type {
   IAuthRefreshResponse,
   IAuthUser,
   ITodayView,
+  IWeekView,
   IWorkPackView,
+  IStudentStatusUpdateResponse,
+  StudentStatus,
   IPushTokenRequest,
   IConnectorTokenResponse,
   IPendingSyncRequestsResponse,
@@ -34,12 +40,54 @@ import type {
   ISourceInviteIssueResponse,
   ISourceInvitePayload,
   ISourceInviteRedeemResponse,
+  ISanitizedPageSkeletonCapture,
+  IServedSelectorPatchesResponse,
+  IPortalAccountUpsertRequest,
+  IPortalAccountUpsertResponse,
+  IPortalBindingUpsertRequest,
+  IPortalBindingUpsertResponse,
+  IAlertListItem,
+  IAlertActionResponse,
+  IUserSettingsResponse,
+  IUserSettingsUpdateRequest,
+  IMySharingView,
+  ISharingContactAdminRequest,
+  ISharingContactUpdateRequest,
+  ISharingContactUpdateResult,
+  ISharingInviteRequest,
+  ISharingInviteResult,
+  ISharingInviteSelection,
+  ISharingInviteSelectionResult,
+  ISharingLeaveRequest,
+  ISharingLeaveResult,
+  ISharingLoginLinkRequest,
+  ISharingLoginLinkResult,
+  ISharingOwnerAlertPrefsRequest,
+  ISharingOwnerAlertPrefsResult,
+  ISharingPendingInvite,
+  ISharingPerson,
+  ISharingResendResult,
+  ISharingSuccessResult,
 } from '@scholaracle/contracts';
-import { parseTodayView, parseWorkPackView } from '@scholaracle/contracts';
+import {
+  parseStudentStatusUpdateResponse,
+  parseTodayView,
+  parseWeekView,
+  parseWorkPackView,
+  studioStatusPatchBody,
+} from '@scholaracle/contracts';
 import { ApiError } from './ApiError';
 import { getDeviceId } from '../device/deviceId';
 
 export type { IStudentListItem } from '@scholaracle/contracts';
+
+/**
+ * The signed-in user as this device remembers it. `forcePasswordReset` is true for an account
+ * the server created from a sharing invitation (random password): the app shows "Set a password".
+ */
+export interface ISessionUser extends IAuthUser {
+  readonly forcePasswordReset?: boolean;
+}
 
 const ACCESS_TOKEN_KEY = 'slc_access_token';
 const REFRESH_TOKEN_KEY = 'slc_refresh_token';
@@ -179,6 +227,32 @@ export class ScholarmancyApiClient {
     return res;
   }
 
+  /**
+   * Sign in with Apple. No shared secret: the server verifies the identity token itself and
+   * takes the account id and email from it, so only the token and its raw nonce are sent.
+   */
+  async loginWithApple(
+    identityToken: string,
+    nonce: string,
+    name?: string
+  ): Promise<IAuthLoginResponse> {
+    const body: Record<string, unknown> = { appleIdentityToken: identityToken, appleNonce: nonce };
+    if (name !== undefined && name.trim() !== '') body['name'] = name.trim();
+    const res = await this._post<IAuthLoginResponse>('/api/auth/oauth/apple', body, false);
+    await this._persistSession(res, 'AppleLogin');
+    return res;
+  }
+
+  /**
+   * Permanently delete the signed-in parent account. Pass the password, or for accounts
+   * created with Apple (no known password) a fresh Apple identity token + nonce.
+   */
+  async deleteAccount(
+    proof: { password: string } | { appleIdentityToken: string; appleNonce: string }
+  ): Promise<void> {
+    await this._delete<{ success: boolean }>('/api/account', proof);
+  }
+
   async loginWithMagicToken(token: string): Promise<IAuthLoginResponse> {
     const res = await this._post<IAuthLoginResponse>('/api/auth/magic', { token }, false);
     await this._persistSession(res, 'MagicLogin');
@@ -198,11 +272,11 @@ export class ScholarmancyApiClient {
     await SecureStore.deleteItemAsync(SESSION_USER_KEY).catch(() => undefined);
   }
 
-  async getSessionUser(): Promise<IAuthUser | null> {
+  async getSessionUser(): Promise<ISessionUser | null> {
     const raw = await SecureStore.getItemAsync(SESSION_USER_KEY);
     if (raw != null && raw !== '') {
       try {
-        const parsed = JSON.parse(raw) as Partial<IAuthUser>;
+        const parsed = JSON.parse(raw) as Partial<ISessionUser>;
         const user = sessionUserFromPartial(parsed);
         if (user) return user;
       } catch {
@@ -307,12 +381,200 @@ export class ScholarmancyApiClient {
     return this._get<IStudentListItem[]>('/api/students');
   }
 
+  /** PUT /api/students/:id — the same name / grade / student-id edit the web makes. */
+  async updateStudent(id: string, request: IStudentUpdateRequest): Promise<IStudentListItem> {
+    return this._put<IStudentListItem>(`/api/students/${encodeURIComponent(id)}`, request);
+  }
+
+  /** DELETE /api/students/:id — removes the student record from the account. */
+  async deleteStudent(id: string): Promise<void> {
+    await this._delete<unknown>(`/api/students/${encodeURIComponent(id)}`, {});
+  }
+
+  /** DELETE /api/students/:id/sources/:sourceId — removes the source from the account. */
+  async deleteStudentSource(studentId: string, sourceId: string): Promise<void> {
+    await this._delete<unknown>(
+      `/api/students/${encodeURIComponent(studentId)}/sources/${encodeURIComponent(sourceId)}`,
+      {}
+    );
+  }
+
+  /** GET /api/billing/subscription — read-only plan info (no in-app purchase). */
+  async getSubscription(): Promise<ISubscriptionWire> {
+    const res = await this._get<ISubscriptionResponse>('/api/billing/subscription');
+    return res.subscription;
+  }
+
+  async getConsents(): Promise<{ readonly serverAi: boolean }> {
+    return this._get<{ readonly serverAi: boolean }>('/api/consents');
+  }
+
+  async setServerAiConsent(enabled: boolean): Promise<{ readonly serverAi: boolean }> {
+    return this._put<{ readonly serverAi: boolean }>(
+      '/api/consents/server-ai',
+      { enabled },
+      { 'X-Consent-Source': '/mobile/settings' }
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Alerts + notification preferences (parent account)
+  // ---------------------------------------------------------------------------
+
+  /** GET /api/alerts-api — all alerts for the user (no server-side filters or paging). */
+  async getAlerts(): Promise<IAlertListItem[]> {
+    return this._get<IAlertListItem[]>('/api/alerts-api');
+  }
+
+  /** POST /api/alerts-api/:id/acknowledge. */
+  async acknowledgeAlert(alertId: string): Promise<IAlertActionResponse> {
+    return this._post<IAlertActionResponse>(
+      `/api/alerts-api/${encodeURIComponent(alertId)}/acknowledge`,
+      {},
+      true
+    );
+  }
+
+  /** GET /api/settings — notification + alert preferences (server defaults filled in). */
+  async getNotificationSettings(): Promise<IUserSettingsResponse> {
+    return this._get<IUserSettingsResponse>('/api/settings');
+  }
+
+  /** PUT /api/settings — partial update; the server merges and returns the new settings. */
+  // ---------------------------------------------------------------------------
+  // Sharing: Family & guardians (docs/sharing-spec.md §4.3). Cross-student calls live under
+  // /api/sharing; per-student people management under /api/students/:id/contacts*.
+  // Identity is always the JWT email: no call sends "whose" invitation it is.
+  // ---------------------------------------------------------------------------
+
+  /** Pending invitations addressed to the signed-in user. */
+  async getPendingSharingInvites(): Promise<ISharingPendingInvite[]> {
+    return this._get<ISharingPendingInvite[]>('/api/sharing/invites/pending');
+  }
+
+  /** One person, one or more students, one email. Duplicates are reported per student. */
+  async sendSharingInvite(request: ISharingInviteRequest): Promise<ISharingInviteResult> {
+    return this._post<ISharingInviteResult>('/api/sharing/invites', request, true);
+  }
+
+  async acceptSharingInvites(
+    selection: ISharingInviteSelection
+  ): Promise<ISharingInviteSelectionResult> {
+    return this._post<ISharingInviteSelectionResult>(
+      '/api/sharing/invites/accept',
+      selection,
+      true
+    );
+  }
+
+  async declineSharingInvites(
+    selection: ISharingInviteSelection
+  ): Promise<ISharingInviteSelectionResult> {
+    return this._post<ISharingInviteSelectionResult>(
+      '/api/sharing/invites/decline',
+      selection,
+      true
+    );
+  }
+
+  /** Re-sends the invitation email for a group (owner / admin on every student in it). */
+  async resendSharingInvite(inviteGroupId: string): Promise<ISharingResendResult> {
+    return this._post<ISharingResendResult>(
+      `/api/sharing/invites/${encodeURIComponent(inviteGroupId)}/resend`,
+      {},
+      true
+    );
+  }
+
+  /** The signed-in adult stops following a student (admins and members; never the owner). */
+  async leaveStudent(studentId: string): Promise<ISharingLeaveResult> {
+    const body: ISharingLeaveRequest = { studentId };
+    return this._post<ISharingLeaveResult>('/api/sharing/leave', body, true);
+  }
+
+  /** Every accessible student with the caller's access, inviter and own alert prefs. */
+  async getMySharing(): Promise<IMySharingView> {
+    return this._get<IMySharingView>('/api/sharing/mine');
+  }
+
+  /** Owner + every invited adult for one student, with texting consent status. */
+  async getStudentContacts(studentId: string): Promise<ISharingPerson[]> {
+    return this._get<ISharingPerson[]>(`/api/students/${encodeURIComponent(studentId)}/contacts`);
+  }
+
+  /** Owner / admin: any field. The person themself: only their alert preferences. */
+  async updateStudentContact(
+    studentId: string,
+    email: string,
+    patch: ISharingContactUpdateRequest
+  ): Promise<ISharingContactUpdateResult> {
+    return this._put<ISharingContactUpdateResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}`,
+      patch
+    );
+  }
+
+  async setStudentContactAdmin(
+    studentId: string,
+    email: string,
+    isAdmin: boolean
+  ): Promise<ISharingSuccessResult> {
+    const body: ISharingContactAdminRequest = { isAdmin };
+    return this._put<ISharingSuccessResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}/admin`,
+      body
+    );
+  }
+
+  /** Owner / admin removes a pending or accepted adult; their links die with it. */
+  async removeStudentContact(studentId: string, email: string): Promise<void> {
+    await this._delete<ISharingSuccessResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}`,
+      {}
+    );
+  }
+
+  /** Owner / admin sends a 24 h sign-in link to a contact by email or text. */
+  async sendStudentContactLoginLink(
+    studentId: string,
+    email: string,
+    request: ISharingLoginLinkRequest
+  ): Promise<ISharingLoginLinkResult> {
+    return this._post<ISharingLoginLinkResult>(
+      `/api/students/${encodeURIComponent(studentId)}/contacts/${encodeURIComponent(email)}/magic-link/send`,
+      request,
+      true
+    );
+  }
+
+  /** The owner's own alert preferences for a student (owner only). */
+  async updateOwnerAlertPrefs(
+    studentId: string,
+    prefs: ISharingOwnerAlertPrefsRequest
+  ): Promise<ISharingOwnerAlertPrefsResult> {
+    return this._put<ISharingOwnerAlertPrefsResult>(
+      `/api/students/${encodeURIComponent(studentId)}/owner-alert-prefs`,
+      prefs
+    );
+  }
+
+  async updateNotificationSettings(
+    update: IUserSettingsUpdateRequest
+  ): Promise<IUserSettingsResponse> {
+    return this._put<IUserSettingsResponse>('/api/settings', update);
+  }
+
   // ---------------------------------------------------------------------------
   // Student studio (IStudioApi — student JWT only)
   // ---------------------------------------------------------------------------
 
   async getStudioToday(): Promise<ITodayView> {
     return parseTodayView(await this._get<unknown>('/api/studio/today'));
+  }
+
+  /** GET /api/studio/week — owed / next 7 days / done this week. Parsed; never a score. */
+  async getStudioWeek(): Promise<IWeekView> {
+    return parseWeekView(await this._get<unknown>('/api/studio/week'));
   }
 
   async getStudioWorkPack(assignmentExternalId: string): Promise<IWorkPackView> {
@@ -323,13 +585,21 @@ export class ScholarmancyApiClient {
     );
   }
 
+  /**
+   * PATCH /api/studio/assignments/:id/status. The body comes from the shared
+   * builder (a non-empty note rides along with need_help); the answer says
+   * whether the adults were told, when the server is new enough to know.
+   */
   async patchStudioAssignmentStatus(
     assignmentExternalId: string,
-    status: 'not_started' | 'working_on_it' | 'need_help' | 'done' | null
-  ): Promise<void> {
-    await this._patch(
-      `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
-      { status }
+    status: StudentStatus | null,
+    note?: string
+  ): Promise<IStudentStatusUpdateResponse> {
+    return parseStudentStatusUpdateResponse(
+      await this._patch<unknown>(
+        `/api/studio/assignments/${encodeURIComponent(assignmentExternalId)}/status`,
+        studioStatusPatchBody(status, note)
+      )
     );
   }
 
@@ -478,12 +748,56 @@ export class ScholarmancyApiClient {
    * GET /api/students/:id/sources filters the source out and the sync
    * history stays empty. Safe to call repeatedly.
    */
+  async listIngestConnectorSources(
+    connectorToken: string
+  ): Promise<readonly { readonly portalBaseUrl?: string }[]> {
+    const res = await this._connectorFetch(
+      '/api/ingest/v1/sources',
+      { method: 'GET' },
+      connectorToken
+    );
+    if (!res.ok) throw await ApiError.fromResponse(res, 'List ingest sources');
+    const body = (await res.json()) as { sources?: readonly { portalBaseUrl?: string }[] };
+    return body.sources ?? [];
+  }
+
+  async getServedSelectorPatches(
+    portalHost: string,
+    connectorToken: string
+  ): Promise<IServedSelectorPatchesResponse> {
+    const query = encodeURIComponent(portalHost);
+    const res = await this._connectorFetch(
+      `/api/ingest/v1/selector-patches?portalHost=${query}`,
+      { method: 'GET' },
+      connectorToken
+    );
+    if (!res.ok) throw await ApiError.fromResponse(res, 'Served selector patches');
+    return (await res.json()) as IServedSelectorPatchesResponse;
+  }
+
   async registerIngestSource(source: IIngestSourceRegisterRequest): Promise<void> {
     const res = await this._connectorFetch('/api/ingest/v1/sources', {
       method: 'POST',
       body: JSON.stringify(source),
     });
     if (!res.ok) throw await ApiError.fromResponse(res, 'Source registration');
+  }
+
+  async upsertPortalAccount(
+    body: IPortalAccountUpsertRequest
+  ): Promise<{ portalAccountId: string }> {
+    const res = await this._put<IPortalAccountUpsertResponse>('/api/portal-accounts', body);
+    return { portalAccountId: res.portalAccount.portalAccountId };
+  }
+
+  async upsertPortalBinding(
+    portalAccountId: string,
+    body: IPortalBindingUpsertRequest
+  ): Promise<void> {
+    await this._put<IPortalBindingUpsertResponse>(
+      `/api/portal-accounts/${portalAccountId}/bindings`,
+      body
+    );
   }
 
   async redeemSourceInvite(token: string): Promise<ISourceInvitePayload> {
@@ -524,15 +838,50 @@ export class ScholarmancyApiClient {
     });
     if (!envelopeRes.ok) throw await ApiError.fromResponse(envelopeRes, 'Envelope upload');
 
+    const appliedPatchId = envelope.run.meta?.['appliedSelectorPatchId'];
     const completeRes = await this._connectorFetch(`/api/ingest/v1/runs/${serverRunId}/complete`, {
       method: 'POST',
       body: JSON.stringify({
         status: 'success',
         ...(envelope.run.coverage !== undefined ? { coverage: envelope.run.coverage } : {}),
         ...(envelope.run.warnings !== undefined ? { warnings: envelope.run.warnings } : {}),
+        ...(appliedPatchId ? { appliedSelectorPatchId: appliedPatchId } : {}),
       }),
     });
     if (!completeRes.ok) throw await ApiError.fromResponse(completeRes, 'Run completion');
+  }
+
+  async uploadRunSkeleton(params: {
+    readonly runId: string;
+    readonly sourceId: string;
+    readonly connectorToken: string;
+    readonly payload: ISanitizedPageSkeletonCapture;
+  }): Promise<void> {
+    const runRes = await this._connectorFetch(
+      '/api/ingest/v1/runs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          runId: params.runId,
+          sourceId: params.sourceId,
+          clientMeta: { clientType: 'mobile' },
+        }),
+      },
+      params.connectorToken
+    );
+    if (!runRes.ok) throw await ApiError.fromResponse(runRes, 'Run registration');
+    const runBody = (await runRes.json()) as Partial<IIngestRunStartResponse>;
+    const serverRunId = runBody.runId ?? params.runId;
+
+    const skeletonRes = await this._connectorFetch(
+      `/api/ingest/v1/runs/${serverRunId}/skeletons`,
+      {
+        method: 'POST',
+        body: JSON.stringify(params.payload),
+      },
+      params.connectorToken
+    );
+    if (!skeletonRes.ok) throw await ApiError.fromResponse(skeletonRes, 'Skeleton upload');
   }
 
   async reportRunFailure(params: {
@@ -649,6 +998,30 @@ export class ScholarmancyApiClient {
     return res.json() as Promise<T>;
   }
 
+  private async _put<T>(
+    path: string,
+    body: unknown,
+    extraHeaders?: Record<string, string>
+  ): Promise<T> {
+    const doPut = async (authToken: string): Promise<Response> =>
+      this._timedFetch(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      });
+
+    let res = await doPut(await this._getAccessToken());
+    if (res.status === 401) {
+      res = await doPut(await this._refreshAccessToken());
+    }
+    if (!res.ok) throw await ApiError.fromResponse(res, `PUT ${path}`);
+    return res.json() as Promise<T>;
+  }
+
   private async _patch<T>(path: string, body: unknown): Promise<T> {
     const doPatch = async (authToken: string): Promise<Response> =>
       this._timedFetch(`${this.baseUrl}${path}`, {
@@ -748,7 +1121,7 @@ function isOfflineLike(err: unknown): boolean {
   );
 }
 
-function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
+function sessionUserFromLogin(res: IAuthLoginResponse): ISessionUser {
   const raw = res.user;
   const role = raw?.role === 'student' ? 'student' : 'parent';
   return {
@@ -757,10 +1130,11 @@ function sessionUserFromLogin(res: IAuthLoginResponse): IAuthUser {
     name: raw?.name ?? '',
     role,
     ...(role === 'student' && raw?.studentId ? { studentId: raw.studentId } : {}),
+    ...(res.forcePasswordReset === true ? { forcePasswordReset: true } : {}),
   };
 }
 
-function sessionUserFromPartial(parsed: Partial<IAuthUser>): IAuthUser | null {
+function sessionUserFromPartial(parsed: Partial<ISessionUser>): ISessionUser | null {
   if (typeof parsed.id !== 'string' || typeof parsed.email !== 'string') return null;
   const role = parsed.role === 'student' ? 'student' : 'parent';
   return {
@@ -771,6 +1145,7 @@ function sessionUserFromPartial(parsed: Partial<IAuthUser>): IAuthUser | null {
     ...(role === 'student' && typeof parsed.studentId === 'string' && parsed.studentId !== ''
       ? { studentId: parsed.studentId }
       : {}),
+    ...(parsed.forcePasswordReset === true ? { forcePasswordReset: true } : {}),
   };
 }
 

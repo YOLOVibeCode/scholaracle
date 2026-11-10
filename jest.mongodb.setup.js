@@ -4,7 +4,9 @@ const path = require('path');
 
 module.exports = async () => {
   // Spin up an ephemeral MongoDB for jest runs so tests are self-contained.
-  const mongod = await MongoMemoryServer.create();
+  const mongod = await MongoMemoryServer.create({
+    instance: { launchTimeout: 60000 },
+  });
   const uri = mongod.getUri();
   const info = mongod.instanceInfoSync ? mongod.instanceInfoSync() : mongod.instanceInfo;
   const pid = info && info.pid ? info.pid : null;

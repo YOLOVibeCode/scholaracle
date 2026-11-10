@@ -4,6 +4,9 @@
  * Handled schemes / paths:
  *   scholarmancy://magic?token=<raw>      ← from /magic web page
  *   scholarmancy://magic/<raw>            ← fallback path form
+ *   https://scholarmancy.com/magic?token=<raw>
+ *                                         ← universal link / Android app link
+ *                                           (also www.scholarmancy.com)
  *
  * Parsed with plain string operations — NOT the URL API.
  * React Native's URL polyfill only understands http(s), so custom-scheme
@@ -11,6 +14,26 @@
  */
 
 const SCHEME_PREFIX = 'scholarmancy:';
+const WEB_PREFIXES = ['https://scholarmancy.com/', 'https://www.scholarmancy.com/'];
+
+/**
+ * Path (+ query) after the scheme or the verified web host, with leading
+ * slashes stripped (e.g. "magic?token=abc"), or null if the URL is neither.
+ */
+function appLinkRest(url: string): string | null {
+  const lower = url.toLowerCase();
+  if (lower.startsWith(SCHEME_PREFIX)) return url.slice(SCHEME_PREFIX.length).replace(/^\/+/, '');
+  const web = WEB_PREFIXES.find((prefix) => lower.startsWith(prefix));
+  return web ? url.slice(web.length).replace(/^\/+/, '') : null;
+}
+
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Returns the raw magic token from a deep-link URL, or null if the URL
@@ -19,10 +42,9 @@ const SCHEME_PREFIX = 'scholarmancy:';
 export function extractMagicToken(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim();
-  if (!trimmed.toLowerCase().startsWith(SCHEME_PREFIX)) return null;
-
-  // Strip scheme + leading slashes  →  e.g. "magic?token=abc" or "magic/abc"
-  const rest = trimmed.slice(SCHEME_PREFIX.length).replace(/^\/+/, '');
+  // Strip scheme/host + leading slashes  →  e.g. "magic?token=abc" or "magic/abc"
+  const rest = appLinkRest(trimmed);
+  if (rest === null) return null;
 
   if (!rest.toLowerCase().startsWith('magic')) return null;
 
@@ -35,7 +57,7 @@ export function extractMagicToken(url: string | null | undefined): string | null
     for (const part of query.split('&')) {
       const [key, val] = part.split('=');
       if (key?.toLowerCase() === 'token' && val) {
-        return decodeURIComponent(val);
+        return safeDecode(val);
       }
     }
   }

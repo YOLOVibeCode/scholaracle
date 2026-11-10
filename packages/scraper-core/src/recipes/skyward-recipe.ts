@@ -27,6 +27,8 @@ import { mergeSelectorRecord } from '../selectors/mergeSelectorTables';
 
 export interface IRunSkywardRecipeOptions {
   readonly selectors?: Partial<ISkywardSelectorsV1>;
+  /** Fake-portal extension conformance: gradebook slice only (expected counts need no attendance/schedule). */
+  readonly conformanceGradebookOnly?: boolean;
 }
 
 /** Grade period literals in priority order (most recent school term first). */
@@ -134,9 +136,12 @@ export async function runSkywardRecipe(
   const schoolName = await driver.evaluate(extractSkywardSchoolName, selectors);
 
   // --- Gradebook ---
-  // Navigate to Gradebook section via nav link
-  await navigateSkywardSection(driver, selectors, 'Gradebook');
-  await driver.sleep(3000);
+  if (options?.conformanceGradebookOnly) {
+    await driver.sleep(500);
+  } else {
+    await navigateSkywardSection(driver, selectors, 'Gradebook');
+    await driver.sleep(3000);
+  }
 
   const html = await driver.content();
   const headers = [
@@ -250,6 +255,19 @@ export async function runSkywardRecipe(
     } finally {
       await closeDialogsQuietly(driver, selectors);
     }
+  }
+
+  if (options?.conformanceGradebookOnly) {
+    return {
+      student: studentName,
+      school: schoolName,
+      courses,
+      missingAssignments,
+      assignments: allAssignments,
+      attendance: [],
+      schedule: [],
+      timestamp: new Date().toISOString(),
+    };
   }
 
   // --- Attendance ---
