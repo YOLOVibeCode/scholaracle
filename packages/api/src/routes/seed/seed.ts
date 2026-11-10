@@ -84,6 +84,18 @@ const TEST_USERS = {
   },
 } as const;
 
+/** Domains and addresses allowed for POST /api/seed/set-plan (blocks arbitrary production mail). */
+function isSeedFixtureEmail(normalizedEmail: string): boolean {
+  if (normalizedEmail.endsWith('@example.com') || normalizedEmail.endsWith('@scholarmancy.com')) {
+    return true;
+  }
+  if (normalizedEmail.endsWith('@scholaracle.com')) {
+    return true;
+  }
+  const extraAllowed = [DEMO_CONTACT_JESSICA, DEMO_CONTACT_RICKY, DEMO_CONTACT_JENNIFER];
+  return extraAllowed.some((e) => e.toLowerCase() === normalizedEmail);
+}
+
 /**
  * True only on a developer machine or in unit tests. Railway always sets
  * RAILWAY_ENVIRONMENT_ID, so a deployed dev, UAT or production API is never local.
@@ -140,7 +152,7 @@ function isDemoDomainEmail(email: string): boolean {
   return normalized.endsWith('@scholarmancy.com');
 }
 
-/** Fixture parent accounts and demo-domain emails allowed on seed maintenance routes. */
+/** Fixture domains allowed for set-plan and similar seed helpers. */
 function isSeedFixtureEmail(email: string): boolean {
   const normalized = email.toLowerCase().trim();
   return normalized.endsWith('@scholarmancy.com') || normalized.endsWith('@example.com');
