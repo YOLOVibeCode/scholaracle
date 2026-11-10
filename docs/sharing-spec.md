@@ -271,6 +271,24 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
   rows (UAT: 0 and 4 rows, 2026-11-10).
 - Test fixture: `POST /api/seed/set-plan` (seed-gated) puts an e2e owner on a paid plan.
 
+## 4.12 As built (S4 #147 phone)
+- Students screen: invitations banner → Invitations screen (Accept / Decline per group), "Shared with you · by
+  <name>", "Share…" for owner/admin → Share screen (person, label, Can manage, multi-select students, channels
+  with Email + Push on by default, Text needs a phone, at least one channel) → per-student results and the SMS
+  opt-in link through the system share sheet.
+- Dashboard → **Family & guardians** screen: chips (Owner / Admin / Member; Invited / Accepted / Declined;
+  Texts none / invited / opted in), Resend, Make admin, Remove, and on the viewer's row My alerts (channels incl.
+  push, alert types, Silence) and Leave. The owner row shows the owner's name and email (server now returns them).
+- Notification settings: a section per shared student with the viewer's channels/types and Silence; "all alert
+  types" is sent as `alertTypes: null` (server clears the filter); the self row is matched by account id when
+  the login email differs from the invite address.
+- Role-aware hiding per §4.2 (Edit / Remove student, server-side Disconnect, Connect source). Home data
+  (students, pending invitations, inviter names, access map) is loaded once by the app shell and passed down;
+  a failed refresh keeps the previous data (never drops a parent into onboarding).
+- "Set a password so you can sign in next time" banner for accounts with `forcePasswordReset`, re-checked on
+  foreground. JS-only: ships as an OTA update.
+- Maestro `share` suite exists but needs a second UAT parent account (`MAESTRO_COPARENT_EMAIL/PASSWORD`).
+
 ## 5. Implementation plan
 
 Each phase is one PR, green CI, with the tests named. Effort is for one developer.
