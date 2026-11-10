@@ -12,3 +12,5 @@ export * from './worker';
 export * from './recipient-resolver';
 export * from './sms';
 export * from './ai';
+export * from './studio';
+export * from './weeklyReview';

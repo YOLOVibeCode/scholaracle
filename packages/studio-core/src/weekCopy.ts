@@ -167,6 +167,22 @@ export function isWeekClear(counts: IWeekCounts): boolean {
   return counts.owed === 0 && counts.due === 0;
 }
 
+/** Nothing owed, nothing due, nothing finished: there is no review to give. */
+export function isWeekEmpty(counts: IWeekCounts): boolean {
+  return isWeekClear(counts) && counts.done === 0;
+}
+
+export const WEEKLY_REVIEW_TAP_HINT = 'Tap to see the plan.';
+
+/**
+ * The Sunday weekly review push body (spec §3.3): "This week: 3 due · 1 still owed ·
+ * you finished 4. Tap to see the plan." An empty week says "You're caught up."
+ */
+export function weeklyReviewMessage(counts: IWeekCounts): string {
+  if (isWeekEmpty(counts)) return WEEK_EMPTY_MESSAGE;
+  return `This week: ${weekSummaryLine(counts)}. ${WEEKLY_REVIEW_TAP_HINT}`;
+}
+
 export function doneSectionTitle(count: number): string {
   return `${DONE_SECTION_TITLE} (${count})`;
 }

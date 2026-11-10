@@ -753,16 +753,23 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         receiveAlerts?: boolean;
         alertChannels?: unknown;
         alertTypes?: unknown;
+        weeklyReviewCopy?: unknown;
       };
       // Reject unknown channels and deduplicate before anything is stored.
       const alertChannels = parseChannels(body.alertChannels);
       // absent = unchanged, array = set, null = every type again (clears a narrowed list).
       const alertTypes = parseAlertTypesPatch(body.alertTypes);
+      // Weekly review copy (student review §3.3 Q2): a boolean or absent, never coerced.
+      if (body.weeklyReviewCopy !== undefined && typeof body.weeklyReviewCopy !== 'boolean') {
+        throw new ValidationError('weeklyReviewCopy must be a boolean');
+      }
+      const weeklyReviewCopy = body.weeklyReviewCopy;
       const updatedShared = [...student.sharedWith];
       const current = updatedShared[idx]!;
       const prefsPatch = {
         ...(body.receiveAlerts !== undefined && { receiveAlerts: body.receiveAlerts }),
         ...(alertChannels !== undefined && { alertChannels }),
+        ...(weeklyReviewCopy !== undefined && { weeklyReviewCopy }),
       };
       if (isOwnerOrAdmin) {
         updatedShared[idx] = withAlertTypes(
@@ -1143,14 +1150,20 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         receiveAlerts?: boolean;
         alertChannels?: unknown;
         alertTypes?: unknown;
+        weeklyReviewCopy?: unknown;
       };
+      if (body.weeklyReviewCopy !== undefined && typeof body.weeklyReviewCopy !== 'boolean') {
+        throw new ValidationError('weeklyReviewCopy must be a boolean');
+      }
       // Same validation as the sharing routes: only email | sms | push, deduplicated.
       // alertTypes: an array narrows; null or absent means every type (no key stored).
       const alertTypes = parseAlertTypesPatch(body.alertTypes);
+      // Whole-object replace: an omitted weekly-review toggle is off (student review §3.3 Q2).
       const prefs: IOwnerAlertPrefs = {
         receiveAlerts: body.receiveAlerts ?? true,
         alertChannels: parseChannels(body.alertChannels) ?? DEFAULT_OWNER_ALERT_CHANNELS,
         ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
+        weeklyReviewCopy: body.weeklyReviewCopy === true,
       };
       await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
       res.status(200).json({ success: true, ownerAlertPrefs: prefs });

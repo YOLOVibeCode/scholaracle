@@ -20,6 +20,8 @@ import * as Notifications from 'expo-notifications';
 import { apiClient } from '../api/client';
 import {
   ALERT_TYPE_KEYS,
+  WEEKLY_REVIEW_SECTION_HINT,
+  WEEKLY_REVIEW_SWITCH_LABEL,
   alertTypeToggleLabel,
   buildUpdate,
   deviceTimezone,
@@ -29,9 +31,13 @@ import {
   pushPermissionView,
   quietHoursSummary,
   setTypeEnabled,
+  setWeeklyReviewEnabled,
   stepTime,
   timezoneMismatch,
+  weeklyReviewRows,
+  weeklyReviewToggleRequest,
   type INotificationDraft,
+  type IWeeklyReviewRow,
 } from '../alerts/notificationSettingsModel';
 import { SharedStudentAlertsSection } from '../components/SharedStudentAlertsSection';
 
@@ -52,6 +58,9 @@ export function NotificationSettingsScreen({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [osStatus, setOsStatus] = useState('unknown');
+  // Weekly review copy switches (one per student) save on their own PUT, not with the Save button.
+  const [weeklyRows, setWeeklyRows] = useState<readonly IWeeklyReviewRow[] | null>(null);
+  const [weeklyError, setWeeklyError] = useState<string | null>(null);
   const device = deviceTimezone();
 
   const load = useCallback(async () => {
@@ -64,7 +73,35 @@ export function NotificationSettingsScreen({
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
     }
+    // Best effort: the rest of the screen still works if the household list fails.
+    try {
+      setWeeklyRows(weeklyReviewRows(await apiClient.getMySharing()));
+      setWeeklyError(null);
+    } catch (err: unknown) {
+      setWeeklyRows([]);
+      setWeeklyError(err instanceof Error ? err.message : 'Could not load your students');
+    }
   }, [device]);
+
+  const toggleWeeklyReview = async (row: IWeeklyReviewRow, enabled: boolean): Promise<void> => {
+    setWeeklyRows((rows) => (rows ? setWeeklyReviewEnabled(rows, row.studentId, enabled) : rows));
+    setWeeklyError(null);
+    try {
+      const req = weeklyReviewToggleRequest(row, enabled);
+      if (req.kind === 'owner') {
+        await apiClient.updateOwnerAlertPrefs(req.studentId, req.body);
+      } else {
+        const me = await apiClient.getSessionUser();
+        if (!me?.email) throw new Error('Sign in again to change this');
+        await apiClient.updateStudentContact(req.studentId, me.email, req.body);
+      }
+    } catch (err: unknown) {
+      setWeeklyRows((rows) =>
+        rows ? setWeeklyReviewEnabled(rows, row.studentId, !enabled) : rows
+      );
+      setWeeklyError(err instanceof Error ? err.message : 'Could not save that');
+    }
+  };
 
   const refreshOsStatus = useCallback(() => {
     Notifications.getPermissionsAsync()
@@ -281,6 +318,39 @@ export function NotificationSettingsScreen({
               testID="switch-weekly-digest"
             />
           </View>
+        </View>
+
+        <Text style={styles.sectionHeader}>Weekly review</Text>
+        <View style={styles.card} testID="section-weekly-review">
+          <Text style={styles.hint}>{WEEKLY_REVIEW_SECTION_HINT}</Text>
+          {weeklyRows !== null && weeklyRows.length === 0 && !weeklyError && (
+            <Text style={[styles.hint, styles.rowTop]} testID="text-weekly-review-empty">
+              No students yet.
+            </Text>
+          )}
+          {(weeklyRows ?? []).map((row) => (
+            <View key={row.studentId} style={[styles.row, styles.rowTop]}>
+              <View style={styles.flex}>
+                <Text style={styles.rowText}>{row.name}</Text>
+                <Text style={styles.hint}>{WEEKLY_REVIEW_SWITCH_LABEL}</Text>
+              </View>
+              <Switch
+                value={row.enabled}
+                onValueChange={(enabled) => void toggleWeeklyReview(row, enabled)}
+                accessibilityLabel={`${WEEKLY_REVIEW_SWITCH_LABEL} for ${row.name}`}
+                testID={`switch-weekly-review-${row.studentId}`}
+              />
+            </View>
+          ))}
+          {weeklyError && (
+            <Text
+              style={styles.errorText}
+              accessibilityRole="alert"
+              testID="text-weekly-review-error"
+            >
+              {weeklyError}
+            </Text>
+          )}
         </View>
 
         <Text style={styles.sectionHeader}>Time zone</Text>

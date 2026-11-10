@@ -915,7 +915,11 @@ describe('/api/sharing (S1)', () => {
             name: 'Ava',
             access: 'admin',
             invitedBy: { userId: owner.id, name: 'Ricardo Owner' },
-            alerts: { receiveAlerts: false, alertChannels: ['email', 'push'] },
+            alerts: {
+              receiveAlerts: false,
+              alertChannels: ['email', 'push'],
+              weeklyReviewCopy: false,
+            },
           },
         ],
       });
@@ -937,6 +941,7 @@ describe('/api/sharing (S1)', () => {
       expect(mineO.body.students[0].alerts).toEqual({
         receiveAlerts: true,
         alertChannels: ['email'],
+        weeklyReviewCopy: false,
       });
     });
   });

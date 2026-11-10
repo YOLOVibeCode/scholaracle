@@ -41,6 +41,8 @@ export interface ISharingPerson {
   readonly receiveAlerts?: boolean;
   readonly alertChannels?: readonly SharingAlertChannel[];
   readonly alertTypes?: readonly string[];
+  /** This adult gets a copy of the student's Sunday weekly review (spec §3.3 Q2; default off). */
+  readonly weeklyReviewCopy?: boolean;
   /** Texting consent state for this person on this student (none / invited / opted_in / opted_out). */
   readonly smsStatus?: ContactSmsStatus;
   /** Groups the entries created by one invitation across several students. */
@@ -106,6 +108,8 @@ export interface ISharingMyAlerts {
   readonly receiveAlerts: boolean;
   readonly alertChannels: readonly SharingAlertChannel[];
   readonly alertTypes?: readonly string[];
+  /** Copy of the student's weekly review to the caller (spec §3.3 Q2). The server always sets it; off unless true. */
+  readonly weeklyReviewCopy?: boolean;
 }
 
 /** One accessible student from the caller's point of view (`GET /api/sharing/mine`). */
@@ -165,6 +169,8 @@ export interface ISharingContactUpdateRequest {
   readonly alertChannels?: readonly SharingAlertChannel[];
   /** An array = exactly these types; `null` = every type (clears a narrowed list); absent = unchanged. */
   readonly alertTypes?: readonly string[] | null;
+  /** Copy of the student's Sunday weekly review to this adult (student review §3.3 Q2). */
+  readonly weeklyReviewCopy?: boolean;
 }
 
 /** Response of `PUT /api/students/:id/contacts/:email`. */
@@ -198,6 +204,8 @@ export interface ISharingOwnerAlertPrefsRequest {
   readonly alertChannels?: readonly SharingAlertChannel[];
   /** An array = exactly these types; `null` or absent = every type. */
   readonly alertTypes?: readonly string[] | null;
+  /** Whole-object replace: absent means off (student review §3.3 Q2). */
+  readonly weeklyReviewCopy?: boolean;
 }
 
 /** Response of `PUT /api/students/:id/owner-alert-prefs`. */
