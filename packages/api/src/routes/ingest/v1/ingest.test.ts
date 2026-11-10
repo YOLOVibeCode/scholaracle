@@ -46,7 +46,8 @@ describe('Ingest v1 API', () => {
     process.env['CONNECTOR_JWT_SECRET'] = 'test-secret-connector';
     authService = new AuthService(database, 'test-secret');
     const reg = await authService.register('slc-user@test.com', 'password123', 'SLC User');
-    if (!reg.success || !reg.token || !reg.user?.id) throw new Error('Failed to register test user');
+    if (!reg.success || !reg.token || !reg.user?.id)
+      throw new Error('Failed to register test user');
     userToken = reg.token;
     const now = new Date();
     await database.collection('subscriptions').insertOne({
