@@ -5,18 +5,25 @@
 
 import request from 'supertest';
 import type { Test } from 'supertest';
-import { MongoClient, ObjectId, type Db } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
 import {
   AlertRepository,
   CommunicationLogRepository,
   IngestSourceRepository,
+  PortalAccountRepository,
   SessionRepository,
   StudentRepository,
 } from '@scholaracle/database';
 import { AlertType } from '@scholaracle/contracts';
 import { AssetRepository } from '../services/assets/AssetRepository';
-import { MongoQueue } from '@scholaracle/agents';
+import {
+  SOURCE_ID_ON_STUDENT,
+  buildSweepRows,
+  sweepTemplateKeys,
+  type ISweepIds,
+} from './parentByIdRouteIdor.sweep.cases';
+import { listParentParamRoutes } from './parentByIdRouteIdor.routeDiscovery';
 
 jest.mock('@sendgrid/mail', () => {
   const mockSend = jest
@@ -39,37 +46,16 @@ import { createApp } from '../server';
 const EMAIL_A = 'parent-a@idor-sweep.test';
 const EMAIL_B = 'parent-b@idor-sweep.test';
 const JWT_SECRET = 'idor-sweep-jwt-secret-do-not-use-in-prod';
-const SOURCE_ID_ON_STUDENT = 'idor-sweep-ds-on-student';
 const INTEGRATION_SOURCE_ID = 'idor-sweep-integration-src';
-const CONTACT_EMAIL = 'contact@idor-sweep.test';
-
-type HttpVerb = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
-
-interface ISweepRow {
-  readonly method: HttpVerb;
-  readonly path: string;
-  readonly body?: Record<string, unknown>;
-}
+const INVITE_GROUP_ID = '00000000-0000-4000-8000-idorsweep0001';
+const SOURCE_RUN_ID = 'idor-sweep-run-1';
 
 describe('Parent API — by-id route IDOR sweep', () => {
   let mongoClient: MongoClient;
   let database: Db;
   let app: ReturnType<typeof createApp>;
   let tokenB: string;
-  let ids: {
-    studentId: string;
-    alertId: string;
-    integrationId: string;
-    emailLogId: string;
-    sessionIdA: string;
-    assetId: string;
-    syncRunId: string;
-    syncJobId: string;
-    commentId: string;
-    mergedCourseId: string;
-    contactToken: string;
-    parentEmailEncoded: string;
-  };
+  let ids: ISweepIds;
 
   beforeAll(async () => {
     const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
@@ -94,26 +80,15 @@ describe('Parent API — by-id route IDOR sweep', () => {
   });
 
   beforeEach(async () => {
-    const priorSweepStudents = await database
-      .collection('students')
-      .find({ name: 'IDOR Sweep Child' })
-      .toArray();
-    const priorStudentIds = priorSweepStudents.map((d) => d['_id'].toString());
-    if (priorStudentIds.length > 0) {
-      await database.collection('sync_runs').deleteMany({ studentId: { $in: priorStudentIds } });
-      await database.collection('jobs').deleteMany({
-        type: 'sync',
-        'data.studentId': { $in: priorStudentIds },
-      });
-    }
     await database.collection('users').deleteMany({ email: { $in: [EMAIL_A, EMAIL_B] } });
+    await database.collection('slc_portal_accounts').deleteMany({ displayName: 'Sweep Portal' });
     await database.collection('students').deleteMany({ name: { $in: ['IDOR Sweep Child'] } });
     await database.collection('subscriptions').deleteMany({});
     await database.collection('alerts').deleteMany({ message: 'idor-sweep' });
     await database
       .collection('slc_sources')
       .deleteMany({ sourceId: { $in: [SOURCE_ID_ON_STUDENT, INTEGRATION_SOURCE_ID] } });
-    await database.collection('slc_runs').deleteMany({ runId: 'idor-sweep-run-1' });
+    await database.collection('slc_runs').deleteMany({ runId: SOURCE_RUN_ID });
     await database.collection('slc_courses').deleteMany({ externalId: 'idor-sweep-course' });
     await database.collection('slc_assignments').deleteMany({ externalId: 'idor-sweep-asg' });
     await database.collection('slc_assignment_comments').deleteMany({
@@ -174,6 +149,28 @@ describe('Parent API — by-id route IDOR sweep', () => {
       ],
     });
     const studentId = createdStudent._id!.toString();
+    await studentRepo.update(studentId, {
+      sharedWith: [
+        {
+          email: 'pending@idor-sweep.test',
+          role: 'parent',
+          status: 'pending',
+          invitedAt: now,
+          inviteGroupId: INVITE_GROUP_ID,
+          invitedByUserId: regA.user.id,
+        },
+      ],
+    });
+
+    const portalRepo = new PortalAccountRepository(database);
+    const portal = await portalRepo.upsertByHost({
+      userId: regA.user.id,
+      provider: 'canvas',
+      adapterId: 'com.instructure.canvas',
+      portalBaseUrl: 'https://school.example.com',
+      institutionExternalId: 'idor-sweep-inst',
+      displayName: 'Sweep Portal',
+    });
 
     const ingestRepo = new IngestSourceRepository(database);
     await ingestRepo.upsert({
@@ -206,7 +203,7 @@ describe('Parent API — by-id route IDOR sweep', () => {
     await database.collection('slc_runs').insertOne({
       userId: regA.user.id,
       sourceId: SOURCE_ID_ON_STUDENT,
-      runId: 'idor-sweep-run-1',
+      runId: SOURCE_RUN_ID,
       status: 'committed',
       startedAt: now,
       uploadedAt: now,
@@ -297,39 +294,6 @@ describe('Parent API — by-id route IDOR sweep', () => {
       entityExternalId: 'idor-sweep-asg',
     });
 
-    const queue = new MongoQueue(database);
-    const syncJobId = await queue.add(
-      'sync',
-      'sync-custom-idor-sweep',
-      {
-        studentId,
-        dataSourceIndex: 0,
-        provider: 'custom-district-api',
-        adapterId: 'custom-district-api::default',
-        baseUrl: 'https://district.example.com',
-        trigger: 'manual',
-        userId: regA.user.id,
-        triggeredByUserId: regA.user.id,
-      } as Record<string, unknown>,
-      { priority: 5 }
-    );
-
-    const syncRunOid = new ObjectId();
-    await database.collection('sync_runs').insertOne({
-      _id: syncRunOid,
-      jobId: syncJobId,
-      studentId,
-      provider: 'custom-district-api',
-      adapterId: 'custom-district-api::default',
-      baseUrl: 'https://district.example.com',
-      trigger: 'manual',
-      userId: regA.user.id,
-      triggeredByUserId: regA.user.id,
-      status: 'completed',
-      createdAt: now,
-      updatedAt: now,
-    });
-
     const contactToken = 'a'.repeat(64);
 
     ids = {
@@ -339,12 +303,13 @@ describe('Parent API — by-id route IDOR sweep', () => {
       emailLogId: comm._id!.toString(),
       sessionIdA: sess._id.toString(),
       assetId: 'idor-sweep-asset-1',
-      syncRunId: syncRunOid.toString(),
-      syncJobId,
       commentId: commentInsert.insertedId.toString(),
       mergedCourseId,
       contactToken,
-      parentEmailEncoded: encodeURIComponent(CONTACT_EMAIL),
+      parentEmailEncoded: encodeURIComponent('contact@idor-sweep.test'),
+      inviteGroupId: INVITE_GROUP_ID,
+      portalAccountId: portal.portalAccountId,
+      sourceRunId: SOURCE_RUN_ID,
     };
   });
 
@@ -393,183 +358,11 @@ describe('Parent API — by-id route IDOR sweep', () => {
       expect([403, 404]).toContain(res.status);
     }
   });
+
+  it('covers every parent JWT route with a :param in the sweep table', () => {
+    const tableKeys = sweepTemplateKeys(buildSweepRows(ids));
+    const discovered = listParentParamRoutes(app).map((r) => `${r.method} ${r.path}`);
+    const missing = discovered.filter((key) => !tableKeys.has(key));
+    expect(missing).toEqual([]);
+  });
 });
-
-function buildSweepRows(i: {
-  studentId: string;
-  alertId: string;
-  integrationId: string;
-  emailLogId: string;
-  sessionIdA: string;
-  assetId: string;
-  syncRunId: string;
-  syncJobId: string;
-  commentId: string;
-  mergedCourseId: string;
-  contactToken: string;
-  parentEmailEncoded: string;
-}): ISweepRow[] {
-  const s = i.studentId;
-  const postAlerts = {
-    studentId: s,
-    type: AlertType.GRADE_DROP,
-    severity: 'high',
-    relatedData: { course: 'Math' },
-  };
-  const postDigest = { recipients: 'all' as const };
-  const postParentInvite = { email: 'invite@example.com', role: 'parent' };
-  const postParentsAccept = { email: 'pending@example.com' };
-  const postContactsAccept = { email: CONTACT_EMAIL };
-  const postContactsDecline = { email: CONTACT_EMAIL };
-  const postTransferConfirm = { token: i.contactToken, email: CONTACT_EMAIL };
-  const putOwnerPrefs = { receiveAlerts: true, alertChannels: ['email' as const], alertTypes: [] };
-  const putParentAdmin = { isAdmin: false };
-  const patchLogin = { showGrades: true };
-  const patchTutorial = { tutorialWindow: '2025-01-01/2025-06-01' };
-  const putAssignmentNote = { note: 'n' };
-  const putAssignmentStatus = { status: 'done' };
-  const postComment = { body: 'x', authorName: 'Y' };
-  const postAddSource = {
-    provider: 'canvas',
-    adapterId: 'com.instructure.canvas',
-    displayName: 'New',
-    dataTypes: ['grades'],
-  };
-  const putUpdateSource = {
-    provider: 'canvas',
-    adapterId: 'com.instructure.canvas',
-    displayName: 'Upd',
-    dataTypes: ['grades'],
-  };
-  const putCredentials = { authType: 'api' as const, accessToken: 'test-token-idor-sweep' };
-
-  return [
-    { method: 'post', path: '/api/alerts', body: postAlerts },
-    { method: 'get', path: `/api/alerts-api/${i.alertId}` },
-    { method: 'post', path: `/api/alerts-api/${i.alertId}/acknowledge` },
-    { method: 'delete', path: `/api/alerts-api/${i.alertId}` },
-    { method: 'get', path: `/api/email-history/${i.emailLogId}` },
-    { method: 'post', path: `/api/email-history/${i.emailLogId}/resend` },
-    { method: 'delete', path: `/api/sessions/${i.sessionIdA}` },
-    { method: 'get', path: `/api/assets/${i.assetId}` },
-    { method: 'head', path: `/api/assets/${i.assetId}` },
-    { method: 'get', path: `/api/assets/${i.assetId}/file` },
-    { method: 'head', path: `/api/assets/${i.assetId}/file` },
-    { method: 'get', path: `/api/integrations/${i.integrationId}` },
-    { method: 'put', path: `/api/integrations/${i.integrationId}`, body: { displayName: 'x' } },
-    { method: 'delete', path: `/api/integrations/${i.integrationId}` },
-    { method: 'get', path: `/api/integrations/${i.integrationId}/students` },
-    { method: 'post', path: `/api/integrations/${i.integrationId}/students/${s}`, body: {} },
-    { method: 'delete', path: `/api/integrations/${i.integrationId}/students/${s}` },
-    { method: 'post', path: `/api/sync/students/${s}` },
-    { method: 'post', path: `/api/sync/students/${s}/0` },
-    { method: 'get', path: `/api/sync/students/${s}/runs` },
-    { method: 'get', path: `/api/sync/runs/${i.syncRunId}` },
-    { method: 'get', path: `/api/sync/jobs/${i.syncJobId}/position` },
-
-    { method: 'get', path: `/api/students/${s}` },
-    { method: 'put', path: `/api/students/${s}`, body: { name: 'X' } },
-    { method: 'delete', path: `/api/students/${s}` },
-    { method: 'get', path: `/api/students/${s}/contacts` },
-    { method: 'post', path: `/api/students/${s}/contacts`, body: postParentInvite },
-    { method: 'post', path: `/api/students/${s}/contacts/accept`, body: postContactsAccept },
-    { method: 'post', path: `/api/students/${s}/contacts/decline`, body: postContactsDecline },
-    {
-      method: 'put',
-      path: `/api/students/${s}/contacts/${i.parentEmailEncoded}`,
-      body: { receiveAlerts: false },
-    },
-    {
-      method: 'post',
-      path: `/api/students/${s}/contacts/${i.parentEmailEncoded}/magic-link/send`,
-      body: { channel: 'email' },
-    },
-    { method: 'delete', path: `/api/students/${s}/contacts/${i.parentEmailEncoded}` },
-    {
-      method: 'post',
-      path: `/api/students/${s}/contacts/${i.parentEmailEncoded}/transfer-email`,
-      body: { newEmail: 'new@example.com' },
-    },
-    {
-      method: 'post',
-      path: `/api/students/${s}/contacts/transfer-confirm`,
-      body: postTransferConfirm,
-    },
-    { method: 'put', path: `/api/students/${s}/owner-alert-prefs`, body: putOwnerPrefs },
-    {
-      method: 'patch',
-      path: `/api/students/${s}/courses/${encodeURIComponent(i.mergedCourseId)}/tutorial`,
-      body: patchTutorial,
-    },
-    {
-      method: 'delete',
-      path: `/api/students/${s}/courses/${encodeURIComponent(i.mergedCourseId)}/tutorial`,
-    },
-    { method: 'get', path: `/api/students/${s}/grades` },
-    { method: 'get', path: `/api/students/${s}/materials` },
-    { method: 'get', path: `/api/students/${s}/grade-history` },
-    { method: 'delete', path: `/api/students/${s}/grade-history` },
-    { method: 'get', path: `/api/students/${s}/action-board` },
-    { method: 'get', path: `/api/students/${s}/activity` },
-    { method: 'get', path: `/api/students/${s}/assignment-workflow` },
-    { method: 'get', path: `/api/students/${s}/assignments/idor-sweep-asg/history` },
-    {
-      method: 'put',
-      path: `/api/students/${s}/assignments/idor-sweep-asg/note`,
-      body: putAssignmentNote,
-    },
-    {
-      method: 'put',
-      path: `/api/students/${s}/assignments/idor-sweep-asg/status`,
-      body: putAssignmentStatus,
-    },
-    { method: 'get', path: `/api/students/${s}/assignments/idor-sweep-asg/comments` },
-    {
-      method: 'post',
-      path: `/api/students/${s}/assignments/idor-sweep-asg/comments`,
-      body: postComment,
-    },
-    {
-      method: 'delete',
-      path: `/api/students/${s}/assignments/idor-sweep-asg/comments/${i.commentId}`,
-    },
-    { method: 'get', path: `/api/students/${s}/sources` },
-    { method: 'post', path: `/api/students/${s}/sources`, body: postAddSource },
-    {
-      method: 'put',
-      path: `/api/students/${s}/sources/${SOURCE_ID_ON_STUDENT}`,
-      body: putUpdateSource,
-    },
-    {
-      method: 'put',
-      path: `/api/students/${s}/sources/${SOURCE_ID_ON_STUDENT}/credentials`,
-      body: putCredentials,
-    },
-    { method: 'delete', path: `/api/students/${s}/sources/${SOURCE_ID_ON_STUDENT}` },
-    { method: 'get', path: `/api/students/${s}/sources/${SOURCE_ID_ON_STUDENT}/runs` },
-    { method: 'post', path: `/api/students/${s}/sources/${SOURCE_ID_ON_STUDENT}/runs/trigger` },
-    { method: 'get', path: `/api/students/${s}/alerts` },
-    { method: 'get', path: `/api/students/${s}/parents` },
-    { method: 'post', path: `/api/students/${s}/parents/invite`, body: postParentInvite },
-    { method: 'post', path: `/api/students/${s}/parents/accept`, body: postParentsAccept },
-    {
-      method: 'put',
-      path: `/api/students/${s}/parents/${i.parentEmailEncoded}/admin`,
-      body: putParentAdmin,
-    },
-    { method: 'delete', path: `/api/students/${s}/parents/${i.parentEmailEncoded}` },
-    { method: 'post', path: `/api/students/${s}/send-digest`, body: postDigest },
-
-    { method: 'get', path: `/api/students/${s}/login` },
-    { method: 'post', path: `/api/students/${s}/login`, body: { email: 'stu@example.com' } },
-    { method: 'post', path: `/api/students/${s}/login/magic-link` },
-    {
-      method: 'post',
-      path: `/api/students/${s}/login/magic-link/send`,
-      body: { channel: 'email', to: 'stu@example.com' },
-    },
-    { method: 'patch', path: `/api/students/${s}/login`, body: patchLogin },
-    { method: 'delete', path: `/api/students/${s}/login` },
-    { method: 'post', path: `/api/students/${s}/assignments/idor-sweep-asg/nudge` },
-  ];
-}
