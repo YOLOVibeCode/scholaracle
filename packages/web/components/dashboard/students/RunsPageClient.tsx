@@ -5,7 +5,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import type { ISlcIngestRunStep, ISlcRunCoverage } from '@scholaracle/contracts';
 import { apiClient } from '@/lib/api/client';
+import { RunGapList } from './RunGapList';
+import { RunStepList } from './RunStepList';
+import { RunWarningsList } from './RunWarningsList';
 
 interface IRunRow {
   readonly runId: string;
@@ -15,6 +19,9 @@ interface IRunRow {
   readonly clientType?: string;
   readonly coreVersion?: string;
   readonly error?: string | null;
+  readonly coverage?: ISlcRunCoverage;
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly warnings?: readonly string[];
 }
 
 export function RunsPageClient({ studentId }: { readonly studentId: string }): React.ReactElement {
@@ -36,22 +43,28 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
             const rows = await apiClient.get<
               Array<{
                 runId: string;
-                sourceId: string;
+                sourceId?: string;
                 status: string;
                 startedAt: string;
                 error?: string | null;
                 clientMeta?: Record<string, string>;
+                coverage?: ISlcRunCoverage;
+                steps?: readonly ISlcIngestRunStep[];
+                warnings?: readonly string[];
               }>
             >(`/students/${studentId}/sources/${sid}/runs`);
             for (const r of rows) {
               all.push({
                 runId: r.runId,
-                sourceId: r.sourceId,
+                sourceId: r.sourceId ?? sid,
                 status: r.status,
                 startedAt: r.startedAt,
                 error: r.error,
                 clientType: r.clientMeta?.['clientType'],
                 coreVersion: r.clientMeta?.['coreVersion'],
+                coverage: r.coverage,
+                steps: r.steps,
+                warnings: r.warnings,
               });
             }
           } catch {
@@ -92,6 +105,11 @@ export function RunsPageClient({ studentId }: { readonly studentId: string }): R
               {r.coreVersion && <span>core: {r.coreVersion}</span>}
             </div>
             {r.error && <p className="text-xs text-red-600">{r.error}</p>}
+            {r.steps && r.steps.length > 0 && <RunStepList runId={r.runId} steps={r.steps} />}
+            {r.warnings && r.warnings.length > 0 && (
+              <RunWarningsList runId={r.runId} warnings={r.warnings} />
+            )}
+            {r.coverage && <RunGapList runId={r.runId} coverage={r.coverage} />}
           </li>
         ))}
       </ul>

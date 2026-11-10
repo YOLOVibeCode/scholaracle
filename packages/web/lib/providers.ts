@@ -57,7 +57,7 @@ export interface IProviderCredentialHelp {
 export const PROVIDERS: readonly IProviderDescriptor[] = [
   {
     id: 'canvas',
-    adapterId: 'com.instructure.canvas',
+    adapterId: 'canvas',
     name: 'Canvas LMS',
     description: 'By Instructure — used by many schools and universities',
     available: true,
@@ -70,7 +70,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter your school\'s Canvas URL above (where you log in to see grades)',
         'Enter the username and password you use to check your child\'s grades',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       docsUrl: 'https://community.canvaslms.com/',
       note: 'Use the same login you use in a browser to view Canvas.',
@@ -78,7 +78,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
   },
   {
     id: 'aeries',
-    adapterId: 'com.aeries',
+    adapterId: 'aeries',
     name: 'Aeries',
     description: 'Student information system — used by many California districts',
     available: true,
@@ -91,14 +91,14 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter your district\'s Aeries parent portal URL above',
         'Enter the username and password you use to log in',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       note: 'Use the same login you use in a browser to view Aeries.',
     },
   },
   {
     id: 'skyward',
-    adapterId: 'com.skyward',
+    adapterId: 'skyward',
     name: 'Skyward',
     description: 'Family Access / Student portal — used by many districts',
     available: true,
@@ -111,7 +111,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter your Skyward Family Access login URL above',
         'Enter the username and password you use to see grades',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       note: 'Use the same login you use in a browser to view Skyward.',
     },
@@ -131,7 +131,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter the login URL for your district\'s ParentVUE or StudentVUE portal',
         'Enter the username and password you use to see grades',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       note: 'Coming soon — we are building browser automation for ParentVUE/StudentVUE portals.',
     },
@@ -151,7 +151,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter your district\'s PowerSchool parent portal URL above',
         'Enter the username and password you use to see grades',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       docsUrl: 'https://support.powerschool.com/',
       note: 'Coming soon — we are building browser automation for PowerSchool portals.',
@@ -172,7 +172,7 @@ export const PROVIDERS: readonly IProviderDescriptor[] = [
       steps: [
         'Enter your school\'s Schoology URL above',
         'Enter the username and password you use to see grades',
-        'Credentials are baked into the downloaded script and never stored on our servers',
+        'Finish connecting in the Scholarmancy app on your phone — credentials stay on your device and are never stored on our servers',
       ],
       docsUrl: 'https://support.schoology.com/',
       note: 'Coming soon — we are building browser automation for Schoology.',

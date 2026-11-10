@@ -1,0 +1,3 @@
+# Not native inputs: eas.json holds the store submit profiles (Play service account path, App Store key) and
+# build-time settings. Editing it must not make existing binaries look incompatible with an OTA update.
+eas.json

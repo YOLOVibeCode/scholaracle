@@ -1,0 +1,19 @@
+# Parent signs in; the student list and a student's dashboard load from the API.
+# Needs MAESTRO_PARENT_EMAIL, MAESTRO_PARENT_PASSWORD, MAESTRO_STUDENT_NAME.
+appId: com.scholarmancy.app
+name: Smoke
+tags: [smoke]
+---
+- runFlow: subflows/login.yaml
+- assertVisible:
+    id: card-student
+- tapOn:
+    id: text-student-name
+    text: ${MAESTRO_STUDENT_NAME}
+- extendedWaitUntil:
+    visible:
+      id: button-sync
+    timeout: 30000
+- assertNotVisible:
+    id: dashboard-error
+- takeScreenshot: smoke-dashboard

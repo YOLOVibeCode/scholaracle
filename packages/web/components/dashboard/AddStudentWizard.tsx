@@ -21,13 +21,12 @@ import {
   integrationsApi,
   type IIntegration,
   type IAssignStudentCredentials,
-  type ITestConnectionResult,
 } from '@/lib/api/integrations';
-import { apiClient } from '@/lib/api/client';
 import { useAsyncData } from '@/lib/hooks';
 import { findProviderById } from '@/lib/providers';
 import { ConnectProviderWizard } from '@/components/dashboard/integrations/ConnectProviderWizard';
-import type { IBundleConnection, IBundleConnectionPayload } from '@/components/dashboard/integrations/bundle-types';
+import { ConnectOnPhonePanel } from '@/components/dashboard/integrations/ConnectOnPhonePanel';
+import type { IBundleConnection } from '@/components/dashboard/integrations/bundle-types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,14 +64,10 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   // Service connections accumulated during this wizard session
   const [connections, setConnections] = useState<ServiceConnection[]>([]);
-  // Bundle: platform connections to be downloaded as one script (connection-centric flow)
   const [bundle, setBundle] = useState<IBundleConnection[]>([]);
   const [currentIntegration, setCurrentIntegration] = useState<IIntegration | null>(null);
 
-  // New provider: open ConnectProviderWizard; after download or add-to-bundle we update state
   const [connectProviderWizardOpen, setConnectProviderWizardOpen] = useState(false);
-  const [bundleDownloading, setBundleDownloading] = useState(false);
-  const [testResult, setTestResult] = useState<ITestConnectionResult | null>(null);
 
   // Created student tracking
   const [createdStudentId, setCreatedStudentId] = useState<string | null>(null);
@@ -88,10 +83,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
   // Helpers
   // ---------------------------------------------------------------------------
 
-  const resetCredentials = () => {
-    setTestResult(null);
-  };
-
   const resetAll = () => {
     setName('');
     setGrade('');
@@ -100,8 +91,8 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setError(null);
     setSubmitting(false);
     setConnections([]);
+    setBundle([]);
     setCurrentIntegration(null);
-    resetCredentials();
     setConnectProviderWizardOpen(false);
     setCreatedStudentId(null);
     setCreatedStudentName('');
@@ -150,7 +141,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   const handleSelectIntegration = (integration: IIntegration) => {
     setCurrentIntegration(integration);
-    resetCredentials();
     setStep('credentials');
   };
 
@@ -190,7 +180,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           },
         ]);
         setCurrentIntegration(null);
-        resetCredentials();
         setStep('done');
       } else {
         setError('Failed to connect student to service.');
@@ -225,67 +214,11 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
     setConnections([]);
     setBundle([]);
     setCurrentIntegration(null);
-    resetCredentials();
     setCreatedStudentId(null);
     setCreatedStudentName('');
   };
   const handleRemoveFromBundle = (id: string) => {
     setBundle((b) => b.filter((c) => c.id !== id));
-  };
-
-  const handleDownloadBundle = async () => {
-    if (bundle.length === 0) return;
-    const allReady = bundle.every((c) => c.generationStatus === 'ready');
-    if (!allReady) return;
-
-    const baseUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
-    const token = apiClient.getToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
-    const detectedOS = typeof navigator !== 'undefined' && navigator.userAgent.includes('Win') ? 'windows' : 'mac';
-    const payload: IBundleConnectionPayload[] = bundle.map((c) => ({
-      platformId: c.platformId,
-      platformName: c.platformName,
-      loginUrl: c.loginUrl,
-      scraperId: c.scraperId,
-      credentials: {
-        studentNameHint: c.studentNameHint,
-      },
-    }));
-
-    setBundleDownloading(true);
-    setError(null);
-    try {
-      const response = await fetch(`${baseUrl}/integrations/scraper-download`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ os: detectedOS, connections: payload }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error ?? 'Download failed');
-      }
-      const blob = await response.blob();
-      const ext = detectedOS === 'windows' ? '.bat' : '.command';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `scholaracle-bundle${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setConnections((c) => [
-        ...c,
-        { integrationId: 'bundle', integrationName: 'Downloaded bundle', hasCredentials: true },
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    } finally {
-      setBundleDownloading(false);
-    }
   };
 
   // ---------------------------------------------------------------------------
@@ -303,8 +236,11 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent className="sm:max-w-lg overflow-y-auto" data-testid="add-student-wizard">
-        <SheetHeader>
+      <SheetContent
+        className="flex h-full max-h-dvh w-full flex-col gap-0 p-0 sm:max-w-lg"
+        data-testid="add-student-wizard"
+      >
+        <SheetHeader className="shrink-0 px-4 pt-4">
           <SheetTitle>
             {step === 'student-info' && 'Add Student'}
             {step === 'connect-services' && 'Connect Services'}
@@ -314,9 +250,12 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
           </SheetTitle>
         </SheetHeader>
 
-        <div className="py-4 space-y-4">
+        <div
+          className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto overscroll-contain px-4 pb-4 pt-2"
+          data-testid="wizard-scroll-body"
+        >
           {/* ── Progress indicator ── */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span
               className={
                 step === 'student-info'
@@ -431,10 +370,9 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 </span>
               </div>
 
-              {/* Bundle: platforms to download as one script */}
               {bundle.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Platforms in bundle:</p>
+                  <p className="text-xs font-medium text-muted-foreground">Platforms to connect on your phone:</p>
                   {bundle.map((c) => (
                     <div
                       key={c.id}
@@ -456,12 +394,13 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                         size="icon"
                         className="h-8 w-8 shrink-0"
                         onClick={() => handleRemoveFromBundle(c.id)}
-                        aria-label="Remove from bundle"
+                        aria-label="Remove from list"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   ))}
+                  <ConnectOnPhonePanel studentId={createdStudentId ?? undefined} />
                 </div>
               )}
 
@@ -536,21 +475,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                 </Button>
               </div>
 
-              {bundle.length > 0 && (
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={
-                    bundleDownloading ||
-                    !bundle.every((c) => c.generationStatus === 'ready')
-                  }
-                  onClick={handleDownloadBundle}
-                  data-testid="wizard-download-bundle"
-                >
-                  {bundleDownloading ? 'Downloading...' : 'Download Bundle'}
-                </Button>
-              )}
-
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <div className="flex gap-2 pt-2">
@@ -584,7 +508,7 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
               </Button>
 
               <p className="text-sm text-muted-foreground">
-                Connect a new school platform. Use the iOS app, browser extension, or the local CLI to run the scraper on your computer — your school login stays on your device.
+                Connect a new school platform. Finish in the Scholarmancy app on your phone — your school login stays on your device.
               </p>
 
               <Button
@@ -623,7 +547,6 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   className="gap-1 text-muted-foreground -ml-2"
                   onClick={() => {
                     setCurrentIntegration(null);
-                    resetCredentials();
                     setStep('connect-services');
                   }}
                 >
@@ -675,39 +598,8 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                     <li>
                       <strong>Browser extension</strong> — connect from the school&apos;s portal page
                     </li>
-                    <li>
-                      <strong>Local CLI</strong> — run{' '}
-                      <code className="bg-amber-100 dark:bg-amber-900 rounded px-1">
-                        npx scholaracle-scraper run
-                      </code>
-                    </li>
                   </ul>
                 </div>
-
-                {/* Test Connection result */}
-                {testResult && (
-                  <div
-                    className={`flex items-start gap-2 rounded-md p-3 text-sm ${
-                      testResult.success
-                        ? 'border border-green-200 bg-green-50/50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200'
-                        : 'border border-red-200 bg-red-50/50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200'
-                    }`}
-                    data-testid="test-connection-result"
-                  >
-                    {testResult.success ? (
-                      <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <span className="text-red-600 shrink-0 mt-0.5">✗</span>
-                    )}
-                    <div>
-                      <p className="font-medium">{testResult.success ? 'Connection successful!' : 'Connection failed'}</p>
-                      <p className="text-xs mt-0.5 opacity-80">{testResult.message}</p>
-                      {testResult.durationMs > 0 && (
-                        <p className="text-[10px] mt-0.5 opacity-60">{testResult.durationMs}ms</p>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex gap-2 pt-2 flex-wrap">
                   <div className="flex gap-2 ml-auto">
@@ -757,6 +649,10 @@ export function AddStudentWizard({ open, onClose, onStudentAdded }: AddStudentWi
                   )}
                 </CardContent>
               </Card>
+
+              {bundle.length > 0 && (
+                <ConnectOnPhonePanel studentId={createdStudentId ?? undefined} />
+              )}
 
               <div className="space-y-2">
                 <Button

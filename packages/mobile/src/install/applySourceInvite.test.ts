@@ -31,7 +31,7 @@ describe('applySourceInvite', () => {
     expect(source.studentExternalId).not.toBe('default');
     expect(source.sourceId).toBe('local-skyward-skyward.iscorp.com');
     expect(source.credentialKey).toBe('slc_creds_skyward_skyward.iscorp.com');
-    expect(source.adapterId).toBe('com.skyward.iscorp');
+    expect(source.adapterId).toBe('skyward');
     expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
     expect(await store.list()).toHaveLength(1);
   });

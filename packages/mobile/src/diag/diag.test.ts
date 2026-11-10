@@ -14,8 +14,8 @@ describe('redact', () => {
       token: 'abcdefghijklmnopqrstuvwxyz',
       password: 'mock-password-value-xyz',
     }) as Record<string, string>;
-    expect(out.token).toMatch(/^tok:abcdef/);
-    expect(out.token).not.toContain('ghijklmn');
+    expect(out.token).toBe('tok:****(len 26)');
+    expect(out.token).not.toContain('abc');
     expect(out.password).toMatch(/^tok:/);
     expect(out.password).not.toContain('password-value');
   });
@@ -44,6 +44,10 @@ describe('redact', () => {
 
   it('fingerprints short values without leaking content', () => {
     expect(fingerprint('abcd')).toBe('tok:****(len 4)');
+  });
+
+  it('fingerprints long values without leaking a prefix', () => {
+    expect(fingerprint('abcdefghijklmnopqrstuvwxyz')).toBe('tok:****(len 26)');
   });
 
   it('passes non-string, non-object values through unchanged', () => {

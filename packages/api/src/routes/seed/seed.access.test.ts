@@ -11,9 +11,11 @@ import { DEMO_USER } from './demo-data';
 const SEED_TOKEN = 'seed-token-for-tests-0123456789';
 const ENV_KEYS = [
   'RAILWAY_ENVIRONMENT_ID',
+  'RAILWAY_ENVIRONMENT_NAME',
   'SEED_TOKEN',
   'SEED_ADMIN_PASSWORD',
   'SEED_ADMIN_MFA_SECRET',
+  'NODE_ENV',
 ] as const;
 
 describe('Seed route access', () => {
@@ -107,7 +109,7 @@ describe('Seed route access', () => {
       expect(res.status).toBe(403);
     });
 
-    it('allows set-password for @example.com fixture emails', async () => {
+    it('rejects set-password for @example.com emails', async () => {
       process.env['SEED_TOKEN'] = SEED_TOKEN;
       process.env['NODE_ENV'] = 'development';
       const unique = `fixture.user.${Date.now()}@example.com`;
@@ -122,6 +124,26 @@ describe('Seed route access', () => {
         .post('/api/seed/set-password')
         .set('X-Seed-Token', SEED_TOKEN)
         .send({ email: unique, password: 'NewPass456!' });
+      expect(res.status).toBe(403);
+    });
+
+    it('allows set-password for demo@scholarmancy.com', async () => {
+      process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['NODE_ENV'] = 'development';
+      const userRepo = new UserRepository(database);
+      const existing = await userRepo.findByEmail(DEMO_USER.email);
+      if (!existing) {
+        await userRepo.create({
+          email: DEMO_USER.email,
+          passwordHash: await UserRepository.hashPassword('OldPass123!'),
+          name: DEMO_USER.name,
+          role: 'parent',
+        });
+      }
+      const res = await request(app)
+        .post('/api/seed/set-password')
+        .set('X-Seed-Token', SEED_TOKEN)
+        .send({ email: DEMO_USER.email, password: 'NewPass456!' });
       expect(res.status).toBe(200);
     });
 
@@ -179,6 +201,7 @@ describe('Seed route access', () => {
 
     it('skips admin accounts when no admin credentials are configured', async () => {
       process.env['SEED_TOKEN'] = SEED_TOKEN;
+      process.env['RAILWAY_ENVIRONMENT_ID'] = 'deployed-sim-no-admin-secrets';
       delete process.env['SEED_ADMIN_PASSWORD'];
       delete process.env['SEED_ADMIN_MFA_SECRET'];
       const res = await request(app)

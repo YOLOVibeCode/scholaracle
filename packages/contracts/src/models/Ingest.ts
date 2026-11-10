@@ -52,6 +52,8 @@ export interface ISlcEntityKey {
   readonly provider: string;
   readonly adapterId: string;
   readonly externalId: string;
+  /** Prior externalIds for the same row (e.g. legacy index-based Canvas keys). */
+  readonly aliasExternalIds?: readonly string[];
   readonly studentExternalId?: string;
   readonly institutionExternalId?: string;
   readonly courseExternalId?: string;
@@ -65,6 +67,49 @@ export interface ISlcCursorOpaque {
 }
 
 export type ISlcCursor = ISlcCursorOpaque;
+
+/** One per-course hole detected when summarizing an envelope (client-computed). */
+export type SlcSyncGapKind =
+  'no_grade' | 'no_assignments' | 'no_grade_no_assignments' | 'missing_course_title';
+
+export interface ISlcSyncCoverageGap {
+  readonly course: string;
+  readonly kind: SlcSyncGapKind;
+}
+
+/** Per-student counts and gaps for what the sync returned vs did not. */
+export interface ISlcStudentSyncCoverage {
+  readonly studentExternalId: string;
+  readonly courses: number;
+  readonly coursesWithGrade: number;
+  readonly coursesWithAssignments: number;
+  readonly attendanceRows: number;
+  /** Distinct teacher emails present on course/teacher records (0 when none). */
+  readonly teacherEmails: number;
+  readonly gaps: readonly ISlcSyncCoverageGap[];
+}
+
+/** Snapshot attached to `run` for parent-facing sync diagnostics. */
+export interface ISlcRunCoverage {
+  readonly students: readonly ISlcStudentSyncCoverage[];
+}
+
+/** Denormalized onto `Student.dataSources[]` after ingest completes. */
+export interface ISourceIngestLastCounts {
+  readonly opsTotal: number;
+  readonly coverage: ISlcRunCoverage;
+}
+
+/** One timed step in a client sync (posted via trace or on run start). */
+export interface ISlcIngestRunStep {
+  readonly name: string;
+  readonly startedAt: string;
+  readonly ms: number;
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
+export type ISlcIngestRunStats = Record<string, number>;
 
 export interface ISlcRunMeta {
   readonly runId: string;
@@ -80,6 +125,10 @@ export interface ISlcRunMeta {
    * e.g. { clientType: 'mobile', coreVersion: '0.1.0', extractorBundleHash: 'abc' }
    */
   readonly meta?: Readonly<Record<string, string>>;
+  /** Per-student coverage + gaps (scraper-core / client fills before upload). */
+  readonly coverage?: ISlcRunCoverage;
+  /** Validator warnings (join-graph, zero-op, etc.) as human-readable strings. */
+  readonly warnings?: readonly string[];
 }
 
 export interface ISlcSourceMeta {
@@ -557,4 +606,23 @@ export function validateEntityRecord(
   }
 
   return errors.length > 0 ? fail(...errors) : ok();
+}
+
+/**
+ * Collect human-readable warnings from per-op entity record validation.
+ * Invalid records are warnings (ingest may still commit); callers merge with join-graph warnings.
+ */
+export function collectEnvelopeEntityWarnings(envelope: ISlcIngestEnvelopeV1): readonly string[] {
+  const warnings: string[] = [];
+  for (const op of envelope.ops) {
+    if (op.op !== 'upsert' || op.record === undefined) continue;
+    const record = op.record as Record<string, unknown>;
+    const result = validateEntityRecord(op.entity, record as Record<string, string>);
+    if (result.valid) continue;
+    const extId = op.key.externalId;
+    for (const err of result.errors) {
+      warnings.push(`${op.entity}[${extId}]: ${err}`);
+    }
+  }
+  return warnings;
 }

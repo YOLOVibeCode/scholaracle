@@ -149,6 +149,64 @@ describe('NotificationWorker', () => {
       expect(mockMongoQueue.fail).not.toHaveBeenCalled();
     });
 
+    it('hands a student_needs_help notify job to the service with the resolved adults (R3)', async () => {
+      const resolved = [
+        { parentEmail: 'owner@example.com', userId: 'parent-1', recipientType: 'parent' as const },
+        { parentEmail: 'gideon@school.edu', recipientType: 'student' as const },
+      ];
+      const resolveAllAlertRecipients = jest.fn().mockResolvedValue(resolved);
+      const worker = new NotificationWorker(mockMongoQueue, mockNotificationService, {
+        resolveAllAlertRecipients,
+      });
+      const relatedData = {
+        assignmentExternalId: 'demo-emma-ap-bio-a5',
+        courseExternalId: 'demo-emma-ap-bio',
+        title: 'Ch. 5 problems',
+        courseName: 'Math',
+        dueAt: '2026-11-10T22:00:00.000Z',
+        note: "I don't get #7",
+        studentName: 'Gideon Vega',
+      };
+      const jobId = 'help-1';
+      const job: IJob = {
+        _id: { toString: (): string => jobId } as unknown as ObjectId,
+        type: 'notify',
+        name: 'deliver-notification',
+        data: {
+          alert: {
+            studentId: 'gideon-id',
+            type: AlertType.STUDENT_NEEDS_HELP,
+            severity: 'info',
+            relatedData,
+            userId: 'parent-1',
+          },
+        },
+        scheduledFor: new Date(),
+        priority: 5,
+        status: 'processing',
+        attempts: 0,
+        maxAttempts: 5,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await worker.processJob(job);
+
+      expect(resolveAllAlertRecipients).toHaveBeenCalledWith('gideon-id');
+      expect(mockNotificationService.processAlertEnqueueDeliver).toHaveBeenCalledTimes(1);
+      const [alert, queue, recipients] = mockNotificationService.processAlertEnqueueDeliver.mock
+        .calls[0] as [Alert, MongoQueue, readonly unknown[]];
+      expect(alert.type).toBe(AlertType.STUDENT_NEEDS_HELP);
+      expect(alert.severity).toBe('info');
+      expect(alert.studentId).toBe('gideon-id');
+      expect(alert.userId).toBe('parent-1');
+      expect(alert.relatedData).toEqual(relatedData);
+      expect(queue).toBe(mockMongoQueue);
+      expect(recipients).toEqual(resolved);
+      expect(mockMongoQueue.complete).toHaveBeenCalledWith(jobId);
+      expect(mockMongoQueue.fail).not.toHaveBeenCalled();
+    });
+
     it('runs processGuidanceJob and completes the job', async () => {
       const processGuidanceJob = jest.fn().mockResolvedValue(undefined);
       const worker = new NotificationWorker(mockMongoQueue, mockNotificationService, {
