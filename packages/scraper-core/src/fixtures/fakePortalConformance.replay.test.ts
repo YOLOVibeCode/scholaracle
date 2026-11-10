@@ -5,6 +5,7 @@
  */
 import { runAeriesRecipe } from '../recipes/aeries-recipe';
 import { runSkywardRecipe } from '../recipes/skyward-recipe';
+import { FakePortalAeriesReplayDriver } from '../__fixtures__/fakePortalAeriesReplayDriver';
 import { JsdomFixtureReplayDriver } from '../__fixtures__/jsdomFixtureReplayDriver';
 import {
   assertFakePortalAeriesExtract,
@@ -12,7 +13,6 @@ import {
   buildFakePortalJsdomFixtures,
   mountFakePortalSkywardJsdomInteractivity,
 } from './fakePortalConformance';
-import { M402SimAeriesDriver } from './fakePortalM402';
 
 const AERIES_ROOT = 'https://district.aeries.net/student/';
 const SKYWARD_ORIGIN = 'https://skyward.example.test';
@@ -23,11 +23,12 @@ describe('fake portal conformance (jsdom replay)', () => {
     document.body.innerHTML = '';
   });
 
-  it('aeries: M402 jsdom driver matches conformance table', async () => {
-    const driver = new M402SimAeriesDriver(JSDOM_FIXTURES.aeriesStudentRoot);
-    const extract = await runAeriesRecipe(driver, JSDOM_FIXTURES.aeriesStudentRoot);
+  it('aeries: JsdomFixtureReplayDriver matches conformance table', async () => {
+    const driver = new FakePortalAeriesReplayDriver(JSDOM_FIXTURES.aeries);
+    const extract = await runAeriesRecipe(driver, AERIES_ROOT);
     assertFakePortalAeriesExtract(extract);
-  });
+    // Ben has no attendance rows, so the recipe waits out its 20 s attendance-ready window.
+  }, 60_000);
 
   it('skyward: JsdomFixtureReplayDriver matches conformance table', async () => {
     const { fixtures, initialUrl } = JSDOM_FIXTURES.skyward;
