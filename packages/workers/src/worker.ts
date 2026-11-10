@@ -42,6 +42,7 @@ import { safeInterval } from './utils/safeInterval';
 import { installProcessHandlers } from './utils/processHandlers';
 import { abandonStaleStartedRuns } from './abandonStaleIngestRuns';
 import { startRepairNightlySchedule } from './repair-nightly/scheduleRepairNightly';
+import { startWeeklyReviewSchedule } from './weekly-review/scheduleWeeklyReview';
 
 export interface IWorkerConfig {
   readonly mongodbUri?: string;
@@ -583,6 +584,12 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
 
   const repairNightlyInterval = startRepairNightlySchedule(database);
 
+  // Student weekly review (Sunday 18:00 local; WEEKLY_REVIEW_ENABLED=true turns it on).
+  // Deliveries ride the same `deliver` jobs the notification worker above drains.
+  const weeklyReviewSchedule = startWeeklyReviewSchedule(database, mongoQueue, {
+    webOrigin: dashboardBaseUrl || smsWebOrigin(),
+  });
+
   // Minimal HTTP server for Railway health check (GET /api/health)
   const port = parseInt(process.env['PORT'] ?? '3003', 10);
   const healthServer = createServer((req, res) => {
@@ -635,6 +642,7 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     clearInterval(heartbeatInterval);
     clearInterval(staleRunReaperInterval);
     if (repairNightlyInterval) clearInterval(repairNightlyInterval);
+    weeklyReviewSchedule?.stop();
     stalenessMonitor.stop();
     healthServer.close();
     await notificationWorker.stop();

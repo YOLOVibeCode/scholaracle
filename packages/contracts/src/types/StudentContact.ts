@@ -15,6 +15,8 @@ export interface IStudentContact {
   readonly receiveAlerts?: boolean;
   readonly alertChannels?: readonly ('email' | 'sms' | 'push')[];
   readonly alertTypes?: readonly string[];
+  /** Copy of the student's weekly review to this adult (default off). */
+  readonly weeklyReviewCopy?: boolean;
 }
 
 /** Resolved alert recipient for notification delivery. */

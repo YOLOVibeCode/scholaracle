@@ -237,6 +237,12 @@ export interface IWeekCounts {
   readonly done: number;
 }
 
+/**
+ * `data.type` of the Sunday weekly review push (spec §3.3). The worker sets it as the
+ * notification's triggerType; the phone routes it to This week.
+ */
+export const WEEKLY_REVIEW_PUSH_TYPE = 'weekly_review';
+
 /** `GET /api/studio/week`. Owed oldest first; days are the next 7 local days, today first. */
 export interface IWeekView {
   readonly encouragement: string;

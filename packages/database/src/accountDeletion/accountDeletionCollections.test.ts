@@ -24,5 +24,8 @@ describe('accountDeletionCollections manifest', () => {
     expect(ACCOUNT_DELETION_AUDIT_COLLECTION).toBe('account_deletion_audits');
     expect(EXTRA_USER_SCOPED_JOB_FILTER).toBe('jobs');
     expect(STUDENT_SCOPED_DELETION_COLLECTIONS).toContain('sync_requests');
+    // Student review R3/R4 rows are keyed by the student's Mongo id and go with the student.
+    expect(STUDENT_SCOPED_DELETION_COLLECTIONS).toContain('student_help_requests');
+    expect(STUDENT_SCOPED_DELETION_COLLECTIONS).toContain('weekly_review_sends');
   });
 });

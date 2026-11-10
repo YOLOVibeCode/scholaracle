@@ -6,10 +6,14 @@
 import {
   AlertType,
   alertTypeLabel,
+  type IMySharingStudent,
+  type IMySharingView,
   type ISettingsAlertTypePref,
   type ISettingsQuietHours,
   type IUserSettingsResponse,
   type IUserSettingsUpdateRequest,
+  type SharingAlertChannel,
+  type StudentAccess,
 } from '@scholaracle/contracts';
 
 /** Alert types the API exposes, in the contracts' declaration order (one source of truth). */
@@ -103,6 +107,100 @@ export function setTypeEnabled(
 ): INotificationDraft {
   const current = draft.types[key] ?? { enabled: true, severity: 'info' };
   return { ...draft, types: { ...draft.types, [key]: { ...current, enabled } } };
+}
+
+// ---------------------------------------------------------------------------
+// Weekly review copy (student review spec §3.3, decision Q2): one switch per student
+// ---------------------------------------------------------------------------
+
+export const WEEKLY_REVIEW_SWITCH_LABEL = 'Send me the weekly review';
+export const WEEKLY_REVIEW_SECTION_HINT =
+  'Students get their own review on Sunday evening. Turn this on to get a copy by your alert channels.';
+
+export interface IWeeklyReviewRow {
+  readonly studentId: string;
+  readonly name: string;
+  readonly access: StudentAccess;
+  readonly enabled: boolean;
+  readonly receiveAlerts: boolean;
+  readonly alertChannels: readonly SharingAlertChannel[];
+  readonly alertTypes?: readonly string[];
+  /** The invite address on the caller's own sharedWith row; what the contacts PUT keys on. */
+  readonly contactEmail?: string;
+}
+
+/** One row per accessible student from `GET /api/sharing/mine`, by name. */
+export function weeklyReviewRows(view: IMySharingView): readonly IWeeklyReviewRow[] {
+  return view.students
+    .map((s: IMySharingStudent): IWeeklyReviewRow => ({
+      studentId: s.studentId,
+      name: s.name,
+      access: s.access,
+      enabled: s.alerts.weeklyReviewCopy === true,
+      receiveAlerts: s.alerts.receiveAlerts,
+      alertChannels: s.alerts.alertChannels,
+      ...(s.alerts.alertTypes !== undefined ? { alertTypes: s.alerts.alertTypes } : {}),
+      ...(s.contactEmail !== undefined && s.contactEmail !== ''
+        ? { contactEmail: s.contactEmail }
+        : {}),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The PUT that flips one student's switch. The owner's prefs endpoint replaces the whole
+ * object, so the current channels travel with the toggle; a shared adult's row is merged
+ * server-side and needs only the toggle.
+ */
+export type WeeklyReviewToggleRequest =
+  | {
+      readonly kind: 'owner';
+      readonly studentId: string;
+      readonly body: {
+        readonly receiveAlerts: boolean;
+        readonly alertChannels: readonly SharingAlertChannel[];
+        readonly alertTypes?: readonly string[];
+        readonly weeklyReviewCopy: boolean;
+      };
+    }
+  | {
+      readonly kind: 'contact';
+      readonly studentId: string;
+      /** The row's invite address from /api/sharing/mine; absent when the server did not say. */
+      readonly email?: string;
+      readonly body: { readonly weeklyReviewCopy: boolean };
+    };
+
+export function weeklyReviewToggleRequest(
+  row: IWeeklyReviewRow,
+  enabled: boolean
+): WeeklyReviewToggleRequest {
+  if (row.access === 'owner') {
+    return {
+      kind: 'owner',
+      studentId: row.studentId,
+      body: {
+        receiveAlerts: row.receiveAlerts,
+        alertChannels: row.alertChannels,
+        ...(row.alertTypes !== undefined ? { alertTypes: row.alertTypes } : {}),
+        weeklyReviewCopy: enabled,
+      },
+    };
+  }
+  return {
+    kind: 'contact',
+    studentId: row.studentId,
+    ...(row.contactEmail !== undefined ? { email: row.contactEmail } : {}),
+    body: { weeklyReviewCopy: enabled },
+  };
+}
+
+export function setWeeklyReviewEnabled(
+  rows: readonly IWeeklyReviewRow[],
+  studentId: string,
+  enabled: boolean
+): readonly IWeeklyReviewRow[] {
+  return rows.map((row) => (row.studentId === studentId ? { ...row, enabled } : row));
 }
 
 // ---------------------------------------------------------------------------

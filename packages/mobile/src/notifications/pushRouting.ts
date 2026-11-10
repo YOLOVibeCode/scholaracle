@@ -10,17 +10,18 @@
  * A student push with `type: 'weekly_review'` (R4) opens This week.
  */
 
-import type {
-  UserRole,
-  IStudentListItem,
-  IStudentGradesResponse,
-  ICourseGrade,
-  ICourseGradeAssignment,
+import {
+  WEEKLY_REVIEW_PUSH_TYPE,
+  type UserRole,
+  type IStudentListItem,
+  type IStudentGradesResponse,
+  type ICourseGrade,
+  type ICourseGradeAssignment,
 } from '@scholaracle/contracts';
 import { homeViewForRole, isStudentSession } from '../studio/studentMode';
 
-/** `data.type` of the weekly review push (student review spec §3.3). */
-export const WEEKLY_REVIEW_PUSH_TYPE = 'weekly_review';
+/** `data.type` of the weekly review push (student review spec §3.3); the worker sets the same constant. */
+export { WEEKLY_REVIEW_PUSH_TYPE };
 
 export type PushTarget =
   | { readonly kind: 'home' }

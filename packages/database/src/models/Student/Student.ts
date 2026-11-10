@@ -77,6 +77,11 @@ export interface ISharedParent {
   readonly alertChannels?: readonly SharedAlertChannel[];
   /** Alert types to receive (undefined = all). */
   readonly alertTypes?: readonly string[];
+  /**
+   * Send this adult a copy of the student's Sunday weekly review by their alert channels
+   * (student review spec §3.3, decision Q2). Off unless explicitly true.
+   */
+  readonly weeklyReviewCopy?: boolean;
   /** Groups the entries one invitation created across several students (sharing-spec §4.3). */
   readonly inviteGroupId?: string;
   /** The owner or admin who sent the invitation. */
@@ -111,6 +116,8 @@ export interface IOwnerAlertPrefs {
   readonly receiveAlerts: boolean;
   readonly alertChannels: readonly SharedAlertChannel[];
   readonly alertTypes?: readonly string[];
+  /** Copy of the student's weekly review to the owner (spec §3.3 Q2). Off unless true. */
+  readonly weeklyReviewCopy?: boolean;
 }
 
 /** One person's alert preferences for a student (owner or accepted adult), as the resolver reads them. */
@@ -118,6 +125,8 @@ export interface IPersonAlertPrefs {
   readonly receiveAlerts: boolean;
   readonly alertChannels: readonly SharedAlertChannel[];
   readonly alertTypes?: readonly string[];
+  /** Copy of the student's Sunday weekly review (student review §3.3 Q2). Off unless true. */
+  readonly weeklyReviewCopy: boolean;
 }
 
 /** The owner's channels when they never set any (unchanged product default). */
@@ -135,17 +144,19 @@ export function effectiveOwnerAlertPrefs(prefs: IOwnerAlertPrefs | undefined): I
     receiveAlerts: prefs?.receiveAlerts !== false,
     alertChannels: prefs?.alertChannels ?? DEFAULT_OWNER_ALERT_CHANNELS,
     ...(prefs?.alertTypes !== undefined ? { alertTypes: prefs.alertTypes } : {}),
+    weeklyReviewCopy: prefs?.weeklyReviewCopy === true,
   };
 }
 
 /** A shared adult's effective alert preferences for a student (pending or accepted row). */
 export function effectiveSharedAlertPrefs(
-  row: Pick<ISharedParent, 'receiveAlerts' | 'alertChannels' | 'alertTypes'>
+  row: Pick<ISharedParent, 'receiveAlerts' | 'alertChannels' | 'alertTypes' | 'weeklyReviewCopy'>
 ): IPersonAlertPrefs {
   return {
     receiveAlerts: row.receiveAlerts !== false,
     alertChannels: row.alertChannels ?? DEFAULT_SHARED_ALERT_CHANNELS,
     ...(row.alertTypes !== undefined ? { alertTypes: row.alertTypes } : {}),
+    weeklyReviewCopy: row.weeklyReviewCopy === true,
   };
 }
 

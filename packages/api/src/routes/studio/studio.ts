@@ -10,6 +10,7 @@ import {
   type StudentStatus,
 } from '@scholaracle/contracts';
 import { TodayGuide, WeekGuide, WorkPack } from '@scholaracle/studio-core';
+import { resolveStudentTimeZone } from '@scholaracle/agents';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { resolveStudioStudent, slcStudentFilter, toStudentSession } from './studioScope';
 import { createMongoTodaySource } from './mongoTodaySource';
@@ -53,17 +54,6 @@ async function ownerTimeZoneById(
   } catch {
     return undefined;
   }
-}
-
-/**
- * Day bucketing follows the household owner's zone (students carry none yet).
- * Unknown owner or zone → undefined, and WeekGuide falls back to UTC.
- */
-function ownerTimeZone(
-  userRepository: UserRepository,
-  student: Student
-): Promise<string | undefined> {
-  return ownerTimeZoneById(userRepository, student.userId.toString());
 }
 
 function parseNote(raw: unknown): string | undefined {
@@ -158,7 +148,9 @@ export function studioRouter(config: IStudioRouterConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const student = await resolveStudioStudent(req, studentRepository);
       const session = toStudentSession(student);
-      const timeZone = await ownerTimeZone(userRepository, student);
+      // Day bucketing: the student login's zone, else the owner's, else America/New_York —
+      // the same rule the weekly-review worker applies, so the push matches the screen.
+      const timeZone = await resolveStudentTimeZone(config.database, student);
       // One instant for the whole request: classification and day slots agree at midnight.
       const now = clock();
       const guide = new WeekGuide(
@@ -169,7 +161,7 @@ export function studioRouter(config: IStudioRouterConfig): Router {
           jwtSecret: config.jwtSecret,
           now,
         }),
-        { ...(timeZone !== undefined ? { timeZone } : {}) }
+        { timeZone }
       );
       const view = await guide.load(session, now);
       res.status(200).json(view);
