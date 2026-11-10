@@ -238,6 +238,16 @@ describe('WeeklyReviewSender', () => {
     });
   }
 
+  /**
+   * No score anywhere in student- or parent-facing copy. Deep links are dropped first: a
+   * Mongo id is random hex and can spell "95" on its own (which is how CI once caught a
+   * false positive here), while the graded fixture's 95 would arrive as "95%" or "score".
+   */
+  function expectNoScore(text: string): void {
+    const withoutLinks = text.replace(/https?:\/\/\S+/g, '');
+    expect(withoutLinks).not.toMatch(/\d\s*%|\b95\b|score/i);
+  }
+
   async function sends(): Promise<Record<string, unknown>[]> {
     return db.collection(WEEKLY_REVIEW_SENDS_COLLECTION).find({}).toArray();
   }
@@ -287,7 +297,7 @@ describe('WeeklyReviewSender', () => {
     });
     expect(email.body).toContain('Still owed: "Ch. 4 worksheet" (Math).');
     expect(email.body).toContain('https://scholarmancy.test/studio/week');
-    expect(email.body).not.toMatch(/95|%/);
+    expectNoScore(email.body);
 
     const rows = await sends();
     expect(rows).toHaveLength(1);
@@ -499,7 +509,7 @@ describe('WeeklyReviewSender', () => {
       expect(job.payload.body).toContain(
         `https://scholarmancy.test/dashboard/students/${home.studentId.toString()}`
       );
-      expect(job.payload.body).not.toMatch(/95|%/);
+      expectNoScore(job.payload.body);
       expect(job.payload.triggerData).toMatchObject({ studentName: 'Gideon Vega', due: 2 });
     }
     expect(queue.jobs[0]!.payload.agentType).toBe(AgentType.STUDENT);
