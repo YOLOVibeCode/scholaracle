@@ -1,6 +1,6 @@
 /**
  * Wire contracts for the student studio (`GET /api/studio/today`,
- * `GET /api/studio/assignments/:assignmentExternalId`).
+ * `GET /api/studio/week`, `GET /api/studio/assignments/:assignmentExternalId`).
  *
  * Student-facing only: no gradebook payload, no siblings, no parent nudge.
  * Server will be source of truth in packages/api/src/routes/studio/ (slice 5).
@@ -12,6 +12,80 @@
 import { ValidationError } from '../../errors';
 
 export const STUDENT_SESSION_KEYS = ['studentId', 'displayName', 'showGrades'] as const;
+
+// STUDENT_STATUSES / StudentStatus are declared with the week view below (one source of truth).
+
+/** Decision §6 Q3 (student review spec): the note on "Need help" is at most 140 characters. */
+export const STUDENT_HELP_NOTE_MAX_CHARS = 140;
+
+/** Body of `PATCH /api/studio/assignments/:assignmentExternalId/status`. */
+export interface IStudentStatusUpdateRequest {
+  readonly status: StudentStatus | null;
+  /** Travels with the need_help alert. Trimmed; at most STUDENT_HELP_NOTE_MAX_CHARS. */
+  readonly note?: string;
+}
+
+/** Response of the status PATCH. `notified`/`nextAllowedAt` appear only for need_help. */
+export interface IStudentStatusUpdateResponse {
+  readonly success: true;
+  readonly studentStatus: StudentStatus | null;
+  readonly studentNote?: string;
+  /** need_help: true when the adults were told this time; false when rate-limited. */
+  readonly notified?: boolean;
+  /** need_help, when rate-limited: ISO time the next alert may go out (24 h window). */
+  readonly nextAllowedAt?: string;
+}
+
+/**
+ * The one way every client builds the status PATCH body: a non-empty, trimmed
+ * note rides along; a blank note is left off the wire.
+ */
+export function studioStatusPatchBody(
+  status: StudentStatus | null,
+  note?: string
+): IStudentStatusUpdateRequest {
+  const trimmed = note?.trim() ?? '';
+  return trimmed === '' ? { status } : { status, note: trimmed };
+}
+
+/**
+ * Tolerant parse of the status PATCH response. Servers before the need-help
+ * alert answer with only `success` and `studentStatus`; `notified` and
+ * `nextAllowedAt` are then absent and the client must not claim anyone was told.
+ */
+export function parseStudentStatusUpdateResponse(input: unknown): IStudentStatusUpdateResponse {
+  const label = 'IStudentStatusUpdateResponse';
+  if (!isRecord(input)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  if (input['success'] !== true) {
+    throw new ValidationError(`Invalid ${label}.success: expected true`);
+  }
+  const rawStatus = input['studentStatus'];
+  const studentStatus =
+    rawStatus === null || rawStatus === undefined
+      ? null
+      : parseOneOf(rawStatus, STUDENT_STATUSES, `${label}.studentStatus`);
+  const notified = input['notified'];
+  if (notified !== undefined && typeof notified !== 'boolean') {
+    throw new ValidationError(`Invalid ${label}.notified: expected boolean`);
+  }
+  const nextAllowedAt = input['nextAllowedAt'];
+  if (nextAllowedAt !== undefined && typeof nextAllowedAt !== 'string') {
+    throw new ValidationError(`Invalid ${label}.nextAllowedAt: expected string`);
+  }
+  const studentNote = input['studentNote'];
+  if (studentNote !== undefined && typeof studentNote !== 'string') {
+    throw new ValidationError(`Invalid ${label}.studentNote: expected string`);
+  }
+  return {
+    success: true,
+    studentStatus,
+    ...(studentNote !== undefined ? { studentNote } : {}),
+    ...(notified !== undefined ? { notified } : {}),
+    ...(nextAllowedAt !== undefined ? { nextAllowedAt } : {}),
+  };
+}
 
 export const NEXT_STEP_KEYS = [
   'assignmentExternalId',
@@ -48,6 +122,61 @@ export const WORK_PACK_LINK_KEYS = ['label', 'href', 'kind'] as const;
 
 export const WORK_PACK_MORE_ITEM_KEYS = ['title', 'asset', 'href'] as const;
 
+export const WEEK_VIEW_KEYS = ['encouragement', 'owed', 'days', 'doneThisWeek', 'counts'] as const;
+
+export const WEEK_ITEM_KEYS = [
+  'assignmentExternalId',
+  'title',
+  'courseName',
+  'dueAt',
+  'humanStatus',
+  'studentStatus',
+  'needs',
+  'primaryCtaLabel',
+  'warning',
+] as const;
+
+export const WEEK_ITEM_OPTIONAL_KEYS = ['dueAt', 'warning'] as const;
+
+export const WEEK_DAY_KEYS = ['date', 'label', 'items'] as const;
+
+export const WEEK_DONE_KEYS = [
+  'assignmentExternalId',
+  'title',
+  'courseName',
+  'dueAt',
+  'confirmedBySchool',
+] as const;
+
+export const WEEK_DONE_OPTIONAL_KEYS = ['dueAt'] as const;
+
+export const WEEK_COUNT_KEYS = ['owed', 'due', 'done'] as const;
+
+/** Today, Tomorrow, then short weekday names. */
+export const WEEK_DAY_LABELS = [
+  'Today',
+  'Tomorrow',
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+] as const;
+
+/** What the student says about an assignment (`PATCH /api/studio/assignments/:id/status`). */
+export const STUDENT_STATUSES = ['not_started', 'working_on_it', 'need_help', 'done'] as const;
+
+export type StudentStatus = (typeof STUDENT_STATUSES)[number];
+
+/** What the student needs to do the work, derived from the work-pack partition. */
+export const WEEK_NEEDS = ['saved_file', 'school_login', 'internet'] as const;
+
+export type WeekNeed = (typeof WEEK_NEEDS)[number];
+
+export type WeekDayLabel = (typeof WEEK_DAY_LABELS)[number];
+
 /** Student login context. Grades stay a boolean flag, never a gradebook. */
 export interface IStudentSession {
   readonly studentId: string;
@@ -69,6 +198,58 @@ export interface ITodayView {
   readonly encouragement: string;
   readonly next: INextStep | null;
   readonly alsoToday: readonly INextStep[];
+}
+
+/** One open assignment on This week. No score, no gradebook. */
+export interface IWeekItem {
+  readonly assignmentExternalId: string;
+  readonly title: string;
+  readonly courseName: string;
+  readonly dueAt?: string;
+  /** Student-facing English for where the school stands: "Not turned in", "Past due", … */
+  readonly humanStatus: string;
+  readonly studentStatus: StudentStatus;
+  readonly needs: readonly WeekNeed[];
+  readonly primaryCtaLabel: string;
+  /** Set when the student marked it done but the portal still shows it not turned in. */
+  readonly warning?: string;
+}
+
+/** One calendar day of the rolling 7-day horizon. `date` is the local day as YYYY-MM-DD. */
+export interface IWeekDay {
+  readonly date: string;
+  readonly label: WeekDayLabel;
+  readonly items: readonly IWeekItem[];
+}
+
+/** Finished this week: the student marked it done, or the portal says turned in / graded. */
+export interface IWeekDone {
+  readonly assignmentExternalId: string;
+  readonly title: string;
+  readonly courseName: string;
+  readonly dueAt?: string;
+  readonly confirmedBySchool: boolean;
+}
+
+export interface IWeekCounts {
+  readonly owed: number;
+  readonly due: number;
+  readonly done: number;
+}
+
+/**
+ * `data.type` of the Sunday weekly review push (spec §3.3). The worker sets it as the
+ * notification's triggerType; the phone routes it to This week.
+ */
+export const WEEKLY_REVIEW_PUSH_TYPE = 'weekly_review';
+
+/** `GET /api/studio/week`. Owed oldest first; days are the next 7 local days, today first. */
+export interface IWeekView {
+  readonly encouragement: string;
+  readonly owed: readonly IWeekItem[];
+  readonly days: readonly IWeekDay[];
+  readonly doneThisWeek: readonly IWeekDone[];
+  readonly counts: IWeekCounts;
 }
 
 export type WorkPackLinkKind = 'school-login' | 'external' | 'needs-internet';
@@ -329,6 +510,141 @@ export function parseWorkPackView(input: unknown): IWorkPackView {
   };
 }
 
+function parseArray(value: unknown, label: string): readonly unknown[] {
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`Invalid ${label}: expected array`);
+  }
+  return value;
+}
+
+function parseOneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
+  if (typeof value !== 'string' || !(allowed as readonly string[]).includes(value)) {
+    throw new ValidationError(`Invalid ${label}: expected one of ${allowed.join(', ')}`);
+  }
+  return value as T;
+}
+
+function parseCount(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new ValidationError(`Invalid ${label}: expected a non-negative integer`);
+  }
+  return value;
+}
+
+/** Required wire keys = all keys minus the optional ones, so the lists never drift. */
+function requiredKeys(all: readonly string[], optional: readonly string[]): readonly string[] {
+  return all.filter((key) => !optional.includes(key));
+}
+
+function parseWeekItem(value: unknown, label: string): IWeekItem {
+  if (!isRecord(value)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  unexpectedOrMissing(
+    value,
+    requiredKeys(WEEK_ITEM_KEYS, WEEK_ITEM_OPTIONAL_KEYS),
+    WEEK_ITEM_OPTIONAL_KEYS,
+    label
+  );
+  const needs = parseArray(value['needs'], `${label}.needs`).map((need, i) =>
+    parseOneOf(need, WEEK_NEEDS, `${label}.needs[${i}]`)
+  );
+  return {
+    assignmentExternalId: parseString(
+      value['assignmentExternalId'],
+      `${label}.assignmentExternalId`
+    ),
+    title: parseString(value['title'], `${label}.title`),
+    courseName: parseString(value['courseName'], `${label}.courseName`),
+    humanStatus: parseString(value['humanStatus'], `${label}.humanStatus`),
+    studentStatus: parseOneOf(value['studentStatus'], STUDENT_STATUSES, `${label}.studentStatus`),
+    needs,
+    primaryCtaLabel: parseString(value['primaryCtaLabel'], `${label}.primaryCtaLabel`),
+    ...(value['dueAt'] !== undefined
+      ? { dueAt: parseString(value['dueAt'], `${label}.dueAt`) }
+      : {}),
+    ...(value['warning'] !== undefined
+      ? { warning: parseString(value['warning'], `${label}.warning`) }
+      : {}),
+  };
+}
+
+function parseWeekDay(value: unknown, label: string): IWeekDay {
+  if (!isRecord(value)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  unexpectedOrMissing(value, WEEK_DAY_KEYS, [], label);
+  return {
+    date: parseString(value['date'], `${label}.date`),
+    label: parseOneOf(value['label'], WEEK_DAY_LABELS, `${label}.label`),
+    items: parseArray(value['items'], `${label}.items`).map((item, i) =>
+      parseWeekItem(item, `${label}.items[${i}]`)
+    ),
+  };
+}
+
+function parseWeekDone(value: unknown, label: string): IWeekDone {
+  if (!isRecord(value)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  unexpectedOrMissing(
+    value,
+    requiredKeys(WEEK_DONE_KEYS, WEEK_DONE_OPTIONAL_KEYS),
+    WEEK_DONE_OPTIONAL_KEYS,
+    label
+  );
+  if (typeof value['confirmedBySchool'] !== 'boolean') {
+    throw new ValidationError(`Invalid ${label}.confirmedBySchool: expected boolean`);
+  }
+  return {
+    assignmentExternalId: parseString(
+      value['assignmentExternalId'],
+      `${label}.assignmentExternalId`
+    ),
+    title: parseString(value['title'], `${label}.title`),
+    courseName: parseString(value['courseName'], `${label}.courseName`),
+    confirmedBySchool: value['confirmedBySchool'],
+    ...(value['dueAt'] !== undefined
+      ? { dueAt: parseString(value['dueAt'], `${label}.dueAt`) }
+      : {}),
+  };
+}
+
+function parseWeekCounts(value: unknown, label: string): IWeekCounts {
+  if (!isRecord(value)) {
+    throw new ValidationError(`Invalid ${label}: expected object`);
+  }
+  unexpectedOrMissing(value, WEEK_COUNT_KEYS, [], label);
+  return {
+    owed: parseCount(value['owed'], `${label}.owed`),
+    due: parseCount(value['due'], `${label}.due`),
+    done: parseCount(value['done'], `${label}.done`),
+  };
+}
+
+/**
+ * Runtime parse for This-week JSON. Rejects any gradebook field on an item.
+ */
+export function parseWeekView(input: unknown): IWeekView {
+  if (!isRecord(input)) {
+    throw new ValidationError('Invalid IWeekView: expected object');
+  }
+  unexpectedOrMissing(input, WEEK_VIEW_KEYS, [], 'IWeekView');
+  return {
+    encouragement: parseString(input['encouragement'], 'IWeekView.encouragement'),
+    owed: parseArray(input['owed'], 'IWeekView.owed').map((item, i) =>
+      parseWeekItem(item, `IWeekView.owed[${i}]`)
+    ),
+    days: parseArray(input['days'], 'IWeekView.days').map((day, i) =>
+      parseWeekDay(day, `IWeekView.days[${i}]`)
+    ),
+    doneThisWeek: parseArray(input['doneThisWeek'], 'IWeekView.doneThisWeek').map((done, i) =>
+      parseWeekDone(done, `IWeekView.doneThisWeek[${i}]`)
+    ),
+    counts: parseWeekCounts(input['counts'], 'IWeekView.counts'),
+  };
+}
+
 const PERCENT_TOKEN = /\d+\s*%/;
 const LETTER_TOKEN = /\b[ABCDF][+-](?!\w)/;
 const POINTS_TOKEN = /\b\d+\s*\/\s*\d+\b|\bpoints?\b/i;
@@ -346,12 +662,33 @@ function scanCopy(text: string, showGrades: boolean): void {
   }
 }
 
+function scanWeekView(view: IWeekView, showGrades: boolean): void {
+  scanCopy(view.encouragement, showGrades);
+  const items = [...view.owed, ...view.days.flatMap((day) => day.items)];
+  for (const item of items) {
+    scanCopy(
+      `${item.title} ${item.humanStatus} ${item.primaryCtaLabel} ${item.warning ?? ''}`,
+      showGrades
+    );
+  }
+  for (const done of view.doneThisWeek) {
+    scanCopy(done.title, showGrades);
+  }
+}
+
 /**
  * When `showGrades` is false, student-facing copy must not include percent,
  * letter grades (A- / B+), or points. Routing still belongs to later slices;
  * this only guards the wire text.
  */
-export function assertNoGradeLeak(view: ITodayView | IWorkPackView, showGrades: boolean): void {
+export function assertNoGradeLeak(
+  view: ITodayView | IWorkPackView | IWeekView,
+  showGrades: boolean
+): void {
+  if ('owed' in view) {
+    scanWeekView(view, showGrades);
+    return;
+  }
   if ('encouragement' in view) {
     scanCopy(view.encouragement, showGrades);
     if (view.next) scanCopy(`${view.next.title} ${view.next.primaryCtaLabel}`, showGrades);

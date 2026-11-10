@@ -1,6 +1,6 @@
 import request from 'supertest';
-import express, { type Express } from 'express';
-import { MongoClient, type Db } from 'mongodb';
+import { type Express } from 'express';
+import { type Db } from 'mongodb';
 import { customersRouter } from './customers';
 import { AuthService } from '@scholaracle/auth';
 import { adminAuthRouter } from '../auth/auth';
@@ -12,7 +12,7 @@ import {
   PasswordResetTokenRepository,
 } from '@scholaracle/database';
 import { createTestAdmin, getStepUpToken } from '../../../test-utils/admin-test-helper';
-import { createErrorHandler } from '../../../middleware/errorHandler';
+import { closeTestApp, createTestApp } from '../../../test-utils/createTestApp';
 
 const noOpPasswordResetSender = { sendResetLink: async (): Promise<void> => {} };
 const mockPasswordChangedSender = {
@@ -21,18 +21,52 @@ const mockPasswordChangedSender = {
 
 describe('Admin Customer Routes', () => {
   let app: Express;
-  let client: MongoClient;
   let database: Db;
+  let testHarness: Awaited<ReturnType<typeof createTestApp>>;
   let adminToken: string;
   let adminMfaSecret: string;
   let superAdminToken: string;
   let superAdminMfaSecret: string;
 
   beforeAll(async () => {
-    const uri = process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017';
-    client = new MongoClient(uri);
-    await client.connect();
-    database = client.db('scholaracle_test');
+    testHarness = await createTestApp({
+      configure: ({ app: testApp, database: db }) => {
+        database = db;
+        app = testApp;
+        testApp.use(
+          '/api/admin/auth',
+          adminAuthRouter({
+            database: db,
+            jwtSecret: 'test-secret',
+            stepUpChallengeStore: new AdminStepUpChallengeRepository(db),
+          })
+        );
+        const passwordResetTokenStore = new PasswordResetTokenRepository(db);
+        const authServiceForReset = new AuthService(
+          db,
+          'test-secret',
+          '15m',
+          passwordResetTokenStore,
+          noOpPasswordResetSender,
+          'http://localhost:2800'
+        );
+        testApp.use(
+          '/api/admin/customers',
+          customersRouter({
+            database: db,
+            jwtSecret: 'test-secret',
+            authService: authServiceForReset,
+            passwordChangedEmailSender: mockPasswordChangedSender,
+            baseUrl: 'https://test.example.com',
+          })
+        );
+      },
+    });
+    if (!testHarness) {
+      throw new Error('Expected createTestApp to connect in customers tests');
+    }
+    database = testHarness.database;
+    app = testHarness.app;
 
     const adminResult = await createTestAdmin(database, 'test-secret', {
       email: 'admin@test.com',
@@ -51,41 +85,12 @@ describe('Admin Customer Routes', () => {
     });
     superAdminToken = superResult.token;
     superAdminMfaSecret = superResult.mfaSecret;
-
-    app = express();
-    app.use(express.json());
-    app.use(
-      '/api/admin/auth',
-      adminAuthRouter({
-        database,
-        jwtSecret: 'test-secret',
-        stepUpChallengeStore: new AdminStepUpChallengeRepository(database),
-      })
-    );
-    const passwordResetTokenStore = new PasswordResetTokenRepository(database);
-    const authServiceForReset = new AuthService(
-      database,
-      'test-secret',
-      '15m',
-      passwordResetTokenStore,
-      noOpPasswordResetSender,
-      'http://localhost:2800'
-    );
-    app.use(
-      '/api/admin/customers',
-      customersRouter({
-        database,
-        jwtSecret: 'test-secret',
-        authService: authServiceForReset,
-        passwordChangedEmailSender: mockPasswordChangedSender,
-        baseUrl: 'https://test.example.com',
-      })
-    );
-    app.use(createErrorHandler());
   });
 
   afterAll(async () => {
-    await client.close();
+    if (testHarness) {
+      await closeTestApp(testHarness);
+    }
   });
 
   beforeEach(async () => {
@@ -295,6 +300,48 @@ describe('Admin Customer Routes', () => {
         .find({ action: 'customer:impersonate' })
         .toArray();
       expect(auditLogs.length).toBeGreaterThan(0);
+    });
+
+    it('IMPERSONATE-ASSURANCE-001: writes audit row and parent JWT cannot call admin APIs', async () => {
+      await database.collection('audit_logs').deleteMany({});
+      const stepUpToken = await getStepUpToken(app, adminToken, adminMfaSecret);
+      const passwordHash = await UserRepository.hashPassword('TestPass123!');
+      const customer = await new UserRepository(database).create({
+        email: 'scope-assurance@test.com',
+        passwordHash,
+        name: 'Scope Assurance User',
+      });
+      const customerId = customer._id!.toString();
+      const reason = 'Audit and scope check';
+
+      const res = await request(app)
+        .post(`/api/admin/customers/${customerId}/impersonate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-admin-stepup', stepUpToken)
+        .send({ reason });
+
+      expect(res.status).toBe(200);
+      const parentToken = res.body.data?.token as string;
+      expect(parentToken).toBeTruthy();
+
+      const auditLogs = await database
+        .collection('audit_logs')
+        .find({ action: 'customer:impersonate', entityId: customerId })
+        .toArray();
+      expect(auditLogs).toHaveLength(1);
+      expect(auditLogs[0]?.['reason']).toBe(reason);
+      // Audit rows store emails masked (M3-12, #83).
+      expect(auditLogs[0]?.['adminEmail']).toBe('a***@test.com');
+      expect(auditLogs[0]?.['entityId']).toBe(customerId);
+
+      const adminDenied = await request(app)
+        .get('/api/admin/customers')
+        .set('Authorization', `Bearer ${parentToken}`);
+      expect(adminDenied.status).toBe(401);
+
+      const userAuth = new AuthService(database, 'test-secret');
+      const decoded = await userAuth.verifyToken(parentToken);
+      expect(decoded?.userId).toBe(customerId);
     });
   });
 

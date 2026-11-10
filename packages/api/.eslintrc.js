@@ -18,14 +18,6 @@ module.exports = {
       },
     },
     {
-      files: ['src/services/scraper-generator/**/*.ts'],
-      rules: {
-        'no-useless-escape': 'off',
-        '@typescript-eslint/explicit-function-return-type': 'off',
-        '@typescript-eslint/explicit-module-boundary-types': 'off',
-      },
-    },
-    {
       files: ['src/routes/seed/demo-data.ts'],
       rules: {
         '@typescript-eslint/naming-convention': [

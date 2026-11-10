@@ -2,25 +2,6 @@ import type { Request, Response, NextFunction } from 'express';
 
 const DEFAULT_MAX_AGE_MS = 5 * 60 * 1000;
 
-function parseRawDlrDoneDate(value: string): number | undefined {
-  if (!/^\d{10}$/.test(value)) return undefined;
-  const yy = Number.parseInt(value.slice(0, 2), 10);
-  const monthIndex = Number.parseInt(value.slice(2, 4), 10) - 1;
-  const day = Number.parseInt(value.slice(4, 6), 10);
-  const hour = Number.parseInt(value.slice(6, 8), 10);
-  const minute = Number.parseInt(value.slice(8, 10), 10);
-  if (
-    Number.isNaN(yy) ||
-    Number.isNaN(monthIndex) ||
-    Number.isNaN(day) ||
-    Number.isNaN(hour) ||
-    Number.isNaN(minute)
-  ) {
-    return undefined;
-  }
-  return Date.UTC(2000 + yy, monthIndex, day, hour, minute, 0, 0);
-}
-
 function parseUnixTimestamp(value: string): number | undefined {
   const n = Number(value);
   if (!Number.isFinite(n)) return undefined;
@@ -37,16 +18,18 @@ function bodyStringMap(body: unknown): Record<string, string> {
   return out;
 }
 
+/**
+ * Event time for the freshness window: only an explicit `Timestamp` field counts.
+ * Carrier fields such as `RawDlrDoneDate` are deliberately ignored: they have no time
+ * zone and minute precision, and carriers report them late, so using them rejected
+ * legitimate delivery receipts. Replays are stopped by the relay signature plus the
+ * MessageSid+MessageStatus dedupe.
+ */
 export function resolveTwilioWebhookEventTimeMs(body: unknown): number {
   const map = bodyStringMap(body);
   const ts = map['Timestamp'] ?? map['timestamp'];
   if (ts !== undefined) {
     const parsed = parseUnixTimestamp(ts);
-    if (parsed !== undefined) return parsed;
-  }
-  const raw = map['RawDlrDoneDate'];
-  if (raw) {
-    const parsed = parseRawDlrDoneDate(raw);
     if (parsed !== undefined) return parsed;
   }
   return Date.now();

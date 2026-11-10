@@ -4,6 +4,7 @@ import type { ITodayView } from '@scholaracle/contracts';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { OfflineSaveButton } from './OfflineSaveButton';
+import { StudioTabs } from './StudioTabs';
 
 export interface ITodayViewProps {
   readonly view: ITodayView;
@@ -16,6 +17,7 @@ export interface ITodayViewProps {
 export function TodayView({ view, token }: ITodayViewProps): React.ReactElement {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-8 px-6 py-12">
+      <StudioTabs active="today" />
       <h1
         data-testid="studio-encouragement"
         className="text-3xl font-semibold tracking-tight text-balance"

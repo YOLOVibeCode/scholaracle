@@ -80,7 +80,7 @@ export default function CoursesPage() {
         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-[minmax(0,12rem)_1fr]">
           <div className="h-[6.25rem] w-full animate-pulse rounded-lg bg-muted md:w-48" />
           <StudentGradePanel
-            student={{ id: '', userId: '', name: '…', grade: '' }}
+            student={{ id: '', userId: '', name: '…', grade: '', access: 'owner', peopleCount: 1 }}
             grades={null}
             loading
             displayMode={gradeDisplayMode}

@@ -1,4 +1,10 @@
-import type { ITriggerSyncResponse, ISlcRunCoverage } from '@scholaracle/contracts';
+import type {
+  ITriggerSyncResponse,
+  ISlcIngestRunStats,
+  ISlcIngestRunStep,
+  ISlcRunCoverage,
+  ISourceIngestLastCounts,
+} from '@scholaracle/contracts';
 import { apiClient } from './client';
 
 export interface IDataSource {
@@ -14,6 +20,9 @@ export interface IDataSource {
   readonly hasCredentials?: boolean;
   readonly lastScraped?: string;
   readonly lastSuccess?: string;
+  readonly lastSuccessAt?: string;
+  readonly lastRunId?: string;
+  readonly lastCounts?: ISourceIngestLastCounts;
   readonly lastError?: string | null;
 }
 
@@ -44,6 +53,9 @@ export interface IIngestRun {
   readonly error?: string | null;
   readonly coverage?: ISlcRunCoverage;
   readonly warnings?: readonly string[];
+  readonly steps?: readonly ISlcIngestRunStep[];
+  readonly stats?: ISlcIngestRunStats;
+  readonly clientMeta?: Readonly<Record<string, string>>;
 }
 
 /**

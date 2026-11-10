@@ -54,7 +54,7 @@ export function transformAeriesExtract(
   const now = extract.timestamp || new Date().toISOString();
   const asOfDate = now.split('T')[0]!;
 
-  // Process first student (scraper config targets one student; filter happens in scraper)
+  // Single student per transform call; multi-student extracts are narrowed in runClientScrape.
   const students = extract.students;
   if (students.length === 0) return ops;
 

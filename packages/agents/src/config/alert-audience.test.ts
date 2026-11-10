@@ -34,6 +34,11 @@ describe('alertAudience v1 (slice 7)', () => {
     expect(shouldNotifyParent(AlertType.TEST)).toBe(false);
   });
 
+  it('student_needs_help is a parent alert, never sent back to the student (R3)', () => {
+    expect(shouldNotifyParent(AlertType.STUDENT_NEEDS_HELP)).toBe(true);
+    expect(shouldNotifyStudent(AlertType.STUDENT_NEEDS_HELP)).toBe(false);
+  });
+
   it('covers every AlertType', () => {
     for (const type of Object.values(AlertType)) {
       expect(alertAudience[type]).toEqual(

@@ -19,9 +19,10 @@ describe('twilio-replay-window.middleware', () => {
     expect(ms).toBe(1609459200 * 1000);
   });
 
-  it('parses RawDlrDoneDate', () => {
-    const ms = resolveTwilioWebhookEventTimeMs({ RawDlrDoneDate: '2006100112' });
-    expect(ms).toBe(Date.UTC(2020, 5, 10, 1, 12, 0, 0));
+  it('ignores the carrier RawDlrDoneDate (late, zone-less) and uses server time', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(42);
+    expect(resolveTwilioWebhookEventTimeMs({ RawDlrDoneDate: '2006100112' })).toBe(42);
+    jest.restoreAllMocks();
   });
 
   it('uses server time when body has no event time', () => {

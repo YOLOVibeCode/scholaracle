@@ -6,7 +6,7 @@
     "composite": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/**/*.json"],
   "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/community/**", "src/scaffold/**"],
   "references": [
     { "path": "../contracts" }

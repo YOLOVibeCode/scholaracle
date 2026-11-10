@@ -220,6 +220,21 @@ describe('authApi', () => {
       expect(apiClient.getToken()).toBeNull();
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('auth_token');
     });
+
+    it('clears every "Set a password" prompt flag so the next account never inherits it', async () => {
+      mockStorage['set_password_prompt:u-1'] = '1';
+      mockStorage['set_password_prompt:u-2'] = '1';
+      mockStorage['remember_me'] = 'true';
+      (mockLocalStorage.key as jest.Mock).mockImplementation(
+        (i: number) => Object.keys(mockStorage)[i] ?? null
+      );
+
+      await authApi.logout();
+
+      expect(mockStorage['set_password_prompt:u-1']).toBeUndefined();
+      expect(mockStorage['set_password_prompt:u-2']).toBeUndefined();
+      expect(mockStorage['remember_me']).toBe('true');
+    });
   });
 
   // -------------------------------------------------------------------------

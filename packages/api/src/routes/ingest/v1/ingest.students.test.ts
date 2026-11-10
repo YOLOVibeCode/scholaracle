@@ -2,12 +2,13 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
+import { SlcBindingRepository } from '@scholaracle/database';
+import { INGEST_MISSING_BINDING_CODE } from '@scholaracle/contracts';
 import { ingestV1Router } from './ingest';
 import { createErrorHandler } from '../../../middleware/errorHandler';
 
 /**
- * Students that ingest creates or matches: a phone-created student is matched by
- * its own id (no duplicate), and new students respect the plan's cap.
+ * Students that ingest matches via bindings (no auto-create on envelope).
  */
 describe('Ingest v1: student matching and plan cap', () => {
   let app: Express;
@@ -24,7 +25,14 @@ describe('Ingest v1: student matching and plan cap', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret: 'test-secret' }));
+    app.use(
+      '/api/ingest/v1',
+      ingestV1Router({
+        database,
+        jwtSecret: 'test-secret',
+        connectorJwtSecret: 'test-secret-connector',
+      })
+    );
     app.use(createErrorHandler());
   });
 
@@ -40,8 +48,12 @@ describe('Ingest v1: student matching and plan cap', () => {
       'subscriptions',
       'slc_sources',
       'slc_runs',
+      'slc_bindings',
       'slc_device_auth',
+      'slc_devices',
+      'revoked_connector_tokens',
       'slc_assignments',
+      'alerts',
     ]) {
       await database.collection(name).deleteMany({});
     }
@@ -61,15 +73,47 @@ describe('Ingest v1: student matching and plan cap', () => {
     return { userId: reg.user.id, connectorToken: poll.body.connectorToken as string };
   }
 
-  async function syncAssignments(
-    connectorToken: string,
-    studentExternalIds: readonly string[]
+  async function upsertBinding(
+    userId: string,
+    params: {
+      readonly sourceId: string;
+      readonly studentExternalId: string;
+      readonly studentId: string;
+    }
   ): Promise<void> {
+    const repo = new SlcBindingRepository(database);
+    await repo.upsert({
+      userId,
+      portalAccountId: 'pa-test',
+      studentId: params.studentId,
+      sourceId: params.sourceId,
+      studentExternalId: params.studentExternalId,
+    });
+  }
+
+  function buildAssignmentOps(studentExternalIds: readonly string[], now: string) {
+    return studentExternalIds.map((studentExternalId, i) => ({
+      op: 'upsert' as const,
+      entity: 'assignment' as const,
+      key: {
+        provider: 'canvas',
+        adapterId: 'com.instructure.canvas',
+        externalId: `a-${i}-${studentExternalId}`,
+        studentExternalId,
+        institutionExternalId: 'inst-1',
+        courseExternalId: 'course-1',
+      },
+      observedAt: now,
+      record: { title: `HW ${i}`, dueAt: now, status: 'missing', pointsPossible: 10 },
+    }));
+  }
+
+  async function startIngestRun(connectorToken: string, sourceId = 'src-phone'): Promise<string> {
     await request(app)
       .post('/api/ingest/v1/sources')
       .set('Authorization', `Bearer ${connectorToken}`)
       .send({
-        sourceId: 'src-phone',
+        sourceId,
         provider: 'canvas',
         adapterId: 'com.instructure.canvas',
         displayName: 'Canvas',
@@ -78,9 +122,17 @@ describe('Ingest v1: student matching and plan cap', () => {
     const run = await request(app)
       .post('/api/ingest/v1/runs')
       .set('Authorization', `Bearer ${connectorToken}`)
-      .send({ sourceId: 'src-phone' })
+      .send({ sourceId })
       .expect(200);
-    const runId = run.body.runId as string;
+    return run.body.runId as string;
+  }
+
+  async function syncAssignments(
+    connectorToken: string,
+    studentExternalIds: readonly string[],
+    sourceId = 'src-phone'
+  ): Promise<void> {
+    const runId = await startIngestRun(connectorToken, sourceId);
     const now = new Date().toISOString();
     await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
@@ -96,21 +148,8 @@ describe('Ingest v1: student matching and plan cap', () => {
           mode: 'delta',
           timezone: 'America/Chicago',
         },
-        source: { sourceId: 'src-phone', displayName: 'Canvas' },
-        ops: studentExternalIds.map((studentExternalId, i) => ({
-          op: 'upsert',
-          entity: 'assignment',
-          key: {
-            provider: 'canvas',
-            adapterId: 'com.instructure.canvas',
-            externalId: `a-${i}`,
-            studentExternalId,
-            institutionExternalId: 'inst-1',
-            courseExternalId: 'course-1',
-          },
-          observedAt: now,
-          record: { title: `HW ${i}`, dueAt: now, status: 'missing', pointsPossible: 10 },
-        })),
+        source: { sourceId, displayName: 'Canvas' },
+        ops: buildAssignmentOps(studentExternalIds, now),
       })
       .expect(200);
     await request(app)
@@ -123,6 +162,7 @@ describe('Ingest v1: student matching and plan cap', () => {
   it('fills a phone-created student keyed by its own id instead of creating a duplicate', async () => {
     const { userId, connectorToken } = await connect('phone-parent@test.com');
     const childId = new ObjectId();
+    const hex = childId.toHexString();
     await database.collection('students').insertOne({
       _id: childId,
       userId: new ObjectId(userId),
@@ -131,49 +171,128 @@ describe('Ingest v1: student matching and plan cap', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    await upsertBinding(userId, {
+      sourceId: 'src-phone',
+      studentExternalId: hex,
+      studentId: hex,
+    });
 
-    await syncAssignments(connectorToken, [childId.toHexString()]);
+    await syncAssignments(connectorToken, [hex]);
 
     const students = await database
       .collection('students')
       .find({ userId: new ObjectId(userId) })
       .toArray();
     expect(students).toHaveLength(1);
-    expect(students[0]!['studentId']).toBe(childId.toHexString());
     expect((students[0]!['dataSources'] as unknown[]).length).toBe(1);
+
+    // The missing assignment became an alert row keyed by the student's Mongo id (S3).
+    const alerts = await database.collection('alerts').find({ userId }).toArray();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ studentId: hex, type: 'missing_assignment' });
   });
 
-  it('does not create students beyond the plan cap on a free account', async () => {
-    const { userId, connectorToken } = await connect('free-parent@test.com');
-
-    await syncAssignments(connectorToken, ['kid-a', 'kid-b', 'kid-c', 'kid-d']);
-
-    const count = await database
-      .collection('students')
-      .countDocuments({ userId: new ObjectId(userId) });
-    expect(count).toBe(1);
+  it('rejects ingest without a binding with 422 when INGEST_REQUIRE_BINDINGS=true', async () => {
+    process.env['INGEST_REQUIRE_BINDINGS'] = 'true';
+    const { connectorToken } = await connect('no-binding@test.com');
+    const runId = await startIngestRun(connectorToken);
+    const now = new Date().toISOString();
+    const blocked = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        schemaVersion: 'slc.ingest.v1',
+        run: {
+          runId,
+          startedAt: now,
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          adapterVersion: '1.0.0',
+          mode: 'delta',
+          timezone: 'America/Chicago',
+        },
+        source: { sourceId: 'src-phone', displayName: 'Canvas' },
+        ops: buildAssignmentOps(['kid-a'], now),
+      });
+    delete process.env['INGEST_REQUIRE_BINDINGS'];
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.code).toBe(INGEST_MISSING_BINDING_CODE);
   });
 
-  it('creates students up to a paid plan cap', async () => {
-    const { userId, connectorToken } = await connect('family-parent@test.com');
-    const now = new Date();
-    await database.collection('subscriptions').insertOne({
-      userId,
-      plan: 'premium',
-      status: 'active',
-      billingCycle: 'monthly',
-      currentPeriodStart: now,
-      currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
-      cancelAtPeriodEnd: false,
-      createdAt: now,
-      updatedAt: now,
+  it('accepts ingest without a binding while INGEST_REQUIRE_BINDINGS is off (legacy sources)', async () => {
+    delete process.env['INGEST_REQUIRE_BINDINGS'];
+    const { connectorToken } = await connect('legacy-no-binding@test.com');
+    const runId = await startIngestRun(connectorToken);
+    const now = new Date().toISOString();
+    const res = await request(app)
+      .post(`/api/ingest/v1/runs/${runId}/envelope`)
+      .set('Authorization', `Bearer ${connectorToken}`)
+      .send({
+        schemaVersion: 'slc.ingest.v1',
+        run: {
+          runId,
+          startedAt: now,
+          provider: 'canvas',
+          adapterId: 'com.instructure.canvas',
+          adapterVersion: '1.0.0',
+          mode: 'delta',
+          timezone: 'America/Chicago',
+        },
+        source: { sourceId: 'src-phone', displayName: 'Canvas' },
+        ops: buildAssignmentOps(['kid-a'], now),
+      });
+    expect(res.status).toBe(200);
+  });
+
+  it('runs two students as separate ingest runs with distinct studentExternalId', async () => {
+    const { userId, connectorToken } = await connect('two-kids@test.com');
+    const kidA = new ObjectId();
+    const kidB = new ObjectId();
+    await database.collection('students').insertMany([
+      {
+        _id: kidA,
+        userId: new ObjectId(userId),
+        name: 'Kid A',
+        studentId: 'kid-a',
+        dataSources: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: kidB,
+        userId: new ObjectId(userId),
+        name: 'Kid B',
+        studentId: 'kid-b',
+        dataSources: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    await upsertBinding(userId, {
+      sourceId: 'src-a',
+      studentExternalId: 'kid-a',
+      studentId: kidA.toHexString(),
+    });
+    await upsertBinding(userId, {
+      sourceId: 'src-b',
+      studentExternalId: 'kid-b',
+      studentId: kidB.toHexString(),
     });
 
-    await syncAssignments(connectorToken, ['kid-a', 'kid-b', 'kid-c']);
+    await syncAssignments(connectorToken, ['kid-a'], 'src-a');
+    await syncAssignments(connectorToken, ['kid-b'], 'src-b');
 
-    const count = await database
-      .collection('students')
-      .countDocuments({ userId: new ObjectId(userId) });
-    expect(count).toBe(2);
+    const runs = await database.collection('slc_runs').find({}).toArray();
+    expect(runs.length).toBeGreaterThanOrEqual(2);
+    const committed = runs.filter((r) => r['status'] === 'committed');
+    expect(committed.length).toBe(2);
+    const bindings = await database.collection('slc_bindings').find({ userId }).toArray();
+    expect(bindings.map((b) => b['studentExternalId']).sort()).toEqual(['kid-a', 'kid-b']);
+
+    // Alert rows carry each kid's Mongo id, never the bare portal id (S3 root-cause fix).
+    const alertStudentIds = (await database.collection('alerts').find({ userId }).toArray()).map(
+      (a) => a['studentId']
+    );
+    expect(alertStudentIds.sort()).toEqual([kidA.toHexString(), kidB.toHexString()].sort());
   });
 });

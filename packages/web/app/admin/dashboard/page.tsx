@@ -23,6 +23,7 @@ import {
   type IRevenueDataPoint,
   type IGrowthDataPoint,
 } from '@/lib/api/admin/analytics';
+import { AiRelayCostCard } from '@/components/admin/AiRelayCostCard';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<IAnalyticsOverview | null>(null);
@@ -172,6 +173,10 @@ export default function AdminDashboardPage() {
               </CardContent>
             </Card>
           )}
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <AiRelayCostCard />
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card>

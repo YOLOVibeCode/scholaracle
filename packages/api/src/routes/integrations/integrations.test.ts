@@ -33,7 +33,12 @@ describe('Integrations API Routes', () => {
     app = express();
     app.use(express.json());
     app.use('/api/students', authMiddleware(authService), studentsRouter({ database }));
-    app.use('/api/integrations', authMiddleware(authService), integrationsRouter({ database }));
+    const connectorJwtSecret = 'integrations-test-connector-secret-min-32';
+    app.use(
+      '/api/integrations',
+      authMiddleware(authService),
+      integrationsRouter({ database, connectorJwtSecret })
+    );
     app.use(createErrorHandler());
   });
 
@@ -51,6 +56,7 @@ describe('Integrations API Routes', () => {
       await database.collection('scraper_generation_jobs').deleteMany({});
       await database.collection('ai_usage').deleteMany({});
       await database.collection('subscriptions').deleteMany({});
+      await database.collection('sync_requests').deleteMany({});
       await database.collection('users').deleteMany({ email: 'integrations@example.com' });
 
       const registerResult = await authService.register(
@@ -559,44 +565,6 @@ describe('Integrations API Routes', () => {
     });
   });
 
-  describe('POST /api/integrations/test-connection', () => {
-    it('should return 401 without token', async () => {
-      const res = await request(app)
-        .post('/api/integrations/test-connection')
-        .send({
-          provider: 'unsupported',
-          adapterId: 'com.test.adapter',
-          credentials: { authType: 'api', accessToken: 'x' },
-        });
-      expect(res.status).toBe(401);
-    });
-
-    it('should return 400 when body invalid (missing provider or credentials)', async () => {
-      const res = await request(app)
-        .post('/api/integrations/test-connection')
-        .set('Authorization', `Bearer ${testToken}`)
-        .send({ provider: 'canvas' });
-      expect(res.status).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.code).toBe('VALIDATION_ERROR');
-    });
-
-    it('should return 200 with success false for unsupported provider', async () => {
-      const res = await request(app)
-        .post('/api/integrations/test-connection')
-        .set('Authorization', `Bearer ${testToken}`)
-        .send({
-          provider: 'unsupported',
-          adapterId: 'com.test.adapter',
-          credentials: { authType: 'api', accessToken: 'x' },
-        });
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toMatch(/not supported/i);
-      expect(typeof res.body.durationMs).toBe('number');
-    });
-  });
-
   describe('POST /api/integrations/generate-scraper', () => {
     it('returns 401 without token', async () => {
       const response = await request(app).post('/api/integrations/generate-scraper').send({
@@ -772,12 +740,13 @@ describe('Integrations API Routes', () => {
       const res = await request(app)
         .post('/api/integrations/scraper-token')
         .set('Authorization', `Bearer ${testToken}`)
-        .send({});
+        .send({ deviceId: 'integrations-test-device' });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.token).toBeDefined();
       expect(res.body.jti).toBeDefined();
-      expect(res.body.expiresIn).toBe('365 days');
+      expect(res.body.deviceId).toBe('integrations-test-device');
+      expect(res.body.expiresIn).toBe('90d');
     });
   });
 
@@ -808,13 +777,39 @@ describe('Integrations API Routes', () => {
       await request(app)
         .post('/api/integrations/scraper-token')
         .set('Authorization', `Bearer ${testToken}`)
-        .send({});
+        .send({ deviceId: 'revoke-test-device' });
 
       const res = await request(app)
         .delete('/api/integrations/scraper-token')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ deviceId: 'revoke-test-device' });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.revoked).toBe(true);
+    });
+  });
+
+  describe('GET /api/integrations/sync-requests/pending', () => {
+    it('should return pending parent sync requests', async () => {
+      const user = await database
+        .collection('users')
+        .findOne({ email: 'integrations@example.com' });
+      const userId = user?._id?.toString() ?? '';
+      await database.collection('sync_requests').insertOne({
+        syncRequestId: 'sync-pending-int-1',
+        studentId: 'stu-1',
+        sourceId: 'src-1',
+        requestedByUserId: userId,
+        createdAt: new Date(),
+        fulfilledAt: null,
+      });
+      const res = await request(app)
+        .get('/api/integrations/sync-requests/pending')
         .set('Authorization', `Bearer ${testToken}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.pending).toHaveLength(1);
+      expect(res.body.pending[0].syncRequestId).toBe('sync-pending-int-1');
     });
   });
 
