@@ -575,6 +575,7 @@ describe('Student', () => {
         receiveAlerts: true,
         alertChannels: ['sms'],
         alertTypes: ['grade_drop'],
+        weeklyReviewCopy: false,
       });
     });
 
@@ -600,6 +601,7 @@ describe('Student', () => {
       expect(effectiveOwnerAlertPrefs(undefined)).toEqual({
         receiveAlerts: true,
         alertChannels: DEFAULT_OWNER_ALERT_CHANNELS,
+        weeklyReviewCopy: false,
       });
       expect(
         effectiveOwnerAlertPrefs({
@@ -607,18 +609,38 @@ describe('Student', () => {
           alertChannels: ['sms', 'push'],
           alertTypes: ['test'],
         })
-      ).toEqual({ receiveAlerts: false, alertChannels: ['sms', 'push'], alertTypes: ['test'] });
+      ).toEqual({
+        receiveAlerts: false,
+        alertChannels: ['sms', 'push'],
+        alertTypes: ['test'],
+        weeklyReviewCopy: false,
+      });
     });
 
     it('a shared adult with no stored channels reads as email + push (spec §8 Q4)', () => {
       expect(effectiveSharedAlertPrefs({})).toEqual({
         receiveAlerts: true,
         alertChannels: DEFAULT_SHARED_ALERT_CHANNELS,
+        weeklyReviewCopy: false,
       });
       expect(DEFAULT_SHARED_ALERT_CHANNELS).toEqual(['email', 'push']);
       expect(
         effectiveSharedAlertPrefs({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] })
-      ).toEqual({ receiveAlerts: false, alertChannels: [], alertTypes: ['x'] });
+      ).toEqual({
+        receiveAlerts: false,
+        alertChannels: [],
+        alertTypes: ['x'],
+        weeklyReviewCopy: false,
+      });
+      // The weekly-review copy toggle rides along (student review §3.3 Q2).
+      expect(effectiveSharedAlertPrefs({ weeklyReviewCopy: true }).weeklyReviewCopy).toBe(true);
+      expect(
+        effectiveOwnerAlertPrefs({
+          receiveAlerts: true,
+          alertChannels: ['email'],
+          weeklyReviewCopy: true,
+        }).weeklyReviewCopy
+      ).toBe(true);
     });
 
     it('getAllAlertRecipients and alertPrefsFor read the same defaults', () => {

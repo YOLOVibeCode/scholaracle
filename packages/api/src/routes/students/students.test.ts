@@ -1768,6 +1768,7 @@ describe('Students API Routes', () => {
       expect(res.body.ownerAlertPrefs).toEqual({
         receiveAlerts: true,
         alertChannels: ['email', 'push'],
+        weeklyReviewCopy: false,
       });
       const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
       const prefs = doc?.['ownerAlertPrefs'] as Record<string, unknown>;
