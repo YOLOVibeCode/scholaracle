@@ -394,6 +394,37 @@ describe('ApiClient', () => {
       expect(client.getToken()).toBeNull();
     });
 
+    it('remembers the reason so /login can still show it when the redirect loses to a reload in flight', async () => {
+      client.setToken('jwt-expired');
+      fetchSpy.mockResolvedValue(fakeResponse({ success: false, error: 'Unauthorized' }, 401));
+
+      await expect(client.get('/alerts-api')).rejects.toBeInstanceOf(SessionExpiredRedirectError);
+      expect(mockStorage['session:session_redirect_reason']).toBe('session_expired');
+      expect(locationHref).toBe('/login?reason=session_expired');
+    });
+
+    it('redirects from whichever request the 401 lands on, not only the first one in flight', async () => {
+      client.setToken('jwt-expired');
+      client.setRefreshToken('refresh-dead');
+      fetchSpy.mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/sharing/invites/pending')) return Promise.resolve(fakeResponse([]));
+        return Promise.resolve(fakeResponse({ success: false, error: 'Unauthorized' }, 401));
+      });
+
+      const [pending, students] = await Promise.allSettled([
+        client.get('/sharing/invites/pending'),
+        client.get('/students'),
+      ]);
+
+      expect(pending.status).toBe('fulfilled');
+      expect(students.status).toBe('rejected');
+      expect((students as PromiseRejectedResult).reason).toBeInstanceOf(SessionExpiredRedirectError);
+      expect(locationHref).toBe('/login?reason=session_expired');
+      expect(mockStorage['auth_token']).toBeUndefined();
+      expect(mockStorage['session:session_redirect_reason']).toBe('session_expired');
+    });
+
     it('does not redirect on 401 for login attempts', async () => {
       fetchSpy.mockResolvedValue(
         fakeResponse({ success: false, error: 'Invalid credentials' }, 401),

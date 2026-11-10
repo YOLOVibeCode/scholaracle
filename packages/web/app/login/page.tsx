@@ -17,6 +17,7 @@ import {
   releaseMagicTokenClaim,
 } from '@/lib/auth/magicLogin';
 import { markSetPasswordPrompt } from '@/lib/sharing/setPasswordPrompt';
+import { takeSessionRedirectReason } from '@/lib/auth/clearParentSession';
 import { FormErrorAlert, FormStatusAlert } from '@/components/common';
 
 function LoginForm() {
@@ -28,10 +29,17 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasOAuth, setHasOAuth] = useState(false);
+  // The API client's redirect to /login?reason=session_expired is dropped by the browser when a
+  // reload or typed URL is already in flight; the reason then arrives through sessionStorage.
+  const [rememberedSessionExpired, setRememberedSessionExpired] = useState(false);
   const redirectTo = searchParams.get('redirect');
-  const sessionExpired = searchParams.get('reason') === 'session_expired';
+  const sessionExpired = searchParams.get('reason') === 'session_expired' || rememberedSessionExpired;
   const resetSuccess = searchParams.get('reset') === 'success';
   const magicToken = magicTokenFromSearchParam(searchParams.get('magic'));
+
+  useEffect(() => {
+    if (takeSessionRedirectReason() === 'session_expired') setRememberedSessionExpired(true);
+  }, []);
 
   useEffect(() => {
     if (magicToken === null || typeof sessionStorage === 'undefined') {
