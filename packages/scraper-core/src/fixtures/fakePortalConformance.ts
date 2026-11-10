@@ -8,6 +8,10 @@ import {
   FAKE_PORTAL_SKYWARD_ASSIGNMENTS,
   FAKE_PORTAL_SKYWARD_EXPECTED,
   FAKE_PORTAL_SKYWARD_GRADEBOOK_PATH,
+  buildM402AeriesAttendanceSync,
+  buildM402AeriesClasses,
+  buildM402AeriesDashboardSync,
+  buildM402AeriesGradebook,
   buildM402SkywardGradebookHtml,
 } from './fakePortalM402';
 
@@ -30,8 +34,7 @@ export const FAKE_PORTAL_RECIPE_CONFORMANCE: readonly IFakePortalConformanceCase
       startPath: '/fake-aeries/student/LoginParent.aspx?csp=strict',
       expectPathPart: '/fake-aeries/student/Dashboard.aspx',
     },
-    recipeRoot: (origin) =>
-      `${origin.replace(/\/$/, '')}/fake-aeries/student/`,
+    recipeRoot: (origin) => `${origin.replace(/\/$/, '')}/fake-aeries/student/`,
   },
   {
     id: 'skyward',
@@ -59,7 +62,9 @@ export function assertFakePortalAeriesExtract(extract: IAeriesFullExtract): void
   const annAssignments = ann.courses.reduce((n, c) => n + c.assignments.length, 0);
   const benAssignments = ben.courses.reduce((n, c) => n + c.assignments.length, 0);
   if (ann.courses.length !== expected.ann.courseCount) {
-    throw new Error(`Ann course count: expected ${expected.ann.courseCount}, got ${ann.courses.length}`);
+    throw new Error(
+      `Ann course count: expected ${expected.ann.courseCount}, got ${ann.courses.length}`
+    );
   }
   if (annAssignments !== expected.ann.totalAssignments) {
     throw new Error(
@@ -72,7 +77,9 @@ export function assertFakePortalAeriesExtract(extract: IAeriesFullExtract): void
     );
   }
   if (ben.courses.length !== expected.ben.courseCount) {
-    throw new Error(`Ben course count: expected ${expected.ben.courseCount}, got ${ben.courses.length}`);
+    throw new Error(
+      `Ben course count: expected ${expected.ben.courseCount}, got ${ben.courses.length}`
+    );
   }
   if (benAssignments !== expected.ben.totalAssignments) {
     throw new Error(
@@ -89,7 +96,9 @@ export function assertFakePortalAeriesExtract(extract: IAeriesFullExtract): void
 export function assertFakePortalSkywardExtract(extract: ISkywardFullExtract): void {
   const expected = FAKE_PORTAL_SKYWARD_EXPECTED;
   if (extract.courses.length !== expected.courseCount) {
-    throw new Error(`Skyward course count: expected ${expected.courseCount}, got ${extract.courses.length}`);
+    throw new Error(
+      `Skyward course count: expected ${expected.courseCount}, got ${extract.courses.length}`
+    );
   }
   if (extract.assignments.length !== expected.assignmentRowCount) {
     throw new Error(
@@ -140,16 +149,61 @@ export function buildFakePortalSkywardJsdomFixtures(skywardOrigin: string): {
   };
 }
 
-/** jsdom replay entry points for both fake-portal recipes (Aeries uses `M402SimAeriesDriver`). */
+export type FakePortalAeriesStudentKey = 'A' | 'B';
+
+export interface IFakePortalAeriesJsdomFixtures {
+  readonly initialUrl: string;
+  /** Visiting this URL moves the session to the other student, as the fake portal does. */
+  readonly switchStudentUrl: string;
+  /** Aeries serves the same URLs for whichever student is selected, so one map per student. */
+  readonly fixturesByStudent: Readonly<
+    Record<FakePortalAeriesStudentKey, Readonly<Record<string, string>>>
+  >;
+}
+
+const FAKE_PORTAL_AERIES_GRADEBOOK_NUMBERS = ['111', '222', '333'] as const;
+
+function buildFakePortalAeriesStudentFixtures(
+  studentRoot: string,
+  student: FakePortalAeriesStudentKey
+): Record<string, string> {
+  const fixtures: Record<string, string> = {
+    [`${studentRoot}Dashboard.aspx`]: buildM402AeriesDashboardSync(student),
+    [`${studentRoot}Classes.aspx`]: buildM402AeriesClasses(student),
+    [`${studentRoot}Attendance.aspx`]:
+      student === 'A' ? buildM402AeriesAttendanceSync() : '<table id="tblNewFlex"></table>',
+  };
+  for (const gn of FAKE_PORTAL_AERIES_GRADEBOOK_NUMBERS) {
+    const url = `${studentRoot}Widgets/ClassSummary/RedirectToGradebook?GradebookNumber=${gn}`;
+    fixtures[url] = buildM402AeriesGradebook(gn);
+  }
+  return fixtures;
+}
+
+export function buildFakePortalAeriesJsdomFixtures(
+  aeriesStudentRoot: string
+): IFakePortalAeriesJsdomFixtures {
+  const root = `${aeriesStudentRoot.replace(/\/$/, '')}/`;
+  return {
+    initialUrl: `${root}Dashboard.aspx`,
+    switchStudentUrl: `${root}ChangeStudent.aspx`,
+    fixturesByStudent: {
+      A: buildFakePortalAeriesStudentFixtures(root, 'A'),
+      B: buildFakePortalAeriesStudentFixtures(root, 'B'),
+    },
+  };
+}
+
+/** URL → post-hydration HTML for both fake-portal recipes, for jsdom replay. */
 export function buildFakePortalJsdomFixtures(
   aeriesStudentRoot: string,
   skywardOrigin: string
 ): {
-  readonly aeriesStudentRoot: string;
+  readonly aeries: IFakePortalAeriesJsdomFixtures;
   readonly skyward: ReturnType<typeof buildFakePortalSkywardJsdomFixtures>;
 } {
   return {
-    aeriesStudentRoot,
+    aeries: buildFakePortalAeriesJsdomFixtures(aeriesStudentRoot),
     skyward: buildFakePortalSkywardJsdomFixtures(skywardOrigin),
   };
 }
