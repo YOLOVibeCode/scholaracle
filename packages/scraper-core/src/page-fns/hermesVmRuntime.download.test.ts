@@ -63,3 +63,66 @@ describe('downloadFromMirrors', () => {
     expect(downloadOnce).toHaveBeenCalledTimes(4);
   });
 });
+
+describe('downloadFromMirrors with an expected sha256', () => {
+  const GOOD = 'a'.repeat(64);
+  const BAD = 'b'.repeat(64);
+
+  /** Pretend each URL wrote a file whose hash is looked up by the URL that wrote it. */
+  function fakeDownloads(hashByUrl: Record<string, string>): {
+    downloadOnce: (url: string) => Promise<void>;
+    sha256Of: () => string;
+    sleep: () => Promise<void>;
+  } {
+    let last = '';
+    return {
+      downloadOnce: (url) => {
+        last = url;
+        return Promise.resolve();
+      },
+      sha256Of: () => hashByUrl[last] ?? '',
+      sleep: noSleep,
+    };
+  }
+
+  it('rejects a truncated or corrupt copy and takes the next mirror', async () => {
+    const deps = fakeDownloads({ 'https://one.test/a': BAD, 'https://two.test/a': GOOD });
+    const downloadOnce = jest.fn(deps.downloadOnce);
+
+    await downloadFromMirrors(
+      ['https://one.test/a', 'https://two.test/a'],
+      '/dest',
+      {
+        ...deps,
+        downloadOnce,
+      },
+      GOOD
+    );
+
+    expect(downloadOnce.mock.calls.map(([url]) => url)).toEqual([
+      'https://one.test/a',
+      'https://one.test/a',
+      'https://two.test/a',
+    ]);
+  });
+
+  it('fails with the URL and a hash prefix when no mirror serves the expected bytes', async () => {
+    const deps = fakeDownloads({ 'https://one.test/a': BAD, 'https://two.test/a': BAD });
+
+    await expect(
+      downloadFromMirrors(['https://one.test/a', 'https://two.test/a'], '/dest', deps, GOOD)
+    ).rejects.toThrow(/https:\/\/two\.test\/a returned unexpected content \(sha256 bbbbbbbbbbbb/);
+  });
+
+  it('skips the hash check when none is given', async () => {
+    const sha256Of = jest.fn(() => 'whatever');
+
+    await downloadFromMirrors(['https://one.test/a'], '/dest', {
+      downloadOnce: () => Promise.resolve(),
+      sha256Of,
+      sleep: noSleep,
+    });
+
+    expect(sha256Of).not.toHaveBeenCalled();
+  });
+});
