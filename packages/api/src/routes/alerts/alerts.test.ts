@@ -77,8 +77,8 @@ describe('Alerts API Routes', () => {
       expect(response.body).toEqual([]);
     });
 
-    it('should return user alerts', async () => {
-      // Arrange - Create test alerts
+    it('should return user alerts newest first', async () => {
+      // Arrange - Create test alerts with distinct timestamps so the order is deterministic
       const alertRepository = new AlertRepository(database);
       await alertRepository.create({
         studentId: 'student-123',
@@ -86,6 +86,7 @@ describe('Alerts API Routes', () => {
         type: 'MISSING_ASSIGNMENT',
         severity: 'warning',
         message: 'Test alert 1',
+        createdAt: new Date('2026-01-05T08:00:00Z'),
       });
       await alertRepository.create({
         studentId: 'student-123',
@@ -93,6 +94,7 @@ describe('Alerts API Routes', () => {
         type: 'GRADE_DROP',
         severity: 'critical',
         message: 'Test alert 2',
+        createdAt: new Date('2026-01-06T08:00:00Z'),
       });
 
       // Act
@@ -105,7 +107,7 @@ describe('Alerts API Routes', () => {
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.length).toBe(2);
       const types = response.body.map((alert: { type: string }) => alert.type);
-      expect(types).toEqual(expect.arrayContaining(['MISSING_ASSIGNMENT', 'GRADE_DROP']));
+      expect(types).toEqual(['GRADE_DROP', 'MISSING_ASSIGNMENT']);
       expect(response.body.every((alert: { id?: string }) => typeof alert.id === 'string')).toBe(
         true
       );
