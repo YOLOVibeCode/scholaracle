@@ -51,6 +51,14 @@ function parseDate(value: string | null | undefined): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+function receiptUrlFromEvent(event: INoctusoftStoreWebhookEventV1): string | undefined {
+  const url = event.action?.url;
+  if (url && /^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return undefined;
+}
+
 export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
   const router = Router();
   const userRepo = new UserRepository(deps.database);
@@ -198,6 +206,7 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
         );
         return;
       }
+      const receiptUrl = receiptUrlFromEvent(event);
       const outcome = await activateOrRenewSubscription(
         { database: deps.database },
         {
@@ -214,6 +223,7 @@ export function noctusoftWebhookRouter(deps: INoctusoftWebhookDeps): Router {
           ...(trialEnd ? { trialEnd } : {}),
           recordChargeWithoutPaymentRef:
             event.type === 'subscription.started' && storeStatus === 'active',
+          ...(receiptUrl ? { receiptUrl } : {}),
           description: `Noctusoft store ${event.type} — ${resolved.plan} (${resolved.billingCycle})`,
         }
       );

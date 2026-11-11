@@ -29,6 +29,7 @@ export interface IActivateSubscriptionParams {
    */
   readonly recordChargeWithoutPaymentRef?: boolean;
   readonly description: string;
+  readonly receiptUrl?: string;
 }
 
 export interface IBillingEntitlementDeps {
@@ -94,6 +95,7 @@ export async function activateOrRenewSubscription(
       ...(params.paymentId ? { storePaymentId: params.paymentId } : {}),
       ...(params.orderId ? { storeOrderId: params.orderId } : {}),
       ...(params.storeSubscriptionId ? { storeSubscriptionId: params.storeSubscriptionId } : {}),
+      ...(params.receiptUrl ? { receiptUrl: params.receiptUrl } : {}),
       description: params.description,
     });
   }
