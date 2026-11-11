@@ -1,10 +1,21 @@
 import { apiClient } from './client';
 
+export interface IPlanFeatures {
+  readonly maxStudents: number;
+  readonly emailNotifications: boolean;
+  readonly smsNotifications: boolean;
+  readonly prioritySupport: boolean;
+  readonly advancedAnalytics: boolean;
+}
+
 export interface ISubscriptionInfo {
   readonly plan: string;
   readonly status: string;
   /** The plan whose limits apply now; 'free' once cancelled, paused or lapsed. */
   readonly effectivePlan?: string;
+  readonly maxStudents?: number;
+  readonly features?: IPlanFeatures;
+  readonly featureLines?: readonly string[];
   readonly currentPeriodStart?: string;
   readonly currentPeriodEnd?: string;
   readonly trialEnd?: string;

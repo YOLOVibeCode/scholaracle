@@ -58,6 +58,14 @@ describe('billingApi', () => {
         status: 'active',
         billingCycle: 'monthly',
         cancelAtPeriodEnd: false,
+        featureLines: ['2 students', 'Advanced analytics'],
+        features: {
+          maxStudents: 2,
+          emailNotifications: true,
+          smsNotifications: true,
+          prioritySupport: true,
+          advancedAnalytics: true,
+        },
       };
       fetchSpy.mockResolvedValue(fakeResponse({ success: true, subscription: sub }));
 

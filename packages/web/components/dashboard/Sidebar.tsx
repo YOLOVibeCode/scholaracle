@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
+import { ScholarmancyLogo } from '@/components/brand/ScholarmancyLogo';
 import { usePathname } from 'next/navigation';
 import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail, CheckSquare } from 'lucide-react';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
@@ -53,7 +53,7 @@ export function Sidebar() {
     <SidebarComponent>
       <SidebarHeader>
         <Link href="/dashboard" className="flex items-center gap-2 px-2 py-1">
-          <Image src="/logo.png" alt="Scholarmancy" width={32} height={32} className="rounded-lg" />
+          <ScholarmancyLogo size={32} />
           <span className="font-semibold text-sm">Scholarmancy</span>
         </Link>
       </SidebarHeader>

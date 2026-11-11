@@ -11,11 +11,41 @@ jest.mock('@scholaracle/database', () => {
   const mockFindByUserIdPayments = jest.fn();
   return {
     PLAN_FEATURES: {
-      free: { maxStudents: 1 },
-      starter: { maxStudents: 1 },
-      premium: { maxStudents: 2 },
-      family: { maxStudents: 5 },
-      enterprise: { maxStudents: -1 },
+      free: {
+        maxStudents: 1,
+        emailNotifications: true,
+        smsNotifications: false,
+        prioritySupport: false,
+        advancedAnalytics: false,
+      },
+      starter: {
+        maxStudents: 1,
+        emailNotifications: true,
+        smsNotifications: true,
+        prioritySupport: false,
+        advancedAnalytics: false,
+      },
+      premium: {
+        maxStudents: 2,
+        emailNotifications: true,
+        smsNotifications: true,
+        prioritySupport: true,
+        advancedAnalytics: true,
+      },
+      family: {
+        maxStudents: 5,
+        emailNotifications: true,
+        smsNotifications: true,
+        prioritySupport: true,
+        advancedAnalytics: true,
+      },
+      enterprise: {
+        maxStudents: -1,
+        emailNotifications: true,
+        smsNotifications: true,
+        prioritySupport: true,
+        advancedAnalytics: true,
+      },
     },
     SubscriptionRepository: jest.fn().mockImplementation(() => ({
       findByUserId: mockFindByUserId,
@@ -218,6 +248,9 @@ describe('Billing Routes', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.subscription.plan).toBe('free');
       expect(res.body.subscription.maxStudents).toBe(1);
+      expect(res.body.subscription.featureLines).toEqual(
+        expect.arrayContaining(['1 student', '7-day history'])
+      );
     });
 
     it('should return subscription details when found', async () => {
@@ -237,6 +270,10 @@ describe('Billing Routes', () => {
       expect(res.body.subscription.effectivePlan).toBe('premium');
       expect(res.body.subscription.status).toBe('active');
       expect(res.body.subscription.maxStudents).toBe(2);
+      expect(res.body.subscription.features.advancedAnalytics).toBe(true);
+      expect(res.body.subscription.featureLines).toEqual(
+        expect.arrayContaining(['2 students', 'Advanced analytics'])
+      );
     });
 
     it('reports the free student cap when the paid plan has lapsed', async () => {
@@ -283,6 +320,7 @@ describe('Billing Routes', () => {
       expect(res.body.invoices[0].id).toBe('pay_1');
       expect(res.body.invoices[0].amount).toBe(19);
       expect(res.body.invoices[0].currency).toBe('usd');
+      expect(res.body.invoices[0].pdfUrl).toBe('https://store.noctusoft.com/receipt/1');
     });
   });
 

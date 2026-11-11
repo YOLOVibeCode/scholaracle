@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import { ScholarmancyLogo } from '@/components/brand/ScholarmancyLogo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -96,13 +96,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 items-center text-center">
-          <Image
-            src="/logo.png"
-            alt="Scholarmancy"
-            width={64}
-            height={64}
-            className="rounded-2xl mb-1"
-          />
+          <ScholarmancyLogo size={64} className="rounded-2xl mb-1" />
           <CardTitle className="text-2xl font-bold">Scholarmancy</CardTitle>
           <CardDescription>
             {magicToken !== null ? 'Signing you in' : 'Sign in to your account'}
