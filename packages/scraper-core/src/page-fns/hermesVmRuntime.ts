@@ -7,8 +7,16 @@ import { tmpdir } from 'node:os';
 import { readHermesCompilerVersion } from './hermesToolchain';
 
 const CACHE_ROOT = join(tmpdir(), 'scholaracle-hermes-smoke');
-const ICU_DEB_URL =
-  'https://archive.ubuntu.com/ubuntu/pool/main/i/icu/libicu70_70.1-2ubuntu1_amd64.deb';
+const ICU_DEB_PATH = '/ubuntu/pool/main/i/icu/libicu70_70.1-2ubuntu1_amd64.deb';
+/**
+ * Tried in order. GitHub-hosted runners run on Azure and install apt packages from
+ * azure.archive.ubuntu.com, so it resolves even when archive.ubuntu.com does not.
+ */
+const ICU_DEB_URLS = [
+  `https://archive.ubuntu.com${ICU_DEB_PATH}`,
+  `https://azure.archive.ubuntu.com${ICU_DEB_PATH}`,
+  `https://security.ubuntu.com${ICU_DEB_PATH}`,
+];
 
 function hermesReleaseTag(compilerVersion: string): string {
   const match = /^(\d+\.0\.)\d+$/.exec(compilerVersion);
@@ -79,22 +87,48 @@ function downloadOnce(url: string, dest: string): Promise<void> {
 }
 
 const DOWNLOAD_ATTEMPTS = 4;
+/** With several mirrors, a dead host should cost two tries, not four, before the next one. */
+const ATTEMPTS_PER_MIRROR = 2;
 
-/** Mirrors and release hosts drop connections from CI runners now and then; retry before failing. */
-async function downloadFile(url: string, dest: string): Promise<void> {
+interface IDownloadDeps {
+  downloadOnce: (url: string, dest: string) => Promise<void>;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const realDownloadDeps: IDownloadDeps = {
+  downloadOnce,
+  sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+};
+
+/**
+ * Mirrors and release hosts drop connections from CI runners now and then. Retry each URL,
+ * then move to the next one; the last error is thrown if every URL fails.
+ */
+export async function downloadFromMirrors(
+  urls: readonly string[],
+  dest: string,
+  deps: IDownloadDeps = realDownloadDeps
+): Promise<void> {
+  const attempts = urls.length > 1 ? ATTEMPTS_PER_MIRROR : DOWNLOAD_ATTEMPTS;
   let lastError: unknown;
-  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
-    try {
-      await downloadOnce(url, dest);
-      return;
-    } catch (err) {
-      lastError = err;
-      if (attempt < DOWNLOAD_ATTEMPTS) {
-        await new Promise<void>((r) => setTimeout(r, 2000 * attempt));
+  for (const url of urls) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await deps.downloadOnce(url, dest);
+        return;
+      } catch (err) {
+        lastError = err;
+        if (attempt < attempts) {
+          await deps.sleep(2000 * attempt);
+        }
       }
     }
   }
   throw lastError;
+}
+
+function downloadFile(url: string, dest: string): Promise<void> {
+  return downloadFromMirrors([url], dest);
 }
 
 let hvmPathPromise: Promise<string> | null = null;
@@ -158,10 +192,10 @@ async function ensureIcu70Libraries(): Promise<string> {
   }
   mkdirSync(join(CACHE_ROOT, 'icu70'), { recursive: true });
   const deb = join(CACHE_ROOT, 'icu70', 'libicu70.deb');
-  await downloadFile(ICU_DEB_URL, deb);
+  await downloadFromMirrors(ICU_DEB_URLS, deb);
   execFileSync('dpkg-deb', ['-x', deb, join(CACHE_ROOT, 'icu70')], { stdio: 'pipe' });
   if (!existsSync(marker)) {
-    throw new Error(`libicuuc.so.70 missing after extracting ${ICU_DEB_URL}`);
+    throw new Error(`libicuuc.so.70 missing after extracting ${ICU_DEB_URLS[0]}`);
   }
   return libDir;
 }
