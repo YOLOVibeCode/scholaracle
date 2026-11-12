@@ -92,6 +92,7 @@ import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
 import { createAssetStore } from './services/assets/createAssetStore';
+import { createDemoSignInRepair } from './services/demo-account/demoSignInRepair';
 import { createScrapersRepairRouter } from './routes/scrapers/repair';
 import { createScrapersRouter } from './routes/scrapers/registry';
 import { agendaRouter } from './routes/agenda';
@@ -429,6 +430,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         sessionRepository,
         oauthAccountRepository,
         authService,
+        // Does nothing unless DEMO_ACCOUNT_PASSWORD is set on this server.
+        beforeLogin: createDemoSignInRepair({
+          database,
+          jwtSecret,
+          assetStore: createAssetStore(),
+        }),
       })
     );
     app.use('/api/auth/cli', cliAuthRouter({ database, authService, baseUrl }));

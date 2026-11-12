@@ -67,6 +67,7 @@ Add any other allowed origins (e.g. staging or preview URLs) as needed. The brow
 
 - **Shared:** `NODE_ENV`, `JWT_SECRET`, `MONGODB_DB_NAME`
 - **API:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`, `PORT` (Railway sets automatically), **`CORS_ORIGINS`** (e.g. `https://scholarmancy.com,https://www.scholarmancy.com`), `MONGO_URL` (from MongoDB plugin). Optional: `BASE_URL` / `WEB_URL` for password reset links.
+- **API, optional, production only:** `DEMO_ACCOUNT_PASSWORD` (12+ characters, from the vault). When set, a sign-in as the demo parent with exactly this password first restores the demo household (account, students, sample data) and moves every demo login to this password. This is the sign-in given to App Store and Google Play reviewers; it keeps working after a reviewer deletes the account. Unset = no effect. See `packages/api/src/services/demo-account/demoSignInRepair.ts`.
 - **Web:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.web`, `PORT`, **`NEXT_PUBLIC_API_URL`** (e.g. `https://api.scholarmancy.com/api` — baked at build time), `MONGO_URL` if needed.
 - **Workers:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.workers`, `MONGO_URL` (from MongoDB plugin)
 
