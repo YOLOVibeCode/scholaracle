@@ -103,8 +103,8 @@ export interface IAuthRouterConfig {
   /** If provided, use this AuthService instead of creating one from config. */
   readonly authService?: AuthService;
   /**
-   * Runs before the password check of POST /login (see services/demo-account). It must
-   * never reject; a rejection is logged and the sign-in carries on.
+   * Runs before the password check of POST /login (see services/demo-account). It should
+   * never reject; if it does, the rejection is ignored and the sign-in carries on.
    */
   readonly beforeLogin?: (email: string, password: string) => Promise<void>;
 }
