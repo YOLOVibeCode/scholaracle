@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { BillingCycle } from '@/lib/billing/planCatalog';
 
 export interface IPlanFeatures {
   readonly maxStudents: number;
@@ -109,6 +110,23 @@ export const billingApi = {
    * The store's page to update the card on a paid subscription, or the
    * in-app billing page when there is none.
    */
+  async changePlan(
+    plan: string,
+    billingCycle: BillingCycle = 'monthly'
+  ): Promise<ISubscriptionInfo | null> {
+    try {
+      const res = await apiClient.post<ISubscriptionResponse>('/billing/change-plan', {
+        plan,
+        billingCycle,
+        confirmed: true,
+      });
+      return res.subscription;
+    } catch (error) {
+      console.error('Failed to change plan:', error);
+      throw error;
+    }
+  },
+
   async createPortal(): Promise<string | null> {
     try {
       const res = await apiClient.post<IPortalResponse>('/billing/portal');

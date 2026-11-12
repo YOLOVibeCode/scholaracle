@@ -2,6 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { billingRouter } from './billing';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { ExternalServiceError } from '@scholaracle/contracts';
 import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 
 // Mock @scholaracle/database
@@ -9,6 +10,7 @@ jest.mock('@scholaracle/database', () => {
   const mockFindByUserId = jest.fn();
   const mockUpdateSubscription = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
+  const mockFindOwnedByUserId = jest.fn();
   return {
     PLAN_FEATURES: {
       free: {
@@ -58,9 +60,13 @@ jest.mock('@scholaracle/database', () => {
       validateCode: jest.fn().mockResolvedValue({ valid: false, error: 'Coupon not found' }),
       recordRedemption: jest.fn().mockResolvedValue(null),
     })),
+    StudentRepository: jest.fn().mockImplementation(() => ({
+      findOwnedByUserId: mockFindOwnedByUserId,
+    })),
     __mockFindByUserId: mockFindByUserId,
     __mockUpdateSubscription: mockUpdateSubscription,
     __mockFindByUserIdPayments: mockFindByUserIdPayments,
+    __mockFindOwnedByUserId: mockFindOwnedByUserId,
   };
 });
 
@@ -69,10 +75,12 @@ const {
   __mockFindByUserId: mockFindByUserId,
   __mockUpdateSubscription: mockUpdateSubscription,
   __mockFindByUserIdPayments: mockFindByUserIdPayments,
+  __mockFindOwnedByUserId: mockFindOwnedByUserId,
 } = require('@scholaracle/database') as {
   __mockFindByUserId: jest.Mock;
   __mockUpdateSubscription: jest.Mock;
   __mockFindByUserIdPayments: jest.Mock;
+  __mockFindOwnedByUserId: jest.Mock;
 };
 
 function createMockStoreClient(): jest.Mocked<INoctusoftStoreClient> {
@@ -80,6 +88,7 @@ function createMockStoreClient(): jest.Mocked<INoctusoftStoreClient> {
     createCheckout: jest.fn(),
     cancelSubscription: jest.fn(),
     updatePaymentMethod: jest.fn(),
+    changePlan: jest.fn(),
     refundPayment: jest.fn(),
   };
 }
@@ -207,6 +216,106 @@ describe('Billing Routes', () => {
       );
       expect(res.body.hasPortal).toBe(true);
       expect(res.body.url).toBe('https://billing.stripe.com/p/session/test_1');
+    });
+  });
+
+  describe('POST /api/billing/change-plan', () => {
+    beforeEach(() => {
+      mockFindOwnedByUserId.mockResolvedValue([]);
+    });
+
+    it('requires confirmed: true before calling the store', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly' })
+        .expect(400);
+
+      expect(res.body.code).toBe('CONFIRMATION_REQUIRED');
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('blocks change when cancel is scheduled at period end', async () => {
+      mockFindByUserId.mockResolvedValue({ ...paidSubscription, cancelAtPeriodEnd: true });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(409);
+
+      expect(res.body.code).toBe('SUBSCRIPTION_CANCELING');
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('blocks downgrade when the household has too many students', async () => {
+      mockFindByUserId.mockResolvedValue({
+        ...paidSubscription,
+        plan: 'family',
+        effectivePlan: () => 'family',
+      });
+      mockFindOwnedByUserId.mockResolvedValue([{}, {}, {}]);
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'starter', billingCycle: 'monthly', confirmed: true })
+        .expect(409);
+
+      expect(res.body.code).toBe('PLAN_LIMIT');
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('sends effective now on upgrade', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.changePlan.mockResolvedValue({ currentPeriodEnd: null });
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(200);
+
+      expect(mockStoreClient.changePlan).toHaveBeenCalledWith(
+        'ns_sub_1',
+        expect.objectContaining({
+          plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+          effective: 'now',
+        })
+      );
+      expect(mockUpdateSubscription).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ plan: 'premium', billingCycle: 'monthly' })
+      );
+    });
+
+    it('sends effective next_period on downgrade', async () => {
+      mockFindByUserId.mockResolvedValue({
+        ...paidSubscription,
+        plan: 'family',
+        effectivePlan: () => 'family',
+      });
+      mockStoreClient.changePlan.mockResolvedValue({ currentPeriodEnd: null });
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(200);
+
+      expect(mockStoreClient.changePlan).toHaveBeenCalledWith(
+        'ns_sub_1',
+        expect.objectContaining({ effective: 'next_period' })
+      );
+    });
+
+    it('does not update local subscription when the store fails', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.changePlan.mockRejectedValue(new ExternalServiceError('store down'));
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(502);
+
+      expect(mockUpdateSubscription).not.toHaveBeenCalled();
     });
   });
 

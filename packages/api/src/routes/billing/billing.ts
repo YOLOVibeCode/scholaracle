@@ -5,13 +5,26 @@ import {
   PaymentRepository,
   CouponRepository,
   PLAN_FEATURES,
+  type BillingCycle,
 } from '@scholaracle/database';
-import { AuthenticationError, ConflictError, ValidationError } from '@scholaracle/contracts';
+import {
+  AppError,
+  AuthenticationError,
+  ConflictError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
 import { planFeatureLines, planFeaturesForApi } from '../../services/billing/planFeatureLines';
+import { resolveStoreSku } from '../../services/noctusoft-store/planStoreSkus';
+import {
+  classifyPlanChange,
+  countOwnedStudents,
+  isSelfServePurchasablePlan,
+  planLimitBlocksDowngrade,
+} from '../../services/billing/planChange';
 
 export interface IBillingRouterDeps {
   readonly database: Db;
@@ -58,6 +71,17 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
   router.post(
     '/cancel',
     asyncHandler((req: Request, res: Response) => handleCancel(req as IAuthenticatedRequest, res))
+  );
+
+  /**
+   * POST /api/billing/change-plan
+   * Switch an active store subscription to another self-serve plan.
+   */
+  router.post(
+    '/change-plan',
+    asyncHandler((req: Request, res: Response) =>
+      handleChangePlan(req as IAuthenticatedRequest, res)
+    )
   );
 
   /**
@@ -198,6 +222,102 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       manageUrl: billingUrl,
       url: billingUrl,
       message: 'Manage your subscription from the billing page.',
+    });
+  }
+
+  async function handleChangePlan(req: IAuthenticatedRequest, res: Response): Promise<void> {
+    const userId = req.userId;
+    if (!userId) {
+      throw new AuthenticationError('Authentication required');
+    }
+
+    const { plan, billingCycle, confirmed } = req.body as {
+      plan?: string;
+      billingCycle?: BillingCycle;
+      confirmed?: boolean;
+    };
+
+    if (confirmed !== true) {
+      throw new AppError('Plan change requires confirmation', {
+        status: 400,
+        code: 'CONFIRMATION_REQUIRED',
+      });
+    }
+
+    if (!isSelfServePurchasablePlan(plan)) {
+      throw new ValidationError('Invalid plan');
+    }
+
+    const validCycle: BillingCycle = billingCycle === 'annual' ? 'annual' : 'monthly';
+
+    const subscription = await subscriptionRepo.findByUserId(userId);
+    if (
+      !subscription?.storeSubscriptionId ||
+      !RUNNING_STATUSES.has(subscription.status) ||
+      !subscription.isActive()
+    ) {
+      throw new ConflictError('There is no paid subscription to change');
+    }
+
+    if (subscription.cancelAtPeriodEnd) {
+      throw new AppError(
+        'Cannot change plan while your subscription is set to cancel at period end',
+        { status: 409, code: 'SUBSCRIPTION_CANCELING' }
+      );
+    }
+
+    const currentPlan = subscription.effectivePlan();
+    const currentCycle = subscription.billingCycle ?? 'monthly';
+    if (currentPlan === plan && currentCycle === validCycle) {
+      throw new ValidationError('You are already on this plan and billing cycle');
+    }
+
+    const ownedCount = await countOwnedStudents(deps.database, userId);
+    if (planLimitBlocksDowngrade(plan, ownedCount)) {
+      const maxStudents = PLAN_FEATURES[plan].maxStudents;
+      throw new AppError(
+        `Your household has ${ownedCount} student${ownedCount === 1 ? '' : 's'}. Remove students down to ${maxStudents} or fewer before switching to ${plan}.`,
+        {
+          status: 409,
+          code: 'PLAN_LIMIT',
+          details: { currentCount: ownedCount, maxStudents, targetPlan: plan },
+        }
+      );
+    }
+
+    const { effective } = classifyPlanChange({
+      currentPlan,
+      currentCycle,
+      targetPlan: plan,
+      targetCycle: validCycle,
+    });
+
+    const sku = resolveStoreSku(plan, validCycle);
+    const storeResult = await deps.storeClient.changePlan(subscription.storeSubscriptionId, {
+      plan: sku,
+      effective,
+    });
+
+    const currentPeriodEnd = storeResult.currentPeriodEnd
+      ? new Date(storeResult.currentPeriodEnd)
+      : subscription.currentPeriodEnd;
+
+    await subscriptionRepo.update(userId, {
+      plan,
+      billingCycle: validCycle,
+      ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
+    });
+
+    res.json({
+      success: true,
+      subscription: {
+        plan,
+        status: subscription.status,
+        effectivePlan: plan,
+        billingCycle: validCycle,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      },
     });
   }
 

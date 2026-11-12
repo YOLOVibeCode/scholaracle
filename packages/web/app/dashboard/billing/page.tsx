@@ -25,8 +25,11 @@ import { billingApi, type ISubscriptionInfo, type IInvoice } from '@/lib/api/bil
 import { TrialCountdownBanner } from '@/components/billing/TrialCountdownBanner';
 import { PlanIncludesCard } from '@/components/billing/PlanIncludesCard';
 import { UpgradePlanPicker } from '@/components/billing/UpgradePlanPicker';
+import { ChangePlanConfirmDialog } from '@/components/billing/ChangePlanConfirmDialog';
 import { InvoiceHistoryList } from '@/components/billing/InvoiceHistoryList';
 import type { BillingCycle } from '@/lib/billing/planCatalog';
+import { isPlanChangeUpgrade } from '@/lib/billing/classifyPlanChange';
+import { ApiClientError } from '@/lib/api/client';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
@@ -64,6 +67,11 @@ function BillingPageContent() {
 
   const [couponCode, setCouponCode] = useState(couponParam ?? '');
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [switchTarget, setSwitchTarget] = useState<{
+    plan: string;
+    cycle: BillingCycle;
+  } | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -108,6 +116,32 @@ function BillingPageContent() {
       showToast('Your subscription will end at the close of this billing period.', 'success');
     } else {
       showToast('Failed to cancel subscription', 'error');
+    }
+  };
+
+  const handleSwitchRequest = (plan: string, billingCycle: BillingCycle) => {
+    setSwitchTarget({ plan, cycle: billingCycle });
+  };
+
+  const handleConfirmSwitch = async () => {
+    if (!switchTarget) return;
+    setIsSwitching(true);
+    setToast(null);
+    try {
+      const updated = await billingApi.changePlan(switchTarget.plan, switchTarget.cycle);
+      setSwitchTarget(null);
+      if (updated) {
+        setSubscription(updated);
+        showToast('Your plan change has been submitted.', 'success');
+      }
+    } catch (error) {
+      const message =
+        error instanceof ApiClientError
+          ? error.message
+          : 'Failed to change plan. Try again or contact support.';
+      showToast(message, 'error');
+    } finally {
+      setIsSwitching(false);
     }
   };
 
@@ -157,6 +191,9 @@ function BillingPageContent() {
   }
 
   const isFreePlan = (subscription?.effectivePlan ?? subscription?.plan) === 'free';
+  const paidPlan = subscription?.plan ?? 'starter';
+  const paidCycle = (subscription?.billingCycle === 'annual' ? 'annual' : 'monthly') as BillingCycle;
+  const switchDisabled = Boolean(subscription?.cancelAtPeriodEnd);
 
   return (
     <div className="space-y-6" data-testid="billing-page">
@@ -230,7 +267,7 @@ function BillingPageContent() {
               data-testid="button-manage-billing"
             >
               <ExternalLink className="mr-2 h-4 w-4" />
-              {isPortalLoading ? 'Opening...' : 'Manage Billing'}
+              {isPortalLoading ? 'Opening...' : 'Update card'}
             </Button>
             {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
               <Button
@@ -248,13 +285,16 @@ function BillingPageContent() {
 
       <PlanIncludesCard subscription={subscription} />
 
-      {isFreePlan && (
-        <UpgradePlanPicker
-          initialPlan={upgradePlan}
-          initialCycle={cycleParam}
-          onCheckout={(plan, cycle) => void handleUpgrade(plan, cycle)}
-        />
-      )}
+      <UpgradePlanPicker
+        mode={isFreePlan ? 'checkout' : 'switch'}
+        initialPlan={isFreePlan ? upgradePlan : paidPlan}
+        initialCycle={isFreePlan ? cycleParam : paidCycle}
+        currentPlan={isFreePlan ? undefined : paidPlan}
+        currentCycle={isFreePlan ? undefined : paidCycle}
+        switchDisabled={!isFreePlan && switchDisabled}
+        onCheckout={(plan, cycle) => void handleUpgrade(plan, cycle)}
+        onSwitchRequest={handleSwitchRequest}
+      />
 
       {isFreePlan && (
         <Card>
@@ -300,6 +340,27 @@ function BillingPageContent() {
           <InvoiceHistoryList invoices={invoices} />
         </CardContent>
       </Card>
+
+      {switchTarget && !isFreePlan && (
+        <ChangePlanConfirmDialog
+          open={Boolean(switchTarget)}
+          onOpenChange={(open) => {
+            if (!open) setSwitchTarget(null);
+          }}
+          currentPlan={paidPlan}
+          currentCycle={paidCycle}
+          targetPlan={switchTarget.plan}
+          targetCycle={switchTarget.cycle}
+          isUpgrade={isPlanChangeUpgrade({
+            currentPlan: paidPlan,
+            currentCycle: paidCycle,
+            targetPlan: switchTarget.plan,
+            targetCycle: switchTarget.cycle,
+          })}
+          isSubmitting={isSwitching}
+          onConfirm={() => void handleConfirmSwitch()}
+        />
+      )}
 
       <Dialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
         <DialogContent>

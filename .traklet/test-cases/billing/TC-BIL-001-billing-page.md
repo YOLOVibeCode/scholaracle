@@ -30,7 +30,8 @@ Verify the billing page displays current subscription status, checkout/upgrade f
 ## Expected Result
 - Current subscription plan, status, and renewal date are shown
 - Invoice list with date, amount, status, download link
-- Upgrade button opens Stripe checkout (billingApi)
+- Free users: plan picker opens store checkout (billingApi)
+- Paid users: plan picker shows current plan, confirm dialog before POST /billing/change-plan; Update card opens store card page (not plan change)
 - Coupon field allows redeeming discount codes
 - Query params `?upgrade=&cycle=&coupon=` from pricing page auto-trigger upgrade flow
 {/traklet:section:expected-result}

@@ -31,12 +31,29 @@ export interface IStoreRefundResult {
   readonly amountCents: number;
 }
 
+export type StorePlanChangeEffective = 'now' | 'next_period';
+
+export interface IStoreChangePlanParams {
+  readonly plan: string;
+  readonly effective: StorePlanChangeEffective;
+}
+
+export interface IStoreChangePlanResult {
+  readonly plan?: string;
+  readonly billingCycle?: BillingCycle;
+  readonly currentPeriodEnd?: string | null;
+}
+
 export interface INoctusoftStoreClient {
   createCheckout(params: ICreateNoctusoftCheckoutParams): Promise<INoctusoftStoreCheckoutResult>;
   /** Cancels at the end of the paid period; the store sends subscription.canceled then. */
   cancelSubscription(subscriptionRef: string): Promise<IStoreCancelResult>;
   /** The store-hosted page where the buyer replaces their card. */
   updatePaymentMethod(subscriptionRef: string, returnUrl: string): Promise<string>;
+  changePlan(
+    subscriptionRef: string,
+    params: IStoreChangePlanParams
+  ): Promise<IStoreChangePlanResult>;
   refundPayment(paymentRef: string, params: IStoreRefundParams): Promise<IStoreRefundResult>;
 }
 
@@ -140,6 +157,25 @@ export class NoctusoftStoreClient implements INoctusoftStoreClient {
       throw new ExternalServiceError('Store did not return a card update page');
     }
     return body.step.url;
+  }
+
+  public async changePlan(
+    subscriptionRef: string,
+    params: IStoreChangePlanParams
+  ): Promise<IStoreChangePlanResult> {
+    const body = await this._post<{
+      plan?: string;
+      billingCycle?: BillingCycle;
+      currentPeriodEnd?: string | null;
+    }>(`/subscriptions/${encodeURIComponent(subscriptionRef)}/change-plan`, {
+      plan: params.plan,
+      effective: params.effective,
+    });
+    return {
+      plan: body.plan,
+      billingCycle: body.billingCycle,
+      currentPeriodEnd: body.currentPeriodEnd ?? null,
+    };
   }
 
   public async refundPayment(

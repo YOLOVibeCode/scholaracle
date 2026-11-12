@@ -19,6 +19,7 @@ describe('Admin Payment Routes', () => {
     createCheckout: jest.fn(),
     cancelSubscription: jest.fn(),
     updatePaymentMethod: jest.fn(),
+    changePlan: jest.fn(),
     refundPayment: jest.fn(),
   };
 

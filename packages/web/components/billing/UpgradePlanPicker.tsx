@@ -7,29 +7,72 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { PURCHASABLE_PLANS, type BillingCycle } from '@/lib/billing/planCatalog';
 
+export type PlanPickerMode = 'checkout' | 'switch';
+
 export interface UpgradePlanPickerProps {
+  readonly mode?: PlanPickerMode;
   readonly initialPlan?: string | null;
   readonly initialCycle: BillingCycle;
+  readonly currentPlan?: string | null;
+  readonly currentCycle?: BillingCycle;
+  readonly switchDisabled?: boolean;
   readonly onCheckout: (plan: string, cycle: BillingCycle) => void;
+  readonly onSwitchRequest?: (plan: string, cycle: BillingCycle) => void;
 }
 
 export function UpgradePlanPicker({
+  mode = 'checkout',
   initialPlan,
   initialCycle,
+  currentPlan,
+  currentCycle = 'monthly',
+  switchDisabled = false,
   onCheckout,
+  onSwitchRequest,
 }: UpgradePlanPickerProps) {
   const validInitial =
     initialPlan && PURCHASABLE_PLANS.some((p) => p.plan === initialPlan) ? initialPlan : 'starter';
   const [selectedPlan, setSelectedPlan] = useState(validInitial);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(initialCycle);
 
+  const isCurrentSelection = (plan: string, cycle: BillingCycle): boolean =>
+    mode === 'switch' &&
+    currentPlan === plan &&
+    (currentCycle ?? 'monthly') === cycle;
+
+  const handlePrimaryAction = () => {
+    if (mode === 'switch') {
+      onSwitchRequest?.(selectedPlan, billingCycle);
+      return;
+    }
+    onCheckout(selectedPlan, billingCycle);
+  };
+
+  const primaryDisabled =
+    switchDisabled ||
+    (mode === 'switch' && isCurrentSelection(selectedPlan, billingCycle));
+
   return (
     <Card data-testid="upgrade-plan-picker">
       <CardHeader>
-        <CardTitle className="text-base">Choose a plan</CardTitle>
-        <CardDescription>Select a subscription tier and billing cycle</CardDescription>
+        <CardTitle className="text-base">
+          {mode === 'switch' ? 'Change your plan' : 'Choose a plan'}
+        </CardTitle>
+        <CardDescription>
+          {mode === 'switch'
+            ? 'Pick a new tier or billing cycle for your subscription'
+            : 'Select a subscription tier and billing cycle'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {mode === 'switch' && switchDisabled && (
+          <p
+            className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+            data-testid="billing-plan-switch-disabled-notice"
+          >
+            Plan changes are unavailable while your subscription is set to cancel at period end.
+          </p>
+        )}
         <div className="flex items-center gap-2" data-testid="billing-cycle-toggle">
           <span className={billingCycle === 'monthly' ? 'font-medium text-sm' : 'text-muted-foreground text-sm'}>
             Monthly
@@ -40,7 +83,8 @@ export function UpgradePlanPicker({
             aria-label="Bill annually"
             aria-checked={billingCycle === 'annual'}
             onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'annual' : 'monthly'))}
-            className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 aria-[checked=true]:bg-blue-600"
+            disabled={switchDisabled}
+            className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 aria-[checked=true]:bg-blue-600"
             data-testid="toggle-annual-billing"
           >
             <span
@@ -63,12 +107,15 @@ export function UpgradePlanPicker({
             const isSelected = selectedPlan === plan.plan;
             const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
             const period = billingCycle === 'annual' ? '/year' : '/month';
+            const isCurrent =
+              mode === 'switch' && currentPlan === plan.plan && (currentCycle ?? 'monthly') === billingCycle;
             return (
               <button
                 key={plan.id}
                 type="button"
                 onClick={() => setSelectedPlan(plan.plan)}
-                className={`rounded-lg border p-3 text-left transition-colors ${
+                disabled={switchDisabled}
+                className={`rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   isSelected ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30' : 'border-border'
                 }`}
                 data-testid={`plan-option-${plan.id}`}
@@ -76,7 +123,13 @@ export function UpgradePlanPicker({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{plan.name}</span>
-                  {plan.popular && <Badge variant="secondary">Popular</Badge>}
+                  {isCurrent ? (
+                    <Badge variant="outline" data-testid={`badge-current-plan-${plan.id}`}>
+                      Current plan
+                    </Badge>
+                  ) : (
+                    plan.popular && <Badge variant="secondary">Popular</Badge>
+                  )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
                 <p className="mt-2 text-lg font-bold">
@@ -98,10 +151,11 @@ export function UpgradePlanPicker({
       </CardContent>
       <CardFooter>
         <Button
-          onClick={() => onCheckout(selectedPlan, billingCycle)}
-          data-testid="button-upgrade-selected-plan"
+          onClick={handlePrimaryAction}
+          disabled={primaryDisabled}
+          data-testid={mode === 'switch' ? 'button-request-plan-switch' : 'button-upgrade-selected-plan'}
         >
-          Continue to checkout
+          {mode === 'switch' ? 'Review plan switch' : 'Continue to checkout'}
         </Button>
       </CardFooter>
     </Card>
