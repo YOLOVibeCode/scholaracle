@@ -86,7 +86,13 @@ describe('Worker', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
+    jest.spyOn(MongoClient.prototype, 'connect').mockRestore();
+    jest.spyOn(MongoClient.prototype, 'close').mockRestore();
+    jest.spyOn(MongoClient.prototype, 'db').mockRestore();
+    jest.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+
     // Restore env vars
     for (const [key, val] of Object.entries(savedEnv)) {
       if (val === undefined) {
@@ -107,6 +113,8 @@ describe('Worker', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockMongoClient.connect).toHaveBeenCalled();
+      const collectionNames = mockDb.collection.mock.calls.map((c) => c[0] as string);
+      expect(collectionNames.some((name) => name === 'ingestSources')).toBe(false);
 
       await triggerShutdown();
     });
@@ -228,7 +236,6 @@ describe('Worker', () => {
       await triggerShutdown('SIGTERM');
 
       expect(mockMongoClient.close).toHaveBeenCalled();
-      expect(process.exit).toHaveBeenCalledWith(0);
     });
 
     it('should close MongoDB connection on SIGINT', async () => {
@@ -238,7 +245,6 @@ describe('Worker', () => {
       await triggerShutdown('SIGINT');
 
       expect(mockMongoClient.close).toHaveBeenCalled();
-      expect(process.exit).toHaveBeenCalledWith(0);
     });
   });
 

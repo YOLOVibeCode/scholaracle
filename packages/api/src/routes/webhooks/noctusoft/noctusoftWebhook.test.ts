@@ -33,6 +33,7 @@ describe('Noctusoft store webhook', () => {
     readonly subscription?: Record<string, unknown> | null;
     readonly refundId?: string | null;
     readonly refundedCents?: number;
+    readonly actionUrl?: string | null;
   }
 
   function makeEvent(type: string, overrides: IEventOverrides = {}): string {
@@ -67,7 +68,12 @@ describe('Noctusoft store webhook', () => {
       },
       subscription: overrides.subscription ?? null,
       seller: null,
-      action: null,
+      action:
+        overrides.actionUrl === undefined
+          ? null
+          : overrides.actionUrl === null
+            ? null
+            : { url: overrides.actionUrl },
       entitlements: {},
     });
   }
@@ -157,6 +163,22 @@ describe('Noctusoft store webhook', () => {
     const payment = await database.collection('payments').findOne({ userId: USERS.buyer });
     expect(payment!['storePaymentId']).toBe('pay_store_1');
     expect(payment!['amount']).toBe(19999);
+  });
+
+  it('persists receiptUrl from action.url on purchase.paid', async () => {
+    const body = makeEvent('purchase.paid', {
+      code: 'NOCTU-SCHOLARMANCY-STARTER-MONTHLY',
+      amountCents: 999,
+      paymentId: 'pay_receipt_1',
+      actionUrl: 'https://store.noctusoft.com/receipts/pay_receipt_1',
+    });
+
+    await post(body).expect(200);
+
+    const payment = await database
+      .collection('payments')
+      .findOne({ storePaymentId: 'pay_receipt_1' });
+    expect(payment!['receiptUrl']).toBe('https://store.noctusoft.com/receipts/pay_receipt_1');
   });
 
   it('keeps the store subscription ref on subscription.started', async () => {

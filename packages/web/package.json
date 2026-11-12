@@ -10,8 +10,8 @@
     "lint:strict": "eslint --max-warnings=0",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf .next out coverage *.tsbuildinfo",
-    "test": "jest --no-coverage",
-    "test:coverage": "jest"
+    "test": "jest --no-coverage --passWithNoTests=false",
+    "test:coverage": "jest --coverage --passWithNoTests=false"
   },
   "dependencies": {
     "@scholaracle/contracts": "workspace:*",

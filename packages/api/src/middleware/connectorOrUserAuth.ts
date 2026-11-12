@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { Db } from 'mongodb';
 import type { AuthService, ConnectorTokenService } from '@scholaracle/auth';
-import { StudentRepository } from '@scholaracle/database';
+import { ConnectorDeviceRepository, StudentRepository } from '@scholaracle/database';
 import { verifyAssetSignature } from '../services/assets/signedUrl';
 
 export interface IAssetAuthenticatedRequest extends Request {
@@ -61,6 +61,14 @@ export function connectorOrUserAuthMiddleware(
             .collection('revoked_connector_tokens')
             .findOne({ jti: connectorDecoded.jti, revokedAt: { $ne: null } });
           if (revoked) {
+            res.status(401).json({ success: false, error: 'Token has been revoked' });
+            return;
+          }
+          const device = await new ConnectorDeviceRepository(options.database).findByUserAndDevice(
+            connectorDecoded.userId,
+            connectorDecoded.deviceId
+          );
+          if (!device?.hasActiveJti(connectorDecoded.jti)) {
             res.status(401).json({ success: false, error: 'Token has been revoked' });
             return;
           }

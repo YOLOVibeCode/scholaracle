@@ -196,7 +196,10 @@ export function AssignmentWorkflowDetail({
             <SelectContent>
               <SelectItem value="not_started">Not Started</SelectItem>
               <SelectItem value="working_on_it">Working On It</SelectItem>
-              <SelectItem value="need_help">Need Help</SelectItem>
+              {/* Only the student can ask for help (the API rejects need_help from a parent). */}
+              <SelectItem value="need_help" disabled>
+                Need Help (student only)
+              </SelectItem>
               <SelectItem value="done">Done</SelectItem>
             </SelectContent>
           </Select>

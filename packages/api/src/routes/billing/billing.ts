@@ -1,11 +1,17 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { SubscriptionRepository, PaymentRepository, CouponRepository } from '@scholaracle/database';
+import {
+  SubscriptionRepository,
+  PaymentRepository,
+  CouponRepository,
+  PLAN_FEATURES,
+} from '@scholaracle/database';
 import { AuthenticationError, ConflictError, ValidationError } from '@scholaracle/contracts';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
+import { planFeatureLines, planFeaturesForApi } from '../../services/billing/planFeatureLines';
 
 export interface IBillingRouterDeps {
   readonly database: Db;
@@ -234,20 +240,33 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
     const subscription = await subscriptionRepo.findByUserId(userId);
     if (!subscription) {
+      const effectivePlan = 'free' as SubscriptionPlan;
       res.json({
         success: true,
-        subscription: { plan: 'free', status: 'active', effectivePlan: 'free' },
+        subscription: {
+          plan: 'free',
+          status: 'active',
+          effectivePlan,
+          maxStudents: PLAN_FEATURES.free.maxStudents,
+          features: planFeaturesForApi(effectivePlan),
+          featureLines: [...planFeatureLines(effectivePlan)],
+        },
       });
       return;
     }
 
+    const effectivePlan = subscription.effectivePlan();
     res.json({
       success: true,
       subscription: {
         plan: subscription.plan,
         status: subscription.status,
         /** The plan whose limits apply now (free once cancelled, paused or lapsed). */
-        effectivePlan: subscription.effectivePlan(),
+        effectivePlan,
+        /** Student cap of effectivePlan; -1 means unlimited. */
+        maxStudents: PLAN_FEATURES[effectivePlan].maxStudents,
+        features: planFeaturesForApi(effectivePlan),
+        featureLines: [...planFeatureLines(effectivePlan)],
         currentPeriodStart: subscription.currentPeriodStart,
         currentPeriodEnd: subscription.currentPeriodEnd,
         billingCycle: subscription.billingCycle,

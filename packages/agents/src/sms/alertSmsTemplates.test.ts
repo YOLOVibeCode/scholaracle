@@ -1,4 +1,4 @@
-import { AlertType } from '@scholaracle/contracts';
+import { AlertType, WEEKLY_REVIEW_PUSH_TYPE } from '@scholaracle/contracts';
 import {
   AGENDA_REMINDER_TRIGGER,
   SMS_SEGMENT_LIMIT,
@@ -66,9 +66,19 @@ describe('buildAlertSmsBody: one concise GSM-7 segment per alert type', () => {
       'A suggestion for Emma: Review fractions before Friday.',
     ],
     [
+      AlertType.STUDENT_NEEDS_HELP,
+      { ...emma, courseName: 'Math', title: 'Ch. 5 problems', note: "I don't get #7" },
+      'Emma asked for help with Ch. 5 problems in Math.',
+    ],
+    [
       AGENDA_REMINDER_TRIGGER,
       { ...emma, title: 'Field trip form', timeAt: '2026-10-14T17:00:00Z' },
       `Reminder: Field trip form for Emma, due ${shortDate('2026-10-14T17:00:00Z')}.`,
+    ],
+    [
+      WEEKLY_REVIEW_PUSH_TYPE,
+      { ...emma, due: 3, owed: 1, done: 4 },
+      "Emma's week: 3 due, 1 still owed, 4 finished.",
     ],
   ];
 

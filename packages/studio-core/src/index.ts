@@ -1,4 +1,48 @@
 export { TodayGuide } from './TodayGuide';
+export {
+  WeekGuide,
+  MARKED_DONE_WARNING,
+  PAST_DUE_LABEL,
+  type IWeekGuideOptions,
+} from './WeekGuide';
+export { encouragementLine } from './encouragement';
+export {
+  WEEK_NEED_GLYPHS,
+  STUDENT_STATUS_LABELS,
+  STUDENT_STATUS_MARKS,
+  STUDENT_STATUS_OPTIONS,
+  OWED_SECTION_TITLE,
+  DONE_SECTION_TITLE,
+  WEEK_EMPTY_MESSAGE,
+  NEED_HELP_TITLE,
+  NEED_HELP_NOTE_PLACEHOLDER,
+  NEED_HELP_UNSTUCK_HINT,
+  NEED_HELP_SENT_MESSAGE,
+  NEED_HELP_ALREADY_ASKED_MESSAGE,
+  NEED_HELP_SAVED_MESSAGE,
+  STATUS_SAVE_ERROR,
+  needGlyphs,
+  needHelpPrompt,
+  needHelpOutcomeMessage,
+  clampNote,
+  noteCounter,
+  normalizeNote,
+  resolvedTimeZone,
+  formatDueDay,
+  weekSummaryLine,
+  isWeekClear,
+  isWeekEmpty,
+  WEEKLY_REVIEW_TAP_HINT,
+  weeklyReviewMessage,
+  doneSectionTitle,
+  type IWeekNeedGlyph,
+  type IStudentStatusOption,
+} from './weekCopy';
+export { applyStudentStatusLocally } from './weekLocalStatus';
+export { submitWithRollback, type ISubmitWithRollback } from './optimisticUpdate';
+export { deriveTaskNeeds } from './taskNeeds';
+export { dueAtMs, compareByDueAsc, sortByDueAsc, type IHasDueAt } from './dueOrder';
+export { buildWeekDays, calendarDayOffset, localDayOf, isValidTimeZone } from './weekDays';
 export { GuidanceLadder, resolveLadderStep, isQuietHour } from './guidance/GuidanceLadder';
 export type {
   ILadderAssignment,
@@ -18,6 +62,7 @@ export {
 } from './descriptionLinks';
 export {
   partitionMaterials,
+  isHostedMaterial,
   classifyResource,
   type IMaterialPartition,
   type IResourceLink,

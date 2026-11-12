@@ -1,187 +1,62 @@
 /**
- * PlaywrightUX: Full multi-student, multi-connector scraper download experience.
- * Does not require real school credentials; validates the bundle pipeline and script structure.
- *
- * The integrations page uses bundle mode — each platform is added to the bundle
- * via ConnectProviderWizard, then downloaded as a single bundle script.
+ * Onboarding + phone-connect integrations for a freshly registered parent.
  */
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
 import { test, expect } from '../fixtures/auth';
+import { RegisterPage } from '../pages/register.page';
+import { generateUniqueEmail } from '../fixtures/test-data';
+import { assertOnDashboard } from '../helpers/assertions';
 
-test.describe('Scraper UX: Multi-student and bundled script', () => {
+test.describe('Scraper UX: Multi-student and phone connect', () => {
   test.setTimeout(120_000);
 
-  let downloadDir: string;
-  let bundleScriptPath: string;
-  let allStudentsScriptPath: string;
+  test('Register, add Avery Sample, connect Canvas in bundle', async ({ page }) => {
+    const registerPage = new RegisterPage(page);
+    await registerPage.goto();
+    await registerPage.register(
+      generateUniqueEmail('scraperux'),
+      'Scraper UX Parent',
+      'SecurePass123!'
+    );
+    await assertOnDashboard(page);
 
-  test.describe.serial('Multi-student flow', () => {
-    test('Login and add student Avery Sample', async ({ page, loginAsRole }) => {
-      await loginAsRole('parent');
-      await page.goto('/dashboard/students');
-      await page.locator('[data-testid="button-add-student"]').first().click();
-      await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
+    await page.goto('/dashboard/students');
+    await page.locator('[data-testid="button-add-student"]').first().click();
+    await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
 
-      await page.locator('[data-testid="wizard-student-name"]').fill('Avery Sample');
-      await page.locator('[data-testid="wizard-student-grade"]').fill('9');
-      await page.locator('[data-testid="wizard-next-step"]').click();
+    await page.locator('[data-testid="wizard-student-name"]').fill('Avery Sample');
+    await page.locator('[data-testid="wizard-student-grade"]').fill('9');
 
-      await expect(page.getByRole('heading', { name: /Connect Services/i })).toBeVisible({ timeout: 10000 });
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(1000);
-      await expect(page.locator('[data-testid="student-list"]').getByText('Avery Sample').first()).toBeVisible({ timeout: 10000 });
+    const createStudentRes = page.waitForResponse(
+      (r) => r.url().includes('/students') && r.request().method() === 'POST'
+    );
+    await page.locator('[data-testid="wizard-next-step"]').click();
+    const res = await createStudentRes;
+    expect(res.status()).toBeLessThan(400);
+
+    await expect(page.locator('[data-testid="wizard-skip-services"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.locator('[data-testid="wizard-skip-services"]').click();
+    await page.locator('[data-testid="wizard-finish"]').click();
+    await expect(page.locator('[data-testid="add-student-wizard"]')).not.toBeVisible({
+      timeout: 10_000,
     });
 
-    test('Add student Noah Sample', async ({ page, loginAsRole }) => {
-      await loginAsRole('parent');
-      await page.goto('/dashboard/students');
-      await page.locator('[data-testid="button-add-student"]').first().click();
-      await expect(page.locator('[data-testid="add-student-wizard"]')).toBeVisible();
+    await expect(
+      page.locator('[data-testid="student-list"]').getByText('Avery Sample', { exact: true }).first()
+    ).toBeVisible({ timeout: 10_000 });
 
-      await page.locator('[data-testid="wizard-student-name"]').fill('Noah Sample');
-      await page.locator('[data-testid="wizard-student-grade"]').fill('11');
-      await page.locator('[data-testid="wizard-next-step"]').click();
+    await page.goto('/dashboard/integrations');
+    const card = page.locator('[data-testid="self-hosted-scraper-card"]');
+    await page.locator('[data-testid="button-connect-school"]').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.locator('[data-testid="platform-canvas"]').click();
+    await page.getByLabel(/School portal URL/i).fill('https://example.instructure.com');
+    await page.locator('[data-testid="connect-provider-student-name-hint"]').fill('Avery Sample');
+    await page.locator('[data-testid="connect-provider-continue"]').click();
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-      await expect(page.getByRole('heading', { name: /Connect Services/i })).toBeVisible({ timeout: 10000 });
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(1000);
-      await expect(page.locator('[data-testid="student-list"]').getByText('Noah Sample').first()).toBeVisible({ timeout: 10000 });
-    });
-
-    test('Add Canvas + Skyward to bundle and download', async ({ page, loginAsRole }) => {
-      await loginAsRole('parent');
-      downloadDir = path.join(os.tmpdir(), `scraper-ux-${Date.now()}`);
-      await fs.promises.mkdir(downloadDir, { recursive: true });
-
-      // Mock bundle download endpoint
-      await page.route('**/api/integrations/scraper-download', async (route) => {
-        const req = route.request();
-        const body = req.postDataJSON();
-        const isBundle = !!body?.connections;
-
-        const script = isBundle
-          ? `#!/bin/bash
-# Scholaracle Bundle Script (mock)
-echo "Scholaracle Bundle"
-for platform in canvas skyward; do
-  APP_DIR="$HOME/.scholaracle-scraper/app-$platform"
-  mkdir -p "$APP_DIR"
-  cat > "$APP_DIR/scraper.ts" << 'SCRAPEREOF'
-export default class Scraper { async scrape() { return {}; } }
-SCRAPEREOF
-  cat > "$APP_DIR/run.js" << 'RUNEOF'
-console.log("run.js loaded for $platform");
-RUNEOF
-done
-echo "Done"
-`
-          : `#!/bin/bash
-# Scholaracle All-Students Script (mock)
-echo "Scholaracle Sync All"
-node run.js --all-students
-echo "Done"
-`;
-
-        const filename = isBundle ? 'scholaracle-bundle.command' : 'scholaracle-sync.command';
-        await route.fulfill({
-          status: 200,
-          headers: {
-            'Content-Type': 'application/x-sh',
-            'Content-Disposition': `attachment; filename="${filename}"`,
-          },
-          body: script,
-        });
-      });
-
-      await page.goto('/dashboard/integrations');
-
-      // --- Add Canvas to bundle ---
-      await page.locator('[data-testid="button-connect-school"]').click();
-      await expect(page.getByRole('dialog')).toBeVisible();
-      await page.locator('[data-testid="platform-canvas"]').click();
-
-      await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
-      await page.getByLabel(/School portal URL/i).fill('https://example.instructure.com');
-      await page.getByLabel(/Student name/i).fill('Avery Sample');
-      await page.getByLabel(/^Username$/i).fill('avery@example.com');
-      await page.getByLabel(/^Password$/i).fill('placeholder');
-
-      // Canvas is a reference platform → "Continue" adds to bundle immediately
-      await page.locator('[data-testid="connect-provider-continue"]').click();
-
-      // Wizard closes, Canvas appears in bundle
-      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
-
-      // --- Add Skyward to bundle ---
-      await page.locator('[data-testid="button-connect-school"]').click();
-      await expect(page.getByRole('dialog')).toBeVisible();
-      await page.locator('[data-testid="platform-skyward"]').click();
-
-      await expect(page.getByLabel(/School portal URL/i)).toBeVisible();
-      await page.getByLabel(/School portal URL/i).fill('https://skyward.example.com');
-      await page.getByLabel(/Student name/i).fill('Noah Sample');
-      await page.getByLabel(/^Username$/i).fill('noah.parent');
-      await page.getByLabel(/^Password$/i).fill('placeholder');
-
-      await page.locator('[data-testid="connect-provider-continue"]').click();
-      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
-
-      // Verify both platforms are in the bundle (2 "Ready" badges)
-      const readyBadges = page.getByText('Ready');
-      await expect(readyBadges.first()).toBeVisible({ timeout: 5000 });
-      expect(await readyBadges.count()).toBeGreaterThanOrEqual(2);
-
-      // Download the combined bundle
-      const bundleDownloadPromise = page.waitForEvent('download', { timeout: 15000 });
-      await page.locator('[data-testid="button-download-bundle"]').click();
-      const bundleDownload = await bundleDownloadPromise;
-      bundleScriptPath = path.join(downloadDir, bundleDownload.suggestedFilename());
-      await bundleDownload.saveAs(bundleScriptPath);
-      await expect(fs.promises.stat(bundleScriptPath)).resolves.toBeDefined();
-    });
-
-    test('Download "all students" script', async ({ page, loginAsRole }) => {
-      await loginAsRole('parent');
-
-      // Mock the download endpoint
-      await page.route('**/api/integrations/scraper-download', async (route) => {
-        const script = `#!/bin/bash
-# Scholaracle All-Students (mock)
-echo "Scholaracle sync all students"
-node run.js --all
-echo "Done"
-`;
-        await route.fulfill({
-          status: 200,
-          headers: {
-            'Content-Type': 'application/x-sh',
-            'Content-Disposition': 'attachment; filename="scholaracle-sync.command"',
-          },
-          body: script,
-        });
-      });
-
-      await page.goto('/dashboard/integrations');
-      await expect(page.locator('[data-testid="button-download-all"]')).toBeVisible({ timeout: 10000 });
-      const downloadPromise = page.waitForEvent('download', { timeout: 25000 });
-      await page.locator('[data-testid="button-download-all"]').click();
-      const download = await downloadPromise;
-      allStudentsScriptPath = path.join(downloadDir, download.suggestedFilename());
-      await download.saveAs(allStudentsScriptPath);
-      await expect(fs.promises.stat(allStudentsScriptPath)).resolves.toBeDefined();
-    });
-
-    test('Verify script structure', async () => {
-      const bundle = await fs.promises.readFile(bundleScriptPath, 'utf8');
-      expect(bundle).toMatch(/#!/);
-      expect(bundle).toMatch(/Scholaracle|scholaracle|node|playwright/i);
-      expect(bundle).toMatch(/scraper|run\.js/i);
-
-      const allStudents = await fs.promises.readFile(allStudentsScriptPath, 'utf8');
-      expect(allStudents).toMatch(/#!/);
-      expect(allStudents).toMatch(/Scholaracle|scholaracle|node|sync/i);
-    });
+    await expect(card.getByText('Canvas', { exact: false }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByText('Phone', { exact: true })).toBeVisible();
   });
 });

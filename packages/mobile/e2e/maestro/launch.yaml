@@ -1,0 +1,23 @@
+# App boots, shows the login screen and reports its build stamp. Needs no logins.
+appId: com.scholarmancy.app
+name: Launch
+tags: [launch]
+---
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            all: deny
+            # Granted so Android 13+ does not raise its notification prompt over the app.
+            notifications: allow
+      - extendedWaitUntil:
+          visible:
+            id: input-email
+          timeout: 40000
+- assertVisible:
+    id: input-password
+- assertVisible:
+    id: button-login
+- takeScreenshot: launch-login

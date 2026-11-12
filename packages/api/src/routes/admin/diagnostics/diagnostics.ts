@@ -278,51 +278,32 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
       const alertResults = await config.database.collection('slc_alerts').insertMany(alerts);
       const alertIds = Object.values(alertResults.insertedIds);
 
-      // Create digest pending items for all recipients
+      // Queue the sample digest only for the target user's own email and the student's
+      // real name. Never hardcode recipients: this endpoint must not mail anyone else.
+      const targetUser = await config.database
+        .collection('users')
+        .findOne({ _id: new ObjectId(userId) }, { projection: { email: 1 } });
+      const targetStudent = await config.database
+        .collection('students')
+        .findOne({ _id: new ObjectId(studentId) }, { projection: { name: 1 } });
+      const recipientEmail = typeof targetUser?.['email'] === 'string' ? targetUser['email'] : null;
+      if (!recipientEmail) {
+        throw new ValidationError('userId does not match a user with an email');
+      }
+      const studentName =
+        typeof targetStudent?.['name'] === 'string' ? targetStudent['name'] : 'Sample Student';
       const digestItems = [];
       let alertIndex = 0;
       for (const alertId of alertIds) {
         const alert = alerts[alertIndex];
         alertIndex++;
         if (alert) {
-          // Owner
           digestItems.push({
             userId,
             alertId: alertId.toString(),
             studentId,
-            studentName: 'Avery Sample',
-            recipientEmail: 'rvegajr@noctusoft.com',
-            recipientType: 'parent',
-            severity: alert.severity,
-            alertType: alert.type,
-            subject: alert.title,
-            body: alert.message,
-            courseName: (alert.metadata as { courseName?: string }).courseName,
-            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
-            createdAt: alert.createdAt,
-          });
-          // Shared parents
-          digestItems.push({
-            userId,
-            alertId: alertId.toString(),
-            studentId,
-            studentName: 'Avery Sample',
-            recipientEmail: 'coparent.one@example.com',
-            recipientType: 'parent',
-            severity: alert.severity,
-            alertType: alert.type,
-            subject: alert.title,
-            body: alert.message,
-            courseName: (alert.metadata as { courseName?: string }).courseName,
-            assignmentTitle: (alert.metadata as { assignmentTitle?: string }).assignmentTitle,
-            createdAt: alert.createdAt,
-          });
-          digestItems.push({
-            userId,
-            alertId: alertId.toString(),
-            studentId,
-            studentName: 'Avery Sample',
-            recipientEmail: 'coparent.two@example.com',
+            studentName,
+            recipientEmail,
             recipientType: 'parent',
             severity: alert.severity,
             alertType: alert.type,
@@ -432,6 +413,11 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           startedAt: r['startedAt'],
           committedAt: r['committedAt'],
           error: r['error'],
+          steps: r['steps'],
+          stats: r['stats'],
+          warnings: r['warnings'],
+          lastCursor: r['lastCursor'],
+          newCursor: r['newCursor'],
         })),
         stuckJobs: stuckJobs.length,
         diagnosis: {
@@ -441,12 +427,12 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
           hasStuckJobs: stuckJobs.length > 0,
           issue:
             jobStats.pending > 0 && recentSyncRuns.length === 0
-              ? 'Jobs are pending but SyncWorker has never processed any - workers service may not be running'
+              ? 'Legacy sync_jobs are pending but no sync_runs were written (server sync is disabled; ignore unless migrating old data)'
               : stuckJobs.length > 0
-                ? 'Jobs are stuck in processing - workers may have crashed'
+                ? 'Legacy sync jobs are stuck in processing'
                 : recentJobs.length === 0
-                  ? 'No sync jobs found - syncScheduler.triggerNow() may not be called'
-                  : 'System appears healthy',
+                  ? 'No legacy sync_jobs in window — client-led ingest uses slc_runs and sync_requests'
+                  : 'Legacy sync job pipeline only; client ingest health is slc_runs',
         },
       });
     })

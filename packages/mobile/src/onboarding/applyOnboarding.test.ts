@@ -29,8 +29,8 @@ describe('applyOnboarding', () => {
 
   it('creates each named child, shares one Keychain entry, and unique source ids', async () => {
     const created: IStudentListItem[] = [
-      { id: 'mongo-g', userId: 'u1', name: 'Gabe', grade: 8 },
-      { id: 'mongo-c', userId: 'u1', name: 'Casey', grade: 6 },
+      { id: 'mongo-g', userId: 'u1', name: 'Gabe', grade: 8, access: 'owner', peopleCount: 1 },
+      { id: 'mongo-c', userId: 'u1', name: 'Casey', grade: 6, access: 'owner', peopleCount: 1 },
     ];
     let i = 0;
     const createStudent = jest.fn(async () => created[i++]!);
@@ -73,7 +73,13 @@ describe('applyOnboarding', () => {
   it('never writes studentExternalId default when SIS id is missing', async () => {
     const store = new ConnectedSourceStore();
     await applyOnboarding(householdState(), {
-      createStudent: async () => ({ id: 'mongo-g', userId: 'u1', name: 'Gabe' }),
+      createStudent: async () => ({
+        id: 'mongo-g',
+        userId: 'u1',
+        name: 'Gabe',
+        access: 'owner' as const,
+        peopleCount: 1,
+      }),
       registerIngestSource: async () => undefined,
       sources: store,
     });

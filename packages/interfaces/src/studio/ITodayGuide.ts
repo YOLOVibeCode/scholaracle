@@ -1,13 +1,25 @@
-import type { IStudentSession, ITodayView } from '@scholaracle/contracts';
+import type {
+  IStudentSession,
+  ITodayView,
+  IWeekView,
+  StudentStatus,
+  WeekNeed,
+} from '@scholaracle/contracts';
 
 /**
- * Student Today composer. Reads a narrow port (ITodaySource) — never the
- * grades API, siblings, or parent nudge.
+ * Student Today / This-week composers. Read a narrow port (ITodaySource /
+ * IWeekSource) — never the grades API, siblings, or parent nudge.
  */
 
 export type WinKind = 'graded' | 'opened_pack' | 'on_time_streak';
 
-export type OpenTaskKind = 'missing' | 'due_soon';
+/**
+ * `missing` and `due_soon` feed Today. `upcoming` is any other open work due
+ * later (the adapter does not cut it; WeekGuide keeps the next 7 local days).
+ * `overdue` is open work past its due date that the portal has NOT flagged
+ * missing/late. Today ignores `upcoming` and `overdue`; This week shows both.
+ */
+export type OpenTaskKind = 'missing' | 'overdue' | 'due_soon' | 'upcoming';
 
 export interface IWin {
   readonly kind: WinKind;
@@ -24,6 +36,20 @@ export interface IOpenTask {
   readonly courseExternalId?: string;
   readonly dueAt?: string;
   readonly primaryCtaLabel: string;
+  /** What the student said about this task; absent means not started. */
+  readonly studentStatus?: StudentStatus;
+  /** What the student needs to do it, derived once from the work-pack partition. */
+  readonly needs?: readonly WeekNeed[];
+}
+
+/** Portal says turned in or graded. Carries no score. */
+export interface IDoneTask {
+  readonly assignmentExternalId: string;
+  readonly title: string;
+  readonly courseName: string;
+  readonly dueAt?: string;
+  /** When it was finished: submittedAt, else gradedAt, else dueAt (ISO). */
+  readonly doneAt: string;
 }
 
 export interface ITodaySource {
@@ -31,6 +57,18 @@ export interface ITodaySource {
   openTasks(): Promise<readonly IOpenTask[]>;
 }
 
+export interface IWeekSource extends ITodaySource {
+  /**
+   * Assignments the portal shows as turned in or graded. The adapter may
+   * return more than a week; WeekGuide applies the rolling 7-day window.
+   */
+  doneThisWeek(): Promise<readonly IDoneTask[]>;
+}
+
 export interface ITodayGuide {
   load(session: IStudentSession): Promise<ITodayView>;
+}
+
+export interface IWeekGuide {
+  load(session: IStudentSession, now: Date): Promise<IWeekView>;
 }

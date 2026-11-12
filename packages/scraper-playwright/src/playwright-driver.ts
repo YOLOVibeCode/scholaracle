@@ -1,7 +1,7 @@
 /**
  * Playwright implementation of IPageDriver.
  *
- * Used by the CLI (scholaracle-scraper) and Railway SyncWorker.
+ * Used by the scholaracle-scraper CLI on the user's machine.
  * Each scraper instantiates this driver after launching the browser.
  */
 

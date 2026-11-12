@@ -4,17 +4,20 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import { AuthService, ConnectorTokenService } from '@scholaracle/auth';
 import { studentsRouter } from './students';
 import { ingestV1Router } from '../ingest/v1/ingest';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { seedBindingsForEnvelope } from '../../test-utils/seedIngestBinding';
+import { seedActiveConnectorJti } from '../../testHelpers/connectorDeviceTestSeed';
 
 describe('Course tutorial override (integration)', () => {
   jest.setTimeout(60_000);
   const jwtSecret = 'test-jwt-secret-min-32-chars!!';
+  const connectorJwtSecret = `${jwtSecret}-connector`;
   let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let database: Db;
@@ -38,7 +41,7 @@ describe('Course tutorial override (integration)', () => {
       requireParent,
       studentsRouter({ database, baseUrl: 'http://test.example' })
     );
-    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret }));
+    app.use('/api/ingest/v1', ingestV1Router({ database, jwtSecret, connectorJwtSecret }));
     app.use(createErrorHandler());
 
     const reg = await authService.register('tutorial-parent@test.com', 'password123', 'Parent');
@@ -65,7 +68,14 @@ describe('Course tutorial override (integration)', () => {
   });
 
   async function ingestCourseTutorialUpsert(tutorialWindow: string): Promise<void> {
-    const connectorToken = new ConnectorTokenService(jwtSecret).createToken(userId, randomJti());
+    const jti = randomJti();
+    const deviceId = 'course-tutorial-device';
+    const connectorToken = new ConnectorTokenService(connectorJwtSecret).createToken(
+      userId,
+      jti,
+      deviceId
+    );
+    await seedActiveConnectorJti(database, userId, deviceId, jti);
     await request(app)
       .post('/api/ingest/v1/sources')
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -121,6 +131,7 @@ describe('Course tutorial override (integration)', () => {
         },
       ],
     };
+    await seedBindingsForEnvelope(database, userId, envelope);
     const upload = await request(app)
       .post(`/api/ingest/v1/runs/${runId}/envelope`)
       .set('Authorization', `Bearer ${connectorToken}`)
@@ -150,8 +161,13 @@ describe('Course tutorial override (integration)', () => {
     const dueSoon = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
     const courseExternalId = 'skyward-course-alg';
+    const studentDoc = await database
+      .collection('students')
+      .findOne({ _id: new ObjectId(studentId) });
+    const slcTenantUserId =
+      studentDoc != null ? (studentDoc['userId'] as ObjectId).toString() : userId;
     await database.collection('slc_courses').insertOne({
-      userId,
+      userId: slcTenantUserId,
       externalId: courseExternalId,
       provider: 'skyward',
       sourceId: 'src-1',
@@ -168,7 +184,7 @@ describe('Course tutorial override (integration)', () => {
     });
 
     await database.collection('slc_grade_snapshots').insertOne({
-      userId,
+      userId: slcTenantUserId,
       studentId,
       studentExternalId: 'stu-ext-1',
       courseExternalId,
@@ -183,7 +199,7 @@ describe('Course tutorial override (integration)', () => {
     });
 
     await database.collection('slc_assignments').insertOne({
-      userId,
+      userId: slcTenantUserId,
       studentId,
       studentExternalId: 'stu-ext-1',
       courseExternalId,

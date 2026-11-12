@@ -15,6 +15,7 @@ Alerts are defined in `packages/contracts/src/enums/AlertType.ts`:
 - `workload`
 - `positive`
 - `recommendation`
+- `student_needs_help`
 
 ## Audience Matrix (v1)
 
@@ -29,6 +30,7 @@ Implemented in `packages/agents/src/config/alert-audience.ts`. Change this table
 | positive           | Yes     | **No** | Encouragement for the student. Does not count against the daily student-push budget. Parent waits for digest (type-level parent false). |
 | workload           | Yes     | **No** | Student first. Parent digest unless severity high — high-severity override is **deferred**. |
 | test               | Yes     | **No** | Same as workload. |
+| student_needs_help | **No**  | Yes    | The student tapped "Need help" (`PATCH /api/studio/assignments/:id/status`). Severity info; carries the student's note (≤140 chars) and a deep link to the parent board; at most one per assignment per 24 h (`student_help_requests`). Reaches shared adults once sharing S3 lands. |
 
 Per-household override of this matrix is a follow-up, not v1.
 
@@ -49,6 +51,19 @@ Students have parent-provisioned logins (slice 6). Student-facing copy may be de
 Until push tokens are registered with `audience: 'student'`, email/SMS to the student login is optional (listed as a follow-up). The ladder still records the intended student send.
 
 When `showGrades` is false (the default), student copy must not include percent, letter grade, or points.
+
+### Weekly review (student review spec §3.3, R4)
+
+Not an `AlertType`: a scheduled student message, `triggerType` / push `data.type` `weekly_review`
+(`WEEKLY_REVIEW_PUSH_TYPE` in contracts). The workers process runs `WeeklyReviewSender`
+(`packages/agents/src/weeklyReview/`) every 15 minutes when `WEEKLY_REVIEW_ENABLED=true`; each
+student whose local clock (`resolveStudentTimeZone`: their login's stored zone, else the owner's
+`users.timezone`, else America/New_York — the same rule `GET /api/studio/week` uses) has passed
+Sunday 18:00 gets, once per ISO week (`weekly_review_sends`): a push to the
+student's devices, an email to `alertEmail` when set, and a copy to each adult whose
+`weeklyReviewCopy` toggle is on (owner prefs or `sharedWith` row), by that adult's channels.
+Parents get no copy by default (decision Q2). The view is composed by the same `WeekGuide` and
+Mongo source as `GET /api/studio/week`, and `assertNoGradeLeak` runs on it before any copy is built.
 
 ## Related Code
 

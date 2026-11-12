@@ -3,19 +3,8 @@ import { ForbiddenError, type IStudentSession } from '@scholaracle/contracts';
 import { StudentRepository, type Student } from '@scholaracle/database';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 
-export function slcStudentFilter(student: Student): Record<string, unknown> {
-  const ownerUserId = student.dataUserId();
-  const studentDbId = student._id?.toString() ?? '';
-  const studentExternalId = student.studentId ?? '';
-  const or: Record<string, unknown>[] = [];
-  if (studentDbId !== '') or.push({ studentId: studentDbId });
-  if (studentExternalId !== '') or.push({ studentExternalId });
-  return {
-    userId: ownerUserId,
-    deletedAt: null,
-    ...(or.length > 0 ? { $or: or } : {}),
-  };
-}
+/** Shared with the weekly-review worker (agents): the one owner-scoped assignment filter. */
+export { slcStudentFilter } from '@scholaracle/agents';
 
 export async function resolveStudioStudent(
   req: Request,

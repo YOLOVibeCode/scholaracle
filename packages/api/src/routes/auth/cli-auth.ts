@@ -17,6 +17,7 @@ import { AuthService } from '@scholaracle/auth';
 import { NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { authMiddleware, type IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { logger } from '../../logger';
 import { UserRepository } from '@scholaracle/database';
 
 const DEVICE_CODE_BYTES = 32;
@@ -65,7 +66,11 @@ export function cliAuthRouter(config: ICliAuthRouterConfig): Router {
   const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? process.env['WEB_URL'] ?? '';
 
   // Ensure TTL index exists (idempotent)
-  void getCollection(database).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  void getCollection(database)
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+    .catch((err: unknown) => {
+      logger.error({ err }, 'Failed to ensure cli_auth_requests TTL index');
+    });
 
   /**
    * POST /api/auth/cli/request

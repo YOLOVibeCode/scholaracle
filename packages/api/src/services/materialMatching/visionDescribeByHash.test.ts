@@ -3,6 +3,18 @@ import { LlmClient } from '@scholaracle/agents';
 import type { IAssetStore } from '../assets/IAssetStore';
 import { Readable } from 'node:stream';
 
+function mockConsentsCollection(userId: string, opts?: { active?: boolean }) {
+  const isActive = opts?.active ?? true;
+  return {
+    findOne: async (query: { userId: string; purpose: string }) => {
+      if (!isActive || query.userId !== userId) {
+        return null;
+      }
+      return { userId, purpose: query.purpose, consentedAt: new Date() };
+    },
+  };
+}
+
 describe('runVisionDescribeByContentHash', () => {
   it('calls LLM once per distinct contentHash and updates all matching materials', async () => {
     const complete = jest.fn().mockResolvedValue({
@@ -37,6 +49,9 @@ describe('runVisionDescribeByContentHash', () => {
     const updateMany = jest.fn().mockResolvedValue({ modifiedCount: 2 });
     const database = {
       collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1');
+        }
         if (name === 'slc_course_materials') {
           return {
             find: () => ({

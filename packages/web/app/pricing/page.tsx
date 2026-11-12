@@ -8,82 +8,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { billingApi } from '@/lib/api/billing';
+import { PRICING_PAGE_PLANS, type BillingCycle } from '@/lib/billing/planCatalog';
 
-type BillingCycle = 'monthly' | 'annual';
-
-const PLANS: readonly {
-  id: string;
-  name: string;
-  monthlyPrice: number;
-  annualPrice: number;
-  students: number;
-  description: string;
-  features: readonly string[];
-  plan: string | null;
-  popular: boolean;
-}[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    monthlyPrice: 0,
-    annualPrice: 0,
-    students: 1,
-    description: 'Get started with basic monitoring',
-    features: ['1 student', 'Email alerts', '7-day history'],
-    plan: null,
-    popular: false,
-  },
-  {
-    id: 'starter',
-    name: 'Starter',
-    monthlyPrice: 9.99,
-    annualPrice: 99.99,
-    students: 1,
-    description: 'One student — just $9.99/month',
-    features: [
-      '1 student',
-      'Email + SMS alerts',
-      'LMS integration',
-      '30-day history',
-    ],
-    plan: 'starter',
-    popular: true,
-  },
-  {
-    id: 'premium',
-    name: 'Premium',
-    monthlyPrice: 19.99,
-    annualPrice: 199.99,
-    students: 2,
-    description: 'Two students — $9.99 each',
-    features: [
-      '2 students',
-      'All notification channels',
-      'Advanced analytics',
-      'Priority support',
-      'Unlimited history',
-    ],
-    plan: 'premium',
-    popular: false,
-  },
-  {
-    id: 'family',
-    name: 'Family',
-    monthlyPrice: 49.99,
-    annualPrice: 499.99,
-    students: 5,
-    description: 'Five students — $9.99 each',
-    features: [
-      '5 students',
-      'All notification channels',
-      'Advanced analytics',
-      'Priority support',
-      'Unlimited history',
-    ],
-    plan: 'family',
-    popular: false,
-  },
-];
+const PLANS = PRICING_PAGE_PLANS;
 
 export default function PricingPage() {
   const router = useRouter();
@@ -130,6 +57,10 @@ export default function PricingPage() {
           <h1 className="text-4xl font-bold tracking-tight">Simple, transparent pricing</h1>
           <p className="mt-4 text-lg text-gray-600 dark:text-gray-400">
             $9.99 per student per month. One dashboard, one bill — the primary account holder pays.
+          </p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400" data-testid="pricing-sharing-note">
+            Sharing a student with co-parents, guardians and caregivers is included and does not count
+            against their plan.
           </p>
         </div>
 

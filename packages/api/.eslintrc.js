@@ -15,26 +15,6 @@ module.exports = {
       files: ['src/server.ts'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
-        '@typescript-eslint/naming-convention': [
-          'error',
-          { selector: 'variable', filter: { regex: '^(MongoQueue|SyncScheduler)$', match: true }, format: ['PascalCase'] },
-          { selector: 'variable', filter: { regex: '^(MongoQueue|SyncScheduler)$', match: false }, format: ['camelCase', 'UPPER_CASE', 'PascalCase'] },
-        ],
-      },
-    },
-    {
-      files: ['src/services/scraper-generator/**/*.ts'],
-      rules: {
-        'no-useless-escape': 'off',
-        '@typescript-eslint/explicit-function-return-type': 'off',
-        '@typescript-eslint/explicit-module-boundary-types': 'off',
-      },
-    },
-    {
-      files: ['src/routes/sync/sync.ts'],
-      rules: {
-        '@typescript-eslint/explicit-function-return-type': 'off',
-        '@typescript-eslint/explicit-module-boundary-types': 'off',
       },
     },
     {

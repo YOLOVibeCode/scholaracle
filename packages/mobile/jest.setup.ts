@@ -52,6 +52,7 @@ jest.mock('expo-crypto', () => ({
 // react-native ships Flow-typed sources jest can't parse; mock the pieces used.
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios', select: (spec: { ios?: unknown }) => spec.ios },
+  Linking: { openURL: jest.fn(async () => true), canOpenURL: jest.fn(async () => true) },
   AppState: {
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
     currentState: 'active',
@@ -70,4 +71,9 @@ jest.mock('expo-notifications', () => ({
   getExpoPushTokenAsync: jest.fn().mockResolvedValue({ data: 'ExponentPushToken[test]' }),
   addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
+  setNotificationChannelAsync: jest.fn().mockResolvedValue(null),
+  AndroidImportance: { HIGH: 4 },
+  AndroidNotificationVisibility: { PRIVATE: 0 },
 }));

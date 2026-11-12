@@ -9,17 +9,54 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   STUDENT_SESSION_KEYS,
+  STUDENT_HELP_NOTE_MAX_CHARS,
   TODAY_VIEW_KEYS,
   WORK_PACK_VIEW_KEYS,
   NEXT_STEP_KEYS,
+  WEEK_VIEW_KEYS,
+  WEEK_ITEM_KEYS,
+  WEEK_DAY_LABELS,
+  STUDENT_STATUSES,
+  WEEK_NEEDS,
   parseTodayView,
   parseWorkPackView,
+  parseWeekView,
+  parseStudentStatusUpdateResponse,
+  studioStatusPatchBody,
   assertNoGradeLeak,
   type IStudentSession,
+  type IStudentStatusUpdateRequest,
+  type IStudentStatusUpdateResponse,
   type ITodayView,
   type IWorkPackView,
   type INextStep,
+  type IWeekDay,
+  type IWeekDone,
+  type IWeekItem,
+  type IWeekView,
 } from './studio';
+
+describe('student status PATCH contract (student review R3)', () => {
+  it('lists the four student statuses and caps the need-help note at 140 characters', () => {
+    expect([...STUDENT_STATUSES]).toEqual(['not_started', 'working_on_it', 'need_help', 'done']);
+    expect(STUDENT_HELP_NOTE_MAX_CHARS).toBe(140);
+  });
+
+  it('request carries status plus an optional note; response reports notified/nextAllowedAt', () => {
+    const request: IStudentStatusUpdateRequest = { status: 'need_help', note: "I don't get #7" };
+    const limited: IStudentStatusUpdateResponse = {
+      success: true,
+      studentStatus: 'need_help',
+      studentNote: request.note,
+      notified: false,
+      nextAllowedAt: '2026-11-10T18:00:00.000Z',
+    };
+    const plain: IStudentStatusUpdateResponse = { success: true, studentStatus: 'done' };
+    expect(Object.keys(request)).toEqual(['status', 'note']);
+    expect(limited.notified).toBe(false);
+    expect(plain.notified).toBeUndefined();
+  });
+});
 import type { ICourseMaterial } from './materials';
 
 const NEXT: INextStep = {
@@ -355,5 +392,205 @@ describe('ISP — studio types do not import the gradebook', () => {
     expect(src).not.toMatch(/letterGrade/);
     expect(src).not.toMatch(/pointsEarned/);
     expect(src).not.toMatch(/INudgePublisher/);
+  });
+});
+
+describe('IWeekView — student review (R1)', () => {
+  const ITEM: IWeekItem = {
+    assignmentExternalId: 'demo-emma-ap-bio-a5',
+    title: 'Cell Division worksheet',
+    courseName: 'AP Biology',
+    dueAt: '2026-08-27T16:00:00.000Z',
+    humanStatus: 'Due soon',
+    studentStatus: 'not_started',
+    needs: ['saved_file', 'internet'],
+    primaryCtaLabel: 'Open worksheet',
+  };
+
+  const OWED: IWeekItem = {
+    ...ITEM,
+    assignmentExternalId: 'demo-emma-alg2-missing-1',
+    title: 'Missing assignment 1',
+    courseName: 'Algebra II',
+    humanStatus: 'Not turned in',
+    studentStatus: 'done',
+    needs: [],
+    warning: 'Marked done, but the school shows not turned in',
+  };
+
+  const TODAY_DAY: IWeekDay = { date: '2026-08-27', label: 'Today', items: [ITEM] };
+
+  const DONE: IWeekDone = {
+    assignmentExternalId: 'demo-emma-eng10-a9',
+    title: 'Essay draft',
+    courseName: 'English 10 Honors',
+    dueAt: '2026-08-30T16:00:00.000Z',
+    confirmedBySchool: true,
+  };
+
+  const WEEK: IWeekView = {
+    encouragement: 'Nice work on Reading response 8.',
+    owed: [OWED],
+    days: [
+      TODAY_DAY,
+      { date: '2026-08-28', label: 'Tomorrow', items: [] },
+      { date: '2026-08-29', label: 'Sat', items: [] },
+    ],
+    doneThisWeek: [DONE],
+    counts: { owed: 1, due: 1, done: 1 },
+  };
+
+  it('pins the wire keys', () => {
+    expect(WEEK_VIEW_KEYS).toEqual(['encouragement', 'owed', 'days', 'doneThisWeek', 'counts']);
+    expect(WEEK_ITEM_KEYS).toEqual([
+      'assignmentExternalId',
+      'title',
+      'courseName',
+      'dueAt',
+      'humanStatus',
+      'studentStatus',
+      'needs',
+      'primaryCtaLabel',
+      'warning',
+    ]);
+    expect(WEEK_DAY_LABELS).toEqual([
+      'Today',
+      'Tomorrow',
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(STUDENT_STATUSES).toEqual(['not_started', 'working_on_it', 'need_help', 'done']);
+    expect(WEEK_NEEDS).toEqual(['saved_file', 'school_login', 'internet']);
+  });
+
+  it('parseWeekView round-trips a valid view', () => {
+    expect(parseWeekView(JSON.parse(JSON.stringify(WEEK)))).toEqual(WEEK);
+  });
+
+  it('parseWeekView rejects a gradebook field smuggled onto an item', () => {
+    const poisoned = {
+      ...WEEK,
+      owed: [{ ...OWED, pointsEarned: 4 }],
+    };
+    expect(() => parseWeekView(poisoned)).toThrow(/unexpected/);
+  });
+
+  it('parseWeekView rejects an unknown studentStatus, need, or list shape', () => {
+    const day = TODAY_DAY;
+    expect(() =>
+      parseWeekView({ ...WEEK, days: [{ ...day, items: [{ ...ITEM, studentStatus: 'x' }] }] })
+    ).toThrow(/studentStatus/);
+    expect(() =>
+      parseWeekView({ ...WEEK, days: [{ ...day, items: [{ ...ITEM, needs: ['wifi'] }] }] })
+    ).toThrow(/needs/);
+    expect(() => parseWeekView({ ...WEEK, days: 'nope' })).toThrow(/days/);
+    expect(() => parseWeekView({ ...WEEK, counts: { owed: 1, due: 1 } })).toThrow(/counts/);
+    expect(() => parseWeekView(null)).toThrow(/IWeekView/);
+  });
+
+  it('assertNoGradeLeak scans encouragement, items, warnings, and done titles', () => {
+    const day = TODAY_DAY;
+    expect(() => assertNoGradeLeak(WEEK, false)).not.toThrow();
+    expect(() =>
+      assertNoGradeLeak({ ...WEEK, encouragement: 'You are at 91% now.' }, false)
+    ).toThrow(/grade|percent/i);
+    expect(() =>
+      assertNoGradeLeak(
+        { ...WEEK, days: [{ ...day, items: [{ ...ITEM, title: 'Quiz (A-)' }] }] },
+        false
+      )
+    ).toThrow(/grade|letter/i);
+    expect(() =>
+      assertNoGradeLeak(
+        { ...WEEK, owed: [{ ...OWED, warning: 'School shows 4/10 points' }] },
+        false
+      )
+    ).toThrow(/grade|points/i);
+    expect(() =>
+      assertNoGradeLeak({ ...WEEK, owed: [{ ...OWED, humanStatus: 'Graded 85%' }] }, false)
+    ).toThrow(/grade|percent/i);
+    expect(() =>
+      assertNoGradeLeak({ ...WEEK, doneThisWeek: [{ ...DONE, title: 'Essay 9/10' }] }, false)
+    ).toThrow(/grade|points/i);
+    expect(() => assertNoGradeLeak({ ...WEEK, encouragement: '91% now.' }, true)).not.toThrow();
+  });
+});
+
+describe('status PATCH body + response (R2 clients, R3 server)', () => {
+  it('studioStatusPatchBody sends a trimmed note only when there is one', () => {
+    expect(studioStatusPatchBody('need_help', "  I don't get #7 ")).toEqual({
+      status: 'need_help',
+      note: "I don't get #7",
+    });
+    expect(studioStatusPatchBody('need_help', '   ')).toEqual({ status: 'need_help' });
+    expect(studioStatusPatchBody('done')).toEqual({ status: 'done' });
+    expect(studioStatusPatchBody(null, undefined)).toEqual({ status: null });
+  });
+
+  it('parseStudentStatusUpdateResponse keeps notified / nextAllowedAt when present', () => {
+    expect(
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        studentNote: 'stuck',
+        notified: false,
+        nextAllowedAt: '2026-11-10T18:00:00.000Z',
+      })
+    ).toEqual({
+      success: true,
+      studentStatus: 'need_help',
+      studentNote: 'stuck',
+      notified: false,
+      nextAllowedAt: '2026-11-10T18:00:00.000Z',
+    });
+    expect(
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        notified: true,
+      })
+    ).toEqual({ success: true, studentStatus: 'need_help', notified: true });
+  });
+
+  it('parseStudentStatusUpdateResponse accepts an older server that never says notified', () => {
+    expect(parseStudentStatusUpdateResponse({ success: true, studentStatus: 'done' })).toEqual({
+      success: true,
+      studentStatus: 'done',
+    });
+    expect(parseStudentStatusUpdateResponse({ success: true, studentStatus: null })).toEqual({
+      success: true,
+      studentStatus: null,
+    });
+    expect(parseStudentStatusUpdateResponse({ success: true })).toEqual({
+      success: true,
+      studentStatus: null,
+    });
+  });
+
+  it('parseStudentStatusUpdateResponse rejects garbage', () => {
+    expect(() => parseStudentStatusUpdateResponse(null)).toThrow(/expected object/);
+    expect(() => parseStudentStatusUpdateResponse({ success: false })).toThrow(/success/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({ success: true, studentStatus: 'late' })
+    ).toThrow(/studentStatus/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        notified: 'yes',
+      })
+    ).toThrow(/notified/);
+    expect(() =>
+      parseStudentStatusUpdateResponse({
+        success: true,
+        studentStatus: 'need_help',
+        nextAllowedAt: 5,
+      })
+    ).toThrow(/nextAllowedAt/);
   });
 });

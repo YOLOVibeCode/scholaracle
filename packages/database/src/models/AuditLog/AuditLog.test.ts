@@ -364,4 +364,24 @@ describe('AuditLog', () => {
       );
     });
   });
+
+  describe('sharing actions', () => {
+    const base = {
+      adminUserId: 'parent-1',
+      adminEmail: 'parent@example.com',
+      entityType: 'student_sharing',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    };
+
+    it('describes a self-removal and a re-sent link', () => {
+      expect(new AuditLog({ ...base, action: 'sharing:leave' }).getActionDescription()).toBe(
+        'An adult stopped following a student'
+      );
+      expect(new AuditLog({ ...base, action: 'sharing:link_sent' }).getActionDescription()).toBe(
+        'Sent or re-sent a student-sharing invitation link'
+      );
+      expect(new AuditLog({ ...base, action: 'sharing:leave' }).severity).toBe('info');
+    });
+  });
 });

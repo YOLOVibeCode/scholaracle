@@ -22,6 +22,7 @@ import type {
   IAeriesCourseExtract,
   IAeriesScheduleRow,
   IAeriesStudentListItem,
+  IAeriesSelectorsV1,
 } from '../extractors/aeries/aeries-extractors';
 import {
   extractAeriesStudentList,
@@ -35,10 +36,16 @@ import {
   isAeriesDashboardReady,
   isAeriesAttendanceReady,
 } from '../extractors/aeries/aeries-extractors';
+import { AERIES_SELECTORS_V1 } from '../selectors/aeriesV1';
+import { mergeSelectorRecord } from '../selectors/mergeSelectorTables';
 
 const PAGE_TIMEOUT_MS = 45_000;
 const DASHBOARD_READY_MS = 30_000;
 const ATTENDANCE_READY_MS = 20_000;
+
+export interface IRunAeriesRecipeOptions {
+  readonly selectors?: Partial<IAeriesSelectorsV1>;
+}
 
 /**
  * Run the Aeries scrape recipe.
@@ -49,18 +56,20 @@ const ATTENDANCE_READY_MS = 20_000;
  */
 export async function runAeriesRecipe(
   driver: IPageDriver,
-  baseUrl: string
+  baseUrl: string,
+  options?: IRunAeriesRecipeOptions
 ): Promise<IAeriesFullExtract> {
+  const selectors = mergeSelectorRecord(AERIES_SELECTORS_V1, options?.selectors);
   const portalBase = aeriesPortalBase(baseUrl);
   const studentRoot = `${portalBase}/student/`;
   const dashboardUrl = `${studentRoot}Dashboard.aspx`;
 
-  await openDashboard(driver, dashboardUrl);
-  const studentList = await driver.evaluate(extractAeriesStudentList);
+  await openDashboard(driver, dashboardUrl, selectors);
+  const studentList = await driver.evaluate(extractAeriesStudentList, selectors);
 
   const allStudents: IAeriesStudentExtract[] = [];
   const current = studentList.find((s) => s.isCurrent) ?? studentList[0];
-  allStudents.push(await scrapeCurrentStudent(driver, studentRoot, current));
+  allStudents.push(await scrapeCurrentStudent(driver, studentRoot, current, selectors));
 
   for (const other of studentList) {
     if (other.isCurrent || !other.switchHref) continue;
@@ -70,8 +79,8 @@ export async function runAeriesRecipe(
         waitUntil: 'load',
         timeout: PAGE_TIMEOUT_MS,
       });
-      await openDashboard(driver, dashboardUrl);
-      allStudents.push(await scrapeCurrentStudent(driver, studentRoot, other));
+      await openDashboard(driver, dashboardUrl, selectors);
+      allStudents.push(await scrapeCurrentStudent(driver, studentRoot, other, selectors));
     } catch {
       // Keep what we have; the next student is independent.
     }
@@ -99,24 +108,32 @@ export function resolveAeriesUrl(studentRoot: string, href: string): string {
   return studentRoot + href.replace(/^\.?\//, '');
 }
 
-async function openDashboard(driver: IPageDriver, dashboardUrl: string): Promise<void> {
+async function openDashboard(
+  driver: IPageDriver,
+  dashboardUrl: string,
+  selectors: IAeriesSelectorsV1
+): Promise<void> {
   await driver.goto(dashboardUrl, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS });
   // The class widget renders after the page load.
   const started = Date.now();
-  while (!(await driver.evaluate(isAeriesDashboardReady))) {
+  while (!(await driver.evaluate(isAeriesDashboardReady, selectors))) {
     if (Date.now() - started > DASHBOARD_READY_MS) break;
     await driver.sleep(500);
   }
 }
 
-async function openAttendance(driver: IPageDriver, studentRoot: string): Promise<void> {
+async function openAttendance(
+  driver: IPageDriver,
+  studentRoot: string,
+  selectors: IAeriesSelectorsV1
+): Promise<void> {
   await driver.goto(`${studentRoot}Attendance.aspx`, {
     waitUntil: 'load',
     timeout: PAGE_TIMEOUT_MS,
   });
   // The attendance grid renders after the page load.
   const started = Date.now();
-  while (!(await driver.evaluate(isAeriesAttendanceReady))) {
+  while (!(await driver.evaluate(isAeriesAttendanceReady, selectors))) {
     if (Date.now() - started > ATTENDANCE_READY_MS) break;
     await driver.sleep(500);
   }
@@ -125,10 +142,11 @@ async function openAttendance(driver: IPageDriver, studentRoot: string): Promise
 async function scrapeCurrentStudent(
   driver: IPageDriver,
   studentRoot: string,
-  listEntry: IAeriesStudentListItem | undefined
+  listEntry: IAeriesStudentListItem | undefined,
+  selectors: IAeriesSelectorsV1
 ): Promise<IAeriesStudentExtract> {
-  const dashboardInfo = await driver.evaluate(extractAeriesStudentInfo);
-  const cards = await driver.evaluate(extractAeriesDashboardCourses);
+  const dashboardInfo = await driver.evaluate(extractAeriesStudentInfo, selectors);
+  const cards = await driver.evaluate(extractAeriesDashboardCourses, selectors);
 
   let schedule: IAeriesScheduleRow[] = [];
   try {
@@ -136,7 +154,7 @@ async function scrapeCurrentStudent(
       waitUntil: 'load',
       timeout: PAGE_TIMEOUT_MS,
     });
-    schedule = await driver.evaluate(extractAeriesSchedule);
+    schedule = await driver.evaluate(extractAeriesSchedule, selectors);
   } catch {
     // Period and email then come from the gradebook pages only.
   }
@@ -156,18 +174,18 @@ async function scrapeCurrentStudent(
           waitUntil: 'load',
           timeout: PAGE_TIMEOUT_MS,
         });
-        const options = await driver.evaluate(extractAeriesCourseDropdownOptions);
+        const options = await driver.evaluate(extractAeriesCourseDropdownOptions, selectors);
         const selected = options.find((o) => o.selected);
         period = selected?.text.match(/^(\d+)\s*-/)?.[1] ?? '';
         const dates = parseAeriesTermDates(selected?.text ?? '');
         termStart = dates?.start ?? '';
         termEnd = dates?.end ?? '';
-        const t = await driver.evaluate(extractAeriesTeacher);
+        const t = await driver.evaluate(extractAeriesTeacher, selectors);
         if (t.name) teacher = t.name;
         teacherEmail = t.email;
-        assignments = await driver.evaluate(extractAeriesAssignments);
+        assignments = await driver.evaluate(extractAeriesAssignments, selectors);
         if (!studentId) {
-          const info = await driver.evaluate(extractAeriesStudentInfo);
+          const info = await driver.evaluate(extractAeriesStudentInfo, selectors);
           studentId = info.studentId;
         }
       } catch {
@@ -196,10 +214,10 @@ async function scrapeCurrentStudent(
 
   let attendance: IAeriesStudentExtract['attendance'] = [];
   try {
-    await openAttendance(driver, studentRoot);
-    attendance = await driver.evaluate(extractAeriesAttendance);
+    await openAttendance(driver, studentRoot, selectors);
+    attendance = await driver.evaluate(extractAeriesAttendance, selectors);
     if (!studentId) {
-      const info = await driver.evaluate(extractAeriesStudentInfo);
+      const info = await driver.evaluate(extractAeriesStudentInfo, selectors);
       studentId = info.studentId;
     }
   } catch {

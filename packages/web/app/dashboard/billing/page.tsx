@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, ExternalLink, FileText, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { billingApi, type ISubscriptionInfo, type IInvoice } from '@/lib/api/billing';
+import { TrialCountdownBanner } from '@/components/billing/TrialCountdownBanner';
+import { PlanIncludesCard } from '@/components/billing/PlanIncludesCard';
+import { UpgradePlanPicker } from '@/components/billing/UpgradePlanPicker';
+import { InvoiceHistoryList } from '@/components/billing/InvoiceHistoryList';
+import type { BillingCycle } from '@/lib/billing/planCatalog';
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free',
@@ -37,8 +42,6 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 
   past_due: 'destructive',
   cancelled: 'outline',
 };
-
-type BillingCycle = 'monthly' | 'annual';
 
 function BillingPageContent() {
   const searchParams = useSearchParams();
@@ -58,14 +61,9 @@ function BillingPageContent() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'error' | 'success'>('error');
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>(cycleParam);
 
   const [couponCode, setCouponCode] = useState(couponParam ?? '');
   const [isRedeeming, setIsRedeeming] = useState(false);
-
-  useEffect(() => {
-    setBillingCycle(cycleParam);
-  }, [cycleParam]);
 
   useEffect(() => {
     void (async () => {
@@ -80,6 +78,11 @@ function BillingPageContent() {
         setIsLoading(false);
       }
     })();
+  }, []);
+
+  const showToast = useCallback((message: string, type: 'error' | 'success') => {
+    setToastType(type);
+    setToast(message);
   }, []);
 
   const handleManageBilling = async () => {
@@ -108,7 +111,7 @@ function BillingPageContent() {
     }
   };
 
-  const handleUpgrade = async (plan: string, billingCycle: 'monthly' | 'annual' = 'monthly') => {
+  const handleUpgrade = async (plan: string, billingCycle: BillingCycle = 'monthly') => {
     setToast(null);
     const url = await billingApi.createCheckout(plan, billingCycle);
     if (url) {
@@ -142,11 +145,6 @@ function BillingPageContent() {
     }
   };
 
-  const showToast = (message: string, type: 'error' | 'success') => {
-    setToastType(type);
-    setToast(message);
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-6" data-testid="billing-page">
@@ -158,8 +156,6 @@ function BillingPageContent() {
     );
   }
 
-  // Offer checkout whenever no paid plan is in force: never subscribed, cancelled,
-  // paused, or a lapsed trial or period. (The server reports effectivePlan.)
   const isFreePlan = (subscription?.effectivePlan ?? subscription?.plan) === 'free';
 
   return (
@@ -168,6 +164,13 @@ function BillingPageContent() {
         <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
         <p className="text-gray-600 dark:text-gray-400">Manage your subscription and billing</p>
       </div>
+
+      {subscription?.status === 'trialing' &&
+        (subscription.trialEnd ?? subscription.currentPeriodEnd) && (
+          <TrialCountdownBanner
+            trialEndIso={subscription.trialEnd ?? subscription.currentPeriodEnd ?? ''}
+          />
+        )}
 
       {toast && (
         <div
@@ -183,7 +186,6 @@ function BillingPageContent() {
         </div>
       )}
 
-      {/* Current Plan */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -219,78 +221,41 @@ function BillingPageContent() {
             </p>
           )}
         </CardContent>
-        <CardFooter className="flex flex-wrap items-center gap-3">
-          {isFreePlan ? (
-            <>
-              <div className="flex items-center gap-2" data-testid="billing-cycle-toggle">
-                <span
-                  className={
-                    billingCycle === 'monthly' ? 'font-medium' : 'text-muted-foreground text-sm'
-                  }
-                >
-                  Monthly
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={billingCycle === 'annual'}
-                  onClick={() => setBillingCycle((c) => (c === 'monthly' ? 'annual' : 'monthly'))}
-                  className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-gray-700 aria-[checked=true]:bg-blue-600"
-                  data-testid="toggle-annual-billing"
-                >
-                  <span
-                    className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform"
-                    style={{
-                      transform:
-                        billingCycle === 'annual' ? 'translateX(1.25rem)' : 'translateX(0)',
-                    }}
-                  />
-                </button>
-                <span
-                  className={
-                    billingCycle === 'annual'
-                      ? 'font-medium text-sm'
-                      : 'text-muted-foreground text-sm'
-                  }
-                >
-                  Annual
-                </span>
-              </div>
+        {!isFreePlan && (
+          <CardFooter className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => void handleManageBilling()}
+              disabled={isPortalLoading}
+              data-testid="button-manage-billing"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              {isPortalLoading ? 'Opening...' : 'Manage Billing'}
+            </Button>
+            {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
               <Button
-                onClick={() => handleUpgrade(upgradePlan ?? 'starter', billingCycle)}
-                data-testid="button-upgrade"
+                variant="ghost"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={isCancelling}
+                data-testid="button-cancel-subscription"
               >
-                Upgrade to {PLAN_LABELS[upgradePlan ?? 'starter'] ?? 'Starter'}
-                {billingCycle === 'annual' ? ' (annual)' : ''}
+                Cancel subscription
               </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                onClick={handleManageBilling}
-                disabled={isPortalLoading}
-                data-testid="button-manage-billing"
-              >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                {isPortalLoading ? 'Opening...' : 'Manage Billing'}
-              </Button>
-              {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowCancelConfirm(true)}
-                  disabled={isCancelling}
-                  data-testid="button-cancel-subscription"
-                >
-                  Cancel subscription
-                </Button>
-              )}
-            </>
-          )}
-        </CardFooter>
+            )}
+          </CardFooter>
+        )}
       </Card>
 
-      {/* Coupon Redemption */}
+      <PlanIncludesCard subscription={subscription} />
+
+      {isFreePlan && (
+        <UpgradePlanPicker
+          initialPlan={upgradePlan}
+          initialCycle={cycleParam}
+          onCheckout={(plan, cycle) => void handleUpgrade(plan, cycle)}
+        />
+      )}
+
       {isFreePlan && (
         <Card>
           <CardHeader>
@@ -323,7 +288,6 @@ function BillingPageContent() {
         </Card>
       )}
 
-      {/* Invoice History */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -333,51 +297,7 @@ function BillingPageContent() {
           <CardDescription>Your recent invoices</CardDescription>
         </CardHeader>
         <CardContent>
-          {invoices.length === 0 ? (
-            <p className="text-sm text-gray-500" data-testid="no-invoices">
-              No invoices yet
-            </p>
-          ) : (
-            <div className="space-y-3" data-testid="invoice-list">
-              {invoices.map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="flex items-center justify-between rounded-md border p-3"
-                  data-testid="invoice-item"
-                >
-                  <div>
-                    <p className="text-sm font-medium">
-                      ${invoice.amount.toFixed(2)} {invoice.currency.toUpperCase()}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(invoice.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={
-                        invoice.status === 'succeeded' || invoice.status === 'paid'
-                          ? 'default'
-                          : 'outline'
-                      }
-                    >
-                      {invoice.status}
-                    </Badge>
-                    {invoice.pdfUrl && (
-                      <a
-                        href={invoice.pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-                      >
-                        PDF
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <InvoiceHistoryList invoices={invoices} />
         </CardContent>
       </Card>
 
