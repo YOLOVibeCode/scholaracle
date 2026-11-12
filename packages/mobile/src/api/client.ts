@@ -165,10 +165,19 @@ export class ScholarmancyApiClient {
    */
   private async _timedFetch(url: string, init: RequestInit = {}): Promise<Response> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this._requestTimeoutMs);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this._requestTimeoutMs);
     try {
       return await fetch(url, { ...init, signal: controller.signal });
     } catch (err: unknown) {
+      // Our own timer cancelled the request. Runtimes word that differently ("AbortError" on
+      // older React Native; "fetch failed: FetchRequestCanceledException: … (at
+      // Expo/NativeResponse.swift:63)" on Expo's fetch), so do not depend on the error's shape:
+      // a parent must never read a native exception on the sign-in screen.
+      if (timedOut) throw new ApiError(OFFLINE_ERROR_MESSAGE, 0, OFFLINE_ERROR_CODE);
       throw mapFetchFailure(err);
     } finally {
       clearTimeout(timeout);
@@ -1115,8 +1124,14 @@ function isOfflineLike(err: unknown): boolean {
   return (
     message.includes('network request failed') ||
     message.includes('failed to fetch') ||
+    // Expo's fetch reports every transport failure (no route, DNS, cancelled, connection
+    // lost) as "fetch failed: <native exception>".
+    message.startsWith('fetch failed') ||
     message.includes('the internet connection appears to be offline') ||
     message.includes('aborted') ||
+    message.includes('canceled') ||
+    message.includes('cancelled') ||
+    message.includes('timed out') ||
     message.includes('the network connection was lost')
   );
 }
