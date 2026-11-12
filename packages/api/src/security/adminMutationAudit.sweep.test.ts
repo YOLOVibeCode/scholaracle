@@ -44,6 +44,7 @@ describe('Admin mutation audit sweep', () => {
       createCheckout: jest.fn(),
       cancelSubscription: jest.fn(),
       updatePaymentMethod: jest.fn(),
+      changePlan: jest.fn(),
       refundPayment: jest.fn(),
     };
 

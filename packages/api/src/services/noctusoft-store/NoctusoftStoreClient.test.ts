@@ -76,6 +76,31 @@ describe('NoctusoftStoreClient', () => {
     });
   });
 
+  it('posts change-plan with SKU and effective timing', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        subscriptionRef: 'ns_sub_1',
+        plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+        billingCycle: 'monthly',
+        currentPeriodEnd: '2026-11-28T00:00:00.000Z',
+      })
+    );
+    const client = new NoctusoftStoreClient(config, fetchMock);
+
+    const result = await client.changePlan('ns_sub_1', {
+      plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      effective: 'now',
+    });
+
+    const call = lastCall(fetchMock);
+    expect(call.url).toBe('https://store.noctusoft.com/subscriptions/ns_sub_1/change-plan');
+    expect(JSON.parse(String(call.init.body))).toEqual({
+      plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      effective: 'now',
+    });
+    expect(result.currentPeriodEnd).toBe('2026-11-28T00:00:00.000Z');
+  });
+
   it('returns the store page where the buyer updates their card', async () => {
     const fetchMock = jest.fn().mockResolvedValue(
       jsonResponse(200, {
