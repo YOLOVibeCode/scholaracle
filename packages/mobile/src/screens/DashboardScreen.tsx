@@ -131,12 +131,18 @@ export function DashboardScreen({
 
   return (
     <View style={styles.container}>
+      {/* Two rows: with Family, Edit, Runs and Sync next to the name, one row pushed Sync
+          off the right edge on every phone. The actions wrap, so large text still fits. */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
-          <Text style={styles.back}>‹ Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{studentName}</Text>
-        <View style={styles.headerActions}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={onBack} accessibilityRole="button" testID="button-back">
+            <Text style={styles.back}>‹ Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title} numberOfLines={1} testID="text-dashboard-title">
+            {studentName}
+          </Text>
+        </View>
+        <View style={styles.headerActions} testID="dashboard-actions">
           {onOpenFamily && (
             <TouchableOpacity
               style={styles.historyBtn}
@@ -405,17 +411,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 16,
+    gap: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#dee2e6',
   },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   back: { color: '#4361ee', fontSize: 17 },
-  title: { fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1a1a2e' },
+  headerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
   historyBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
