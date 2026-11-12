@@ -69,6 +69,7 @@ Add any other allowed origins (e.g. staging or preview URLs) as needed. The brow
 - **API:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.api`, `PORT` (Railway sets automatically), **`CORS_ORIGINS`** (e.g. `https://scholarmancy.com,https://www.scholarmancy.com`), `MONGO_URL` (from MongoDB plugin). Optional: `BASE_URL` / `WEB_URL` for password reset links.
 - **Web:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.web`, `PORT`, **`NEXT_PUBLIC_API_URL`** (e.g. `https://api.scholarmancy.com/api` — baked at build time), `MONGO_URL` if needed.
 - **Workers:** `RAILWAY_DOCKERFILE_PATH` = `Dockerfile.workers`, `MONGO_URL` (from MongoDB plugin)
+- **API, for Sign in with Apple token revocation at account deletion (App Review 5.1.1(v)):** `APPLE_TEAM_ID`, `APPLE_SIGN_IN_KEY_ID`, `APPLE_SIGN_IN_PRIVATE_KEY` (contents of the `.p8` of a key with "Sign in with Apple" enabled for `com.scholarmancy.app`; from the vault). Until all three are set, deletion works and logs that no Apple token was revoked. See `packages/api/src/services/apple/appleTokenRevocation.ts`.
 
 ## Redeploy
 

@@ -1,11 +1,8 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import type { IAppleProof } from './appleDeleteRequest';
 
-export interface IAppleProof {
-  readonly identityToken: string;
-  /** Raw nonce; Apple was given its SHA-256, the server re-hashes and compares. */
-  readonly nonce: string;
-}
+export type { IAppleProof } from './appleDeleteRequest';
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
@@ -22,7 +19,8 @@ export async function isAppleProofAvailable(): Promise<boolean> {
 
 /**
  * Run a FRESH Sign in with Apple and return the identity token + raw nonce, to prove to the server
- * who is at the keyboard (account deletion for accounts that have no password).
+ * who is at the keyboard (account deletion for accounts that have no password), plus the
+ * one-time authorization code the server needs to revoke the user's Apple tokens.
  * Returns null when the user cancels.
  */
 export async function requestAppleProof(): Promise<IAppleProof | null> {
@@ -33,7 +31,12 @@ export async function requestAppleProof(): Promise<IAppleProof | null> {
     if (credential.identityToken === null || credential.identityToken === '') {
       throw new Error('Apple did not return an identity token');
     }
-    return { identityToken: credential.identityToken, nonce };
+    const code = credential.authorizationCode;
+    return {
+      identityToken: credential.identityToken,
+      nonce,
+      authorizationCode: typeof code === 'string' && code !== '' ? code : null,
+    };
   } catch (err: unknown) {
     if (
       err !== null &&

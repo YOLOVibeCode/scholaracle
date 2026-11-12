@@ -88,6 +88,10 @@ import {
 } from './services/noctusoft-store';
 import { seedRouter } from './routes/seed/seed';
 import { createAccountRouter } from './routes/account/account';
+import {
+  AppleTokenRevoker,
+  appleRevocationConfigFromEnv,
+} from './services/apple/appleTokenRevocation';
 import { ingestV1Router } from './routes/ingest/v1';
 import { createGoogleOAuthRouter } from './routes/oauth/google';
 import { createAssetUploadRouter, createAssetServeRouter } from './routes/assets/assets';
@@ -507,7 +511,12 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use(
       '/api/account',
       authMiddleware(authService),
-      createAccountRouter({ database, baseUrl })
+      createAccountRouter({
+        database,
+        baseUrl,
+        // Does nothing until the Sign in with Apple key variables are set on this server.
+        appleTokenRevoker: new AppleTokenRevoker(appleRevocationConfigFromEnv()),
+      })
     );
     app.use(
       '/api/oauth',

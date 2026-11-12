@@ -1382,6 +1382,22 @@ describe('ScholarmancyApiClient Apple login and account deletion', () => {
     });
   });
 
+  it('deleteAccount forwards the Apple authorization code for token revocation', async () => {
+    secureStoreData.set('slc_access_token', 'jwt-access-token-1');
+    const fetchMock = mockFetchSequence({ status: 200, body: { success: true } });
+    await client.deleteAccount({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+      appleAuthorizationCode: 'one-time-code',
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      appleIdentityToken: 'apple.jwt',
+      appleNonce: 'raw-nonce',
+      appleAuthorizationCode: 'one-time-code',
+    });
+  });
+
   it('getServedSelectorPatches GETs connector selector-patches for portal host', async () => {
     const fetchMock = mockFetchSequence({
       status: 200,
