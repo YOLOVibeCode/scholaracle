@@ -34,7 +34,7 @@ import {
 } from './onboardingMachine';
 import { registerForPushNotifications } from '../notifications/pushSetup';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
-import { isUsStorefrontLocale, resolvedDeviceLocale } from '../utils/usStorefrontLocale';
+import { canLinkToWebPlans, resolvedDeviceLocale } from '../utils/usStorefrontLocale';
 
 const PROVIDERS: readonly { id: OnboardingProvider; name: string; urlHint: string }[] = [
   { id: 'skyward', name: 'Skyward Family Access', urlHint: 'https://skyward.iscorp.com' },
@@ -66,7 +66,7 @@ export function OnboardingScreen({
   const [applyResult, setApplyResult] = useState<IApplyOnboardingResult | null>(null);
 
   const ready = useMemo(() => canAdvance(state), [state]);
-  const isUsLocale = useMemo(() => isUsStorefrontLocale(resolvedDeviceLocale()), []);
+  const canLinkOut = useMemo(() => canLinkToWebPlans(Platform.OS, resolvedDeviceLocale()), []);
 
   const submitAccount = async (): Promise<void> => {
     const email = state.email.trim();
@@ -136,7 +136,7 @@ export function OnboardingScreen({
               {applyResult.students[0]?.name ?? 'The first child'} is set up. To add another
               student, manage membership on the web — not in this app.
             </Text>
-            {isUsLocale && (
+            {canLinkOut && (
               <TouchableOpacity
                 style={styles.plansLinkRow}
                 onPress={() => void Linking.openURL(STORE_LEGAL_URLS.pricing)}
