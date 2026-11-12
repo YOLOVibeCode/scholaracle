@@ -33,9 +33,11 @@ describe('Plan & usage wiring', () => {
     expect(clampNavView('student', 'plan')).toBe('today');
   });
 
-  it('web links come only from planManageLinks gated by the US-locale check', () => {
-    expect(PLAN).toContain('isUsStorefrontLocale(resolvedDeviceLocale())');
-    expect(PLAN).toContain('planManageLinks(isUsLocale, STORE_LEGAL_URLS)');
+  it('web links come only from planManageLinks gated by platform and US locale', () => {
+    expect(PLAN).toContain('canLinkToWebPlans(Platform.OS, resolvedDeviceLocale())');
+    expect(PLAN).toContain('planManageLinks(canLinkOut, STORE_LEGAL_URLS)');
+    // The locale-only check must not come back: it showed the links on Android.
+    expect(PLAN).not.toContain('isUsStorefrontLocale');
     // The screen itself never opens a URL outside the gated link list.
     expect(PLAN.match(/Linking\.openURL/g)).toHaveLength(1);
     expect(PLAN).toContain('Linking.openURL(link.url)');

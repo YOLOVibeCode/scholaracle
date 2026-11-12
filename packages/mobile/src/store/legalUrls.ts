@@ -7,6 +7,6 @@ export const STORE_LEGAL_URLS = {
   marketing: 'https://scholarmancy.com',
   /** Web-only plans (no IAP in app). */
   pricing: 'https://scholarmancy.com/pricing',
-  /** Web billing page (manage an existing plan). Shown to US-locale devices only. */
+  /** Web billing page (manage an existing plan). Shown on iOS to US-locale devices only. */
   billing: 'https://scholarmancy.com/dashboard/billing',
 } as const;
