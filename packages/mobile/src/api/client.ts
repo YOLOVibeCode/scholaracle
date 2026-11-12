@@ -245,10 +245,13 @@ export class ScholarmancyApiClient {
 
   /**
    * Permanently delete the signed-in parent account. Pass the password, or for accounts
-   * created with Apple (no known password) a fresh Apple identity token + nonce.
+   * created with Apple (no known password) a fresh Apple identity token + nonce, with the
+   * authorization code of that sign-in so the server can revoke the Apple tokens.
    */
   async deleteAccount(
-    proof: { password: string } | { appleIdentityToken: string; appleNonce: string }
+    proof:
+      | { password: string }
+      | { appleIdentityToken: string; appleNonce: string; appleAuthorizationCode?: string }
   ): Promise<void> {
     await this._delete<{ success: boolean }>('/api/account', proof);
   }

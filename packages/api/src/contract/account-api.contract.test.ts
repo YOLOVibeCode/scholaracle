@@ -72,8 +72,13 @@ describe('account API contract', () => {
   it('server.ts mounts /api/account (guard against silent unmount)', () => {
     const serverSource = readFileSync(join(__dirname, '..', 'server.ts'), 'utf8');
     // Whitespace-insensitive: prettier may split app.use across lines.
-    expect(serverSource.replace(/\s+/g, ' ')).toContain("app.use( '/api/account'");
-    expect(serverSource).toContain('createAccountRouter({ database, baseUrl })');
+    const flat = serverSource.replace(/\s+/g, ' ');
+    expect(flat).toContain("app.use( '/api/account'");
+    // The router takes more options than these two; the mount with the real database is the guard.
+    expect(flat).toContain('createAccountRouter({ database, baseUrl,');
+    expect(flat).toContain(
+      'appleTokenRevoker: new AppleTokenRevoker(appleRevocationConfigFromEnv())'
+    );
   });
 
   it('POST /api/account/push-token — returns the exact wire keys', async () => {
