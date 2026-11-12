@@ -1249,6 +1249,65 @@ describe('ScholarmancyApiClient airplane mode', () => {
       code: 'OFFLINE',
     });
   });
+
+  // Seen on the iOS sign-in screen (Maestro run 2026-11-12): the 15 s timer cancelled a slow
+  // request and the parent was shown the native exception text.
+  const EXPO_IOS_CANCEL =
+    'fetch failed: FetchRequestCanceledException: Fetch request has been canceled (at Expo/NativeResponse.swift:63)';
+
+  it('a timed-out request on Expo fetch reads as offline, not as a native exception', async () => {
+    client = new ScholarmancyApiClient(BASE_URL, { requestTimeoutMs: 20 });
+    global.fetch = jest.fn((_url: string, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new TypeError(EXPO_IOS_CANCEL)));
+      });
+    }) as unknown as typeof fetch;
+
+    const failure = await client.login('demo@scholarmancy.com', 'x').catch((e: unknown) => e);
+
+    expect(failure).toMatchObject({ name: 'ApiError', code: 'OFFLINE' });
+    expect((failure as Error).message).toMatch(/offline/i);
+    expect((failure as Error).message).not.toMatch(/exception|swift|fetch failed/i);
+  });
+
+  it('our own timeout reads as offline whatever the runtime throws', async () => {
+    client = new ScholarmancyApiClient(BASE_URL, { requestTimeoutMs: 20 });
+    global.fetch = jest.fn((_url: string, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('E_UNKNOWN_0x2A')));
+      });
+    }) as unknown as typeof fetch;
+
+    await expect(client.login('demo@scholarmancy.com', 'x')).rejects.toMatchObject({
+      code: 'OFFLINE',
+      message: expect.stringMatching(/offline/i),
+    });
+  });
+
+  it.each([
+    EXPO_IOS_CANCEL,
+    'fetch failed: java.net.UnknownHostException: Unable to resolve host "api.scholarmancy.com"',
+    'fetch failed: java.net.SocketTimeoutException: timeout',
+    'The request timed out.',
+    'Request was cancelled',
+  ])('maps a transport failure to the offline message: %s', async (nativeMessage) => {
+    client = new ScholarmancyApiClient(BASE_URL);
+    global.fetch = jest.fn().mockRejectedValue(new TypeError(nativeMessage));
+
+    await expect(client.login('demo@scholarmancy.com', 'x')).rejects.toMatchObject({
+      code: 'OFFLINE',
+      message: expect.stringMatching(/offline/i),
+    });
+  });
+
+  it('does not call an unrelated failure "offline"', async () => {
+    client = new ScholarmancyApiClient(BASE_URL);
+    global.fetch = jest.fn().mockRejectedValue(new Error('Unexpected end of JSON input'));
+
+    await expect(client.login('demo@scholarmancy.com', 'x')).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+    });
+  });
 });
 
 describe('ScholarmancyApiClient source invites', () => {
