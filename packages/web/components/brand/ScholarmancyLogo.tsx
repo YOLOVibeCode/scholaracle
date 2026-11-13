@@ -15,7 +15,7 @@ export function ScholarmancyLogo({ size = 32, className }: ScholarmancyLogoProps
       alt="Scholarmancy"
       width={size}
       height={size}
-      className={className ?? 'rounded-lg'}
+      className={className ?? 'shrink-0 rounded-lg'}
       data-testid="logo"
       priority={size >= 48}
     />

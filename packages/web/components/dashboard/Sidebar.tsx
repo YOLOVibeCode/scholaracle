@@ -52,7 +52,7 @@ export function Sidebar() {
   return (
     <SidebarComponent>
       <SidebarHeader>
-        <Link href="/dashboard" className="flex items-center gap-2 px-2 py-1">
+        <Link href="/dashboard" className="flex min-w-0 items-center gap-2 px-2 py-1">
           <ScholarmancyLogo size={32} />
           <span className="font-semibold text-sm">Scholarmancy</span>
         </Link>
