@@ -181,6 +181,33 @@ describe('Noctusoft store webhook', () => {
     expect(payment!['receiptUrl']).toBe('https://store.noctusoft.com/receipts/pay_receipt_1');
   });
 
+  it('backfills receiptUrl when a later paid event includes action.url', async () => {
+    const paymentId = 'pay_backfill_receipt';
+    const receiptUrl = 'https://store.noctusoft.com/receipts/pay_backfill_receipt';
+
+    await post(
+      makeEvent('purchase.paid', {
+        id: 'evt_no_receipt_yet',
+        paymentId,
+        actionUrl: null,
+      })
+    ).expect(200);
+
+    const before = await database.collection('payments').findOne({ storePaymentId: paymentId });
+    expect(before!['receiptUrl']).toBeUndefined();
+
+    await post(
+      makeEvent('purchase.paid', {
+        id: 'evt_receipt_arrived',
+        paymentId,
+        actionUrl: receiptUrl,
+      })
+    ).expect(200);
+
+    const after = await database.collection('payments').findOne({ storePaymentId: paymentId });
+    expect(after!['receiptUrl']).toBe(receiptUrl);
+  });
+
   it('keeps the store subscription ref on subscription.started', async () => {
     const body = makeEvent('subscription.started', {
       userId: USERS.family,
