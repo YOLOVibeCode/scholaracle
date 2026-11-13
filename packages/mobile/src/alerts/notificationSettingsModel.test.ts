@@ -4,6 +4,9 @@ import {
   WEEKLY_REVIEW_SWITCH_LABEL,
   alertTypeToggleLabel,
   buildUpdate,
+  SMS_CONSENT_LABEL,
+  smsOptInError,
+  pushSectionVisible,
   deviceTimezone,
   draftFromSettings,
   formatTime12,
@@ -97,6 +100,7 @@ describe('buildUpdate / dirty tracking', () => {
     const body = buildUpdate(draft);
     expect(body.timezone).toBe('America/Chicago');
     expect(body.notifications).toEqual({
+      sms: false,
       push: true,
       quietHours: SETTINGS.notifications.quietHours,
       digestSchedule: {
@@ -265,5 +269,62 @@ describe('weekly review copy switches (spec §3.3 Q2)', () => {
 
   it('an empty household has no rows', () => {
     expect(weeklyReviewRows({ students: [] })).toEqual([]);
+  });
+});
+
+describe('text message alerts (SMS stands in for push on Android)', () => {
+  const withProfile = (sms: boolean, smsConsent: boolean, phone = '+15551230000') => ({
+    ...SETTINGS,
+    notifications: { ...SETTINGS.notifications, sms },
+    profile: { phone, smsConsent },
+  });
+
+  it('is on only when the channel is on AND consent was recorded', () => {
+    expect(draftFromSettings(withProfile(true, true), 'UTC').smsOn).toBe(true);
+    expect(draftFromSettings(withProfile(true, false), 'UTC').smsOn).toBe(false);
+    expect(draftFromSettings(withProfile(false, true), 'UTC').smsOn).toBe(false);
+    expect(draftFromSettings(SETTINGS, 'UTC').smsOn).toBe(false);
+    expect(draftFromSettings(SETTINGS, 'UTC').phone).toBe('');
+  });
+
+  it('opting in sends the phone and consent with the save, and turns the channel on', () => {
+    const saved = draftFromSettings(SETTINGS, 'UTC');
+    const draft = { ...saved, smsOn: true, phone: ' (555) 123-0000 ' };
+    const body = buildUpdate(draft, saved);
+    expect(body.notifications?.sms).toBe(true);
+    expect(body.profile).toEqual({ phone: '(555) 123-0000', smsConsent: true });
+  });
+
+  it('does not re-send consent when the text settings did not change', () => {
+    const saved = draftFromSettings(withProfile(true, true), 'UTC');
+    const body = buildUpdate({ ...saved, push: false }, saved);
+    expect(body.profile).toBeUndefined();
+    expect(body.notifications?.sms).toBe(true);
+  });
+
+  it('opting out revokes consent and turns the channel off', () => {
+    const saved = draftFromSettings(withProfile(true, true), 'UTC');
+    const body = buildUpdate({ ...saved, smsOn: false }, saved);
+    expect(body.notifications?.sms).toBe(false);
+    expect(body.profile).toEqual({ phone: '+15551230000', smsConsent: false });
+  });
+
+  it('asks for a US mobile number only when opting in', () => {
+    const base = draftFromSettings(SETTINGS, 'UTC');
+    expect(smsOptInError({ ...base, smsOn: false, phone: '' })).toBeNull();
+    expect(smsOptInError({ ...base, smsOn: true, phone: '' })).toMatch(/mobile number/i);
+    expect(smsOptInError({ ...base, smsOn: true, phone: '555-1234' })).toMatch(/mobile number/i);
+    expect(smsOptInError({ ...base, smsOn: true, phone: '(555) 123-0000' })).toBeNull();
+    expect(smsOptInError({ ...base, smsOn: true, phone: '+1 555 123 0000' })).toBeNull();
+  });
+
+  it('uses the same consent wording as the web opt-in box', () => {
+    expect(SMS_CONSENT_LABEL).toMatch(/Reply STOP to opt out, HELP for help/);
+    expect(SMS_CONSENT_LABEL).toMatch(/Message and data rates may apply/);
+  });
+
+  it('hides the push switch on Android only', () => {
+    expect(pushSectionVisible('android')).toBe(false);
+    expect(pushSectionVisible('ios')).toBe(true);
   });
 });
