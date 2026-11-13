@@ -20,4 +20,9 @@ describe('middleware public App Store routes', () => {
     expect(src).toMatch(/robots\.txt/);
     expect(src).toMatch(/sitemap\.xml/);
   });
+
+  it('does not send brand logo assets through the auth matcher', () => {
+    expect(src).toMatch(/logo-128\.png/);
+    expect(src).toMatch(/logo\.png/);
+  });
 });
