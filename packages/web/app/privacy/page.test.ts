@@ -27,6 +27,32 @@ describe('App Store legal pages', () => {
     expect(src).toMatch(/privacy@scholarmancy\.com/);
   });
 
+  it('children section matches how student logins work (parent-created, parent-controlled)', () => {
+    const src = read('privacy/page.tsx').replace(/\s+/g, ' ');
+    // The old "13 and older / we do not collect from children under 13" claim contradicted
+    // parent-created student logins used by elementary-age children.
+    expect(src).not.toMatch(/aged 13 and older/);
+    expect(src).not.toMatch(/do not knowingly collect personal information from children under 13/);
+    expect(src).toMatch(/student login that a parent or guardian creates/);
+    expect(src).toMatch(/never let a child create an account/);
+    expect(src).toMatch(/What we collect about a child/);
+    expect(src).toMatch(/no advertising/i);
+    expect(src).toMatch(/Your choices as a parent/);
+    expect(src).toMatch(/remove the student login/);
+    expect(src).toMatch(/refuse further collection/);
+    expect(src).toMatch(/Settings → Delete account/);
+  });
+
+  it('store-metadata policy copy carries the same children section', () => {
+    const html = readFileSync(
+      join(__dirname, '..', '..', '..', 'mobile', 'store-metadata', 'privacy-policy.html'),
+      'utf8'
+    ).replace(/\s+/g, ' ');
+    expect(html).not.toMatch(/aged 13 and older/);
+    expect(html).toMatch(/student login that a parent or guardian creates/);
+    expect(html).toMatch(/refuse further collection/);
+  });
+
   it('terms of service cover mobile apps and account deletion', () => {
     const src = read('terms/page.tsx');
     expect(src).toMatch(/iOS app/);

@@ -14,7 +14,7 @@ export default function PrivacyPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Privacy Policy</CardTitle>
             <CardDescription>
-              Last updated: November 7, 2026 · Scholarmancy is operated by Noctusoft, Inc.
+              Last updated: November 12, 2026 · Scholarmancy is operated by Noctusoft, Inc.
               (https://noctusoft.com)
             </CardDescription>
           </CardHeader>
@@ -118,9 +118,39 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-lg font-semibold">5. Children&apos;s Privacy</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Scholarmancy is intended for use by parents and students aged 13 and older. We do not knowingly
-                collect personal information from children under 13. If you believe a child under 13 has provided
-                us personal information, contact us and we will delete it promptly.
+                Scholarmancy is a family tool for school. Parents and guardians own the account. A student of any
+                school age, including an elementary-school child, can use Scholarmancy only through a student login
+                that a parent or guardian creates for them. We never let a child create an account on their own.
+                By creating a student login for a child under 13, you confirm that you are the child&apos;s parent or
+                legal guardian and you consent to the collection and use described in this section.
+              </p>
+              <h3 className="text-base font-semibold mt-4">What we collect about a child</h3>
+              <ul className="text-sm text-gray-600 dark:text-gray-400 list-disc list-inside space-y-1">
+                <li>The child&apos;s name and the email address the parent gives us for the student login</li>
+                <li>
+                  Assignments, grades, attendance, and course information that the parent syncs from the school
+                  portal (the school portal password stays on the parent&apos;s device)
+                </li>
+                <li>A push notification token, if the student turns notifications on</li>
+              </ul>
+              <h3 className="text-base font-semibold mt-4">How we use it</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Only to show the child their school work, to send the alerts the family chose, and to keep the
+                account secure. There is no advertising, no sale of a child&apos;s information, no profiling for
+                marketing, and no chat or public posting. A child&apos;s information is not shared with other
+                families.
+              </p>
+              <h3 className="text-base font-semibold mt-4">Your choices as a parent</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Inside the app, a parent can choose whether the student can see grades, send the student a new
+                sign-in link, and remove the student login. Deleting the account (Settings → Delete account)
+                removes the child&apos;s information as described in Data Retention below. To review the information
+                we hold about a child, to have it deleted, or to refuse further collection, email{' '}
+                <Link href="mailto:privacy@scholarmancy.com" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                  privacy@scholarmancy.com
+                </Link>
+                . If you believe a child has an account that a parent or
+                guardian did not create, contact us and we will delete it promptly.
               </p>
             </section>
 
