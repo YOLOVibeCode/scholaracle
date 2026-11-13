@@ -27,7 +27,7 @@ describe('iOS universal links (apple-app-site-association)', () => {
 
   it('is not behind the login redirect in middleware', () => {
     const source = readFileSync(join(root, 'middleware.ts'), 'utf8');
-    expect(source).toMatch(/matcher:.*\\\.well-known\//);
+    expect(source).toMatch(/matcher:[\s\S]*\\\.well-known\//);
   });
 });
 

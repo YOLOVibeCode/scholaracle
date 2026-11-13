@@ -10,15 +10,19 @@ jest.mock('next/image', () => ({
   default: (props: {
     alt: string;
     src: string;
-    className?: string;
+    width: number;
+    height: number;
     'data-testid'?: string;
+    className?: string;
   }) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       alt={props.alt}
       src={props.src}
-      className={props.className}
+      width={props.width}
+      height={props.height}
       data-testid={props['data-testid']}
+      className={props.className}
     />
   ),
 }));
@@ -29,8 +33,12 @@ describe('ScholarmancyLogo', () => {
     expect(screen.getByTestId('logo')).toHaveAttribute('alt', 'Scholarmancy');
   });
 
-  it('loads the public brand asset', () => {
-    render(<ScholarmancyLogo />);
-    expect(screen.getByTestId('logo')).toHaveAttribute('src', '/logo-128.png');
+  it('loads the smaller public brand asset at the requested size', () => {
+    render(<ScholarmancyLogo size={32} />);
+    const logo = screen.getByTestId('logo');
+    expect(logo).toHaveAttribute('src', '/logo-128.png');
+    expect(logo).toHaveAttribute('width', '32');
+    expect(logo).toHaveAttribute('height', '32');
+    expect(logo).toHaveClass('shrink-0');
   });
 });
