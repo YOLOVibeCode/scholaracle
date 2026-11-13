@@ -12,6 +12,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Switch,
+  TextInput,
+  Platform,
   Linking,
   AppState,
   ActivityIndicator,
@@ -29,6 +31,9 @@ import {
   formatTime12,
   isDirty,
   pushPermissionView,
+  pushSectionVisible,
+  smsOptInError,
+  SMS_CONSENT_LABEL,
   quietHoursSummary,
   setTypeEnabled,
   setWeeklyReviewEnabled,
@@ -127,11 +132,13 @@ export function NotificationSettingsScreen({
   };
 
   const handleSave = async (): Promise<void> => {
-    if (!draft) return;
+    if (!draft || smsOptInError(draft) !== null) return;
     setSaveState('saving');
     setSaveError(null);
     try {
-      const settings = await apiClient.updateNotificationSettings(buildUpdate(draft));
+      const settings = await apiClient.updateNotificationSettings(
+        buildUpdate(draft, saved ?? undefined)
+      );
       const next = draftFromSettings(settings, device);
       setSaved(next);
       setDraft(next);
@@ -144,6 +151,7 @@ export function NotificationSettingsScreen({
 
   const perm = pushPermissionView(osStatus);
   const dirty = draft !== null && saved !== null && isDirty(draft, saved);
+  const smsError = draft ? smsOptInError(draft) : null;
 
   const header = (
     <View style={styles.header}>
@@ -196,35 +204,91 @@ export function NotificationSettingsScreen({
     <View style={styles.container} testID="notification-settings-screen">
       {header}
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.sectionHeader}>Push notifications</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.rowText}>This device</Text>
-            <Text style={styles.rowValue} testID="text-os-permission">
-              {perm.label}
-            </Text>
-          </View>
-          <Text style={styles.hint}>{perm.hint}</Text>
-          {!perm.granted && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => void Linking.openSettings()}
-              accessibilityRole="button"
-              accessibilityLabel="Open device settings"
-              testID="button-open-os-settings"
-            >
-              <Text style={styles.secondaryText}>Open device settings</Text>
-            </TouchableOpacity>
-          )}
+        {pushSectionVisible(Platform.OS) && (
+          <>
+            <Text style={styles.sectionHeader}>Push notifications</Text>
+            <View style={styles.card}>
+              <View style={styles.row}>
+                <Text style={styles.rowText}>This device</Text>
+                <Text style={styles.rowValue} testID="text-os-permission">
+                  {perm.label}
+                </Text>
+              </View>
+              <Text style={styles.hint}>{perm.hint}</Text>
+              {!perm.granted && (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => void Linking.openSettings()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open device settings"
+                  testID="button-open-os-settings"
+                >
+                  <Text style={styles.secondaryText}>Open device settings</Text>
+                </TouchableOpacity>
+              )}
+              <View style={[styles.row, styles.rowTop]}>
+                <Text style={styles.rowText}>Send push alerts</Text>
+                <Switch
+                  value={draft.push}
+                  onValueChange={(push) => edit({ ...draft, push })}
+                  accessibilityLabel="Send push alerts"
+                  testID="switch-push"
+                />
+              </View>
+            </View>
+          </>
+        )}
+
+        <Text style={styles.sectionHeader}>Text message alerts</Text>
+        <View style={styles.card} testID="sms-alerts-card">
+          <Text style={styles.hint}>
+            {pushSectionVisible(Platform.OS)
+              ? 'Get grade and assignment alerts by text.'
+              : 'Grade and assignment alerts arrive by text message and email on Android.'}
+          </Text>
+          <TextInput
+            style={styles.phoneInput}
+            value={draft.phone}
+            onChangeText={(phone) => edit({ ...draft, phone })}
+            placeholder="Mobile number"
+            keyboardType="phone-pad"
+            textContentType="telephoneNumber"
+            autoComplete="tel"
+            accessibilityLabel="Mobile number for text alerts"
+            testID="input-sms-phone"
+          />
           <View style={[styles.row, styles.rowTop]}>
-            <Text style={styles.rowText}>Send push alerts</Text>
+            <Text style={[styles.hint, styles.flex]} testID="text-sms-consent">
+              {SMS_CONSENT_LABEL}
+            </Text>
             <Switch
-              value={draft.push}
-              onValueChange={(push) => edit({ ...draft, push })}
-              accessibilityLabel="Send push alerts"
-              testID="switch-push"
+              value={draft.smsOn}
+              onValueChange={(smsOn) => edit({ ...draft, smsOn })}
+              accessibilityLabel="Text me grade and assignment alerts"
+              testID="switch-sms"
             />
           </View>
+          <View style={styles.row}>
+            <TouchableOpacity
+              onPress={() => void Linking.openURL('https://scholarmancy.com/terms#sms')}
+              accessibilityRole="link"
+              testID="link-sms-terms"
+            >
+              <Text style={styles.secondaryText}>SMS Terms</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => void Linking.openURL('https://scholarmancy.com/privacy')}
+              accessibilityRole="link"
+              testID="link-sms-privacy"
+            >
+              <Text style={styles.secondaryText}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
+          {smsError !== null && (
+            <Text style={styles.errorTitle} testID="text-sms-error">
+              {smsError}
+            </Text>
+          )}
         </View>
 
         <Text style={styles.sectionHeader}>Alert types</Text>
@@ -387,13 +451,16 @@ export function NotificationSettingsScreen({
           </Text>
         )}
         <TouchableOpacity
-          style={[styles.primaryButton, (!dirty || saveState === 'saving') && styles.disabled]}
+          style={[
+            styles.primaryButton,
+            (!dirty || saveState === 'saving' || smsError !== null) && styles.disabled,
+          ]}
           onPress={() => void handleSave()}
-          disabled={!dirty || saveState === 'saving'}
+          disabled={!dirty || saveState === 'saving' || smsError !== null}
           accessibilityRole="button"
           accessibilityLabel="Save notification settings"
           accessibilityState={{
-            disabled: !dirty || saveState === 'saving',
+            disabled: !dirty || saveState === 'saving' || smsError !== null,
             busy: saveState === 'saving',
           }}
           testID="button-save-notification-settings"
@@ -515,6 +582,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#4361ee',
+  },
+  phoneInput: {
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginTop: 8,
   },
   secondaryText: { color: '#4361ee', fontWeight: '600', fontSize: 14 },
   primaryButton: {

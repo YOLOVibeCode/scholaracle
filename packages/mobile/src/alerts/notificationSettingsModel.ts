@@ -5,6 +5,7 @@
 
 import {
   AlertType,
+  buildSmsOptInLabelHtml,
   alertTypeLabel,
   type IMySharingStudent,
   type IMySharingView,
@@ -40,7 +41,26 @@ export interface IWeeklyDigestDraft extends IDigestDraft {
   readonly day: string;
 }
 
+/** Same words as the web opt-in checkbox, so the consent a parent gives is the same everywhere. */
+export const SMS_CONSENT_LABEL = buildSmsOptInLabelHtml();
+
+/** Android has no Firebase in 1.0, so push cannot register there; texts carry the alerts. */
+export function pushSectionVisible(platform: string): boolean {
+  return platform !== 'android';
+}
+
+/** Asked for only when opting in; the server does the strict check. US numbers only (US-only launch). */
+export function smsOptInError(draft: Pick<INotificationDraft, 'smsOn' | 'phone'>): string | null {
+  if (!draft.smsOn) return null;
+  const digits = draft.phone.replace(/\D/g, '');
+  const ok = digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
+  return ok ? null : 'Enter your US mobile number to get texts.';
+}
+
 export interface INotificationDraft {
+  /** Text-message alerts on: the sms channel is enabled and consent is recorded. */
+  readonly smsOn: boolean;
+  readonly phone: string;
   readonly push: boolean;
   readonly quietHours: ISettingsQuietHours;
   readonly dailyDigest: IDigestDraft;
@@ -64,6 +84,8 @@ export function draftFromSettings(
     if (!(key in types)) types[key] = value;
   }
   return {
+    smsOn: n.sms === true && settings.profile?.smsConsent === true,
+    phone: settings.profile?.phone ?? '',
     push: n.push,
     quietHours: n.quietHours ?? DEFAULT_QUIET_HOURS,
     dailyDigest: {
@@ -81,10 +103,18 @@ export function draftFromSettings(
 }
 
 /** Full-replacement PUT body for everything the screen edits. */
-export function buildUpdate(draft: INotificationDraft): IUserSettingsUpdateRequest {
+export function buildUpdate(
+  draft: INotificationDraft,
+  saved?: INotificationDraft
+): IUserSettingsUpdateRequest {
+  // Consent goes to the server only when the text settings changed: every send records an opt-in.
+  const smsChanged =
+    saved !== undefined && (draft.smsOn !== saved.smsOn || draft.phone !== saved.phone);
   return {
     timezone: draft.timezone,
+    ...(smsChanged ? { profile: { phone: draft.phone.trim(), smsConsent: draft.smsOn } } : {}),
     notifications: {
+      sms: draft.smsOn,
       push: draft.push,
       quietHours: draft.quietHours,
       digestSchedule: {
