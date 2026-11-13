@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.scholarmancy.app",
+      "sha256_cert_fingerprints": [
+        "A0:C8:F4:FF:0D:B7:17:E2:24:CF:C3:09:31:44:F9:29:D4:6D:B7:CE:5E:8D:F0:52:C6:0A:AC:9C:23:E6:6D:6C"
+      ]
+    }
+  }
+]
