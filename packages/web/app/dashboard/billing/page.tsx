@@ -192,7 +192,9 @@ function BillingPageContent() {
 
   const isFreePlan = (subscription?.effectivePlan ?? subscription?.plan) === 'free';
   const paidPlan = subscription?.plan ?? 'starter';
-  const paidCycle = (subscription?.billingCycle === 'annual' ? 'annual' : 'monthly') as BillingCycle;
+  const paidCycle = (
+    subscription?.billingCycle === 'annual' ? 'annual' : 'monthly'
+  ) as BillingCycle;
   const switchDisabled = Boolean(subscription?.cancelAtPeriodEnd);
 
   return (
@@ -223,67 +225,69 @@ function BillingPageContent() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
-            Current Plan
-          </CardTitle>
-          <CardDescription>Your active subscription details</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold" data-testid="current-plan">
-              {PLAN_LABELS[subscription?.plan ?? 'free'] ?? subscription?.plan}
-            </span>
-            <Badge
-              variant={STATUS_VARIANTS[subscription?.status ?? 'active'] ?? 'outline'}
-              data-testid="plan-status"
-            >
-              {subscription?.status ?? 'active'}
-            </Badge>
-          </div>
-
-          {subscription?.billingCycle && (
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Billed {subscription.billingCycle}
-            </p>
-          )}
-
-          {subscription?.currentPeriodEnd && (
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {subscription.cancelAtPeriodEnd
-                ? `Cancels on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-                : `Renews on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
-            </p>
-          )}
-        </CardContent>
-        {!isFreePlan && (
-          <CardFooter className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => void handleManageBilling()}
-              disabled={isPortalLoading}
-              data-testid="button-manage-billing"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              {isPortalLoading ? 'Opening...' : 'Update card'}
-            </Button>
-            {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
-              <Button
-                variant="ghost"
-                onClick={() => setShowCancelConfirm(true)}
-                disabled={isCancelling}
-                data-testid="button-cancel-subscription"
+      <div className="grid gap-6 md:grid-cols-2 md:items-start" data-testid="billing-plan-overview">
+        <Card data-testid="current-plan-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Current Plan
+            </CardTitle>
+            <CardDescription>Your active subscription details</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold" data-testid="current-plan">
+                {PLAN_LABELS[subscription?.plan ?? 'free'] ?? subscription?.plan}
+              </span>
+              <Badge
+                variant={STATUS_VARIANTS[subscription?.status ?? 'active'] ?? 'outline'}
+                data-testid="plan-status"
               >
-                Cancel subscription
-              </Button>
-            )}
-          </CardFooter>
-        )}
-      </Card>
+                {subscription?.status ?? 'active'}
+              </Badge>
+            </div>
 
-      <PlanIncludesCard subscription={subscription} />
+            {subscription?.billingCycle && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Billed {subscription.billingCycle}
+              </p>
+            )}
+
+            {subscription?.currentPeriodEnd && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {subscription.cancelAtPeriodEnd
+                  ? `Cancels on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                  : `Renews on ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`}
+              </p>
+            )}
+          </CardContent>
+          {!isFreePlan && (
+            <CardFooter className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => void handleManageBilling()}
+                disabled={isPortalLoading}
+                data-testid="button-manage-billing"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                {isPortalLoading ? 'Opening...' : 'Update card'}
+              </Button>
+              {subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowCancelConfirm(true)}
+                  disabled={isCancelling}
+                  data-testid="button-cancel-subscription"
+                >
+                  Cancel subscription
+                </Button>
+              )}
+            </CardFooter>
+          )}
+        </Card>
+
+        <PlanIncludesCard subscription={subscription} />
+      </div>
 
       <UpgradePlanPicker
         mode={isFreePlan ? 'checkout' : 'switch'}
