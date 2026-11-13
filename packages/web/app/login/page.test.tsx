@@ -34,11 +34,13 @@ jest.mock('next/link', () => {
     );
   };
 });
-jest.mock('next/image', () => {
-  return function MockImage() {
-    return null;
-  };
-});
+jest.mock('next/image', () => ({
+  __esModule: true,
+  default: (props: { alt: string; 'data-testid'?: string }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={props.alt} data-testid={props['data-testid']} />
+  ),
+}));
 jest.mock('@/components/auth/OAuthButtons', () => ({ OAuthButtons: () => null }));
 jest.mock('@/lib/api/auth', () => ({
   authApi: { login: jest.fn(), loginWithMagicToken: jest.fn() },
@@ -67,5 +69,11 @@ describe('LoginPage session-expired notice', () => {
     render(<LoginPage />);
     await screen.findByTestId('form-login');
     expect(screen.queryByTestId('message-session-expired')).not.toBeInTheDocument();
+  });
+
+  it('shows the brand logo on a plain visit', async () => {
+    render(<LoginPage />);
+    await screen.findByTestId('form-login');
+    expect(screen.getByTestId('logo')).toHaveAttribute('alt', 'Scholarmancy');
   });
 });
