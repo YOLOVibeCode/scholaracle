@@ -8,6 +8,7 @@ import {
   localStampFromEnv,
   shortId,
 } from './deployStamp';
+import { isDeployStampHidden } from './deployStamp';
 import type { IBackendStamp, ILocalStamp } from './deployStamp';
 
 const env = {
@@ -204,5 +205,15 @@ describe('fetchBackendStamp', () => {
     const out = await fetchBackendStamp('https://api.scholarmancy.com/', fetchImpl);
     expect(out.ok).toBe(false);
     expect(fetchImpl).toHaveBeenCalledWith('https://api.scholarmancy.com/api/health/version');
+  });
+});
+
+describe('isDeployStampHidden', () => {
+  it('hides the visible stamp only when the store-build flag is "1"', () => {
+    expect(isDeployStampHidden('1')).toBe(true);
+    expect(isDeployStampHidden(undefined)).toBe(false);
+    expect(isDeployStampHidden('')).toBe(false);
+    expect(isDeployStampHidden('0')).toBe(false);
+    expect(isDeployStampHidden('true')).toBe(false);
   });
 });
