@@ -1,0 +1,72 @@
+# Store screenshots from the demo household (sample students, sample grades; no real family data).
+# Run with the demo parent's sign-in as MAESTRO_PARENT_EMAIL / MAESTRO_PARENT_PASSWORD, against the
+# production API, on a build with the store settings (EXPO_PUBLIC_HIDE_DEPLOY_STAMP=1):
+#   iPhone 17 Pro Max simulator (6.9 inch, 1320x2868) for the App Store,
+#   an Android emulator set to 1080x1920 for Google Play (Play rejects anything taller than 2:1).
+# Screenshots land in --test-output-dir. Never run this against a real family's account.
+# Not part of any CI suite (scripts/e2e.sh picks its flows by name).
+appId: com.scholarmancy.app
+name: Store screenshots
+tags: [store]
+---
+- runFlow: subflows/login.yaml
+- assertVisible:
+    id: students-list
+- waitForAnimationToEnd
+- takeScreenshot: 01-students
+
+- tapOn:
+    id: text-student-name
+    text: Emma Mitchell
+- extendedWaitUntil:
+    visible:
+      id: button-sync
+    timeout: 30000
+- assertNotVisible:
+    id: dashboard-error
+- waitForAnimationToEnd
+- takeScreenshot: 02-grades
+
+- tapOn: Assignments
+- waitForAnimationToEnd
+- takeScreenshot: 03-assignments
+
+- tapOn: Docs
+- waitForAnimationToEnd
+- takeScreenshot: 04-docs
+
+- tapOn:
+    id: button-back
+- assertVisible:
+    id: students-list
+
+- tapOn:
+    id: button-alerts
+- extendedWaitUntil:
+    visible:
+      id: alerts-screen
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: 05-alerts
+- tapOn:
+    id: button-alerts-back
+- assertVisible:
+    id: students-list
+
+- tapOn:
+    id: button-settings
+- extendedWaitUntil:
+    visible:
+      id: link-notification-settings
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: 06-settings
+
+- tapOn:
+    id: link-notification-settings
+- extendedWaitUntil:
+    visible:
+      id: notification-settings-screen
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: 07-notifications
