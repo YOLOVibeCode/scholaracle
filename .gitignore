@@ -129,5 +129,6 @@ local/
 **/play-service-account.json
 **/*-play-service-account.json
 
-# Claude Code worktrees
+# Claude Code worktrees and per-machine settings
 .claude/worktrees/
+**/.claude/settings.local.json
