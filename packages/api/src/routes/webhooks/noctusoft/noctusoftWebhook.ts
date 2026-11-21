@@ -52,9 +52,13 @@ function parseDate(value: string | null | undefined): Date | undefined {
 }
 
 function receiptUrlFromEvent(event: INoctusoftStoreWebhookEventV1): string | undefined {
-  const url = event.action?.url;
-  if (url && /^https?:\/\//i.test(url)) {
-    return url;
+  const receipt = event.receipt;
+  if (!receipt) {
+    return undefined;
+  }
+  const candidate = receipt.pdfUrl ?? receipt.url;
+  if (candidate && /^https?:\/\//i.test(candidate)) {
+    return candidate;
   }
   return undefined;
 }
