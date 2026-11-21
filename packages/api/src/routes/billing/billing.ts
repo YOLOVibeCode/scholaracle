@@ -4,25 +4,32 @@ import {
   SubscriptionRepository,
   PaymentRepository,
   CouponRepository,
+  UserRepository,
   PLAN_FEATURES,
-  type BillingCycle,
 } from '@scholaracle/database';
 import {
   AppError,
   AuthenticationError,
   ConflictError,
+  ExternalServiceError,
   ValidationError,
 } from '@scholaracle/contracts';
+import { logger } from '../../logger';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import type { INoctusoftStoreClient } from '../../services/noctusoft-store/NoctusoftStoreClient';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import type { SubscriptionPlan } from '@scholaracle/database';
-import { planFeatureLines, planFeaturesForApi } from '../../services/billing/planFeatureLines';
+import {
+  planFeatureLines,
+  planFeaturesForApi,
+  type IPlanFeaturesPayload,
+} from '../../services/billing/planFeatureLines';
 import { resolveStoreSku } from '../../services/noctusoft-store/planStoreSkus';
 import {
-  classifyPlanChange,
+  canChangeStorePlan,
   countOwnedStudents,
   isSelfServePurchasablePlan,
+  parseBillingCycle,
   planLimitBlocksDowngrade,
 } from '../../services/billing/planChange';
 
@@ -38,6 +45,45 @@ export interface IBillingRouterDeps {
 
 /** Store subscription states in which a second checkout would double-bill the buyer. */
 const RUNNING_STATUSES = new Set(['active', 'trialing', 'past_due', 'paused']);
+
+type SubscriptionRecord = NonNullable<Awaited<ReturnType<SubscriptionRepository['findByUserId']>>>;
+
+/** The subscription as the web and phone apps read it (GET and change-plan share it). */
+interface ISubscriptionView {
+  readonly plan: SubscriptionRecord['plan'];
+  readonly status: SubscriptionRecord['status'];
+  readonly effectivePlan: SubscriptionPlan;
+  readonly maxStudents: number;
+  readonly features: IPlanFeaturesPayload;
+  readonly featureLines: string[];
+  readonly currentPeriodStart: SubscriptionRecord['currentPeriodStart'];
+  readonly currentPeriodEnd: SubscriptionRecord['currentPeriodEnd'];
+  readonly billingCycle: SubscriptionRecord['billingCycle'];
+  readonly cancelAtPeriodEnd: SubscriptionRecord['cancelAtPeriodEnd'];
+  readonly trialEnd: SubscriptionRecord['trialEnd'];
+  readonly canChangePlan: boolean;
+}
+
+function subscriptionView(subscription: SubscriptionRecord): ISubscriptionView {
+  const effectivePlan = subscription.effectivePlan();
+  return {
+    plan: subscription.plan,
+    status: subscription.status,
+    /** The plan whose limits apply now (free once cancelled, paused or lapsed). */
+    effectivePlan,
+    /** Student cap of effectivePlan; -1 means unlimited. */
+    maxStudents: PLAN_FEATURES[effectivePlan].maxStudents,
+    features: planFeaturesForApi(effectivePlan),
+    featureLines: [...planFeatureLines(effectivePlan)],
+    currentPeriodStart: subscription.currentPeriodStart,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    billingCycle: subscription.billingCycle,
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    trialEnd: subscription.trialEnd,
+    /** True only for a running paid store subscription (not a coupon trial or a past-due card). */
+    canChangePlan: canChangeStorePlan(subscription),
+  };
+}
 
 export function billingRouter(deps: IBillingRouterDeps): Router {
   const router = Router();
@@ -225,6 +271,26 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
     });
   }
 
+  /** What the buyer sees when the store refuses a plan change: no raw store text. */
+  function planChangeFailure(err: unknown): unknown {
+    if (!(err instanceof ExternalServiceError)) return err;
+    const details = (err.details ?? {}) as { status?: number; code?: string | null };
+    logger.warn(
+      { storeStatus: details.status, storeCode: details.code },
+      'Store refused or failed a plan change'
+    );
+    if (details.status === 402) {
+      return new AppError(
+        'Your card could not be charged for this change. Update your card and try again.',
+        { status: 402, code: 'PLAN_CHANGE_PAYMENT_FAILED' }
+      );
+    }
+    return new AppError(
+      'We could not change your plan right now. Nothing was changed. Try again later or contact support.',
+      { status: 502, code: 'PLAN_CHANGE_FAILED' }
+    );
+  }
+
   async function handleChangePlan(req: IAuthenticatedRequest, res: Response): Promise<void> {
     const userId = req.userId;
     if (!userId) {
@@ -233,7 +299,7 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
 
     const { plan, billingCycle, confirmed } = req.body as {
       plan?: string;
-      billingCycle?: BillingCycle;
+      billingCycle?: unknown;
       confirmed?: boolean;
     };
 
@@ -248,14 +314,9 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       throw new ValidationError('Invalid plan');
     }
 
-    const validCycle: BillingCycle = billingCycle === 'annual' ? 'annual' : 'monthly';
-
     const subscription = await subscriptionRepo.findByUserId(userId);
-    if (
-      !subscription?.storeSubscriptionId ||
-      !RUNNING_STATUSES.has(subscription.status) ||
-      !subscription.isActive()
-    ) {
+    const storeSubscriptionId = subscription?.storeSubscriptionId;
+    if (!subscription || !storeSubscriptionId || !canChangeStorePlan(subscription)) {
       throw new ConflictError('There is no paid subscription to change');
     }
 
@@ -266,9 +327,13 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       );
     }
 
-    const currentPlan = subscription.effectivePlan();
     const currentCycle = subscription.billingCycle ?? 'monthly';
-    if (currentPlan === plan && currentCycle === validCycle) {
+    const validCycle = parseBillingCycle(billingCycle, currentCycle);
+    if (!validCycle) {
+      throw new ValidationError('Invalid billing cycle');
+    }
+
+    if (subscription.plan === plan && currentCycle === validCycle) {
       throw new ValidationError('You are already on this plan and billing cycle');
     }
 
@@ -285,39 +350,51 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
       );
     }
 
-    const { effective } = classifyPlanChange({
-      currentPlan,
-      currentCycle,
-      targetPlan: plan,
-      targetCycle: validCycle,
-    });
+    // The store decides when the change applies (its provider may offer only
+    // "now"), so no `effective` is sent; its answer says what happened.
+    let storeResult;
+    try {
+      storeResult = await deps.storeClient.changePlan(storeSubscriptionId, {
+        plan: resolveStoreSku(plan, validCycle),
+      });
+    } catch (err) {
+      throw planChangeFailure(err);
+    }
 
-    const sku = resolveStoreSku(plan, validCycle);
-    const storeResult = await deps.storeClient.changePlan(subscription.storeSubscriptionId, {
-      plan: sku,
-      effective,
-    });
+    const deferred = Boolean(storeResult.pendingPlanKey) || storeResult.effective === 'next_period';
 
-    const currentPeriodEnd = storeResult.currentPeriodEnd
-      ? new Date(storeResult.currentPeriodEnd)
-      : subscription.currentPeriodEnd;
+    if (!deferred) {
+      const storePeriodEnd = storeResult.currentPeriodEnd
+        ? new Date(storeResult.currentPeriodEnd)
+        : null;
+      const currentPeriodEnd =
+        storePeriodEnd && !Number.isNaN(storePeriodEnd.getTime())
+          ? storePeriodEnd
+          : subscription.currentPeriodEnd;
+      await subscriptionRepo.update(userId, {
+        plan,
+        billingCycle: validCycle,
+        ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
+      });
+      try {
+        await new UserRepository(deps.database).updateSubscription(userId, {
+          plan,
+          status: subscription.status,
+        });
+      } catch {
+        // Best-effort: the subscriptions collection is authoritative
+      }
+    }
+    // A change scheduled for the next period leaves the plan alone until the
+    // store's subscription.changed webhook reports it, so the buyer keeps what
+    // they paid for until then.
 
-    await subscriptionRepo.update(userId, {
-      plan,
-      billingCycle: validCycle,
-      ...(currentPeriodEnd ? { currentPeriodEnd } : {}),
-    });
-
+    const current = (await subscriptionRepo.findByUserId(userId)) ?? subscription;
     res.json({
       success: true,
-      subscription: {
-        plan,
-        status: subscription.status,
-        effectivePlan: plan,
-        billingCycle: validCycle,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-      },
+      effective: deferred ? 'next_period' : 'now',
+      ...(deferred ? { pendingPlan: { plan, billingCycle: validCycle } } : {}),
+      subscription: subscriptionView(current),
     });
   }
 
@@ -370,30 +447,13 @@ export function billingRouter(deps: IBillingRouterDeps): Router {
           maxStudents: PLAN_FEATURES.free.maxStudents,
           features: planFeaturesForApi(effectivePlan),
           featureLines: [...planFeatureLines(effectivePlan)],
+          canChangePlan: false,
         },
       });
       return;
     }
 
-    const effectivePlan = subscription.effectivePlan();
-    res.json({
-      success: true,
-      subscription: {
-        plan: subscription.plan,
-        status: subscription.status,
-        /** The plan whose limits apply now (free once cancelled, paused or lapsed). */
-        effectivePlan,
-        /** Student cap of effectivePlan; -1 means unlimited. */
-        maxStudents: PLAN_FEATURES[effectivePlan].maxStudents,
-        features: planFeaturesForApi(effectivePlan),
-        featureLines: [...planFeatureLines(effectivePlan)],
-        currentPeriodStart: subscription.currentPeriodStart,
-        currentPeriodEnd: subscription.currentPeriodEnd,
-        billingCycle: subscription.billingCycle,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-        trialEnd: subscription.trialEnd,
-      },
-    });
+    res.json({ success: true, subscription: subscriptionView(subscription) });
   }
 
   async function handleRedeemCoupon(req: IAuthenticatedRequest, res: Response): Promise<void> {

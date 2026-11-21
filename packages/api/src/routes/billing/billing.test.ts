@@ -11,6 +11,7 @@ jest.mock('@scholaracle/database', () => {
   const mockUpdateSubscription = jest.fn();
   const mockFindByUserIdPayments = jest.fn();
   const mockFindOwnedByUserId = jest.fn();
+  const mockUserUpdateSubscription = jest.fn().mockResolvedValue(true);
   return {
     PLAN_FEATURES: {
       free: {
@@ -63,6 +64,10 @@ jest.mock('@scholaracle/database', () => {
     StudentRepository: jest.fn().mockImplementation(() => ({
       findOwnedByUserId: mockFindOwnedByUserId,
     })),
+    UserRepository: jest.fn().mockImplementation(() => ({
+      updateSubscription: mockUserUpdateSubscription,
+    })),
+    __mockUserUpdateSubscription: mockUserUpdateSubscription,
     __mockFindByUserId: mockFindByUserId,
     __mockUpdateSubscription: mockUpdateSubscription,
     __mockFindByUserIdPayments: mockFindByUserIdPayments,
@@ -76,11 +81,13 @@ const {
   __mockUpdateSubscription: mockUpdateSubscription,
   __mockFindByUserIdPayments: mockFindByUserIdPayments,
   __mockFindOwnedByUserId: mockFindOwnedByUserId,
+  __mockUserUpdateSubscription: mockUserUpdateSubscription,
 } = require('@scholaracle/database') as {
   __mockFindByUserId: jest.Mock;
   __mockUpdateSubscription: jest.Mock;
   __mockFindByUserIdPayments: jest.Mock;
   __mockFindOwnedByUserId: jest.Mock;
+  __mockUserUpdateSubscription: jest.Mock;
 };
 
 function createMockStoreClient(): jest.Mocked<INoctusoftStoreClient> {
@@ -265,56 +272,236 @@ describe('Billing Routes', () => {
       expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
     });
 
-    it('sends effective now on upgrade', async () => {
-      mockFindByUserId.mockResolvedValue(paidSubscription);
-      mockStoreClient.changePlan.mockResolvedValue({ currentPeriodEnd: null });
+    it('rejects a billing cycle that is neither monthly nor annual', async () => {
+      mockFindByUserId.mockResolvedValue({ ...paidSubscription, billingCycle: 'annual' });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'yearly', confirmed: true })
+        .expect(400);
+
+      expect(JSON.stringify(res.body)).toMatch(/billing cycle/i);
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+      expect(mockUpdateSubscription).not.toHaveBeenCalled();
+    });
+
+    it('keeps an annual subscriber on annual when the request names no cycle', async () => {
+      mockFindByUserId.mockResolvedValue({ ...paidSubscription, billingCycle: 'annual' });
+      mockStoreClient.changePlan.mockResolvedValue({ planKey: 'x', effective: 'now' });
 
       await request(app)
         .post('/api/billing/change-plan')
-        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .send({ plan: 'premium', confirmed: true })
         .expect(200);
 
-      expect(mockStoreClient.changePlan).toHaveBeenCalledWith(
-        'ns_sub_1',
-        expect.objectContaining({
-          plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
-          effective: 'now',
-        })
-      );
+      expect(mockStoreClient.changePlan).toHaveBeenCalledWith('ns_sub_1', {
+        plan: 'NOCTU-SCHOLARMANCY-PREMIUM-ANNUAL',
+      });
       expect(mockUpdateSubscription).toHaveBeenCalledWith(
         'user-1',
-        expect.objectContaining({ plan: 'premium', billingCycle: 'monthly' })
+        expect.objectContaining({ plan: 'premium', billingCycle: 'annual' })
       );
     });
 
-    it('sends effective next_period on downgrade', async () => {
+    it('refuses a subscription with no store subscription (coupon trial or admin grant)', async () => {
       mockFindByUserId.mockResolvedValue({
         ...paidSubscription,
-        plan: 'family',
-        effectivePlan: () => 'family',
+        status: 'trialing',
+        storeSubscriptionId: undefined,
       });
-      mockStoreClient.changePlan.mockResolvedValue({ currentPeriodEnd: null });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(409);
+
+      expect(JSON.stringify(res.body)).toMatch(/no paid subscription/i);
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('refuses a past-due subscription', async () => {
+      mockFindByUserId.mockResolvedValue({
+        ...paidSubscription,
+        status: 'past_due',
+        isActive: () => false,
+      });
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(409);
+
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('refuses free and enterprise as targets', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'free', billingCycle: 'monthly', confirmed: true })
+        .expect(400);
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'enterprise', billingCycle: 'monthly', confirmed: true })
+        .expect(400);
+
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('refuses a change to the plan and cycle the subscription is already on', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+
+      await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'starter', billingCycle: 'monthly', confirmed: true })
+        .expect(400);
+
+      expect(mockStoreClient.changePlan).not.toHaveBeenCalled();
+    });
+
+    it('lets the store decide when the change applies: no effective is sent', async () => {
+      mockFindByUserId.mockResolvedValueOnce(paidSubscription).mockResolvedValueOnce({
+        ...paidSubscription,
+        plan: 'premium',
+        effectivePlan: () => 'premium',
+      });
+      mockStoreClient.changePlan.mockResolvedValue({
+        status: 'active',
+        planKey: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+        pendingPlanKey: null,
+        currentPeriodEnd: '2026-12-01T00:00:00.000Z',
+        effective: 'now',
+      });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(200);
+
+      expect(mockStoreClient.changePlan).toHaveBeenCalledWith('ns_sub_1', {
+        plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      });
+      expect(mockUpdateSubscription).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          plan: 'premium',
+          billingCycle: 'monthly',
+          currentPeriodEnd: new Date('2026-12-01T00:00:00.000Z'),
+        })
+      );
+      expect(mockUserUpdateSubscription).toHaveBeenCalledWith('user-1', {
+        plan: 'premium',
+        status: 'active',
+      });
+      expect(res.body.effective).toBe('now');
+      expect(res.body.pendingPlan).toBeUndefined();
+      // The full subscription comes back, not a partial one.
+      expect(res.body.subscription.plan).toBe('premium');
+      expect(res.body.subscription.maxStudents).toBe(2);
+      expect(res.body.subscription.featureLines).toEqual(
+        expect.arrayContaining(['2 students', 'Advanced analytics'])
+      );
+      expect(res.body.subscription.canChangePlan).toBe(true);
+    });
+
+    it('applies a downgrade immediately when the store applied it now (Stripe)', async () => {
+      const family = { ...paidSubscription, plan: 'family', effectivePlan: () => 'family' };
+      mockFindByUserId
+        .mockResolvedValueOnce(family)
+        .mockResolvedValueOnce({ ...family, plan: 'premium', effectivePlan: () => 'premium' });
+      mockStoreClient.changePlan.mockResolvedValue({ effective: 'now', pendingPlanKey: null });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(200);
+
+      expect(mockUpdateSubscription).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ plan: 'premium' })
+      );
+      expect(res.body.effective).toBe('now');
+      expect(res.body.subscription.plan).toBe('premium');
+    });
+
+    it('keeps the paid plan until renewal when the store schedules the change', async () => {
+      const family = { ...paidSubscription, plan: 'family', effectivePlan: () => 'family' };
+      mockFindByUserId.mockResolvedValue(family);
+      mockStoreClient.changePlan.mockResolvedValue({
+        status: 'active',
+        planKey: 'NOCTU-SCHOLARMANCY-FAMILY-MONTHLY',
+        pendingPlanKey: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+        effective: 'next_period',
+      });
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(200);
+
+      expect(mockUpdateSubscription).not.toHaveBeenCalled();
+      expect(mockUserUpdateSubscription).not.toHaveBeenCalled();
+      expect(res.body.effective).toBe('next_period');
+      expect(res.body.pendingPlan).toEqual({ plan: 'premium', billingCycle: 'monthly' });
+      expect(res.body.subscription.plan).toBe('family');
+      expect(res.body.subscription.effectivePlan).toBe('family');
+      expect(res.body.subscription.maxStudents).toBe(5);
+    });
+
+    it('keeps the old period end when the store sends none or an unreadable one', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.changePlan.mockResolvedValue({ currentPeriodEnd: 'not-a-date' });
 
       await request(app)
         .post('/api/billing/change-plan')
         .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
         .expect(200);
 
-      expect(mockStoreClient.changePlan).toHaveBeenCalledWith(
-        'ns_sub_1',
-        expect.objectContaining({ effective: 'next_period' })
+      expect(mockUpdateSubscription).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ currentPeriodEnd: paidSubscription.currentPeriodEnd })
       );
     });
 
-    it('does not update local subscription when the store fails', async () => {
+    it('does not update local subscription when the store fails, and hides the store text', async () => {
       mockFindByUserId.mockResolvedValue(paidSubscription);
-      mockStoreClient.changePlan.mockRejectedValue(new ExternalServiceError('store down'));
+      mockStoreClient.changePlan.mockRejectedValue(
+        new ExternalServiceError('Store 422 CAPABILITY_UNSUPPORTED: This store changes plans', {
+          status: 422,
+          code: 'CAPABILITY_UNSUPPORTED',
+        })
+      );
 
-      await request(app)
+      const res = await request(app)
         .post('/api/billing/change-plan')
         .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
         .expect(502);
 
+      const text = JSON.stringify(res.body);
+      expect(text).toMatch(/could not change your plan/i);
+      expect(text).not.toMatch(/CAPABILITY_UNSUPPORTED|Store 422/);
+      expect(mockUpdateSubscription).not.toHaveBeenCalled();
+      expect(mockUserUpdateSubscription).not.toHaveBeenCalled();
+    });
+
+    it('tells the buyer their card failed when the store answers 402', async () => {
+      mockFindByUserId.mockResolvedValue(paidSubscription);
+      mockStoreClient.changePlan.mockRejectedValue(
+        new ExternalServiceError('Store 402 CARD_DECLINED: declined', {
+          status: 402,
+          code: 'CARD_DECLINED',
+        })
+      );
+
+      const res = await request(app)
+        .post('/api/billing/change-plan')
+        .send({ plan: 'premium', billingCycle: 'monthly', confirmed: true })
+        .expect(402);
+
+      const text = JSON.stringify(res.body);
+      expect(text).toMatch(/card could not be charged/i);
+      expect(text).not.toMatch(/CARD_DECLINED/);
       expect(mockUpdateSubscription).not.toHaveBeenCalled();
     });
   });

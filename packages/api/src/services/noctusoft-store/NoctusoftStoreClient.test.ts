@@ -76,29 +76,86 @@ describe('NoctusoftStoreClient', () => {
     });
   });
 
-  it('posts change-plan with SKU and effective timing', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
-      jsonResponse(200, {
-        subscriptionRef: 'ns_sub_1',
-        plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
-        billingCycle: 'monthly',
-        currentPeriodEnd: '2026-11-28T00:00:00.000Z',
-      })
-    );
+  const swapPlanAnswer = {
+    subscriptionRef: 'ns_sub_1',
+    status: 'active',
+    planKey: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+    planCode: 'PREMIUM-MONTHLY',
+    pendingPlanKey: null,
+    currentPeriodEnd: '2026-11-28T00:00:00.000Z',
+    trialEnd: null,
+    cancelAtPeriodEnd: false,
+    effective: 'now',
+  };
+
+  it('posts change-plan with the SKU only, so the store applies what its provider offers', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse(200, swapPlanAnswer));
     const client = new NoctusoftStoreClient(config, fetchMock);
 
     const result = await client.changePlan('ns_sub_1', {
       plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
-      effective: 'now',
     });
 
     const call = lastCall(fetchMock);
     expect(call.url).toBe('https://store.noctusoft.com/subscriptions/ns_sub_1/change-plan');
     expect(JSON.parse(String(call.init.body))).toEqual({
       plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+    });
+    expect(result).toEqual({
+      status: 'active',
+      planKey: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      pendingPlanKey: null,
+      currentPeriodEnd: '2026-11-28T00:00:00.000Z',
       effective: 'now',
     });
-    expect(result.currentPeriodEnd).toBe('2026-11-28T00:00:00.000Z');
+  });
+
+  it('sends effective when the caller names one', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse(200, swapPlanAnswer));
+    const client = new NoctusoftStoreClient(config, fetchMock);
+
+    await client.changePlan('ns_sub_1', {
+      plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      effective: 'next_period',
+    });
+
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+      effective: 'next_period',
+    });
+  });
+
+  it('reports a scheduled change through pendingPlanKey and effective', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse(200, {
+        ...swapPlanAnswer,
+        planKey: 'NOCTU-SCHOLARMANCY-FAMILY-MONTHLY',
+        pendingPlanKey: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+        effective: 'next_period',
+      })
+    );
+    const client = new NoctusoftStoreClient(config, fetchMock);
+
+    const result = await client.changePlan('ns_sub_1', {
+      plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY',
+    });
+
+    expect(result.pendingPlanKey).toBe('NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY');
+    expect(result.effective).toBe('next_period');
+  });
+
+  it('carries the store status and code on a refused plan change', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      jsonResponse(422, {
+        error: 'This store changes plans immediately.',
+        code: 'CAPABILITY_UNSUPPORTED',
+      })
+    );
+    const client = new NoctusoftStoreClient(config, fetchMock);
+
+    await expect(
+      client.changePlan('ns_sub_1', { plan: 'NOCTU-SCHOLARMANCY-PREMIUM-MONTHLY' })
+    ).rejects.toMatchObject({ details: { status: 422, code: 'CAPABILITY_UNSUPPORTED' } });
   });
 
   it('returns the store page where the buyer updates their card', async () => {
