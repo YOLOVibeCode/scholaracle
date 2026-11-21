@@ -3,7 +3,10 @@
 # production API, on a build with the store settings (EXPO_PUBLIC_HIDE_DEPLOY_STAMP=1):
 #   iPhone 17 Pro Max simulator (6.9 inch, 1320x2868) for the App Store,
 #   an Android emulator set to 1080x1920 for Google Play (Play rejects anything taller than 2:1).
-# Screenshots land in --test-output-dir. Never run this against a real family's account.
+# Screenshots land in --test-output-dir; the kept set is in store-metadata/screenshots
+# (app-store-6.9in, google-play-phone). Never run this against a real family's account.
+# A Play-signed APK will not open outside Google Play (it shows a "get this app from Play"
+# screen), so on the emulator install the EAS build's own bundle instead.
 # Not part of any CI suite (scripts/e2e.sh picks its flows by name).
 appId: com.scholarmancy.app
 name: Store screenshots
@@ -12,6 +15,15 @@ tags: [store]
 - runFlow: subflows/login.yaml
 - assertVisible:
     id: students-list
+# Android: the sign-in subflow submits with the Enter key. A key press leaves Android in keyboard
+# navigation mode, which paints a grey focus highlight across the bottom of the screen. A touch on
+# an empty part of the screen ends that mode.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          point: 50%,80%
 - waitForAnimationToEnd
 - takeScreenshot: 01-students
 
