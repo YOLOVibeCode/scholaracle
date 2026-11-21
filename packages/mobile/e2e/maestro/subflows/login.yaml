@@ -35,6 +35,15 @@ appId: com.scholarmancy.app
           label: Type parent email
       - assertVisible:
           text: ${MAESTRO_PARENT_EMAIL}
+# On a short Android screen (1080x1920, the store screenshot size) the keyboard covers the
+# password field, and a tap on a covered field lands on the keyboard: the password is then
+# typed into whatever still has focus. Close the keyboard first. iOS is left alone: its
+# simulators keep the field above the keyboard, and hideKeyboard is unreliable there.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - tapOn:
     id: input-password
 - waitForAnimationToEnd
