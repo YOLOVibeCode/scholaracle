@@ -35,13 +35,22 @@ export type StorePlanChangeEffective = 'now' | 'next_period';
 
 export interface IStoreChangePlanParams {
   readonly plan: string;
-  readonly effective: StorePlanChangeEffective;
+  /**
+   * Leave unset to let the store apply what its provider offers (a Stripe store
+   * offers only `now`; the store answers 422 CAPABILITY_UNSUPPORTED for anything else).
+   */
+  readonly effective?: StorePlanChangeEffective;
 }
 
+/** The store's swap-plan answer: its subscription view plus when the change applies. */
 export interface IStoreChangePlanResult {
-  readonly plan?: string;
-  readonly billingCycle?: BillingCycle;
+  readonly status?: string | null;
+  /** The plan the subscription is on right now. */
+  readonly planKey?: string | null;
+  /** Set when the change is scheduled for the next period instead of applied. */
+  readonly pendingPlanKey?: string | null;
   readonly currentPeriodEnd?: string | null;
+  readonly effective?: StorePlanChangeEffective | null;
 }
 
 export interface INoctusoftStoreClient {
@@ -164,17 +173,21 @@ export class NoctusoftStoreClient implements INoctusoftStoreClient {
     params: IStoreChangePlanParams
   ): Promise<IStoreChangePlanResult> {
     const body = await this._post<{
-      plan?: string;
-      billingCycle?: BillingCycle;
+      status?: string | null;
+      planKey?: string | null;
+      pendingPlanKey?: string | null;
       currentPeriodEnd?: string | null;
+      effective?: StorePlanChangeEffective | null;
     }>(`/subscriptions/${encodeURIComponent(subscriptionRef)}/change-plan`, {
       plan: params.plan,
-      effective: params.effective,
+      ...(params.effective ? { effective: params.effective } : {}),
     });
     return {
-      plan: body.plan,
-      billingCycle: body.billingCycle,
+      status: body.status ?? null,
+      planKey: body.planKey ?? null,
+      pendingPlanKey: body.pendingPlanKey ?? null,
       currentPeriodEnd: body.currentPeriodEnd ?? null,
+      effective: body.effective ?? null,
     };
   }
 

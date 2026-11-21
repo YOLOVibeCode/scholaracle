@@ -6,45 +6,30 @@ import {
   type SubscriptionPlan,
 } from '@scholaracle/database';
 
-export type PlanChangeEffective = 'now' | 'next_period';
-
-export interface IPlanChangeClassification {
-  readonly effective: PlanChangeEffective;
-  readonly isUpgrade: boolean;
-}
-
 const PURCHASABLE_PLANS = new Set<SubscriptionPlan>(['starter', 'premium', 'family']);
 
 export function isSelfServePurchasablePlan(plan: string | undefined): plan is SubscriptionPlan {
   return typeof plan === 'string' && PURCHASABLE_PLANS.has(plan as SubscriptionPlan);
 }
 
-/** Upgrade vs downgrade for store change-plan `effective`. */
-export function classifyPlanChange(params: {
-  readonly currentPlan: SubscriptionPlan;
-  readonly currentCycle: BillingCycle;
-  readonly targetPlan: SubscriptionPlan;
-  readonly targetCycle: BillingCycle;
-}): IPlanChangeClassification {
-  const currentCap = PLAN_FEATURES[params.currentPlan].maxStudents;
-  const targetCap = PLAN_FEATURES[params.targetPlan].maxStudents;
+/**
+ * Whether the buyer can switch plans from the billing page: a running paid
+ * store subscription. Coupon trials and admin grants have no store subscription;
+ * past-due and paused ones must fix the card first.
+ */
+export function canChangeStorePlan(
+  subscription: { readonly storeSubscriptionId?: string; isActive(): boolean } | null | undefined
+): boolean {
+  return Boolean(subscription?.storeSubscriptionId) && subscription?.isActive() === true;
+}
 
-  if (targetCap > currentCap) {
-    return { effective: 'now', isUpgrade: true };
-  }
-  if (targetCap < currentCap) {
-    return { effective: 'next_period', isUpgrade: false };
-  }
-
-  // Same student cap: cycle-only change.
-  if (params.currentCycle === 'monthly' && params.targetCycle === 'annual') {
-    return { effective: 'now', isUpgrade: true };
-  }
-  if (params.currentCycle === 'annual' && params.targetCycle === 'monthly') {
-    return { effective: 'next_period', isUpgrade: false };
-  }
-
-  return { effective: 'now', isUpgrade: true };
+/**
+ * The billing cycle a change request names. A missing one means "keep my
+ * cycle"; anything else that is not monthly or annual is rejected, not guessed.
+ */
+export function parseBillingCycle(value: unknown, current: BillingCycle): BillingCycle | null {
+  if (value === undefined || value === null) return current;
+  return value === 'monthly' || value === 'annual' ? value : null;
 }
 
 export async function countOwnedStudents(database: Db, userId: string): Promise<number> {

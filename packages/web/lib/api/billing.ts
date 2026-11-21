@@ -22,6 +22,16 @@ export interface ISubscriptionInfo {
   readonly trialEnd?: string;
   readonly billingCycle?: string;
   readonly cancelAtPeriodEnd?: boolean;
+  /** True only for a running paid store subscription (not a coupon trial or a past-due card). */
+  readonly canChangePlan?: boolean;
+}
+
+/** What the API answers to a plan change: when it applies, plus the full subscription. */
+export interface IChangePlanResult {
+  readonly subscription: ISubscriptionInfo;
+  /** `next_period`: the store scheduled it, and the buyer keeps the current plan until renewal. */
+  readonly effective: 'now' | 'next_period';
+  readonly pendingPlan?: { readonly plan: string; readonly billingCycle: BillingCycle };
 }
 
 export interface IInvoice {
@@ -49,6 +59,8 @@ interface ISubscriptionResponse {
   readonly success: boolean;
   readonly subscription: ISubscriptionInfo;
 }
+
+interface IChangePlanResponse extends ISubscriptionResponse, IChangePlanResult {}
 
 interface IInvoicesResponse {
   readonly success: boolean;
@@ -107,26 +119,34 @@ export const billingApi = {
   },
 
   /**
-   * The store's page to update the card on a paid subscription, or the
-   * in-app billing page when there is none.
+   * Switch the paid subscription to another plan or billing cycle. Throws on
+   * failure so the caller can show the reason next to the confirm button.
    */
   async changePlan(
     plan: string,
     billingCycle: BillingCycle = 'monthly'
-  ): Promise<ISubscriptionInfo | null> {
+  ): Promise<IChangePlanResult> {
     try {
-      const res = await apiClient.post<ISubscriptionResponse>('/billing/change-plan', {
+      const res = await apiClient.post<IChangePlanResponse>('/billing/change-plan', {
         plan,
         billingCycle,
         confirmed: true,
       });
-      return res.subscription;
+      return {
+        subscription: res.subscription,
+        effective: res.effective,
+        ...(res.pendingPlan ? { pendingPlan: res.pendingPlan } : {}),
+      };
     } catch (error) {
       console.error('Failed to change plan:', error);
       throw error;
     }
   },
 
+  /**
+   * The store's page to update the card on a paid subscription, or the
+   * in-app billing page when there is none.
+   */
   async createPortal(): Promise<string | null> {
     try {
       const res = await apiClient.post<IPortalResponse>('/billing/portal');
