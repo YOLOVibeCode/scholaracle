@@ -22,6 +22,7 @@ import {
 import { apiClient } from '../api/client';
 import { deleteFailureMessage } from './deleteAccountMessages';
 import { isAppleProofAvailable, requestAppleProof } from '../auth/appleProof';
+import { appleDeleteRequest, type IAppleDeleteRequest } from '../auth/appleDeleteRequest';
 
 export interface IDeleteAccountSheetProps {
   readonly visible: boolean;
@@ -47,9 +48,7 @@ export function DeleteAccountSheet({
     void isAppleProofAvailable().then(setAppleAvailable);
   }, [visible]);
 
-  const run = async (
-    proof: { password: string } | { appleIdentityToken: string; appleNonce: string }
-  ): Promise<void> => {
+  const run = async (proof: { password: string } | IAppleDeleteRequest): Promise<void> => {
     setBusy(true);
     setError(null);
     try {
@@ -75,7 +74,7 @@ export function DeleteAccountSheet({
     try {
       const proof = await requestAppleProof();
       if (proof === null) return;
-      await run({ appleIdentityToken: proof.identityToken, appleNonce: proof.nonce });
+      await run(appleDeleteRequest(proof));
     } catch {
       setError('Apple confirmation failed. Nothing was deleted.');
     }

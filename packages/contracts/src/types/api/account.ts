@@ -34,6 +34,11 @@ export interface IAccountDeleteRequest {
    */
   readonly appleIdentityToken?: string;
   readonly appleNonce?: string;
+  /**
+   * One-time authorization code from the same fresh Sign in with Apple. The server uses it to
+   * revoke the user's Apple tokens (App Review 5.1.1(v)). Optional: deletion never waits on it.
+   */
+  readonly appleAuthorizationCode?: string;
 }
 
 export interface IAccountDeleteResponse {

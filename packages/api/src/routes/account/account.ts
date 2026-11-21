@@ -20,6 +20,8 @@ import {
   type IEmailTransferEmailService,
 } from '../../services/email-transfer';
 import { AccountDeletionService } from '../../services/account-deletion';
+import type { IAppleTokenRevoker } from '../../services/apple/appleTokenRevocation';
+import { logger } from '../../logger';
 
 function getUserId(req: Request): string | null {
   return (req as { userId?: string }).userId ?? null;
@@ -29,6 +31,37 @@ export interface IAccountRouterConfig {
   readonly database: Db;
   readonly baseUrl: string;
   readonly emailService?: IEmailTransferEmailService;
+  /** Revokes Sign in with Apple tokens at account deletion. Absent = nothing is revoked. */
+  readonly appleTokenRevoker?: IAppleTokenRevoker;
+}
+
+/** Best effort: logs the outcome (no token, code or account id) and never throws. */
+async function revokeAppleTokens(
+  revoker: IAppleTokenRevoker | undefined,
+  authorizationCode: string,
+  clientId: string,
+  sub: string
+): Promise<void> {
+  if (!revoker) return;
+  if (authorizationCode === '') {
+    logger.warn('Apple account deleted without an authorization code: no token was revoked');
+    return;
+  }
+  try {
+    const outcome = await revoker.revokeWithAuthorizationCode(authorizationCode, clientId, sub);
+    if (outcome.status === 'revoked') {
+      logger.info('Apple tokens revoked for a deleted account');
+    } else if (outcome.status === 'not_configured') {
+      logger.warn('Apple token revocation is not configured on this server: no token was revoked');
+    } else {
+      logger.error(
+        { step: outcome.step, reason: outcome.reason },
+        'Apple token revocation failed for a deleted account'
+      );
+    }
+  } catch {
+    logger.error('Apple token revocation threw for a deleted account');
+  }
 }
 
 export function createAccountRouter(config: IAccountRouterConfig): Router {
@@ -261,7 +294,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         throw new AuthenticationError('Unauthorized');
       }
 
-      const { password, appleIdentityToken, appleNonce } = (req.body ??
+      const { password, appleIdentityToken, appleNonce, appleAuthorizationCode } = (req.body ??
         {}) as Partial<IAccountDeleteRequest>;
       const hasPassword = typeof password === 'string' && password.trim() !== '';
       const hasApple = typeof appleIdentityToken === 'string' && appleIdentityToken.trim() !== '';
@@ -287,6 +320,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         // account id is the one linked to THIS user.
         const nonce = typeof appleNonce === 'string' ? appleNonce.trim() : '';
         let sub: string;
+        let aud: string;
         try {
           const verified = await verifyAppleIdentityToken({
             identityToken: (appleIdentityToken as string).trim(),
@@ -294,6 +328,7 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
             audiences: appleOAuthAudiences(),
           });
           sub = verified.sub;
+          aud = verified.aud;
         } catch {
           throw new AuthenticationError('Invalid Apple identity token');
         }
@@ -301,6 +336,12 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         if (!link || link.userId !== userId) {
           throw new AuthenticationError('This Apple account is not linked to your account');
         }
+
+        // Apple requires the user's tokens to be revoked when the account is deleted. The
+        // person asked for deletion, so a failed revocation is logged and never stops it.
+        const code =
+          typeof appleAuthorizationCode === 'string' ? appleAuthorizationCode.trim() : '';
+        await revokeAppleTokens(config.appleTokenRevoker, code, aud, sub);
       }
 
       const deletionService = new AccountDeletionService(config.database);

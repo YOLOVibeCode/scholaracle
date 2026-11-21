@@ -28,6 +28,8 @@ export interface IVerifyAppleIdentityTokenInput {
 export interface IAppleVerifiedClaims {
   readonly sub: string;
   readonly email?: string;
+  /** The allowed audience the token was issued for (the app's bundle id). */
+  readonly aud: string;
 }
 
 let jwksCache: { readonly keys: ReadonlyArray<IAppleEcJwk>; readonly fetchedAt: number } | null =
@@ -94,12 +96,13 @@ function readStringClaim(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function audMatchesAllowed(tokenAud: unknown, allowed: readonly string[]): boolean {
-  if (typeof tokenAud === 'string') return allowed.includes(tokenAud);
-  if (Array.isArray(tokenAud)) {
-    return tokenAud.some((a) => typeof a === 'string' && allowed.includes(a));
+/** The first of the token's audiences that is allowed, or null. */
+function matchedAudience(tokenAud: unknown, allowed: readonly string[]): string | null {
+  const candidates: readonly unknown[] = Array.isArray(tokenAud) ? tokenAud : [tokenAud];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && allowed.includes(candidate)) return candidate;
   }
-  return false;
+  return null;
 }
 
 async function loadAppleJwks(
@@ -135,7 +138,8 @@ export async function verifyAppleIdentityToken(
     throw new Error('Invalid issuer');
   }
 
-  if (!audMatchesAllowed(payload['aud'], input.audiences)) {
+  const aud = matchedAudience(payload['aud'], input.audiences);
+  if (aud === null) {
     throw new Error('Invalid audience');
   }
 
@@ -181,7 +185,7 @@ export async function verifyAppleIdentityToken(
   }
 
   const email = readStringClaim(payload['email']);
-  return { sub, email };
+  return { sub, email, aud };
 }
 
 async function defaultFetchJson(url: string): Promise<unknown> {
