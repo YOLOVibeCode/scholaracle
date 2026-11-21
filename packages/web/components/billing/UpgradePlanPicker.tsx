@@ -3,7 +3,14 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PURCHASABLE_PLANS, type BillingCycle } from '@/lib/billing/planCatalog';
 
@@ -36,9 +43,7 @@ export function UpgradePlanPicker({
   const [billingCycle, setBillingCycle] = useState<BillingCycle>(initialCycle);
 
   const isCurrentSelection = (plan: string, cycle: BillingCycle): boolean =>
-    mode === 'switch' &&
-    currentPlan === plan &&
-    (currentCycle ?? 'monthly') === cycle;
+    mode === 'switch' && currentPlan === plan && (currentCycle ?? 'monthly') === cycle;
 
   const handlePrimaryAction = () => {
     if (mode === 'switch') {
@@ -48,9 +53,7 @@ export function UpgradePlanPicker({
     onCheckout(selectedPlan, billingCycle);
   };
 
-  const primaryDisabled =
-    switchDisabled ||
-    (mode === 'switch' && isCurrentSelection(selectedPlan, billingCycle));
+  const primaryDisabled = switchDisabled || isCurrentSelection(selectedPlan, billingCycle);
 
   return (
     <Card data-testid="upgrade-plan-picker">
@@ -74,7 +77,11 @@ export function UpgradePlanPicker({
           </p>
         )}
         <div className="flex items-center gap-2" data-testid="billing-cycle-toggle">
-          <span className={billingCycle === 'monthly' ? 'font-medium text-sm' : 'text-muted-foreground text-sm'}>
+          <span
+            className={
+              billingCycle === 'monthly' ? 'font-medium text-sm' : 'text-muted-foreground text-sm'
+            }
+          >
             Monthly
           </span>
           <button
@@ -107,8 +114,7 @@ export function UpgradePlanPicker({
             const isSelected = selectedPlan === plan.plan;
             const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
             const period = billingCycle === 'annual' ? '/year' : '/month';
-            const isCurrent =
-              mode === 'switch' && currentPlan === plan.plan && (currentCycle ?? 'monthly') === billingCycle;
+            const isCurrent = isCurrentSelection(plan.plan, billingCycle);
             return (
               <button
                 key={plan.id}
@@ -153,7 +159,9 @@ export function UpgradePlanPicker({
         <Button
           onClick={handlePrimaryAction}
           disabled={primaryDisabled}
-          data-testid={mode === 'switch' ? 'button-request-plan-switch' : 'button-upgrade-selected-plan'}
+          data-testid={
+            mode === 'switch' ? 'button-request-plan-switch' : 'button-upgrade-selected-plan'
+          }
         >
           {mode === 'switch' ? 'Review plan switch' : 'Continue to checkout'}
         </Button>
