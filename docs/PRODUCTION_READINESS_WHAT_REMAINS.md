@@ -49,6 +49,11 @@ Checked on 26 Nov 2026 by listing variable names on Railway. Secret values were 
 - [x] **Email** goes through the relay (`SENDGRID_BASE_URL`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME`) on the API and the workers.
 - [x] **`BASE_URL`** on the API and, since 26 Nov 2026, on the workers. Without it on the workers, digest and alert emails carry no link to the dashboard (DEF-026).
 - [x] **Web security headers** (HTTPS-only, framing, content type), since #191.
+- [x] **Failed sign-ins are limited**, since #205: ten per account and address and a hundred per address inside fifteen minutes, and five wrong admin authenticator codes per admin. The counts live in the API's memory, which holds while the API runs as one instance (RISK-027).
+- [x] **The other secrets the services need** are set where `RAILWAY_DEPLOYMENT.md` says they must be: `INTERNAL_API_SECRET` (API and web), `CREDENTIALS_ENCRYPTION_KEY` (API and workers), `COMMUNICATIONS_WEBHOOK_SECRET` (API), `LITELLM_API_KEY` (API and workers).
+- [ ] **Error reporting**: `SENTRY_DSN` is on no service, so an error in production is a line in the Railway logs and nobody is told (RISK-028).
+- [ ] **Leftover variables**: thirteen names are set on Railway and used by nothing, two of them direct model-vendor keys (`RAILWAY_DEPLOYMENT.md`, "Set on Railway and used by nothing"). Removing them is the owner's call.
+- [ ] **Backups**: a schedule for the production database volume and the assets volume.
 - [ ] **Text messages**: the site offers alerts by text and Settings has the opt-in. Texting is on only where `NOCTUSOFT_API_KEY` is set on the API and the workers (`RAILWAY_DEPLOYMENT.md`, "Switches"). On 26 Nov 2026 it is set nowhere, so no text goes out (DEF-027).
 - [ ] **Asset store**: production keeps assets on a Railway volume (`ASSET_STORE=local`, `/data/assets`). The other backends are `s3` and `relay`; see `packages/api/docs/ASSET_STORAGE.md`. Moving is a decision, not a defect.
 - [ ] **Sign in with Apple token revocation**: the code is live (#173) and waits for `APPLE_TEAM_ID`, `APPLE_SIGN_IN_KEY_ID` and `APPLE_SIGN_IN_PRIVATE_KEY` on the API. App Review asks for it (5.1.1(v)).

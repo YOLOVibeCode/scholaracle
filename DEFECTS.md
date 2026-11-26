@@ -140,7 +140,7 @@
 
 ## November 2026 — found in the status review (25–26 Nov)
 
-Found by checking the live site, the phone app's links and the production logs against the code. Each fix went in with a test that failed first. Paths are under `packages/`.
+Found by checking the live site, the phone app's links, the production logs and the variables set on Railway against the code. Each fix went in with a test that failed first. Paths are under `packages/`.
 
 | ID | Sev | What was wrong | Status | Regression test |
 |----|-----|----------------|--------|-----------------|
@@ -161,6 +161,8 @@ Found by checking the live site, the phone app's links and the production logs a
 | DEF-025 | Sev-2 | Deleting an account did not revoke its Sign in with Apple tokens (App Review 5.1.1(v)). | Code merged, #173. It does nothing until `APPLE_TEAM_ID`, `APPLE_SIGN_IN_KEY_ID` and `APPLE_SIGN_IN_PRIVATE_KEY` are set on the API. | `api/src/routes/account/accountAppleRevocation.test.ts`, `api/src/services/apple/appleTokenRevocation.test.ts` |
 | DEF-026 | Sev-2 | Production workers had no `BASE_URL`, so digest and alert emails carried no link to the dashboard. | Fixed on 26 Nov 2026 by setting the variable. `RAILWAY_DEPLOYMENT.md` now lists it as required. | None: it is configuration. |
 | DEF-027 | Sev-2 | The site offers alerts by text ("Email and SMS notifications" on the home page, an opt-in and a switch in Settings), and no text is sent. Every sender is built by `agents/src/sms/createSmsStack.ts`, which returns nothing without `NOCTUSOFT_API_KEY`, and the variable is on no service. | Open. A decision: turn texts on (the key on the API and the workers) or stop offering them. | None yet. |
+| DEF-028 | Sev-1 | `POST /api/auth/login` checked every password it was sent. Nothing counted failed sign-ins and nothing locked an account, for parents and for students. | Fixed, #205. After ten failed sign-ins for one account from one address inside fifteen minutes, or a hundred from one address, the API answers 429 with `Retry-After` and does not check the password. `SIGN_IN_ATTEMPT_LIMIT=off` turns it off. | `api/src/routes/auth/signInAttemptLimit.test.ts`, `api/src/routes/auth/signInAttemptGuard.test.ts`, `auth/src/AttemptLimiter/AttemptLimiter.test.ts` |
+| DEF-029 | Sev-2 | A wrong admin authenticator code was not counted and did not use up the sign-in step, at sign-in and at step-up. Someone with an admin's password, or with an admin's session, could try codes until one matched. | Fixed, #205. Five wrong codes per admin inside fifteen minutes, counted across both routes, then 429. | `auth/src/AdminAuthService/adminCodeAttempts.test.ts`, `api/src/routes/admin/auth/codeAttempts.test.ts` |
 
 ---
 
@@ -195,3 +197,5 @@ Found by checking the live site, the phone app's links and the production logs a
 | DEF-025 | Sev-2 | Apple token revocation | Code merged; needs three variables | yes |
 | DEF-026 | Sev-2 | Email links | Fixed (configuration) | no |
 | DEF-027 | Sev-2 | Text alerts | Open (decision) | no |
+| DEF-028 | Sev-1 | Auth: failed sign-ins not limited | Fixed | yes |
+| DEF-029 | Sev-2 | Auth: admin code tries not limited | Fixed | yes |

@@ -104,8 +104,13 @@ Variables are set per service and per environment. A variable on the API is not 
 | `CORS_ORIGINS` | yes | — | — | The web origins allowed to call the API (see "Base CORS rules"). |
 | `BASE_URL` | yes | **yes** | — | The web origin, for example `https://scholarmancy.com`. Links in emails are built from it: password reset, sharing invites, alerts and invoices on the API; digests and alerts on the workers. Without it on the workers those emails carry no link to the dashboard. |
 | `SENDGRID_API_KEY`, `SENDGRID_BASE_URL`, `SENDGRID_FROM_EMAIL`, `SENDGRID_FROM_NAME` | yes | yes | — | Email. It goes through the Noctusoft relay: the key is the product's relay key, not a SendGrid key, and `SENDGRID_BASE_URL` is the relay's address. |
-| `RELAY_API_KEY`, `RELAY_WEBHOOK_SECRET`, `RELAY_STORE_ALIAS`, `RELAY_STORE_MODE` | yes | — | — | Billing through the Noctusoft store. `RELAY_STORE_ALIAS=scholarmancy`; `RELAY_STORE_MODE=live` on production. |
+| `RELAY_API_KEY`, `RELAY_WEBHOOK_SECRET`, `RELAY_STORE_ALIAS` | yes | — | — | Billing through the Noctusoft store. `RELAY_STORE_ALIAS=scholarmancy`. Billing needs all three. |
+| `RELAY_STORE_MODE` | production | — | — | `live` on production. Unset, the store mode is `live` when `NODE_ENV=production` and `test` otherwise. The dev API runs with `NODE_ENV=development`, which is what keeps UAT in the sandbox: set `RELAY_STORE_MODE=test` there before ever changing its `NODE_ENV`. |
 | `CONNECTOR_JWT_SECRET` | yes | — | — | Signs device (connector) tokens. It must differ from `JWT_SECRET`, so a parent's session token cannot be used as a device token. |
+| `CREDENTIALS_ENCRYPTION_KEY` | yes | yes | — | Encrypts the school-portal sign-ins a parent saves. 32 or more characters, or 64 hex digits. Without it the API refuses to save them. The workers need the same value to read the encrypted run skeletons the nightly scraper repair works from. |
+| `INTERNAL_API_SECRET` | yes | — | yes | The web server proves itself to `POST /api/auth/oauth` with it; the same value on both. It must never reach a browser or a phone build. |
+| `COMMUNICATIONS_WEBHOOK_SECRET` | yes | — | — | Guards `POST /api/webhooks/communications/status` (delivery reports). The API does not start in production without it. |
+| `AUTH_SECRET`, `AUTH_TRUST_HOST`, `NEXTAUTH_URL` | — | — | yes | NextAuth on the web server: the secret that signs its cookie, trust for Railway's proxy, and the site's own address. |
 | `LITELLM_API_KEY`, `LITELLM_BASE_URL` | yes | yes | — | Model calls, through the Noctusoft LLM relay (`LITELLM_BASE_URL` defaults to `https://ai.noctusoft.com`). Without the key, everything that uses a model is skipped. |
 | `ASSET_STORE`, `ASSET_STORAGE_PATH` | yes | — | — | Where uploaded files live. `local` keeps them on the volume at `ASSET_STORAGE_PATH`. `relay` needs `NOCTUSOFT_RELAY_API_KEY`. See `packages/api/docs/ASSET_STORAGE.md`. |
 | `NEXT_PUBLIC_API_URL` | — | — | yes | For example `https://api.scholarmancy.com/api`. Baked in at build time. |
@@ -128,6 +133,36 @@ Each of these is off when unset, except `STALENESS_ENABLED`, which is on when un
 | `STALENESS_ENABLED=false` | Workers | Turns the stale-sync email off. Default is on: one email per stale spell, 48 hours without a sync. |
 
 Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything named `NEXT_PUBLIC_` is sent to browsers.
+
+### Optional
+
+| Variable | Service | What it does |
+|----------|---------|--------------|
+| `SENTRY_DSN` | API, workers, web | Error reporting. The web also reads `NEXT_PUBLIC_SENTRY_DSN` for errors in the browser. Set on no service on 26 Nov 2026, so errors reach the Railway logs and nothing else. |
+| `ADMIN_IP_ALLOWLIST` | API | Comma-separated addresses that may call the admin API. Unset: any address. |
+| `ADMIN_JWT_SECRET` | API | A separate secret for admin tokens. Unset: `JWT_SECRET` signs them. |
+| `RATE_LIMIT_ENABLED=true` | API | Limits admin sign-in to ten requests a minute per address. The lockout after five wrong admin passwords is always on. |
+| `SIGN_IN_ATTEMPT_LIMIT=off` | API | Turns off the limit on failed sign-ins (ten per account and address, a hundred per address, inside fifteen minutes). It exists for the day the limit refuses people it should not. Leave it unset. |
+| `RELAY_URL` | API | The store's address. Default `https://store.noctusoft.com`. |
+| `SENDGRID_REPLY_TO` | API | The reply-to address on mail the API sends. |
+| `AI_MODEL_MATCHING`, `AI_MODEL_TRIAGE`, `AI_MODEL_PATCH`, `AI_MODEL_ESCALATE`, `AI_MODEL_INSIGHTS` | API and workers | Which model each kind of call asks the relay for. The defaults are in `packages/agents/src/ai/models.ts`. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_S3_ENDPOINT` | API | Read only when `ASSET_STORE=s3`. |
+| `API_BASE_URL` | Workers | The API's address, when the code cannot work it out (`packages/agents/src/studio/resolveApiBaseUrl.ts`). |
+
+### Set on Railway and used by nothing
+
+Found on 26 Nov 2026 by comparing the variable names on each service with the code. They are listed so that nobody takes them for live settings. Removing them is the owner's call.
+
+| Variable | Where | Why it does nothing |
+|----------|-------|---------------------|
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_BASE_URL`, `TWILIO_API_KEY_SECRET`, `TWILIO_API_KEY_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | API and workers | No code reads them. Texts go through the relay with `NOCTUSOFT_API_KEY`. |
+| `TWILIO_MESSAGING_SERVICE_SID` | API | The same. |
+| `AI_API_KEY` | API | A direct model-vendor key. `packages/agents/src/ai/llm-config.ts` falls back to it only when `LITELLM_API_KEY` is missing, so today it is never used. While it is set, losing the relay key would send model calls straight to the vendor without anyone noticing. |
+| `ANTHROPIC_API_KEY` | Workers | The same. |
+| `SSDN_API_KEY` | API and workers, production | The name appears nowhere in the repo. |
+| `JWT_SECRET` | Workers | The worker process does not read it. |
+| `NEXT_PUBLIC_API_URL` | API | Only the web build reads it. |
+| `CACHEBUST` | Web, production | Read by no code and no Dockerfile. |
 
 ### See which variables a service has (names only)
 
