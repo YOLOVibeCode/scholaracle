@@ -8,7 +8,7 @@ import {
   RateLimitError,
   ValidationError,
 } from '@scholaracle/contracts';
-import { AgendaIntelligenceService } from '@scholaracle/agents';
+import { AgendaIntelligenceService, resolveLlmConfig } from '@scholaracle/agents';
 import { authMiddleware } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { AgendaOverrideRepository, StudentRepository, UserRepository } from '@scholaracle/database';
@@ -131,6 +131,20 @@ function computeLabelsAndImportance(
   }
 
   return { labels, importance };
+}
+
+/**
+ * The model's one-line summaries on agenda items are off unless `AGENDA_AI_ENABLED=true`.
+ *
+ * The call is made while the page waits, on every agenda load (the dashboard home, the
+ * agenda page and each student's view), and each one counts against the plan's monthly
+ * allowance. So it is turned on per environment on purpose, dev first, like the weekly
+ * review. Before 26 Nov 2026 it ran whenever the API held a direct vendor key, which no
+ * deployed server did.
+ */
+export function isAgendaAiEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env['AGENDA_AI_ENABLED']?.trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes';
 }
 
 export function agendaRouter(config: IAgendaRouterConfig): Router {
@@ -302,11 +316,18 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
         }
       }
 
+      // The model call goes where every other one goes: the Noctusoft relay when its key
+      // is set, a direct vendor key only as the fallback. Never read a vendor key here.
+      const agendaLlm = isAgendaAiEnabled() ? resolveLlmConfig('triage') : null;
       const agendaAI = new AgendaIntelligenceService({
-        apiKey: process.env['ANTHROPIC_API_KEY'],
+        apiKey: agendaLlm?.apiKey,
+        baseUrl: agendaLlm?.baseUrl,
+        model: agendaLlm?.model,
         cacheTtlMs: 5 * 60 * 1000,
       });
-      const agendaLimit = await checkAiRateLimit(config.database, userId, 'agenda');
+      const agendaLimit = agendaAI.isAvailable()
+        ? await checkAiRateLimit(config.database, userId, 'agenda')
+        : { allowed: false };
       if (agendaAI.isAvailable() && items.length > 0 && agendaLimit.allowed) {
         const enhancements = await agendaAI.enhance(items);
         for (let i = 0; i < items.length; i++) {
