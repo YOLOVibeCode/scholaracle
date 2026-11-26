@@ -8,10 +8,12 @@
 | UAT Web | `web-uat.scholarmancy.com` | `web` / env `dev` | — |
 | Prod API | `api.scholarmancy.com` | `api` / env `production` | — |
 | Prod Web | `scholarmancy.com` | `web` / env `production` | — |
-| TestFlight preview (UAT) | build #44+ | — | `preview` → UAT API |
-| TestFlight production | build #45+ | — | `production` → prod API |
-| Play internal (UAT) | build `8faad8ba` | — | `preview` → UAT API |
-| Play alpha (prod) | build `0e340595` | — | `production` → prod API |
+| TestFlight preview (UAT) | a `preview` build | — | `preview` → UAT API |
+| TestFlight production | a `production` build | — | `production` → prod API |
+| Play internal (UAT) | a `preview` build | — | `preview` → UAT API |
+| Play alpha (prod) | a `production` build | — | `production` → prod API |
+
+Build numbers change with every build, so this table does not name them. App Store Connect → TestFlight and Play Console → Testing show what is there now. On 26 Nov 2026: TestFlight build #51 (`production`) is the one outside testers get, and it expires on 11 Feb 2027; Google Play has 1.0.0 (11) on the internal track.
 
 Railway internal URLs (`*-dev-*.up.railway.app`, `*-production-*.up.railway.app`) are
 only used by CI health checks; they are never exposed to users or the mobile app.
@@ -30,7 +32,7 @@ push → Railway deploys dev (auto, no CI wait)
                 POST /api/auth/login (demo) → 200
                 POST /api/auth/magic (bogus) → 4xx
               App Store legal pages: /privacy /terms /support /delete-account → 200
-         → E2E vs dev (Playwright, 54 specs)
+         → E2E vs dev (Playwright)
          → OTA → TestFlight preview
               fingerprint guard: if fingerprint changed → warning, skip OTA
               if fingerprint matches → eas update --channel preview
@@ -47,6 +49,12 @@ push → Railway deploys dev (auto, no CI wait)
 | Seed route | `POST /api/seed/demo` (dev only) |
 
 The seed is idempotent. Playwright E2E calls it on every run.
+
+**Where this sign-in works:** on a developer machine and on UAT. It does not work on production.
+
+- **Developer machine:** the home page shows "Try the demo", which loads the seed and signs in.
+- **UAT:** the button is not shown on a deployed site. Sign in on `/login` with the email and password above.
+- **Production:** the demo parent's password is `DEMO_ACCOUNT_PASSWORD`, a private value in the vault that is given to App Store and Google Play reviewers (`RAILWAY_DEPLOYMENT.md`, "Switches"). Do not use it to try something out: a sign-in with it first restores the demo household, which undoes whatever a reviewer or a tester did there.
 
 ## OTA vs binary rebuild
 
@@ -79,8 +87,10 @@ pnpm update:production        # production channel (keep manual)
 
 1. App Store Connect → Scholarmancy → TestFlight → PilotTesting (External) → Testers → +
 2. Enter email. Apple sends an invitation; no code required.
-3. The public TestFlight link (`https://testflight.apple.com/join/YMAKAqh8`) is active
-   once Apple approves the first external build (review typically 24–48 h).
+3. The public TestFlight link (`https://testflight.apple.com/join/YMAKAqh8`) is active.
+   It is the link `/get-app` gives parents, and it installs the `production` build.
+   The link has a tester limit, set on the group in App Store Connect (25 on 26 Nov 2026).
+   A new external build needs Apple's beta review before testers get it (typically 24–48 h).
 
 ## GitHub secrets required
 

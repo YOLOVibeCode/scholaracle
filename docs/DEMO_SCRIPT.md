@@ -1,20 +1,23 @@
 # Scholarmancy Demo Script
 
-Click-through script for a complete end-to-end demo. Covers the parent dashboard, student studio, guest-parent access, and confirms that mobile still uses password + wizard until native OAuth ships.
+Click-through script for a complete end-to-end demo. Covers the parent dashboard, student studio, guest-parent access, and the phone app's sign-in and connect wizard.
+
+Run it on a developer machine or on UAT. It does not work on production: `https://scholarmancy.com` does not offer the demo, and these logins are rejected there (see [UAT.md](./UAT.md)).
 
 ---
 
 ## Prerequisites
 
-- Local or UAT web app running
+- A local web app and API (`pnpm --filter @scholaracle/web dev`, `pnpm --filter @scholaracle/api dev`), or UAT (`https://web-uat.scholarmancy.com`)
 - API running with `DEMO_ENABLED=true`
-- Demo seed loaded (the "Try the demo" button does this automatically)
+- Demo seed loaded. On a developer machine the "Try the demo" button does this. UAT is seeded by the deploy pipeline.
 
 ---
 
 ## 1. Parent demo — Sarah Mitchell
 
-1. Open `https://scholarmancy.com` (or `http://localhost:2800`)
+1. Open `http://localhost:2800`.
+   - On UAT there is no button (a deployed site does not show it). Open `https://web-uat.scholarmancy.com/login`, sign in as the demo parent with the login below, and go to step 3.
 2. Click **Try the demo** in the nav or hero.
    - The button calls `POST /api/seed/demo` then logs in as `demo@scholarmancy.com / DemoPass123!`
    - Expected: redirect to `/dashboard`
@@ -78,11 +81,11 @@ Click-through script for a complete end-to-end demo. Covers the parent dashboard
 
 ---
 
-## 5. Mobile — current state (password + wizard only)
+## 5. Mobile — sign in and connect
 
-> **Note:** OAuth buttons do not appear on mobile until native Sign in with Apple / Google ships. This is intentional.
+> **Note:** The sign-in screen shows **Sign in with Apple** on iPhone and iPad. Google and Microsoft buttons appear only in a build that was given their client ids. The demo uses email and password.
 
-On the TestFlight build:
+On a TestFlight **preview** build (it talks to UAT, where the demo logins work):
 
 1. Open the app on iOS
 2. On the welcome screen, choose **I'm a parent** → enter email/password credentials
@@ -90,7 +93,7 @@ On the TestFlight build:
 3. Confirm the portal-connect wizard appears (Canvas / Skyward / Aeries picker)
 4. Confirm student list loads after connecting
 
-OAuth will be added in the `mobile-oauth` track once Apple certs exist.
+The public TestFlight link on `/get-app` installs the **production** build. The logins in this script do not work in it.
 
 ---
 
@@ -98,7 +101,7 @@ OAuth will be added in the `mobile-oauth` track once Apple certs exist.
 
 | Step | Expected | Pass? |
 |------|----------|-------|
-| Try the demo button | Seeds + logs in as Sarah, lands on `/dashboard` | |
+| Try the demo button (developer machine) or demo sign-in (UAT) | Signed in as Sarah, lands on `/dashboard` | |
 | Emma grades | `/dashboard` shows AP Bio, Algebra II | |
 | Liam grades | `/dashboard` shows 7th-grade courses | |
 | Send magic link to Emma | Toast / success message | |
@@ -107,5 +110,5 @@ OAuth will be added in the `mobile-oauth` track once Apple certs exist.
 | Liam student login | `/studio` with today's tasks | |
 | Student cannot reach `/dashboard` | Redirected to `/studio` | |
 | Jamie guest login | `/dashboard` read-only view | |
-| Mobile: no OAuth buttons | Welcome screen shows email/password only | |
+| Mobile: sign-in screen | Email and password, and Sign in with Apple on iPhone and iPad | |
 | Mobile: password login works | Dashboard + connector wizard loads | |

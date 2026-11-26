@@ -86,18 +86,24 @@ Password for all three: `DemoPass123!`
 
 Parent Settings → Student logins also has **iPad sign-in** (QR) for Emma and Liam.
 
+These logins work on a developer machine and on UAT. They do not work on production, whose demo sign-in is private and kept for app reviewers. See [docs/UAT.md](./docs/UAT.md).
+
 ## Deployment
 
 - **API, workers, web:** Railway. Push to `main` deploys **dev** immediately; **production** waits on CI. Details: [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) and [CLAUDE.md](./CLAUDE.md).
 - **Mobile:** EAS. JS-only → `pnpm update:production`. Native → `pnpm ship:production` (or `:ios` / `:android`). See [CLAUDE.md](./CLAUDE.md).
 - **Production:** https://scholarmancy.com · https://api.scholarmancy.com
-- **UAT:** https://api-uat.scholarmancy.com (preview / Play internal)
+- **UAT:** https://web-uat.scholarmancy.com · https://api-uat.scholarmancy.com (preview / Play internal)
+- **Getting the phone app today:** iPhone and iPad through TestFlight, from the link on https://scholarmancy.com/get-app. The app is not in the App Store or Google Play yet, and the Chrome extension is not in the Chrome Web Store.
 
 ## Documentation
 
 - [CLAUDE.md](./CLAUDE.md) — operating rules and how to ship
 - [PORT_POLICY.md](./PORT_POLICY.md) — fixed local ports
-- [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) — backend/web deploy
+- [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) — backend/web deploy, and the variables each service needs
+- [docs/UAT.md](./docs/UAT.md) — UAT, TestFlight and where the demo sign-in works
+- [docs/PRODUCTION_READINESS_WHAT_REMAINS.md](./docs/PRODUCTION_READINESS_WHAT_REMAINS.md) — what is unfinished around production
+- [DEFECTS.md](./DEFECTS.md) · [RISK_REGISTER.md](./RISK_REGISTER.md) · [NEXT_STEPS.md](./NEXT_STEPS.md) — defects, risks and test tooling
 - [docs/CLIENT_PIPELINE_SPEC.md](./docs/CLIENT_PIPELINE_SPEC.md) — client scrape pipeline
 - [docs/CLIENT_SCRAPER_SPEC.md](./docs/CLIENT_SCRAPER_SPEC.md) — extraction quality rules
 
