@@ -133,4 +133,16 @@ describe('Communications Webhooks', () => {
       .send({ logId: 'x', status: 'opened' });
     expect(res.status).toBe(401);
   });
+
+  it('rejects a secret of the same length, a part of it, and the right one with more after it', async () => {
+    const statuses: number[] = [];
+    for (const given of ['test-secreX', 'test', 'test-secret-more']) {
+      const res = await request(app)
+        .post('/api/webhooks/communications/status')
+        .set('x-webhook-secret', given)
+        .send({ logId: 'x', status: 'opened' });
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([401, 401, 401]);
+  });
 });

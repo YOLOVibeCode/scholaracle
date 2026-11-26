@@ -17,9 +17,9 @@
  * this does nothing at all.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Db } from 'mongodb';
 import { logger } from '../../logger';
+import { sameSecret } from '../../security/sameSecret';
 import type { IAssetStore } from '../assets/IAssetStore';
 import { DEMO_USER } from '../../routes/seed/demo-data';
 import { ensureDemoHousehold, type IEnsureDemoHouseholdOptions } from '../../routes/seed/seed';
@@ -49,13 +49,6 @@ export interface IDemoSignInRepairDeps {
 export function configuredDemoPassword(env: NodeJS.ProcessEnv = process.env): string | null {
   const value = env[DEMO_ACCOUNT_PASSWORD_ENV] ?? '';
   return value.length >= DEMO_ACCOUNT_PASSWORD_MIN_LENGTH ? value : null;
-}
-
-/** Constant-time comparison that does not leak the length of the expected value. */
-function sameSecret(given: string, expected: string): boolean {
-  const a = createHash('sha256').update(given, 'utf8').digest();
-  const b = createHash('sha256').update(expected, 'utf8').digest();
-  return timingSafeEqual(a, b);
 }
 
 export function isDemoParentEmail(email: string): boolean {
