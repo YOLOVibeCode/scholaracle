@@ -102,6 +102,11 @@ export interface IAuthRouterConfig {
   readonly oauthAccountRepository?: IOAuthAccountRepository;
   /** If provided, use this AuthService instead of creating one from config. */
   readonly authService?: AuthService;
+  /**
+   * Runs before the password check of POST /login (see services/demo-account). It should
+   * never reject; if it does, the rejection is ignored and the sign-in carries on.
+   */
+  readonly beforeLogin?: (email: string, password: string) => Promise<void>;
 }
 
 function getIp(req: Request): string {
@@ -215,7 +220,8 @@ async function handleLogin(
   req: Request,
   res: Response,
   authService: AuthService,
-  sessionRepository?: ISessionRepository
+  sessionRepository?: ISessionRepository,
+  beforeLogin?: (email: string, password: string) => Promise<void>
 ): Promise<void> {
   const { email, password, rememberMe } = req.body as {
     email?: string;
@@ -225,6 +231,14 @@ async function handleLogin(
 
   if (!email || !password) {
     throw new ValidationError('Missing required fields: email, password');
+  }
+
+  if (beforeLogin) {
+    try {
+      await beforeLogin(email, password);
+    } catch {
+      // A hook failure must never turn a sign-in into an error; the password check decides.
+    }
   }
 
   const result = await authService.login(email, password, {
@@ -731,7 +745,7 @@ export function authRouter(config: IAuthRouterConfig): Router {
   router.post(
     '/login',
     asyncHandler((req: Request, res: Response) =>
-      handleLogin(req, res, authService, config.sessionRepository)
+      handleLogin(req, res, authService, config.sessionRepository, config.beforeLogin)
     )
   );
 

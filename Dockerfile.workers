@@ -31,6 +31,18 @@ COPY packages/studio-core/package.json ./packages/studio-core/
 
 RUN pnpm install --no-frozen-lockfile
 
+# Development stage. Build it by name: --target development.
+FROM base AS development
+COPY . .
+RUN pnpm --filter @scholaracle/workers... build
+RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
+EXPOSE 3003
+CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]
+
+# Production stage. Keep it LAST: Railway and CI build without a target, so
+# they get the last stage. The dev command above (ts-node-dev --respawn) does
+# not exit when the worker crashes, so Railway would never restart it.
+# Guarded by packages/workers/src/production-image.test.ts.
 FROM base AS production
 COPY . .
 RUN pnpm --filter @scholaracle/workers... build
@@ -38,10 +50,3 @@ RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/nod
 ENV NODE_ENV=production
 EXPOSE 3003
 CMD ["node", "packages/workers/dist/worker.js"]
-
-FROM base AS development
-COPY . .
-RUN pnpm --filter @scholaracle/workers... build
-RUN cp -r packages/contracts/dist node_modules/.pnpm/file+packages+contracts/node_modules/@scholaracle/contracts/dist 2>/dev/null || true
-EXPOSE 3003
-CMD ["pnpm", "--filter", "@scholaracle/workers", "dev"]

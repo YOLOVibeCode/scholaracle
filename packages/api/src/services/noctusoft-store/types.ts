@@ -69,6 +69,7 @@ export interface INoctusoftStoreWebhookEventV1 {
     readonly canceledAt?: string | null;
   } | null;
   readonly action?: { readonly reason?: string | null; readonly url?: string | null } | null;
+  readonly receipt?: { readonly url?: string | null; readonly pdfUrl?: string | null } | null;
 }
 
 export interface INoctusoftStoreCheckoutResult {

@@ -15,13 +15,17 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'public, max-age=3600' },
         ],
       },
-      // TODO(android app links): public/.well-known/assetlinks.json is NOT
-      // published yet. It needs the SHA-256 certificate fingerprint of the key
-      // Google Play signs the release with (Play Console > Test and release >
-      // App integrity > App signing key certificate). Until then the Android
-      // intent filter (autoVerify) simply fails verification and /magic links
-      // keep opening in the browser, which falls back to the scholarmancy://
-      // redirect on the /magic page. Do not publish a placeholder fingerprint.
+      {
+        // Android app links: public/.well-known/assetlinks.json. The fingerprint is the
+        // certificate Google Play signs the release with (Play app signing), read from the
+        // Play Developer API (generatedApks.certificateSha256Hash). It is public. It changes
+        // only if the Play signing key is rotated; then update the file and its test.
+        source: '/.well-known/assetlinks.json',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'Cache-Control', value: 'public, max-age=3600' },
+        ],
+      },
     ];
   },
 };

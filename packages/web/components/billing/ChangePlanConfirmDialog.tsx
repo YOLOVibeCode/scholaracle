@@ -11,18 +11,12 @@ import {
 import type { BillingCycle } from '@/lib/billing/planCatalog';
 import { PURCHASABLE_PLANS } from '@/lib/billing/planCatalog';
 
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  premium: 'Premium',
-  family: 'Family',
-};
-
-function formatPrice(plan: string, cycle: BillingCycle): string {
+function describePlan(plan: string, cycle: BillingCycle): string {
   const entry = PURCHASABLE_PLANS.find((p) => p.plan === plan);
-  if (!entry) return '';
+  if (!entry) return `${plan} (${cycle})`;
   const amount = cycle === 'annual' ? entry.annualPrice : entry.monthlyPrice;
   const period = cycle === 'annual' ? '/year' : '/month';
-  return `$${amount}${period}`;
+  return `${entry.name} — $${amount}${period} (${cycle})`;
 }
 
 export interface ChangePlanConfirmDialogProps {
@@ -32,8 +26,9 @@ export interface ChangePlanConfirmDialogProps {
   readonly currentCycle: BillingCycle;
   readonly targetPlan: string;
   readonly targetCycle: BillingCycle;
-  readonly isUpgrade: boolean;
   readonly isSubmitting: boolean;
+  /** Why the last attempt failed; shown here, inside the dialog, where the buyer is looking. */
+  readonly error?: string | null;
   readonly onConfirm: () => void;
 }
 
@@ -44,15 +39,14 @@ export function ChangePlanConfirmDialog({
   currentCycle,
   targetPlan,
   targetCycle,
-  isUpgrade,
   isSubmitting,
+  error,
   onConfirm,
 }: ChangePlanConfirmDialogProps) {
-  const currentLabel = PLAN_LABELS[currentPlan] ?? currentPlan;
-  const targetLabel = PLAN_LABELS[targetPlan] ?? targetPlan;
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    // Esc or a click outside must not close the dialog while the store call (and a
+    // possible charge) is in flight: the buyer would think they had cancelled.
+    <Dialog open={open} onOpenChange={(next) => !isSubmitting && onOpenChange(next)}>
       <DialogContent data-testid="modal-change-plan-confirm">
         <DialogHeader>
           <DialogTitle>Confirm plan switch</DialogTitle>
@@ -63,18 +57,21 @@ export function ChangePlanConfirmDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <p data-testid="change-plan-current">
-            <span className="font-medium">Current:</span> {currentLabel} —{' '}
-            {formatPrice(currentPlan, currentCycle)} ({currentCycle})
+            <span className="font-medium">Current:</span> {describePlan(currentPlan, currentCycle)}
           </p>
           <p data-testid="change-plan-target">
-            <span className="font-medium">New:</span> {targetLabel} —{' '}
-            {formatPrice(targetPlan, targetCycle)} ({targetCycle})
+            <span className="font-medium">New:</span> {describePlan(targetPlan, targetCycle)}
           </p>
           <p className="text-muted-foreground" data-testid="change-plan-terms">
-            {isUpgrade
-              ? 'Upgrades are prorated and charged to the card on file now.'
-              : 'Downgrades take effect at your next renewal date; you keep your current plan until then.'}
+            The store works out any prorated charge or credit. Depending on your payment provider,
+            the new plan starts right away or at your next renewal date, and we will tell you which
+            once it is done.
           </p>
+          {error && (
+            <p role="alert" className="text-destructive" data-testid="change-plan-error">
+              {error}
+            </p>
+          )}
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button

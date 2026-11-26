@@ -159,6 +159,56 @@ describe('billingApi', () => {
   // createPortal
   // -------------------------------------------------------------------------
 
+  describe('changePlan', () => {
+    it('POSTs the confirmed change and returns when it applies plus the full subscription', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          effective: 'next_period',
+          pendingPlan: { plan: 'premium', billingCycle: 'monthly' },
+          subscription: { plan: 'family', status: 'active', featureLines: ['5 students'] },
+        })
+      );
+
+      const result = await billingApi.changePlan('premium', 'monthly');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/billing/change-plan`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ plan: 'premium', billingCycle: 'monthly', confirmed: true }),
+        })
+      );
+      expect(result.effective).toBe('next_period');
+      expect(result.pendingPlan).toEqual({ plan: 'premium', billingCycle: 'monthly' });
+      expect(result.subscription.featureLines).toEqual(['5 students']);
+    });
+
+    it('has no pendingPlan when the change applied now', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          success: true,
+          effective: 'now',
+          subscription: { plan: 'premium', status: 'active' },
+        })
+      );
+
+      const result = await billingApi.changePlan('premium', 'annual');
+
+      expect(result.effective).toBe('now');
+      expect(result.pendingPlan).toBeUndefined();
+    });
+
+    it('throws so the caller can show the reason', async () => {
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      fetchSpy.mockRejectedValue(new Error('Change failed'));
+
+      await expect(billingApi.changePlan('premium', 'monthly')).rejects.toThrow();
+
+      consoleError.mockRestore();
+    });
+  });
+
   describe('createPortal', () => {
     it('POSTs to /billing/portal and returns URL', async () => {
       fetchSpy.mockResolvedValue(

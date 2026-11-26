@@ -34,6 +34,7 @@ describe('Noctusoft store webhook', () => {
     readonly refundId?: string | null;
     readonly refundedCents?: number;
     readonly actionUrl?: string | null;
+    readonly receipt?: { readonly url?: string | null; readonly pdfUrl?: string | null } | null;
   }
 
   function makeEvent(type: string, overrides: IEventOverrides = {}): string {
@@ -74,6 +75,7 @@ describe('Noctusoft store webhook', () => {
           : overrides.actionUrl === null
             ? null
             : { url: overrides.actionUrl },
+      ...(overrides.receipt !== undefined ? { receipt: overrides.receipt } : {}),
       entitlements: {},
     });
   }
@@ -165,20 +167,107 @@ describe('Noctusoft store webhook', () => {
     expect(payment!['amount']).toBe(19999);
   });
 
-  it('persists receiptUrl from action.url on purchase.paid', async () => {
-    const body = makeEvent('purchase.paid', {
-      code: 'NOCTU-SCHOLARMANCY-STARTER-MONTHLY',
-      amountCents: 999,
-      paymentId: 'pay_receipt_1',
-      actionUrl: 'https://store.noctusoft.com/receipts/pay_receipt_1',
+  it('persists receiptUrl from receipt.pdfUrl on subscription.renewed', async () => {
+    const pdfUrl = 'https://store.noctusoft.com/receipt/ns_rcp_pdf_1';
+    const hostedUrl = 'https://store.noctusoft.com/receipt/ns_rcp_host_1';
+    const body = makeEvent('subscription.renewed', {
+      paymentId: 'pay_receipt_renew_1',
+      receipt: { pdfUrl, url: hostedUrl },
+      subscription: { status: 'active', cancelScheduled: false },
     });
 
     await post(body).expect(200);
 
     const payment = await database
       .collection('payments')
-      .findOne({ storePaymentId: 'pay_receipt_1' });
-    expect(payment!['receiptUrl']).toBe('https://store.noctusoft.com/receipts/pay_receipt_1');
+      .findOne({ storePaymentId: 'pay_receipt_renew_1' });
+    expect(payment!['receiptUrl']).toBe(pdfUrl);
+  });
+
+  it('persists receiptUrl from receipt.url when pdfUrl is absent', async () => {
+    const hostedUrl = 'https://store.noctusoft.com/receipt/ns_rcp_url_only';
+    await post(
+      makeEvent('subscription.renewed', {
+        paymentId: 'pay_receipt_url_only',
+        receipt: { url: hostedUrl },
+        subscription: { status: 'active', cancelScheduled: false },
+      })
+    ).expect(200);
+
+    const payment = await database
+      .collection('payments')
+      .findOne({ storePaymentId: 'pay_receipt_url_only' });
+    expect(payment!['receiptUrl']).toBe(hostedUrl);
+  });
+
+  it('does not set receiptUrl when receipt is null', async () => {
+    await post(
+      makeEvent('subscription.renewed', {
+        paymentId: 'pay_receipt_null',
+        receipt: null,
+        subscription: { status: 'active', cancelScheduled: false },
+      })
+    ).expect(200);
+
+    const payment = await database
+      .collection('payments')
+      .findOne({ storePaymentId: 'pay_receipt_null' });
+    expect(payment!['receiptUrl']).toBeUndefined();
+  });
+
+  it('does not set receiptUrl when receipt urls are null', async () => {
+    await post(
+      makeEvent('subscription.renewed', {
+        paymentId: 'pay_receipt_empty',
+        receipt: { url: null, pdfUrl: null },
+        subscription: { status: 'active', cancelScheduled: false },
+      })
+    ).expect(200);
+
+    const payment = await database
+      .collection('payments')
+      .findOne({ storePaymentId: 'pay_receipt_empty' });
+    expect(payment!['receiptUrl']).toBeUndefined();
+  });
+
+  it('does not persist receiptUrl from action.url alone', async () => {
+    await post(
+      makeEvent('purchase.paid', {
+        paymentId: 'pay_action_only',
+        actionUrl: 'https://store.noctusoft.com/pay/invoice_ns_1',
+      })
+    ).expect(200);
+
+    const payment = await database
+      .collection('payments')
+      .findOne({ storePaymentId: 'pay_action_only' });
+    expect(payment!['receiptUrl']).toBeUndefined();
+  });
+
+  it('backfills receiptUrl when a later paid event includes receipt', async () => {
+    const paymentId = 'pay_backfill_receipt';
+    const receiptUrl = 'https://store.noctusoft.com/receipt/ns_rcp_backfill';
+
+    await post(
+      makeEvent('purchase.paid', {
+        id: 'evt_no_receipt_yet',
+        paymentId,
+      })
+    ).expect(200);
+
+    const before = await database.collection('payments').findOne({ storePaymentId: paymentId });
+    expect(before!['receiptUrl']).toBeUndefined();
+
+    await post(
+      makeEvent('purchase.paid', {
+        id: 'evt_receipt_arrived',
+        paymentId,
+        receipt: { url: receiptUrl, pdfUrl: receiptUrl },
+      })
+    ).expect(200);
+
+    const after = await database.collection('payments').findOne({ storePaymentId: paymentId });
+    expect(after!['receiptUrl']).toBe(receiptUrl);
   });
 
   it('keeps the store subscription ref on subscription.started', async () => {

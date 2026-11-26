@@ -645,7 +645,8 @@ type DemoStudentUserCreds = {
 
 /**
  * Parent-provisioned demo student login. Idempotent: find-by-email, never public register.
- * Restores DemoPass123! and unsuspends leftovers so documented creds always work.
+ * Restores the given password (the documented demo one unless the caller passes another)
+ * and unsuspends leftovers so the expected creds always work.
  */
 async function ensureDemoStudentLogin(
   userRepository: UserRepository,
@@ -690,17 +691,32 @@ async function ensureDemoStudentLogin(
   };
 }
 
+export interface IEnsureDemoHouseholdOptions {
+  /**
+   * Password for the demo parent and the two demo student logins.
+   * Default: the documented demo password.
+   */
+  readonly password?: string;
+  /**
+   * Also put the accounts that already exist (demo parent, demo co-parents) back on
+   * `password` and lift a suspension of the demo parent. Used by the sign-in repair
+   * (services/demo-account), where the password is private and must be the only one that works.
+   */
+  readonly restoreLogins?: boolean;
+}
+
 /**
- * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
+ * Create whatever is missing of the demo household: the parent, Emma and Liam, their
+ * student logins, the co-parent contacts and the sample school data. Safe to call again;
+ * it never removes anything. Callers decide who may trigger it.
  */
-async function handleDemoSeed(
-  _req: Request,
-  res: Response,
-  config: ISeedRouterConfig
+export async function ensureDemoHousehold(
+  config: ISeedRouterConfig,
+  options: IEnsureDemoHouseholdOptions = {}
 ): Promise<void> {
-  if (!isDemoAllowed()) {
-    throw new ForbiddenError('Demo is not enabled');
-  }
+  const password = options.password ?? DEMO_USER.password;
+  const contactPassword = options.password ?? DEMO_CONTACT_PASSWORD;
+  const restoreLogins = options.restoreLogins === true;
 
   const userRepository = new UserRepository(config.database);
   const studentRepository = new StudentRepository(config.database);
@@ -708,8 +724,16 @@ async function handleDemoSeed(
   const authService = new AuthService(config.database);
 
   let user = await userRepository.findByEmail(DEMO_USER.email);
+  if (user?._id && restoreLogins) {
+    if (user.isSuspended) {
+      await userRepository.unsuspendUser(user._id.toString());
+    }
+    await userRepository.update(user._id, {
+      passwordHash: await UserRepository.hashPassword(password),
+    });
+  }
   if (!user) {
-    const result = await authService.register(DEMO_USER.email, DEMO_USER.password, DEMO_USER.name);
+    const result = await authService.register(DEMO_USER.email, password, DEMO_USER.name);
     if (!result.success) {
       if (result.error === 'User already exists') {
         // Concurrent seed call — user was created by another worker; re-fetch
@@ -751,7 +775,11 @@ async function handleDemoSeed(
   for (const email of [DEMO_CONTACT_JESSICA, DEMO_CONTACT_RICKY]) {
     const existing = await userRepository.findByEmail(email);
     if (!existing) {
-      await authService.register(email, DEMO_CONTACT_PASSWORD, email.split('@')[0] ?? 'Demo');
+      await authService.register(email, contactPassword, email.split('@')[0] ?? 'Demo');
+    } else if (restoreLogins && existing._id) {
+      await userRepository.update(existing._id, {
+        passwordHash: await UserRepository.hashPassword(contactPassword),
+      });
     }
   }
   const jessicaUser = await userRepository.findByEmail(DEMO_CONTACT_JESSICA);
@@ -808,7 +836,7 @@ async function handleDemoSeed(
   if (emmaId) {
     const emmaLogin = await ensureDemoStudentLogin(
       userRepository,
-      DEMO_STUDENT_USER_EMMA,
+      { ...DEMO_STUDENT_USER_EMMA, password },
       emmaId,
       userId,
       emma?.studentLogin?.createdAt
@@ -821,7 +849,7 @@ async function handleDemoSeed(
   if (liamId) {
     const liamLogin = await ensureDemoStudentLogin(
       userRepository,
-      DEMO_STUDENT_USER_LIAM,
+      { ...DEMO_STUDENT_USER_LIAM, password },
       liamId,
       userId,
       liam?.studentLogin?.createdAt
@@ -879,6 +907,21 @@ async function handleDemoSeed(
       }
     }
   }
+}
+
+/**
+ * POST /api/seed/demo — Create or ensure demo user + SLC data exists.
+ */
+async function handleDemoSeed(
+  _req: Request,
+  res: Response,
+  config: ISeedRouterConfig
+): Promise<void> {
+  if (!isDemoAllowed()) {
+    throw new ForbiddenError('Demo is not enabled');
+  }
+
+  await ensureDemoHousehold(config);
 
   res.status(200).json({
     success: true,

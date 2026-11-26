@@ -2,8 +2,9 @@
  * Pure view-model for the Plan & usage screen. No React, no network.
  *
  * The phone shows plan information read-only: the app has no in-app purchase,
- * and the "manage on the web" link is offered to US-locale devices only
- * (see usStorefrontLocale.ts) — never as steering for other storefronts.
+ * and the "manage on the web" link is offered only where the store allows it
+ * (iOS on a US-locale device; see canLinkToWebPlans in usStorefrontLocale.ts),
+ * never as steering anywhere else.
  */
 
 import type { ISubscriptionWire, SubscriptionPlanWire } from '@scholaracle/contracts';
@@ -164,7 +165,7 @@ export function showsEffectivePlanNote(vm: IPlanViewModel): boolean {
   return vm.effectivePlanLabel !== vm.planLabel;
 }
 
-/** Shown to every non-US-locale device in place of the web link (same wording as onboarding). */
+/** Shown in place of the web links wherever they are not allowed (same wording as onboarding). */
 export const PLAN_NEUTRAL_TEXT =
   'Membership is managed on the web — not in this app. This screen is read-only.';
 
@@ -175,16 +176,16 @@ export interface IPlanManageLink {
 }
 
 export interface IPlanManageLinks {
-  /** Outbound links; empty unless the device locale is US (App Review 3.1.3). */
+  /** Outbound links; empty unless canLinkToWebPlans allowed them (iOS, US locale). */
   readonly links: readonly IPlanManageLink[];
   readonly neutralText: string | null;
 }
 
 export function planManageLinks(
-  isUsLocale: boolean,
+  canLinkOut: boolean,
   urls: { readonly pricing: string; readonly billing: string }
 ): IPlanManageLinks {
-  if (!isUsLocale) return { links: [], neutralText: PLAN_NEUTRAL_TEXT };
+  if (!canLinkOut) return { links: [], neutralText: PLAN_NEUTRAL_TEXT };
   return {
     links: [
       {

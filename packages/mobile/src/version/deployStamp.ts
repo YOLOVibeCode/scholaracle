@@ -50,6 +50,15 @@ export interface IEnvSlice {
   readonly apiUrl: string;
 }
 
+/**
+ * Store builds (EXPO_PUBLIC_HIDE_DEPLOY_STAMP=1 in the eas.json production profile)
+ * keep the stamp's 7-tap diagnostics target but draw no text, so customers and App
+ * Review do not see "Lane www / App ? (?) / API ..." under every screen.
+ */
+export function isDeployStampHidden(flag: string | undefined): boolean {
+  return flag === '1';
+}
+
 export function resolveApiBaseUrl(explicit?: string): string {
   const fromEnv = explicit ?? process.env['EXPO_PUBLIC_API_URL'] ?? DEFAULT_API_URL;
   return fromEnv.replace(/\/+$/, '') || DEFAULT_API_URL;

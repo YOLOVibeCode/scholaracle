@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "env": {
@@ -18,6 +19,7 @@
       }
     },
     "preview": {
+      "environment": "preview",
       "distribution": "store",
       "channel": "preview",
       "autoIncrement": true,
@@ -35,10 +37,12 @@
       }
     },
     "production": {
+      "environment": "production",
       "autoIncrement": true,
       "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.scholarmancy.com",
+        "EXPO_PUBLIC_HIDE_DEPLOY_STAMP": "1",
         "EAS_USE_CACHE": "1",
         "EAS_GRADLE_CACHE": "1"
       },

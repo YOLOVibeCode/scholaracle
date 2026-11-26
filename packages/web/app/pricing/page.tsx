@@ -104,7 +104,11 @@ export default function PricingPage() {
             return (
             <Card
               key={plan.id}
-              className={plan.popular ? 'border-2 border-blue-500 dark:border-blue-400' : ''}
+              className={
+                plan.popular
+                  ? 'h-full border-2 border-blue-500 dark:border-blue-400'
+                  : 'h-full'
+              }
               data-testid={`plan-card-${plan.id}`}
             >
               <CardHeader>
@@ -114,7 +118,7 @@ export default function PricingPage() {
                 </div>
                 <CardDescription>{plan.description}</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1">
                 <div className="mb-6">
                   <span className="text-4xl font-bold">
                     {plan.plan === null ? '$0' : `$${price}`}
@@ -130,7 +134,7 @@ export default function PricingPage() {
                   ))}
                 </ul>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="mt-auto w-full">
                 <Button
                   className="w-full"
                   variant={plan.popular ? 'default' : 'outline'}

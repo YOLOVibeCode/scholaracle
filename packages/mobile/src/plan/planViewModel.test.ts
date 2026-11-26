@@ -28,13 +28,13 @@ function vm(subscription: ISubscriptionWire, studentCount = 1) {
 describe('planManageLinks', () => {
   const urls = { pricing: 'https://x.test/pricing', billing: 'https://x.test/billing' };
 
-  it('offers web links only for US locale', () => {
+  it('offers web links when the store allows them (iOS, US locale)', () => {
     const us = planManageLinks(true, urls);
     expect(us.links.map((l) => l.url)).toEqual([urls.billing, urls.pricing]);
     expect(us.neutralText).toBeNull();
   });
 
-  it('shows read-only neutral text and no links outside the US', () => {
+  it('shows read-only neutral text and no links everywhere else', () => {
     const other = planManageLinks(false, urls);
     expect(other.links).toEqual([]);
     expect(other.neutralText).toBe(PLAN_NEUTRAL_TEXT);

@@ -65,6 +65,58 @@ describe('PaymentRepository', () => {
     });
   });
 
+  describe('setReceiptUrlIfMissing', () => {
+    it('should set receiptUrl when missing', async () => {
+      await repository.create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+        storePaymentId: 'pay_receipt_backfill',
+      });
+
+      const isSuccess = await repository.setReceiptUrlIfMissing(
+        'pay_receipt_backfill',
+        'https://store.noctusoft.com/receipts/pay_receipt_backfill'
+      );
+
+      expect(isSuccess).toBe(true);
+      const updated = await repository.findByStorePaymentId('pay_receipt_backfill');
+      expect(updated?.receiptUrl).toBe('https://store.noctusoft.com/receipts/pay_receipt_backfill');
+    });
+
+    it('should not overwrite an existing receiptUrl', async () => {
+      const original = 'https://store.noctusoft.com/receipts/original';
+      await repository.create({
+        userId: '507f1f77bcf86cd799439011',
+        amount: 1900,
+        currency: 'usd',
+        status: 'succeeded',
+        paymentMethod: 'card',
+        storePaymentId: 'pay_receipt_keep',
+        receiptUrl: original,
+      });
+
+      const isSuccess = await repository.setReceiptUrlIfMissing(
+        'pay_receipt_keep',
+        'https://store.noctusoft.com/receipts/new'
+      );
+
+      expect(isSuccess).toBe(false);
+      const unchanged = await repository.findByStorePaymentId('pay_receipt_keep');
+      expect(unchanged?.receiptUrl).toBe(original);
+    });
+
+    it('should return false when store payment ref is unknown', async () => {
+      const isSuccess = await repository.setReceiptUrlIfMissing(
+        'pay_missing',
+        'https://store.noctusoft.com/receipts/pay_missing'
+      );
+      expect(isSuccess).toBe(false);
+    });
+  });
+
   describe('findByStorePaymentId', () => {
     it('should find payment by store payment ref', async () => {
       await repository.create({

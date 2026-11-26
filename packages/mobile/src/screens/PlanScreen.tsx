@@ -1,7 +1,8 @@
 /**
  * PlanScreen — read-only plan & usage. The app sells nothing in-app; the
- * "Manage plan on scholarmancy.com" links are offered to US-locale devices
- * only (same gate as OnboardingScreen), everyone else sees neutral text.
+ * "Manage plan on scholarmancy.com" links are offered on iOS to US-locale devices
+ * only (same gate as OnboardingScreen: canLinkToWebPlans). Android and every other
+ * locale see neutral text with no link.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -13,10 +14,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Linking,
+  Platform,
 } from 'react-native';
 import { apiClient } from '../api/client';
 import { STORE_LEGAL_URLS } from '../store/legalUrls';
-import { isUsStorefrontLocale, resolvedDeviceLocale } from '../utils/usStorefrontLocale';
+import { canLinkToWebPlans, resolvedDeviceLocale } from '../utils/usStorefrontLocale';
 import {
   buildPlanViewModel,
   planManageLinks,
@@ -39,8 +41,8 @@ export function PlanScreen({ onBack }: IPlanScreenProps): React.ReactElement {
   const [vm, setVm] = useState<IPlanViewModel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const isUsLocale = useMemo(() => isUsStorefrontLocale(resolvedDeviceLocale()), []);
-  const manage = useMemo(() => planManageLinks(isUsLocale, STORE_LEGAL_URLS), [isUsLocale]);
+  const canLinkOut = useMemo(() => canLinkToWebPlans(Platform.OS, resolvedDeviceLocale()), []);
+  const manage = useMemo(() => planManageLinks(canLinkOut, STORE_LEGAL_URLS), [canLinkOut]);
 
   const load = useCallback(async () => {
     setIsLoading(true);

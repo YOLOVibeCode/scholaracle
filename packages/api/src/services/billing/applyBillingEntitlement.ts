@@ -98,6 +98,8 @@ export async function activateOrRenewSubscription(
       ...(params.receiptUrl ? { receiptUrl: params.receiptUrl } : {}),
       description: params.description,
     });
+  } else if (params.paymentId && params.receiptUrl) {
+    await paymentRepo.setReceiptUrlIfMissing(params.paymentId, params.receiptUrl);
   }
 
   const baseUpdate = {

@@ -44,9 +44,20 @@ export interface ISettingsAlerts {
 }
 
 /** Subset of the GET /api/settings response the notification screens read. */
+/** Account fields GET /api/settings returns beside the preferences. */
+export interface IUserSettingsProfile {
+  readonly name?: string;
+  readonly email?: string;
+  /** E.164, or '' when none is on file. */
+  readonly phone: string;
+  /** True once the parent ticked the text-message consent box. */
+  readonly smsConsent: boolean;
+}
+
 export interface IUserSettingsResponse {
   /** IANA timezone. */
   readonly timezone?: string;
+  readonly profile?: IUserSettingsProfile;
   readonly notifications: ISettingsNotifications;
   readonly alerts: ISettingsAlerts;
 }
@@ -59,4 +70,6 @@ export interface IUserSettingsUpdateRequest {
   readonly timezone?: string;
   readonly notifications?: Partial<Omit<ISettingsNotifications, 'inApp'>>;
   readonly alerts?: Partial<ISettingsAlerts>;
+  /** Phone number and text-message consent; the server records the opt-in when consent is true. */
+  readonly profile?: { readonly phone?: string; readonly smsConsent?: boolean };
 }

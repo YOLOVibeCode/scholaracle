@@ -1,4 +1,8 @@
-import { isUsStorefrontLocale, resolvedDeviceLocale } from './usStorefrontLocale';
+import {
+  canLinkToWebPlans,
+  isUsStorefrontLocale,
+  resolvedDeviceLocale,
+} from './usStorefrontLocale';
 
 describe('resolvedDeviceLocale', () => {
   it('returns a non-empty locale string', () => {
@@ -16,5 +20,21 @@ describe('isUsStorefrontLocale', () => {
     ['', false],
   ])('%s → %s', (locale, expected) => {
     expect(isUsStorefrontLocale(locale)).toBe(expected);
+  });
+});
+
+describe('canLinkToWebPlans', () => {
+  it.each([
+    ['ios', 'en-US', true],
+    ['ios', 'en_US', true],
+    ['ios', 'en-GB', false],
+    ['ios', 'es-MX', false],
+    // Google Play: no outbound purchase links without enrolling in its program.
+    ['android', 'en-US', false],
+    ['android', 'en-GB', false],
+    ['web', 'en-US', false],
+    ['', 'en-US', false],
+  ])('%s + %s → %s', (platformOs, locale, expected) => {
+    expect(canLinkToWebPlans(platformOs, locale)).toBe(expected);
   });
 });

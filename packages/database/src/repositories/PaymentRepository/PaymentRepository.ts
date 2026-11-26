@@ -13,6 +13,11 @@ export interface IPaymentReader {
 export interface IPaymentWriter {
   create(paymentData: IPaymentData): Promise<Payment>;
   updateStatus(id: string, status: PaymentStatus, failureReason?: string): Promise<boolean>;
+  /**
+   * Sets receiptUrl on a store payment when the row has none yet.
+   * @returns true when updated, false when not found or receipt already set
+   */
+  setReceiptUrlIfMissing(storePaymentId: string, receiptUrl: string): Promise<boolean>;
   /** Adds `amount` to what was already refunded, capped at the charge. */
   recordRefund(
     id: string,
@@ -120,6 +125,34 @@ export class PaymentRepository implements IPaymentRepository {
     }
 
     const result = await this._collection.updateOne({ _id: objectId }, { $set: updateDoc });
+
+    return result.modifiedCount > 0;
+  }
+
+  /**
+   * Backfill receipt link from a later Noctusoft event without overwriting an existing URL.
+   */
+  public async setReceiptUrlIfMissing(
+    storePaymentId: string,
+    receiptUrl: string
+  ): Promise<boolean> {
+    if (!storePaymentId || !receiptUrl) {
+      return false;
+    }
+
+    const payment = await this.findByStorePaymentId(storePaymentId);
+    if (!payment?._id) {
+      return false;
+    }
+
+    if (payment.receiptUrl && payment.receiptUrl.trim() !== '') {
+      return false;
+    }
+
+    const result = await this._collection.updateOne(
+      { _id: payment._id },
+      { $set: { receiptUrl, updatedAt: new Date() } }
+    );
 
     return result.modifiedCount > 0;
   }

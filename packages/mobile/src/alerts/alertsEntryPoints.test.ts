@@ -58,9 +58,17 @@ describe('screens', () => {
   it('NotificationSettingsScreen opens OS settings and saves through the client', () => {
     expect(NOTIF).toMatch(/Linking\.openSettings\(\)/);
     expect(NOTIF).toMatch(/apiClient\.getNotificationSettings\(\)/);
-    expect(NOTIF).toMatch(/apiClient\.updateNotificationSettings\(buildUpdate\(draft\)\)/);
+    expect(NOTIF).toMatch(/apiClient\.updateNotificationSettings\(\s*buildUpdate\(draft, saved/);
     expect(NOTIF).toMatch(/deviceTimezone\(\)/);
     expect(NOTIF).toMatch(/text-save-error/);
+  });
+
+  it('NotificationSettingsScreen offers text alerts and hides push on Android', () => {
+    expect(NOTIF).toMatch(/pushSectionVisible\(Platform\.OS\)/);
+    expect(NOTIF).toMatch(/testID="switch-sms"/);
+    expect(NOTIF).toMatch(/testID="input-sms-phone"/);
+    expect(NOTIF).toMatch(/SMS_CONSENT_LABEL/);
+    expect(NOTIF).toMatch(/smsOptInError\(draft\)/);
   });
 
   it('neither screen uses the banned URL API', () => {

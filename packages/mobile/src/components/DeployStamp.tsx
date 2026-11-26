@@ -7,6 +7,7 @@ import {
   formatApiLine,
   formatAppLine,
   formatLaneLine,
+  isDeployStampHidden,
   localStampFromEnv,
   resolveApiBaseUrl,
   type IBackendStamp,
@@ -25,10 +26,22 @@ export function DeployStamp(): React.ReactElement {
     });
   });
   const [backend, setBackend] = useState<IBackendStamp | null>(null);
+  const hidden = isDeployStampHidden(process.env['EXPO_PUBLIC_HIDE_DEPLOY_STAMP']);
 
   useEffect(() => {
+    if (hidden) return;
     void fetchBackendStamp(local.apiUrl).then(setBackend);
-  }, [local.apiUrl]);
+  }, [hidden, local.apiUrl]);
+
+  if (hidden) {
+    return (
+      <Pressable
+        style={styles.hiddenTarget}
+        testID="deploy-stamp"
+        onPress={registerDiagSecretTap}
+      />
+    );
+  }
 
   return (
     <Pressable style={styles.wrap} testID="deploy-stamp" onPress={registerDiagSecretTap}>
@@ -50,6 +63,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     alignItems: 'center',
+  },
+  hiddenTarget: {
+    height: 24,
   },
   lane: {
     fontWeight: '600',
