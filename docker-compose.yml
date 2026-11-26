@@ -80,8 +80,12 @@ services:
       RELAY_STORE_MODE: ${RELAY_STORE_MODE:-test}
       # Credential encryption (for non-portal secrets, e.g. API tokens stored at rest)
       CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
-      # AI (optional - for LLM material matching)
+      # AI (optional). The relay key wins; the vendor key is the fallback when it is empty.
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://ai.noctusoft.com}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Model summaries on agenda items (off unless true; see .env.example)
+      AGENDA_AI_ENABLED: ${AGENDA_AI_ENABLED:-}
       # CORS
       CORS_ORIGINS: http://localhost:2800,http://localhost:3000
     depends_on:
@@ -159,7 +163,9 @@ services:
       # Firebase (optional)
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       SKIP_FIREBASE: ${SKIP_FIREBASE:-true}
-      # AI (optional - for digest insights)
+      # AI (optional). The relay key wins; the vendor key is the fallback when it is empty.
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://ai.noctusoft.com}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Sync job concurrency (how many jobs workers process in parallel)
       SYNC_CONCURRENCY: ${SYNC_CONCURRENCY:-2}

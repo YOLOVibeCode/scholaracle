@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
+import { resolveModelForRole } from '@scholaracle/agents';
 import { AuthService } from '@scholaracle/auth';
 import { StudentRepository } from '@scholaracle/database';
 import { agendaRouter } from './agenda';
@@ -102,6 +103,226 @@ describe('Agenda API', () => {
     const assignment = res.body.data.items.find((item: any) => item.type === 'assignment');
     expect(assignment).toBeDefined();
     expect(assignment.courseName).toBe('Algebra I');
+  });
+
+  /**
+   * The model's one-line summaries on agenda items.
+   *
+   * Where the call goes: every other model call in the API and the workers asks
+   * `resolveLlmConfig`, where the Noctusoft relay key wins. Until 26 Nov 2026 this route read
+   * ANTHROPIC_API_KEY itself, so with that key set it called the vendor directly, and with
+   * only the relay key set (every deployed server) the summaries were silently off.
+   *
+   * Whether it runs: off unless AGENDA_AI_ENABLED=true. The call is made while the page
+   * waits, on every agenda load, so it is turned on per environment on purpose.
+   */
+  describe('AI summaries', () => {
+    const ENV_KEYS = [
+      'AGENDA_AI_ENABLED',
+      'LITELLM_API_KEY',
+      'LITELLM_BASE_URL',
+      'ANTHROPIC_API_KEY',
+      'AI_API_KEY',
+    ];
+    const savedEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
+    const realFetch = globalThis.fetch;
+    const SUMMARY = 'Essay due in two days';
+    let userId: string;
+
+    /** Stands in for the relay: answers with a summary for every item id it was sent. */
+    function mockModel(): jest.Mock {
+      const fetchMock = jest.fn(async (_url: string, init: { body: string }) => {
+        const prompt = (JSON.parse(init.body) as { messages: { content: string }[] }).messages
+          .map((message) => message.content)
+          .join('\n');
+        const ids = [...prompt.matchAll(/^id: ([^,]+),/gm)].map((match) => match[1]);
+        const items = ids.map((id) => ({ id, importance: 'high', labels: [], aiSummary: SUMMARY }));
+        const reply = {
+          content: [{ type: 'text', text: JSON.stringify({ items }) }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        };
+        return new Response(JSON.stringify(reply), { status: 200 });
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      return fetchMock;
+    }
+
+    async function getAgenda(): Promise<request.Response> {
+      const now = new Date();
+      return request(app)
+        .get('/api/agenda')
+        .query({
+          from: now.toISOString(),
+          to: new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString(),
+        })
+        .set('Authorization', `Bearer ${testToken}`);
+    }
+
+    function summaries(res: request.Response): (string | undefined)[] {
+      return (res.body.data.items as { aiSummary?: string }[]).map((item) => item.aiSummary);
+    }
+
+    beforeAll(async () => {
+      const user = await database.collection('users').findOne({ email: 'agenda@test.com' });
+      userId = user?._id?.toString() ?? 'unknown';
+      await database.collection('slc_assignments').insertOne({
+        userId,
+        provider: 'fixture',
+        adapterId: 'com.scholaracle.fixture',
+        externalId: 'assignment-ai-1',
+        studentExternalId: 'student-ext-1',
+        institutionExternalId: 'institution-ext-1',
+        courseExternalId: 'course-ext-1',
+        termExternalId: 'term-ext-fall',
+        deletedAt: null,
+        record: {
+          title: 'Essay',
+          dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000).toISOString(),
+        },
+      });
+    });
+
+    beforeEach(async () => {
+      for (const key of ENV_KEYS) delete process.env[key];
+      // A plan that includes agenda summaries (the free plan has none).
+      await database
+        .collection('users')
+        .updateOne(
+          { email: 'agenda@test.com' },
+          { $set: { subscription: { plan: 'family', status: 'active' } } }
+        );
+      await database.collection('ai_usage').deleteMany({ userId });
+    });
+
+    afterEach(() => {
+      for (const [key, value] of savedEnv) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      globalThis.fetch = realFetch;
+    });
+
+    afterAll(async () => {
+      await database
+        .collection('users')
+        .updateOne({ email: 'agenda@test.com' }, { $unset: { subscription: '' } });
+      await database.collection('ai_usage').deleteMany({ userId });
+    });
+
+    it('asks the relay, with the relay key, even when a direct vendor key is also set', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      process.env['LITELLM_BASE_URL'] = 'https://relay.test';
+      process.env['ANTHROPIC_API_KEY'] = 'fake-vendor-key';
+      const fetchMock = mockModel();
+
+      const res = await getAgenda();
+
+      expect(res.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string> }];
+      expect(url).toBe('https://relay.test/v1/messages');
+      expect(init.headers['x-api-key']).toBe('fake-relay-key');
+    });
+
+    it('asks the relay when the relay key is the only key, as on every deployed server', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      const fetchMock = mockModel();
+
+      const res = await getAgenda();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toBe('https://ai.noctusoft.com/v1/messages');
+      expect(summaries(res)).toContain(SUMMARY);
+    });
+
+    it('uses the small model set for the job, not the client default', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      const fetchMock = mockModel();
+
+      await getAgenda();
+
+      const [, init] = fetchMock.mock.calls[0] as [string, { body: string }];
+      expect((JSON.parse(init.body) as { model: string }).model).toBe(
+        resolveModelForRole('triage')
+      );
+    });
+
+    it('counts one use against the plan for each call it makes', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      mockModel();
+
+      await getAgenda();
+
+      expect(await database.collection('ai_usage').countDocuments({ userId })).toBe(1);
+    });
+
+    it('stays off until it is switched on, with the relay key set (how it runs today)', async () => {
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      process.env['ANTHROPIC_API_KEY'] = 'fake-vendor-key';
+      const fetchMock = mockModel();
+
+      const res = await getAgenda();
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.items.length).toBeGreaterThan(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(summaries(res).filter(Boolean)).toEqual([]);
+      expect(await database.collection('ai_usage').countDocuments({ userId })).toBe(0);
+    });
+
+    it.each(['false', '0', '', 'on-ish'])('stays off when the switch is %p', async (value) => {
+      process.env['AGENDA_AI_ENABLED'] = value;
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      const fetchMock = mockModel();
+
+      await getAgenda();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('makes no model call when it is switched on but no key is set', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      const fetchMock = mockModel();
+
+      const res = await getAgenda();
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.items.length).toBeGreaterThan(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('makes no model call on a plan without agenda summaries', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      await database
+        .collection('users')
+        .updateOne({ email: 'agenda@test.com' }, { $unset: { subscription: '' } });
+      const fetchMock = mockModel();
+
+      const res = await getAgenda();
+
+      expect(res.status).toBe(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('still returns the agenda when the relay fails', async () => {
+      process.env['AGENDA_AI_ENABLED'] = 'true';
+      process.env['LITELLM_API_KEY'] = 'fake-relay-key';
+      const fetchMock = jest.fn(async () => new Response('upstream down', { status: 502 }));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const res = await getAgenda();
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.items.length).toBeGreaterThan(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(summaries(res).filter(Boolean)).toEqual([]);
+    });
   });
 
   it('returns 400 when from/to params missing', async () => {

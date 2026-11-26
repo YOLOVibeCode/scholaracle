@@ -28,6 +28,12 @@ function isPublicPath(pathname: string): boolean {
   return publicRoutes.includes(pathname) || publicPrefixes.some((p) => pathname.startsWith(p));
 }
 
+/**
+ * Protected pages reached from a link that carries a one-time code. A visitor who has to
+ * sign in first comes back to the page with its query string, not to the dashboard.
+ */
+const returnsAfterSignIn = ['/connector/activate'];
+
 /** If token expires within this many seconds, client may proactively refresh. */
 const PROACTIVE_REFRESH_THRESHOLD_SEC = 2 * 60; // 2 minutes
 
@@ -58,7 +64,11 @@ export function middleware(request: NextRequest) {
 
   // If user is not authenticated and tries to access protected routes, redirect to login
   if (!token && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const login = new URL('/login', request.url);
+    if (returnsAfterSignIn.includes(pathname)) {
+      login.searchParams.set('redirect', `${pathname}${request.nextUrl.search}`);
+    }
+    return NextResponse.redirect(login);
   }
 
   const res = NextResponse.next();
