@@ -120,7 +120,7 @@ async function notifyFailure(provider: string, baseUrl: string): Promise<void> {
   await chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon-48.png',
-    title: 'Scholaracle: Login required',
+    title: 'Scholarmancy: Login required',
     message: `Your ${provider} session expired. Click to log in again.`,
     buttons: [{ title: 'Open portal' }],
     isClickable: true,

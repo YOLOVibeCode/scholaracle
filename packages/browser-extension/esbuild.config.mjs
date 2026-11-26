@@ -1,5 +1,5 @@
 /**
- * Build script for the Scholaracle browser extension.
+ * Build script for the Scholarmancy Sync browser extension.
  *
  * Bundles three entry points:
  *   - background/service-worker.ts → dist/background.js
