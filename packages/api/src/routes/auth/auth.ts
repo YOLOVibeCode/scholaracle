@@ -1,7 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import crypto from 'node:crypto';
-import { AuthService, type IPasswordResetEmailSender } from '@scholaracle/auth';
+import {
+  AuthService,
+  INVALID_CREDENTIALS_ERROR,
+  type IPasswordResetEmailSender,
+} from '@scholaracle/auth';
 import {
   AuthenticationError,
   RateLimitError,
@@ -26,6 +30,12 @@ import { verifyAppleIdentityToken } from './appleIdentityToken';
 import { appleOAuthAudiences } from './appleAudiences';
 import { acceptedSharedWith } from '../../services/sharing/sharedWithOps';
 import { createSharingAuditRecorder } from '../../services/sharing/sharingAudit';
+import {
+  SignInAttemptGuard,
+  signInLimitsFromEnv,
+  tooManySignInsMessage,
+  type ISignInLimits,
+} from './signInAttemptGuard';
 
 /** In-memory rate limit for forgot-password: key -> { count, resetAt } */
 const forgotPasswordRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -107,6 +117,12 @@ export interface IAuthRouterConfig {
    * never reject; if it does, the rejection is ignored and the sign-in carries on.
    */
   readonly beforeLogin?: (email: string, password: string) => Promise<void>;
+  /**
+   * How many sign-ins may fail before POST /login answers 429 without checking the password.
+   * Omitted: the defaults, or none when SIGN_IN_ATTEMPT_LIMIT=off (see signInAttemptGuard).
+   * `false`: no limit.
+   */
+  readonly signInLimits?: ISignInLimits | false;
 }
 
 function getIp(req: Request): string {
@@ -221,7 +237,8 @@ async function handleLogin(
   res: Response,
   authService: AuthService,
   sessionRepository?: ISessionRepository,
-  beforeLogin?: (email: string, password: string) => Promise<void>
+  beforeLogin?: (email: string, password: string) => Promise<void>,
+  signInGuard?: SignInAttemptGuard
 ): Promise<void> {
   const { email, password, rememberMe } = req.body as {
     email?: string;
@@ -233,6 +250,14 @@ async function handleLogin(
     throw new ValidationError('Missing required fields: email, password');
   }
 
+  // Counted before anything is checked. Without this, a password could be guessed as fast as
+  // the server answers: nothing ever said "enough".
+  const attempt = signInGuard?.begin(email, getIp(req));
+  if (attempt && !attempt.allowed) {
+    res.setHeader('Retry-After', String(attempt.retryAfterSeconds));
+    throw new RateLimitError(tooManySignInsMessage(attempt.retryAfterSeconds));
+  }
+
   if (beforeLogin) {
     try {
       await beforeLogin(email, password);
@@ -241,9 +266,21 @@ async function handleLogin(
     }
   }
 
-  const result = await authService.login(email, password, {
-    rememberMe: rememberMe !== false,
-  });
+  let result: Awaited<ReturnType<AuthService['login']>>;
+  try {
+    result = await authService.login(email, password, {
+      rememberMe: rememberMe !== false,
+    });
+  } catch (error) {
+    attempt?.abandoned();
+    throw error;
+  }
+  if (result.success) {
+    attempt?.succeeded();
+  } else if (result.error !== INVALID_CREDENTIALS_ERROR) {
+    // The sign-in could not be checked (the database, say). That is not a wrong password.
+    attempt?.abandoned();
+  }
 
   if (result.success && result.user?.id && result.familyId) {
     await upsertSession(sessionRepository, result.user.id, result.familyId, req);
@@ -738,14 +775,18 @@ export function authRouter(config: IAuthRouterConfig): Router {
     )
   );
 
+  const signInLimits =
+    config.signInLimits === false ? null : (config.signInLimits ?? signInLimitsFromEnv());
+  const signInGuard = signInLimits ? new SignInAttemptGuard(signInLimits) : undefined;
+
   /**
    * POST /api/auth/login
-   * Login user.
+   * Login user. Answers 429 with Retry-After once too many sign-ins have failed.
    */
   router.post(
     '/login',
     asyncHandler((req: Request, res: Response) =>
-      handleLogin(req, res, authService, config.sessionRepository, config.beforeLogin)
+      handleLogin(req, res, authService, config.sessionRepository, config.beforeLogin, signInGuard)
     )
   );
 

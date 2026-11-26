@@ -12,6 +12,13 @@ import type { IUserData, User, UserRole } from '@scholaracle/database';
 import type { OAuthProvider } from '@scholaracle/database';
 import type { IPasswordResetEmailSender } from '../PasswordResetEmailSender';
 
+/**
+ * What `login` answers when the email or the password is wrong. An unknown email and a
+ * suspended account get the same words, so the answer does not tell which accounts exist.
+ * Any other `error` from `login` means the sign-in could not be checked at all.
+ */
+export const INVALID_CREDENTIALS_ERROR = 'Invalid email or password';
+
 export interface IAuthUserPayload {
   readonly id: string;
   readonly email: string;
@@ -295,14 +302,14 @@ export class AuthService implements IAuthService {
       if (!user) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 
       if (user.isSuspended) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 
@@ -311,7 +318,7 @@ export class AuthService implements IAuthService {
       if (!isValidPassword) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 

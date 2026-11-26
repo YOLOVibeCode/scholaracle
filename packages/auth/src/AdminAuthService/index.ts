@@ -1,2 +1,7 @@
-export { AdminAuthService } from './AdminAuthService';
-export type { IAdminAuthService, IAdminAuthResult, IAdminTokenPayload } from './AdminAuthService';
+export { AdminAuthService, tooManyWrongCodesMessage } from './AdminAuthService';
+export type {
+  AdminCodeCheck,
+  IAdminAuthService,
+  IAdminAuthResult,
+  IAdminTokenPayload,
+} from './AdminAuthService';
