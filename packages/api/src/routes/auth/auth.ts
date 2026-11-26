@@ -24,6 +24,7 @@ import { normalizePhoneE164 } from '@scholaracle/agents';
 import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
 import type { ISessionRepository } from '@scholaracle/database';
 import { parseUserAgent } from '../../utils/parseUserAgent';
+import { sameSecret } from '../../security/sameSecret';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { MagicLoginLink } from '../../services/provision/MagicLoginLink';
 import { verifyAppleIdentityToken } from './appleIdentityToken';
@@ -542,11 +543,10 @@ async function handleRefresh(
 }
 
 function validateOAuthSecret(req: Request): boolean {
-  const secret =
+  const given =
     req.headers['x-internal-api-secret'] ??
     req.headers['authorization']?.replace(/^Bearer\s+/i, '');
-  const expected = process.env['INTERNAL_API_SECRET'];
-  return Boolean(expected && secret === expected);
+  return sameSecret(given, process.env['INTERNAL_API_SECRET']);
 }
 
 function validateOAuthPayload(body: unknown):

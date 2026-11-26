@@ -303,6 +303,70 @@ describe('Auth API Routes', () => {
       expect(response.body.error).toMatch(/unauthorized/i);
     });
 
+    it('should return 401 for a wrong secret, a part of it, or the right one with more after it', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const statuses: number[] = [];
+      for (const given of ['test-internal-secreX', 'test-internal', 'test-internal-secret-more']) {
+        const response = await request(app)
+          .post('/api/auth/oauth')
+          .set('x-internal-api-secret', given)
+          .send({
+            provider: 'google',
+            providerAccountId: 'google-uid-wrong-secret',
+            email: 'newparent.oauth@example.com',
+            name: 'New OAuth Parent',
+          });
+        statuses.push(response.status);
+      }
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      expect(statuses).toEqual([401, 401, 401]);
+    });
+
+    it('should return 401 when no secret is configured, even for an empty header', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      delete process.env['INTERNAL_API_SECRET'];
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('x-internal-api-secret', '')
+        .send({
+          provider: 'google',
+          providerAccountId: 'google-uid-no-secret',
+          email: 'newparent.oauth@example.com',
+          name: 'New OAuth Parent',
+        });
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should accept the secret as a Bearer token as well', async () => {
+      const oldSecret = process.env['INTERNAL_API_SECRET'];
+      process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
+
+      const response = await request(app)
+        .post('/api/auth/oauth')
+        .set('Authorization', 'Bearer test-internal-secret')
+        .send({
+          provider: 'google',
+          providerAccountId: '12345',
+          email: 'oauth@example.com',
+        });
+
+      if (oldSecret !== undefined) process.env['INTERNAL_API_SECRET'] = oldSecret;
+      else delete process.env['INTERNAL_API_SECRET'];
+
+      // Past the secret check: the request fails on the missing name, not on the secret.
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/missing|required/i);
+    });
+
     it('should return 400 when email or name is missing', async () => {
       const oldSecret = process.env['INTERNAL_API_SECRET'];
       process.env['INTERNAL_API_SECRET'] = 'test-internal-secret';
