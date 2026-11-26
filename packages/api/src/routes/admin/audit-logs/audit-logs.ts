@@ -60,7 +60,7 @@ function maskSensitive(value: unknown, depth: number = 0): unknown {
 
 export interface IAuditLogsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 export function auditLogsRouter(config: IAuditLogsRouterConfig): Router {

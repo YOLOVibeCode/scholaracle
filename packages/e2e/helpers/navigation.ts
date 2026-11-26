@@ -141,10 +141,14 @@ export async function clickBreadcrumb(page: Page, text: string): Promise<void> {
 
 /**
  * Navigate back using browser back button.
+ *
+ * `goBack()` returns when the page it lands on has loaded. It does not then wait for the
+ * network to go quiet: a page can be complete while a request is still open, and that wait
+ * then runs into the test timeout. Callers assert on what they expect next (a URL, an
+ * element), and those assertions wait on their own.
  */
 export async function navigateBack(page: Page): Promise<void> {
   await page.goBack();
-  await page.waitForLoadState('networkidle');
 }
 
 /**

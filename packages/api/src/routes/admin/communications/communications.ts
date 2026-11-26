@@ -21,7 +21,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface ICommunicationsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 export function communicationsRouter(config: ICommunicationsRouterConfig): Router {

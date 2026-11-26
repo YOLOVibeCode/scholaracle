@@ -99,7 +99,7 @@ Variables are set per service and per environment. A variable on the API is not 
 |----------|-----|---------|-----|----------------|
 | `RAILWAY_DOCKERFILE_PATH` | `Dockerfile.api` | `Dockerfile.workers` | `Dockerfile.web` | Which image Railway builds. |
 | `NODE_ENV` | yes | yes | — | `production` on production. |
-| `JWT_SECRET` | yes | — | — | Signs and checks sign-in tokens. The API refuses to start in production without it. |
+| `JWT_SECRET` | yes | — | — | Signs and checks sign-in tokens, admin tokens included: there is no separate admin secret, and the server does not read `ADMIN_JWT_SECRET`. The API refuses to start in production without it. |
 | `MONGODB_URI`, `MONGODB_DB_NAME` | yes | yes | — | The database. The code also accepts `MONGO_URL`. |
 | `CORS_ORIGINS` | yes | — | — | The web origins allowed to call the API (see "Base CORS rules"). |
 | `BASE_URL` | yes | **yes** | — | The web origin, for example `https://scholarmancy.com`. Links in emails are built from it: password reset, sharing invites, alerts and invoices on the API; digests and alerts on the workers. Without it on the workers those emails carry no link to the dashboard. |
@@ -139,8 +139,9 @@ Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything nam
 | Variable | Service | What it does |
 |----------|---------|--------------|
 | `SENTRY_DSN` | API, workers, web | Error reporting. The web also reads `NEXT_PUBLIC_SENTRY_DSN` for errors in the browser. Set on no service on 26 Nov 2026, so errors reach the Railway logs and nothing else. |
-| `ADMIN_IP_ALLOWLIST` | API | Comma-separated addresses that may call the admin API. Unset: any address. |
-| `ADMIN_JWT_SECRET` | API | A separate secret for admin tokens. Unset: `JWT_SECRET` signs them. |
+| `ADMIN_IP_ALLOWLIST` | API | Comma-separated addresses that may use the admin API: everything under `/api/admin`, admin sign-in included, and `POST /api/scrapers/repair`. Any other address gets 403. Unset: any address. Addresses are compared exactly, with no ranges, and the API's domain has only an IPv4 address, so list fixed IPv4 addresses such as an office or a VPN exit. A list without your own address locks every admin out until the variable is corrected or removed. |
+| `ADMIN_JWT_EXPIRES_IN` | API | How long an admin token lasts. Default `8h`. Signing out ends the token it is done with at once, in every admin area, and so does ending that session from another admin session. |
+| `JWT_ACCESS_EXPIRES_IN` | API | How long a parent's access token lasts. Default `15m`. A device whose session is signed out from another device keeps its access until this runs out, then cannot get a new token. The sessions page tells parents "within 15 minutes": change that sentence with this value. |
 | `RATE_LIMIT_ENABLED=true` | API | Limits admin sign-in to ten requests a minute per address. The lockout after five wrong admin passwords is always on. |
 | `SIGN_IN_ATTEMPT_LIMIT=off` | API | Turns off the limit on failed sign-ins (ten per account and address, a hundred per address, inside fifteen minutes). It exists for the day the limit refuses people it should not. Leave it unset. |
 | `RELAY_URL` | API | The store's address. Default `https://store.noctusoft.com`. |

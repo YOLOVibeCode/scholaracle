@@ -11,7 +11,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface INotesRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 async function handleGetNotesByCustomer(

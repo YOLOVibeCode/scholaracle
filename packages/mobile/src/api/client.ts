@@ -204,41 +204,12 @@ export class ScholarmancyApiClient {
     return res;
   }
 
-  async loginWithOAuth(
-    provider: 'google' | 'apple' | 'microsoft',
-    providerAccountId: string,
-    email: string,
-    name: string,
-    internalSecret: string,
-    options?: { appleIdentityToken?: string; appleNonce?: string }
-  ): Promise<IAuthLoginResponse> {
-    const body: Record<string, unknown> = {
-      provider,
-      providerAccountId,
-      email,
-      name,
-    };
-    if (provider === 'apple') {
-      if (options?.appleIdentityToken !== undefined) {
-        body['appleIdentityToken'] = options.appleIdentityToken;
-      }
-      if (options?.appleNonce !== undefined) {
-        body['appleNonce'] = options.appleNonce;
-      }
-    }
-    const res = await this._postWithHeaders<IAuthLoginResponse>(
-      '/api/auth/oauth',
-      body,
-      { 'x-internal-api-secret': internalSecret },
-      false
-    );
-    await this._persistSession(res, 'OAuthLogin');
-    return res;
-  }
-
   /**
    * Sign in with Apple. No shared secret: the server verifies the identity token itself and
    * takes the account id and email from it, so only the token and its raw nonce are sent.
+   *
+   * This is the only provider sign-in the app has. The API's other provider route trusts a
+   * secret that only the web server holds, and the app must never carry that secret.
    */
   async loginWithApple(
     identityToken: string,
@@ -1081,26 +1052,6 @@ export class ScholarmancyApiClient {
     if (requireAuth && res.status === 401) {
       res = await doPost(await this._refreshAccessToken());
     }
-    if (!res.ok) throw await ApiError.fromResponse(res, `POST ${path}`);
-    return res.json() as Promise<T>;
-  }
-
-  private async _postWithHeaders<T>(
-    path: string,
-    body: unknown,
-    extraHeaders: Record<string, string>,
-    requireAuth: boolean
-  ): Promise<T> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders };
-    if (requireAuth) {
-      const token = await this._getAccessToken();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    }
-    const res = await this._timedFetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
     if (!res.ok) throw await ApiError.fromResponse(res, `POST ${path}`);
     return res.json() as Promise<T>;
   }

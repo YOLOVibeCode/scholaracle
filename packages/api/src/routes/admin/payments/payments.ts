@@ -17,7 +17,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 import type { INoctusoftStoreClient } from '../../../services/noctusoft-store/NoctusoftStoreClient';
 export interface IPaymentsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   /** Refunds move money through the store; absent when store billing is not configured. */
   readonly storeClient?: INoctusoftStoreClient;
 }
