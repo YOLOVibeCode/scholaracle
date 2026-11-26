@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api/auth';
+import { apiClient } from '@/lib/api/client';
+import { SessionExpiredRedirectError } from '@/lib/auth/clearParentSession';
 
 export default function ConnectorActivatePage() {
   return (
@@ -30,29 +32,23 @@ function ConnectorActivateContent() {
     setStatus('submitting');
     setError(null);
 
-    const token = authApi.getToken();
-    if (!token) {
-      router.push('/login');
+    // This page is opened by a fresh page load, outside the dashboard, so the session is in
+    // the browser's storage and not yet in memory. Load it before asking for it (issue #3).
+    authApi.initialize();
+    if (!authApi.getToken()) {
+      // Sign in, then come back here with the code still filled in.
+      const here = `/connector/activate?code=${encodeURIComponent(userCode.trim())}`;
+      router.push(`/login?redirect=${encodeURIComponent(here)}`);
       return;
     }
 
     try {
-      const res = await fetch(`${process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api'}/ingest/v1/device/approve`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ userCode }),
-      });
-
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `Failed to approve (${res.status})`);
-      }
-
+      // The shared client renews an expired session once and retries before giving up.
+      await apiClient.post('/ingest/v1/device/approve', { userCode });
       setStatus('success');
     } catch (e) {
+      // The client is already sending the visitor to sign in again.
+      if (e instanceof SessionExpiredRedirectError) return;
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Failed to approve');
     }
