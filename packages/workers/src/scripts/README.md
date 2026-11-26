@@ -9,25 +9,29 @@ TDD-compliant, ISP-segregated scripts for triggering student sync and sending di
 Triggers sync for all student data sources, waits for completion, then sends digest email to alert recipients.
 
 **Usage:**
+
 ```bash
 npx ts-node src/scripts/trigger-sync-and-digest.ts --studentId=<student-id>
 ```
 
 **Options:**
+
 - `--studentId=<id>` — (required) MongoDB student _id
 - `--apiUrl=<url>` — API base URL (default: env `API_BASE_URL` or `BASE_URL` or `http://localhost:3000`)
 - `--token=<bearer>` — Auth token for API (default: env `AUTH_TOKEN` or `API_TOKEN`)
 
 **Environment variables:**
+
 - `MONGODB_URI` — MongoDB connection string
 - `MONGODB_DB_NAME` — Database name (default: `scholaracle`)
 - `SENDGRID_API_KEY` — SendGrid API key (or use `SMTP_HOST` for SMTP)
 - `SENDGRID_FROM_EMAIL` — From email address
 - `SENDGRID_FROM_NAME` — From name
 - `BASE_URL` — Dashboard base URL for digest links
-- `ANTHROPIC_API_KEY` — (optional) For AI digest insights
+- `LITELLM_API_KEY` — (optional) For AI digest insights, through the Noctusoft LLM relay (`ANTHROPIC_API_KEY` is the fallback when it is empty)
 
 **Example:**
+
 ```bash
 export AUTH_TOKEN=your-jwt-token
 export MONGODB_URI=mongodb://localhost:27017
@@ -36,6 +40,7 @@ npx ts-node src/scripts/trigger-sync-and-digest.ts --studentId=507f1f77bcf86cd79
 ```
 
 **Flow:**
+
 1. Triggers sync for all enabled data sources (Canvas, Skyward, etc.)
 2. Polls every 15s for completion (max 15 minutes)
 3. Resolves student alert recipients (owner + accepted contacts)
@@ -48,6 +53,7 @@ npx ts-node src/scripts/trigger-sync-and-digest.ts --studentId=507f1f77bcf86cd79
 Sends pending digest email immediately for specified users or student recipients.
 
 **Usage:**
+
 ```bash
 # By student ID (resolves owner + contacts)
 npx ts-node src/scripts/send-digest-now.ts --studentId=<student-id>
@@ -57,12 +63,14 @@ npx ts-node src/scripts/send-digest-now.ts --userIds=id1,id2,id3
 ```
 
 **Options:**
+
 - `--studentId=<id>` — MongoDB student _id (resolves to owner + accepted contacts)
 - `--userIds=<csv>` — Comma-separated user IDs
 
 **Environment variables:** (same as above)
 
 **Example:**
+
 ```bash
 export MONGODB_URI=mongodb://localhost:27017
 export SENDGRID_API_KEY=your-sendgrid-key
