@@ -1,6 +1,6 @@
 ---
 description: Railway deployment and CORS conventions; follow when changing deploy or API server config
-globs: "Dockerfile.*,railway.json,.github/workflows/deploy.yml,RAILWAY_DEPLOYMENT.md,.env.example,packages/api/src/server.ts"
+globs: "Dockerfile.*,.github/workflows/deploy.yml,RAILWAY_DEPLOYMENT.md,.env.example,packages/api/src/server.ts"
 alwaysApply: false
 ---
 
@@ -15,7 +15,8 @@ alwaysApply: false
   - **web** → `Dockerfile.web`
   - **workers** → `Dockerfile.workers`
 - **Do not** remove or rename the per-service Dockerfiles. Do not add a single default Dockerfile that would be used by more than one service without setting `RAILWAY_DOCKERFILE_PATH` per service.
-- **Deploy workflow** (`.github/workflows/deploy.yml`): runs on push to `main` and `workflow_dispatch`; runs CI then `railway up --service api`, `--service workers`, `--service web`. Requires `RAILWAY_TOKEN` secret. Keep this order and service names unless the doc is updated.
+- **Deploy workflow** (`.github/workflows/deploy.yml`): runs on push to `main` and `workflow_dispatch`; runs CI, waits until dev serves the commit, then runs E2E against dev. It never deploys: Railway's GitHub integration deploys dev on every push and releases production when every check is green. Do not add `railway up` to a workflow.
+- **No `railway.json` or `railway.toml`.** Railway stops reading Config as Code files on 2026-12-01. The health check path (`/api/health`), its timeout (30 s), and the restart rule (on failure, 3 retries) are Railway service settings on api, web, and workers in both environments. Do not add a config file back; change the service settings and update `RAILWAY_DEPLOYMENT.md`.
 
 ## CORS
 
@@ -31,5 +32,6 @@ alwaysApply: false
 ## Checklist before merging deploy-related changes
 
 - [ ] `RAILWAY_DOCKERFILE_PATH` remains set per service (doc + Railway dashboard).
+- [ ] Health check path, timeout, and restart rule remain set per service in both environments (check command in `RAILWAY_DEPLOYMENT.md`).
 - [ ] CORS stays env-driven; no production origins in code.
 - [ ] `RAILWAY_DEPLOYMENT.md` and `.env.example` updated if env or steps changed.
