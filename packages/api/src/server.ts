@@ -580,7 +580,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       consentsRouter({ database })
     );
     // Agenda API routes (unified assignments + recurring events)
-    app.use('/api/agenda', agendaRouter({ database, notificationService }));
+    app.use('/api/agenda', agendaRouter({ database, notificationService, jwtSecret }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use(
       '/api/ingest/v1',
