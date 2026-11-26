@@ -27,7 +27,7 @@ import { parseUserAgent } from '../../../utils/parseUserAgent';
 
 export interface IAdminAuthRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   readonly revokedTokenStore?: IAdminRevokedTokenStore;
   readonly mfaTokenStore?: IAdminMFATokenStore;
   readonly stepUpChallengeStore?: IAdminStepUpChallengeStore;

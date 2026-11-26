@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { Db } from 'mongodb';
 import {
+  AdminRevokedTokenRepository,
   AdminUserRepository,
   AdminUserRepository as AdminUserRepo,
   type IAdminRevokedTokenStore,
@@ -109,7 +110,13 @@ export class AdminAuthService implements IAdminAuthService {
   /** In-memory fallback when _mfaTokenStore is not provided (e.g. tests). */
   private readonly _mfaTokens: Map<string, { adminId: string; secret: string; expiresAt: Date }> =
     new Map();
-  private readonly _revokedTokenStore?: IAdminRevokedTokenStore;
+  /**
+   * Where signed-out tokens are recorded. Always present: a service that is handed no store
+   * keeps the record in its database. Leaving the store out used to mean "record nothing and
+   * check nothing", and every admin area but sign-in built its service that way, so a
+   * signed-out token went on working in those areas until it expired.
+   */
+  private readonly _revokedTokenStore: IAdminRevokedTokenStore;
   private readonly _passwordResetTokenStore?: IPasswordResetTokenStore;
   private readonly _passwordResetEmailSender?: IPasswordResetEmailSender;
   private readonly _adminBaseUrl?: string;
@@ -142,7 +149,7 @@ export class AdminAuthService implements IAdminAuthService {
       process.env['JWT_SECRET'] ??
       'default-admin-secret';
     this._jwtExpiresIn = jwtExpiresIn ?? process.env['ADMIN_JWT_EXPIRES_IN'] ?? '8h';
-    this._revokedTokenStore = revokedTokenStore;
+    this._revokedTokenStore = revokedTokenStore ?? new AdminRevokedTokenRepository(database);
     this._mfaTokenStore = mfaTokenStore;
     this._passwordResetTokenStore = passwordResetTokenStore;
     this._passwordResetEmailSender = passwordResetEmailSender;
@@ -297,7 +304,7 @@ export class AdminAuthService implements IAdminAuthService {
       }
 
       // MFA is enabled: require TOTP verification
-      const mfaToken = this._generateMFAToken(admin._id!.toString(), admin.mfaSecret);
+      const mfaToken = await this._generateMFAToken(admin._id!.toString(), admin.mfaSecret);
 
       return {
         success: false,
@@ -551,7 +558,7 @@ export class AdminAuthService implements IAdminAuthService {
         return null;
       }
 
-      if (this._revokedTokenStore && decoded.jti) {
+      if (decoded.jti) {
         const revoked = await this._revokedTokenStore.isRevoked(decoded.jti);
         if (revoked) return null;
       }
@@ -664,12 +671,10 @@ export class AdminAuthService implements IAdminAuthService {
       const decoded = jwt.decode(token) as { jti?: string; exp?: number } | null;
       if (!decoded || !decoded.jti) return true;
 
-      if (this._revokedTokenStore) {
-        const expiresAt = decoded.exp
-          ? new Date(decoded.exp * 1000)
-          : new Date(Date.now() + 8 * 60 * 60 * 1000);
-        await this._revokedTokenStore.revoke(decoded.jti, expiresAt);
-      }
+      const expiresAt = decoded.exp
+        ? new Date(decoded.exp * 1000)
+        : new Date(Date.now() + 8 * 60 * 60 * 1000);
+      await this._revokedTokenStore.revoke(decoded.jti, expiresAt);
       return true;
     } catch {
       return true;
@@ -759,16 +764,19 @@ export class AdminAuthService implements IAdminAuthService {
    * @param secret - MFA secret
    * @returns MFA token
    */
-  private _generateMFAToken(adminId: string, secret: string): string {
+  private async _generateMFAToken(adminId: string, secret: string): Promise<string> {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
     const expiresAtDate = new Date(expiresAt);
     const token = jwt.sign({ adminId, type: 'mfa', expiresAt }, this._jwtSecret, {
       expiresIn: this._mfaTokenExpiresIn,
     } as jwt.SignOptions) as string;
 
-    // Store MFA data in DB when store is provided; otherwise in-memory
+    // Store MFA data in DB when store is provided; otherwise in-memory.
+    // The write is awaited: the password step answers only once the token can be found
+    // again, so a code sent straight after cannot arrive before it, and a write that fails
+    // fails the sign-in instead of handing out a token that will never be accepted.
     if (this._mfaTokenStore) {
-      void this._mfaTokenStore.create(token, adminId, secret, expiresAtDate);
+      await this._mfaTokenStore.create(token, adminId, secret, expiresAtDate);
     } else {
       this._mfaTokens.set(token, { adminId, secret, expiresAt: expiresAtDate });
     }

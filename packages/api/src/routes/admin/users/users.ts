@@ -12,7 +12,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface IAdminUsersRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 export function adminUsersRouter(config: IAdminUsersRouterConfig): Router {
