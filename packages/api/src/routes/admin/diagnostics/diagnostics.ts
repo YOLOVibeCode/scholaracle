@@ -17,6 +17,53 @@ export interface IDiagnosticsRouterConfig {
   readonly sendGridFromName?: string;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export interface IManualDigestAlert {
+  readonly title: string;
+  readonly message: string;
+}
+
+export interface IManualDigestEmail {
+  readonly subject: string;
+  readonly text: string;
+  readonly html: string;
+}
+
+/**
+ * The email a manual digest flush sends to one recipient. Student names and alert text come
+ * from school portals, so the HTML shows them as text.
+ *
+ * @param updateCount how many updates were pending, when some of their alerts no longer exist
+ */
+export function buildManualDigestEmail(
+  studentName: string,
+  alerts: readonly IManualDigestAlert[],
+  updateCount: number = alerts.length
+): IManualDigestEmail {
+  const rows = alerts
+    .map(
+      (alert) =>
+        `<li><strong>${escapeHtml(alert.title)}</strong><br>${escapeHtml(alert.message)}</li>`
+    )
+    .join('');
+
+  return {
+    subject: `Daily Digest for ${studentName}`,
+    text: `Scholarmancy Digest: ${updateCount} updates for ${studentName}`,
+    html:
+      `<h2>Scholarmancy Digest for ${escapeHtml(studentName)}</h2>` +
+      `<p>You have ${updateCount} update(s):</p><ul>${rows}</ul><p>--<br>Scholarmancy</p>`,
+  };
+}
+
 /**
  * Manual digest flush - processes pending digest items and sends emails immediately
  */
@@ -52,11 +99,8 @@ async function manualFlushDigests(
   for (const [recipientEmail, recipientItems] of byRecipient) {
     const first = recipientItems[0] as unknown as { studentName?: string; alertId: unknown };
     const studentName = first.studentName || 'Your Student';
-    const subject = `Daily Digest for ${studentName}`;
 
-    let html = `<h2>Scholaracle Digest for ${studentName}</h2>`;
-    html += `<p>You have ${recipientItems.length} update(s):</p><ul>`;
-
+    const alerts: IManualDigestAlert[] = [];
     for (const item of recipientItems) {
       const alertId =
         typeof (item as unknown as { alertId: unknown }).alertId === 'string'
@@ -64,18 +108,23 @@ async function manualFlushDigests(
           : (item as unknown as { alertId: unknown }).alertId;
       const alert = await database.collection('slc_alerts').findOne({ _id: alertId as never });
       if (alert) {
-        html += `<li><strong>${(alert as unknown as { title: string }).title}</strong><br>${(alert as unknown as { message: string }).message}</li>`;
+        const found = alert as unknown as { title?: unknown; message?: unknown };
+        alerts.push({ title: String(found.title ?? ''), message: String(found.message ?? '') });
       }
     }
 
-    html += '</ul><p>--<br>Scholaracle</p>';
+    const { subject, text, html } = buildManualDigestEmail(
+      studentName,
+      alerts,
+      recipientItems.length
+    );
 
     try {
       await sgMail.send({
         to: recipientEmail,
         from: { email: fromEmail, name: fromName },
         subject: subject,
-        text: `Scholaracle Digest: ${recipientItems.length} updates for ${studentName}`,
+        text,
         html: html,
       });
 
@@ -135,7 +184,7 @@ export function createDiagnosticsRouter(config: IDiagnosticsRouterConfig): Route
         process.env['SENDGRID_FROM_EMAIL'] ??
         'noreply@scholarmancy.com';
       const fromName =
-        config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle';
+        config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholarmancy';
 
       if (!sendGridApiKey) {
         res.status(500).json({ success: false, error: 'SendGrid not configured' });

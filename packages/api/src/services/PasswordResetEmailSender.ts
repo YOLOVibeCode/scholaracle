@@ -29,7 +29,7 @@ export class SendGridPasswordResetEmailSender implements IPasswordResetEmailSend
       return;
     }
     const bodyHtml = `
-      <p>You requested a password reset for your Scholaracle account.</p>
+      <p>You requested a password reset for your Scholarmancy account.</p>
       <p><a href="${resetUrl}">Reset your password</a></p>
       <p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
     `.trim();
@@ -37,7 +37,7 @@ export class SendGridPasswordResetEmailSender implements IPasswordResetEmailSend
     await this._sendGrid.send({
       to: email,
       from: { email: this._config.fromEmail, name: this._config.fromName },
-      subject: 'Reset your Scholaracle password',
+      subject: 'Reset your Scholarmancy password',
       text: `Reset your password: ${resetUrl}`,
       html,
     });
