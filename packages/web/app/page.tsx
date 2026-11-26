@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { authApi } from '@/lib/api/auth';
+import { isOneClickDemoAvailable } from '@/lib/oneClickDemo';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:2801/api';
 const DEMO_EMAIL = 'demo@scholarmancy.com';
@@ -41,6 +42,14 @@ export default function HomePage() {
   const router = useRouter();
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState('');
+  // Decided after hydration so server and client markup match. The server render, and
+  // every deployed site, leads with "Create account"; see lib/oneClickDemo.ts.
+  const [demoAvailable, setDemoAvailable] = useState(false);
+  useEffect(() => {
+    setDemoAvailable(
+      isOneClickDemoAvailable(window.location.hostname, process.env['NEXT_PUBLIC_SEED_TOKEN'])
+    );
+  }, []);
 
   const handleExploreDemo = async () => {
     setDemoLoading(true);
@@ -70,8 +79,17 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="marketing-home">
-      <SiteNav onExploreDemo={handleExploreDemo} demoLoading={demoLoading} />
-      <Hero onExploreDemo={handleExploreDemo} demoLoading={demoLoading} demoError={demoError} />
+      <SiteNav
+        demoAvailable={demoAvailable}
+        onExploreDemo={handleExploreDemo}
+        demoLoading={demoLoading}
+      />
+      <Hero
+        demoAvailable={demoAvailable}
+        onExploreDemo={handleExploreDemo}
+        demoLoading={demoLoading}
+        demoError={demoError}
+      />
       <TrustBar />
       <ProblemSection />
       <FeaturesSection />
@@ -80,7 +98,11 @@ export default function HomePage() {
       <UseCases />
       <PricingTease />
       <FaqSection />
-      <FinalCta onExploreDemo={handleExploreDemo} demoLoading={demoLoading} />
+      <FinalCta
+        demoAvailable={demoAvailable}
+        onExploreDemo={handleExploreDemo}
+        demoLoading={demoLoading}
+      />
       <Footer />
     </div>
   );
@@ -91,9 +113,11 @@ export default function HomePage() {
 // ---------------------------------------------------------------------------
 
 function SiteNav({
+  demoAvailable,
   onExploreDemo,
   demoLoading,
 }: {
+  readonly demoAvailable: boolean;
   readonly onExploreDemo: () => void;
   readonly demoLoading: boolean;
 }) {
@@ -113,18 +137,28 @@ function SiteNav({
           <Link href="/pricing" className="transition-colors hover:text-foreground">Pricing</Link>
           <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
         </nav>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/login">Sign in</Link>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/login" data-testid="nav-sign-in">Sign in</Link>
           </Button>
-          <Button
-            size="sm"
-            onClick={onExploreDemo}
-            disabled={demoLoading}
-            data-testid="nav-try-demo"
-          >
-            {demoLoading ? 'Loading…' : 'Try the demo'}
-          </Button>
+          {demoAvailable ? (
+            <Button
+              size="sm"
+              onClick={onExploreDemo}
+              disabled={demoLoading}
+              data-testid="nav-try-demo"
+            >
+              {demoLoading ? 'Loading…' : 'Try the demo'}
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              {/* The short label keeps the nav on one line on a 320px phone. */}
+              <Link href="/register" data-testid="nav-create-account" aria-label="Create account">
+                <span className="min-[400px]:hidden">Sign up</span>
+                <span className="hidden min-[400px]:inline">Create account</span>
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
     </header>
@@ -136,10 +170,12 @@ function SiteNav({
 // ---------------------------------------------------------------------------
 
 function Hero({
+  demoAvailable,
   onExploreDemo,
   demoLoading,
   demoError,
 }: {
+  readonly demoAvailable: boolean;
   readonly onExploreDemo: () => void;
   readonly demoLoading: boolean;
   readonly demoError: string;
@@ -176,7 +212,8 @@ function Hero({
             <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-purple-400">
               grade drop
             </span>
-            ,<br className="hidden sm:block" />
+            ,{' '}
+            <br className="hidden sm:block" />
             assignment, or deadline.
           </h1>
 
@@ -185,24 +222,40 @@ function Hero({
             and alerts land in one dashboard — and we warn you before things slip.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              size="lg"
-              onClick={onExploreDemo}
-              disabled={demoLoading}
-              data-testid="hero-explore-demo"
-              className="text-base"
-            >
-              {demoLoading ? 'Loading demo…' : 'Try the demo'}
-              <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-            <Button asChild size="lg" variant="outline" className="text-base">
-              <Link href="/register" data-testid="hero-create-account">Create account</Link>
-            </Button>
-          </div>
+          {demoAvailable ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size="lg"
+                onClick={onExploreDemo}
+                disabled={demoLoading}
+                data-testid="hero-explore-demo"
+                className="text-base"
+              >
+                {demoLoading ? 'Loading demo…' : 'Try the demo'}
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+              <Button asChild size="lg" variant="outline" className="text-base">
+                <Link href="/register" data-testid="hero-create-account">Create account</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild size="lg" className="text-base">
+                <Link href="/register" data-testid="hero-create-account">
+                  Create account
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="text-base">
+                <Link href="/pricing" data-testid="hero-see-pricing">See pricing</Link>
+              </Button>
+            </div>
+          )}
 
           <p className="text-sm text-muted-foreground">
-            No credit card required · No signup for demo · Cancel anytime
+            {demoAvailable
+              ? 'No credit card required · No signup for demo · Cancel anytime'
+              : 'No credit card required · Free for your first student · Cancel anytime'}
           </p>
 
           {demoError && (
@@ -968,9 +1021,11 @@ function FaqItem({
 // ---------------------------------------------------------------------------
 
 function FinalCta({
+  demoAvailable,
   onExploreDemo,
   demoLoading,
 }: {
+  readonly demoAvailable: boolean;
   readonly onExploreDemo: () => void;
   readonly demoLoading: boolean;
 }) {
@@ -983,51 +1038,79 @@ function FinalCta({
           Ready to stop chasing grades?
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-lg text-white/90">
-          Try the live demo in one click. No signup, no credit card, no commitment.
+          {demoAvailable
+            ? 'Try the live demo in one click. No signup, no credit card, no commitment.'
+            : 'Create a free account and add your first student. No credit card, no commitment.'}
         </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button
-            size="lg"
-            variant="secondary"
-            onClick={onExploreDemo}
-            disabled={demoLoading}
-            className="bg-white text-blue-700 hover:bg-white/90"
-            data-testid="final-cta-demo"
-          >
-            {demoLoading ? 'Loading demo…' : 'Try the demo'}
-            <ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
-          >
-            <Link href="/register" data-testid="final-cta-register">Create free account</Link>
-          </Button>
-        </div>
-        <div className="mt-6 rounded-lg border border-white/20 bg-white/10 px-5 py-4 text-left text-sm">
-          <p className="mb-2 font-semibold text-white/90">Demo logins</p>
-          <div className="space-y-1 text-white/75">
-            <p>
-              <span className="font-medium text-white">Parent (Sarah):</span>{' '}
-              <span className="font-mono">{DEMO_EMAIL}</span> /{' '}
-              <span className="font-mono">{DEMO_PASSWORD}</span>
-            </p>
-            <p>
-              <span className="font-medium text-white">Student Emma:</span>{' '}
-              <span className="font-mono">emma.demo@scholarmancy.com</span> /{' '}
-              <span className="font-mono">{DEMO_PASSWORD}</span>
-            </p>
-            <p>
-              <span className="font-medium text-white">Student Liam:</span>{' '}
-              <span className="font-mono">liam.demo@scholarmancy.com</span> /{' '}
-              <span className="font-mono">{DEMO_PASSWORD}</span>
-            </p>
+        {demoAvailable ? (
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Button
+              size="lg"
+              variant="secondary"
+              onClick={onExploreDemo}
+              disabled={demoLoading}
+              className="bg-white text-blue-700 hover:bg-white/90"
+              data-testid="final-cta-demo"
+            >
+              {demoLoading ? 'Loading demo…' : 'Try the demo'}
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              <Link href="/register" data-testid="final-cta-register">Create free account</Link>
+            </Button>
           </div>
-        </div>
+        ) : (
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Button
+              asChild
+              size="lg"
+              variant="secondary"
+              className="bg-white text-blue-700 hover:bg-white/90"
+            >
+              <Link href="/register" data-testid="final-cta-register">
+                Create free account
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
+        {demoAvailable && <DemoLogins />}
       </div>
     </section>
+  );
+}
+
+/** Sample sign-ins for a developer machine. The live server does not accept them. */
+function DemoLogins() {
+  return (
+    <div
+      className="mt-6 rounded-lg border border-white/20 bg-white/10 px-5 py-4 text-left text-sm"
+      data-testid="demo-logins"
+    >
+      <p className="mb-2 font-semibold text-white/90">Demo logins</p>
+      <div className="space-y-1 text-white/75">
+        <p>
+          <span className="font-medium text-white">Parent (Sarah):</span>{' '}
+          <span className="font-mono">{DEMO_EMAIL}</span> /{' '}
+          <span className="font-mono">{DEMO_PASSWORD}</span>
+        </p>
+        <p>
+          <span className="font-medium text-white">Student Emma:</span>{' '}
+          <span className="font-mono">emma.demo@scholarmancy.com</span> /{' '}
+          <span className="font-mono">{DEMO_PASSWORD}</span>
+        </p>
+        <p>
+          <span className="font-medium text-white">Student Liam:</span>{' '}
+          <span className="font-mono">liam.demo@scholarmancy.com</span> /{' '}
+          <span className="font-mono">{DEMO_PASSWORD}</span>
+        </p>
+      </div>
+    </div>
   );
 }
 

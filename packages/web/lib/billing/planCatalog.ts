@@ -18,7 +18,8 @@ export const PURCHASABLE_PLANS = [
     monthlyPrice: 19.99,
     annualPrice: 199.99,
     students: 2,
-    description: 'Two students — $9.99 each',
+    // No "$9.99 each" here: two students at $19.99 is not 2 x $9.99. See planCatalog.test.ts.
+    description: 'Two students on one plan',
     features: [
       '2 students',
       'All notification channels',
@@ -35,7 +36,7 @@ export const PURCHASABLE_PLANS = [
     monthlyPrice: 49.99,
     annualPrice: 499.99,
     students: 5,
-    description: 'Five students — $9.99 each',
+    description: 'Five students on one plan',
     features: [
       '5 students',
       'All notification channels',
