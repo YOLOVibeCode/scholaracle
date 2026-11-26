@@ -185,7 +185,13 @@ describe('Health Router', () => {
       }
     });
 
-    it('reports no gate and default store links when nothing is configured', async () => {
+    /**
+     * The app is not in the App Store or on Google Play yet (26 Nov 2026): both listing
+     * pages answer "not found". Until they are live, the "Update required" screen sends an
+     * iPhone to the TestFlight beta, where its updates come from, and shows no button on
+     * Android rather than a dead one. Put the listings back in health.ts when they are live.
+     */
+    it('reports no gate, the TestFlight beta for iPhone and no Android link by default', async () => {
       const response = await request(app).get('/api/health/min-app-version');
 
       expect(response.status).toBe(200);
@@ -195,10 +201,18 @@ describe('Health Router', () => {
         minBuild: null,
         message: null,
         storeUrls: {
-          ios: 'https://apps.apple.com/app/scholarmancy/id6798499288',
-          android: 'https://play.google.com/store/apps/details?id=com.scholarmancy.app',
+          ios: 'https://testflight.apple.com/join/YMAKAqh8',
+          android: null,
         },
       });
+    });
+
+    it('never offers a store listing by default while the listings are not live', async () => {
+      const response = await request(app).get('/api/health/min-app-version');
+
+      const links = JSON.stringify(response.body.storeUrls);
+      expect(links).not.toContain('apps.apple.com');
+      expect(links).not.toContain('play.google.com');
     });
 
     it('returns the configured floor, build, message and store links', async () => {

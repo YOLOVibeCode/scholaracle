@@ -70,9 +70,20 @@ healthRouter.get('/version', (_req: Request, res: Response) => {
   });
 });
 
-const DEFAULT_IOS_STORE_URL = 'https://apps.apple.com/app/scholarmancy/id6798499288';
-const DEFAULT_ANDROID_STORE_URL =
-  'https://play.google.com/store/apps/details?id=com.scholarmancy.app';
+/**
+ * Where the "Update required" screen sends a phone.
+ *
+ * The app is not in the App Store or on Google Play yet (26 Nov 2026): both listing pages
+ * answer "not found". Until they are live, an iPhone goes to the TestFlight beta, where its
+ * updates come from, and Android gets no link (the app shows the message without a button).
+ *
+ * When a listing is live, put it here, and in packages/web/lib/app-downloads.ts:
+ *   iOS      https://apps.apple.com/app/scholarmancy/id6798499288
+ *   Android  https://play.google.com/store/apps/details?id=com.scholarmancy.app
+ * IOS_APP_STORE_URL / ANDROID_PLAY_STORE_URL override these without a code change.
+ */
+const DEFAULT_IOS_STORE_URL: string | null = 'https://testflight.apple.com/join/YMAKAqh8';
+const DEFAULT_ANDROID_STORE_URL: string | null = null;
 
 /** Dotted numeric version such as `1.2.0`. Anything else disables the gate. */
 const VERSION_PATTERN = /^\d+(\.\d+){0,3}$/;
