@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Script from 'next/script';
+import {
+  feedbackPlacement,
+  markFeedbackReady,
+  type FeedbackPlacement,
+} from '@/lib/feedback/feedback';
 
 export const FEEDBACK_WIDGET_SRC = 'https://store.noctusoft.com/feedback/widget.js';
 
@@ -30,6 +35,10 @@ export function isFeedbackHostAllowed(hostname: string): boolean {
  * "Feedback" button and posts to the relay's public route. There is no key, env var, or
  * server route on our side. The host check runs after hydration so server and client
  * markup match.
+ *
+ * On a phone the floating button is not drawn (`data-hide-button`): it sits on top of the
+ * page's own buttons there. The form is then opened from the page's menu instead, see
+ * `lib/feedback/feedback.ts` and `FeedbackMenuButton`.
  */
 export function NoctusoftFeedbackWidget({
   hostname,
@@ -37,16 +46,20 @@ export function NoctusoftFeedbackWidget({
   /** Test seam: defaults to the browser's current hostname. */
   readonly hostname?: string;
 } = {}): React.ReactElement | null {
-  const [allowed, setAllowed] = useState(false);
+  const [placement, setPlacement] = useState<FeedbackPlacement | null>(null);
   useEffect(() => {
-    setAllowed(isFeedbackHostAllowed(hostname ?? window.location.hostname));
+    setPlacement(
+      isFeedbackHostAllowed(hostname ?? window.location.hostname) ? feedbackPlacement() : null
+    );
   }, [hostname]);
-  if (!allowed) return null;
+  if (!placement) return null;
   return (
     <Script
       src={FEEDBACK_WIDGET_SRC}
       data-product={FEEDBACK_PRODUCT_KEY}
+      data-hide-button={placement === 'menu' ? 'true' : undefined}
       strategy="afterInteractive"
+      onReady={markFeedbackReady}
     />
   );
 }
