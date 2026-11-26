@@ -2,6 +2,7 @@ export {
   EmailDelivery,
   SendGridTransport,
   SmtpTransport,
+  acceptRelayKeys,
   buildDigestEmail,
   buildGlanceEmail,
 } from './EmailDelivery';

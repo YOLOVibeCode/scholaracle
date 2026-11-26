@@ -1,5 +1,6 @@
 import type { IEmailEnvelope, IEmailTransportResult } from './IEmailTransport';
 import type { MailService } from '@sendgrid/mail';
+import { acceptRelayKeys } from './acceptRelayKeys';
 
 /**
  * SendGrid implementation of IEmailTransport (ISP).
@@ -10,6 +11,8 @@ export class SendGridTransport {
     private readonly _mailService: MailService,
     baseUrl?: string
   ) {
+    // Behind a relay the key is the relay's, not SendGrid's: skip the library's "SG." check.
+    if (baseUrl) acceptRelayKeys(this._mailService);
     this._mailService.setApiKey(apiKey);
     if (baseUrl) {
       // MailService's typings hide its underlying @sendgrid/client instance, but it
