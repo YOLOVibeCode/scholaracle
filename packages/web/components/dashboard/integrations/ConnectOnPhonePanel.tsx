@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type JSX } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export interface IConnectOnPhonePanelProps {
@@ -36,6 +37,18 @@ export function ConnectOnPhonePanel({ studentId }: IConnectOnPhonePanelProps): J
         <p className="text-sm text-muted-foreground">
           Open the Scholarmancy app on your phone to finish connecting your school portal. Your login
           stays on your device.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Don&apos;t have the app yet?{' '}
+          <Link
+            href="/get-app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-primary underline underline-offset-2"
+            data-testid="link-get-app"
+          >
+            Get the app
+          </Link>
         </p>
       </div>
       <div className="flex flex-col items-center gap-3">
