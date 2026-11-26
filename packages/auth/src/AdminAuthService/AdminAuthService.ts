@@ -9,8 +9,28 @@ import {
   type IPasswordResetTokenStore,
 } from '@scholaracle/database';
 import type { IAdminUserData, AdminRole } from '@scholaracle/database';
+import { AttemptLimiter, type IAttemptLimiter } from '../AttemptLimiter';
 import { MFAService, type IMFAService } from '../MFAService';
 import type { IPasswordResetEmailSender } from '../PasswordResetEmailSender';
+
+/** Wrong authenticator codes an admin may enter inside one window, at sign-in and step-up together. */
+const CODE_ATTEMPTS_MAX = 5;
+const CODE_ATTEMPTS_WINDOW_MS = 15 * 60 * 1000;
+
+/** What an admin is told once the allowance of wrong authenticator codes is used up. */
+export function tooManyWrongCodesMessage(retryAfterSeconds: number): string {
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  return `Too many wrong codes. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+}
+
+/** What `checkAuthenticatorCode` found. */
+export type AdminCodeCheck =
+  | { readonly status: 'ok' }
+  | { readonly status: 'invalid' }
+  /** The admin has used the allowance of wrong codes; the code was not checked. */
+  | { readonly status: 'tooManyAttempts'; readonly retryAfterSeconds: number }
+  /** No such active admin, or the admin has no authenticator. */
+  | { readonly status: 'unavailable' };
 
 export interface IAdminAuthResult {
   readonly success: boolean;
@@ -28,6 +48,10 @@ export interface IAdminAuthResult {
     readonly role: AdminRole;
   };
   readonly error?: string;
+  /** True when the admin has used the allowance of wrong authenticator codes. The code was not checked. */
+  readonly tooManyAttempts?: boolean;
+  /** With `tooManyAttempts`: whole seconds until codes are checked again. */
+  readonly retryAfterSeconds?: number;
 }
 
 export interface IAdminTokenPayload {
@@ -47,6 +71,11 @@ export interface IAdminAuthService {
   ): Promise<IAdminAuthResult>;
   login(email: string, password: string): Promise<IAdminAuthResult>;
   verifyMFAToken(mfaToken: string, totpToken: string): Promise<IAdminAuthResult>;
+  /**
+   * Check a signed-in admin's authenticator code (step-up before a sensitive action). Wrong
+   * codes count against the same allowance as wrong codes at sign-in.
+   */
+  checkAuthenticatorCode(adminId: string, totpToken: string): Promise<AdminCodeCheck>;
   /** Get QR code and manual key for MFA setup (requires valid mfaSetupToken from login). */
   getMFASetupData(
     mfaSetupToken: string
@@ -84,6 +113,11 @@ export class AdminAuthService implements IAdminAuthService {
   private readonly _passwordResetTokenStore?: IPasswordResetTokenStore;
   private readonly _passwordResetEmailSender?: IPasswordResetEmailSender;
   private readonly _adminBaseUrl?: string;
+  /**
+   * Wrong authenticator codes per admin. Without it the six-digit code could be guessed by
+   * anyone who has the password: a wrong code cost nothing and could be repeated at will.
+   */
+  private readonly _codeAttempts: IAttemptLimiter;
 
   constructor(
     database: Db,
@@ -94,10 +128,14 @@ export class AdminAuthService implements IAdminAuthService {
     mfaTokenStore?: IAdminMFATokenStore,
     passwordResetTokenStore?: IPasswordResetTokenStore,
     passwordResetEmailSender?: IPasswordResetEmailSender,
-    adminBaseUrl?: string
+    adminBaseUrl?: string,
+    codeAttempts?: IAttemptLimiter
   ) {
     this._adminRepository = new AdminUserRepository(database);
     this._mfaService = mfaService ?? new MFAService();
+    this._codeAttempts =
+      codeAttempts ??
+      new AttemptLimiter({ maxFailures: CODE_ATTEMPTS_MAX, windowMs: CODE_ATTEMPTS_WINDOW_MS });
     this._jwtSecret =
       jwtSecret ??
       process.env['ADMIN_JWT_SECRET'] ??
@@ -437,6 +475,18 @@ export class AdminAuthService implements IAdminAuthService {
         };
       }
 
+      // The token is ours, so the admin id is real: count this try before the code is checked.
+      // A token we do not accept never gets here, so it cannot use up an admin's tries.
+      const attempt = this._codeAttempts.begin(decoded.adminId);
+      if (!attempt.allowed) {
+        return {
+          success: false,
+          error: tooManyWrongCodesMessage(attempt.retryAfterSeconds),
+          tooManyAttempts: true,
+          retryAfterSeconds: attempt.retryAfterSeconds,
+        };
+      }
+
       // Verify TOTP token
       const isValid = this._mfaService.verifyToken(mfaData.secret, totpToken);
       if (!isValid) {
@@ -445,6 +495,7 @@ export class AdminAuthService implements IAdminAuthService {
           error: 'Invalid MFA code',
         };
       }
+      this._codeAttempts.succeed(decoded.adminId);
 
       // Get admin
       const admin = await this._adminRepository.findById(decoded.adminId);
@@ -515,6 +566,28 @@ export class AdminAuthService implements IAdminAuthService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Check a signed-in admin's authenticator code, for step-up before a sensitive action.
+   * Wrong codes count against the same allowance as wrong codes at sign-in, so a stolen session
+   * cannot be used to guess the code either.
+   */
+  public async checkAuthenticatorCode(adminId: string, totpToken: string): Promise<AdminCodeCheck> {
+    const admin = await this._adminRepository.findById(adminId);
+    if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) {
+      return { status: 'unavailable' };
+    }
+
+    const attempt = this._codeAttempts.begin(adminId);
+    if (!attempt.allowed) {
+      return { status: 'tooManyAttempts', retryAfterSeconds: attempt.retryAfterSeconds };
+    }
+    if (!this._mfaService.verifyToken(admin.mfaSecret, totpToken)) {
+      return { status: 'invalid' };
+    }
+    this._codeAttempts.succeed(adminId);
+    return { status: 'ok' };
   }
 
   /**

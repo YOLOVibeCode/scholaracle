@@ -1,8 +1,13 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
 import jwt from 'jsonwebtoken';
-import { AdminAuthService, MFAService } from '@scholaracle/auth';
-import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
+import { AdminAuthService, MFAService, tooManyWrongCodesMessage } from '@scholaracle/auth';
+import {
+  AuthenticationError,
+  NotFoundError,
+  RateLimitError,
+  ValidationError,
+} from '@scholaracle/contracts';
 import { adminAuthMiddleware } from '../../../middleware/adminAuth';
 import type { IAdminAuthenticatedRequest } from '../../../middleware/adminAuth';
 import { asyncHandler } from '../../../middleware/asyncHandler';
@@ -108,6 +113,10 @@ async function handleMFAVerify(
   const result = await adminAuthService.verifyMFAToken(mfaToken, token);
 
   if (!result.success) {
+    if (result.tooManyAttempts) {
+      res.setHeader('Retry-After', String(result.retryAfterSeconds ?? 0));
+      throw new RateLimitError(result.error);
+    }
     throw new AuthenticationError(result.error);
   }
 
@@ -270,8 +279,6 @@ async function handleStepUpStart(
 async function handleStepUpVerify(
   req: Request,
   res: Response,
-  adminRepo: AdminUserRepository,
-  mfaService: MFAService,
   adminAuthService: AdminAuthService,
   stepUpStore: IAdminStepUpChallengeStore
 ): Promise<void> {
@@ -290,13 +297,17 @@ async function handleStepUpVerify(
     throw new AuthenticationError('Invalid step-up challenge');
   }
 
-  const admin = await adminRepo.findById(authReq.adminId);
-  if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) {
+  // The service counts wrong codes, together with those at sign-in, and stops checking once the
+  // allowance is used: a session alone must not be enough to guess the code.
+  const check = await adminAuthService.checkAuthenticatorCode(authReq.adminId, token);
+  if (check.status === 'unavailable') {
     throw new AuthenticationError('MFA is not enabled');
   }
-
-  const ok = mfaService.verifyToken(admin.mfaSecret, token);
-  if (!ok) {
+  if (check.status === 'tooManyAttempts') {
+    res.setHeader('Retry-After', String(check.retryAfterSeconds));
+    throw new RateLimitError(tooManyWrongCodesMessage(check.retryAfterSeconds));
+  }
+  if (check.status === 'invalid') {
     throw new AuthenticationError('Invalid MFA code');
   }
 
@@ -489,7 +500,7 @@ export function adminAuthRouter(config: IAdminAuthRouterConfig): Router {
         res.status(503).json({ success: false, error: 'Step-up challenges not configured' });
         return;
       }
-      await handleStepUpVerify(req, res, adminRepo, mfaService, adminAuthService, stepUpStore);
+      await handleStepUpVerify(req, res, adminAuthService, stepUpStore);
     })
   );
 

@@ -1,4 +1,4 @@
-export { AuthService } from './AuthService/AuthService';
+export { AuthService, INVALID_CREDENTIALS_ERROR } from './AuthService/AuthService';
 export type {
   IAuthService,
   IAuthResult,
@@ -10,8 +10,9 @@ export type {
 } from './AuthService/AuthService';
 export type { IPasswordResetEmailSender } from './PasswordResetEmailSender';
 
-export { AdminAuthService } from './AdminAuthService/AdminAuthService';
+export { AdminAuthService, tooManyWrongCodesMessage } from './AdminAuthService/AdminAuthService';
 export type {
+  AdminCodeCheck,
   IAdminAuthService,
   IAdminAuthResult,
   IAdminTokenPayload,
@@ -19,6 +20,13 @@ export type {
 
 export { MFAService } from './MFAService/MFAService';
 export type { IMFAService, IMFASetupResult } from './MFAService/MFAService';
+
+export { AttemptLimiter } from './AttemptLimiter/AttemptLimiter';
+export type {
+  IAttemptDecision,
+  IAttemptLimiter,
+  IAttemptLimiterOptions,
+} from './AttemptLimiter/AttemptLimiter';
 
 export { ConnectorTokenService } from './ConnectorTokenService/ConnectorTokenService';
 export type { IConnectorTokenPayload } from './ConnectorTokenService/ConnectorTokenService';
