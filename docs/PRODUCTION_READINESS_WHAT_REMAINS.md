@@ -26,7 +26,7 @@ Production is live at https://scholarmancy.com and https://api.scholarmancy.com.
 | **Push notifications** | `packages/agents` (`ExpoPushDelivery`), `packages/mobile/src/notifications/pushSetup.ts`, `packages/web/app/dashboard/settings/page.tsx` | Decide | The phone app registers an Expo push token (`POST /api/account/push-token`) and the workers can deliver through Expo. The web settings switch for push is still disabled and says "coming soon". Web push (`PushDelivery`, VAPID keys) does nothing. Decide whether phone push is on, then enable the switch or say so in the app. |
 | **Add student wizard forgets its place** | `packages/web/components/dashboard/AddStudentWizard.tsx` | Medium | A refresh loses what was typed (DEF-008). |
 | **Store webhook has no timestamp window** | `packages/api/src/routes/webhooks/noctusoft/` | Medium | Event ids are deduped; an old signed event is not refused on age (DEF-007). |
-| **Browser extension** | `packages/browser-extension` | Before publishing | Not in the Chrome Web Store. Its popup and options page still say "Scholaracle Sync" and suggest an API host on scholaracle.com. |
+| **Browser extension** | `packages/browser-extension` | Before publishing | Not in the Chrome Web Store. Its pages say Scholarmancy since #207. The tracked `scholarmancy-sync-v1.0.0.zip` is a build from August 2026 and still has the old text and the old API address hint in it: build a fresh zip before publishing. |
 | **Flaky integration test** | `packages/agents/src/integration/NotificationFlow.integration.test.ts` | Low | Noted in March: the worker completes but the mock transport is not always called. Not re-checked. |
 
 ### Scholaracle Scrapers
