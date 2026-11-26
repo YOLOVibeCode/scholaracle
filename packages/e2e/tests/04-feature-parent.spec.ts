@@ -1,7 +1,33 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/auth';
 import { RegisterPage } from '../pages/register.page';
 import { generateUniqueEmail } from '../fixtures/test-data';
 import { assertToastMessage, assertOnDashboard } from '../helpers/assertions';
+
+/**
+ * Registers a new parent, adds one student for them and leaves the page on the students list.
+ *
+ * The tests that create, rename or delete a student work on this parent's student. The seeded
+ * parent's students are shared with the specs that run later (INT-005 expects both of them).
+ */
+async function registerParentWithStudent(page: Page, emailPrefix: string): Promise<string> {
+  const registerPage = new RegisterPage(page);
+  await registerPage.goto();
+  await registerPage.register(generateUniqueEmail(emailPrefix), 'Feature Parent', 'SecurePass123!');
+  await assertOnDashboard(page);
+  await page.goto('/dashboard/students/new');
+
+  const studentName = `Test Student ${Date.now()}`;
+  await page.fill('[data-testid="input-student-name"]', studentName);
+  await page.fill('[data-testid="input-student-grade"]', '10');
+  await page.fill('[data-testid="input-student-school"]', 'Test High School');
+
+  await page.click('[data-testid="button-save-student"]');
+
+  await page.waitForURL(/\/dashboard\/students$/, { timeout: 10000 });
+  await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
+  return studentName;
+}
 
 /**
  * Layer 4: Feature CRUD Tests (Parent)
@@ -13,27 +39,10 @@ import { assertToastMessage, assertOnDashboard } from '../helpers/assertions';
  */
 test.describe('@feature Layer 4: Parent Features', () => {
   test('FEAT-P-001: Create student', async ({ page }) => {
-    const registerPage = new RegisterPage(page);
-    await registerPage.goto();
-    await registerPage.register(generateUniqueEmail('featp001'), 'Feature Parent', 'SecurePass123!');
-    await assertOnDashboard(page);
-    await page.goto('/dashboard/students/new');
+    const studentName = await registerParentWithStudent(page, 'featp001');
 
-    const studentName = `Test Student ${Date.now()}`;
-    await page.fill('[data-testid="input-student-name"]', studentName);
-    await page.fill('[data-testid="input-student-grade"]', '10');
-    await page.fill('[data-testid="input-student-school"]', 'Test High School');
-
-    await page.click('[data-testid="button-save-student"]');
-
-    // Should redirect to students list or show success
-    await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
-
-    // Verify student appears in list
-    await expect(
-      page.locator('[data-testid="student-list"], [data-testid="empty-state"]').first()
-    ).toBeVisible();
-    await expect(page.locator(`text=${studentName}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="student-list"]')).toBeVisible();
+    await expect(page.locator(`text=${studentName}`)).toBeVisible();
   });
 
   test('FEAT-P-002: Read student details', async ({ page, loginAsRole }) => {
@@ -50,47 +59,36 @@ test.describe('@feature Layer 4: Parent Features', () => {
     }
   });
 
-  test('FEAT-P-003: Update student', async ({ page, loginAsRole }) => {
-    await loginAsRole('parent');
-    await page.goto('/dashboard/students');
+  test('FEAT-P-003: Update student', async ({ page }) => {
+    const studentName = await registerParentWithStudent(page, 'featp003');
+    const updatedName = `Updated ${studentName}`;
 
-    const editButton = page.locator('[data-testid="button-edit-student"]').first();
-    const count = await editButton.count();
+    // The Edit control is a link, and the link's own test id is the one that reaches the page.
+    await page.locator('[data-testid="student-link"]').click();
+    await page.waitForURL(/\/dashboard\/students\/[^/]+$/, { timeout: 10000 });
 
-    if (count > 0) {
-      await editButton.click();
-      await page.waitForURL(/\/dashboard\/students\/[^/]+/, { timeout: 3000 });
+    // The form appears once the student has loaded, and holds the name as it is now.
+    const nameInput = page.locator('[data-testid="input-student-name"]');
+    await expect(nameInput).toHaveValue(studentName);
+    await nameInput.fill(updatedName);
 
-      // Update name
-      const nameInput = page.locator('[data-testid="input-student-name"]');
-      await nameInput.clear();
-      await nameInput.fill('Updated Student Name');
+    await page.click('[data-testid="button-save-student"]');
 
-      await page.click('[data-testid="button-save-student"]');
-
-      // Verify redirect and update
-      await page.waitForURL(/\/dashboard\/students/, { timeout: 5000 });
-      await expect(page.locator('text=Updated Student Name')).toBeVisible({ timeout: 3000 });
-    }
+    await page.waitForURL(/\/dashboard\/students$/, { timeout: 10000 });
+    await expect(page.getByText(updatedName, { exact: true })).toBeVisible();
+    await expect(page.getByText(studentName, { exact: true })).toHaveCount(0);
   });
 
-  test('FEAT-P-004: Delete student', async ({ page, loginAsRole }) => {
-    await loginAsRole('parent');
-    await page.goto('/dashboard/students');
+  test('FEAT-P-004: Delete student', async ({ page }) => {
+    const studentName = await registerParentWithStudent(page, 'featp004');
 
-    const deleteButton = page.locator('[data-testid="button-delete-student"]').first();
-    const count = await deleteButton.count();
+    await page.locator('[data-testid="button-delete-student"]').click();
+    await page.locator('[data-testid="button-confirm-dialog"]').click();
 
-    if (count > 0) {
-      await deleteButton.click();
-
-      // Confirm dialog appears
-      const confirmButton = page.locator('[data-testid="button-confirm-dialog"]');
-      await confirmButton.click();
-
-      await page.waitForTimeout(1000);
-      await expect(page.locator('body')).toBeVisible();
-    }
+    // The list reloads after the delete. The empty state is what it shows once it has: checking
+    // only that the name is gone would also pass while the list is still loading.
+    await expect(page.locator('[data-testid="empty-state"]')).toBeVisible();
+    await expect(page.locator(`text=${studentName}`)).toHaveCount(0);
   });
 
   test('FEAT-P-005: Read alerts', async ({ page, loginAsRole }) => {
