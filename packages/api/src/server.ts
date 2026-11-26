@@ -412,6 +412,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       sendGrid
     );
 
+    // The access token's lifetime is also how long a device stays signed in after its session
+    // is signed out from another device. The sessions page says so ("within 15 minutes"):
+    // keep the two in step if this default changes.
     const authService = new AuthService(
       database,
       jwtSecret,

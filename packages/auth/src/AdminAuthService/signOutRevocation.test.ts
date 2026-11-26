@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import speakeasy from 'speakeasy';
 import { MongoClient, type Db } from 'mongodb';
 import { AdminUserRepository, type IAdminRevokedTokenStore } from '@scholaracle/database';
@@ -17,6 +19,15 @@ const PASSWORD = 'AdminPass123!';
 const EMAIL = 'sign-out@admin-revocation.test';
 const EMAIL_PATTERN = /@admin-revocation\.test$/;
 
+const claims = (token: string): { jti: string; exp: number } =>
+  JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString()) as {
+    jti: string;
+    exp: number;
+  };
+const tokenId = (token: string): string => claims(token).jti;
+/** When the token expires, in milliseconds. */
+const expiry = (token: string): number => claims(token).exp * 1000;
+
 describe('AdminAuthService: a signed-out token is refused everywhere', () => {
   let client: MongoClient;
   let database: Db;
@@ -35,8 +46,7 @@ describe('AdminAuthService: a signed-out token is refused everywhere', () => {
     );
     expect(codeStep).toMatchObject({ success: true });
     const token = codeStep.token ?? '';
-    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString());
-    issuedTokenIds.push(payload.jti as string);
+    issuedTokenIds.push(tokenId(token));
     return token;
   }
 
@@ -96,6 +106,103 @@ describe('AdminAuthService: a signed-out token is refused everywhere', () => {
 
     expect(await service.verifyToken(signedOut)).toBeNull();
     expect(await service.verifyToken(kept)).toMatchObject({ email: EMAIL });
+  });
+
+  describe('a token that was refreshed', () => {
+    it('keeps its id, so it stays the same session', async () => {
+      const service = plainService();
+      const token = await signIn(service);
+
+      const refreshed = await service.refreshToken(token);
+
+      expect(refreshed.success).toBe(true);
+      expect(tokenId(refreshed.token ?? '')).toBe(tokenId(token));
+    });
+
+    it('is ended by signing out with the token it replaced', async () => {
+      const service = plainService();
+      const token = await signIn(service);
+      const refreshed = (await service.refreshToken(token)).token ?? '';
+      expect(await service.verifyToken(refreshed)).toMatchObject({ email: EMAIL });
+
+      await service.logout(token);
+
+      expect(await service.verifyToken(refreshed)).toBeNull();
+    });
+
+    it('is covered by the sign-out record for as long as it can live', async () => {
+      const service = plainService();
+      const admin = await service.verifyToken(await signIn(service));
+      // The same admin four hours into a session: the first token has four hours left, and
+      // the one it is refreshed into has eight.
+      const fourHoursAgo = Math.floor(Date.now() / 1000) - 4 * 60 * 60;
+      const firstToken = jwt.sign(
+        { adminId: admin?.adminId, email: EMAIL, role: 'admin', type: 'admin', iat: fourHoursAgo },
+        'test-secret',
+        { expiresIn: '8h', jwtid: `four-hours-in-${crypto.randomUUID()}` }
+      );
+      issuedTokenIds.push(tokenId(firstToken));
+      const refreshed = (await service.refreshToken(firstToken)).token ?? '';
+      expect(expiry(refreshed)).toBeGreaterThan(expiry(firstToken));
+
+      await service.logout(firstToken);
+
+      const record = await database
+        .collection('admin_revoked_tokens')
+        .findOne({ jti: tokenId(firstToken) });
+      expect((record?.['expiresAt'] as Date).getTime()).toBeGreaterThanOrEqual(expiry(refreshed));
+      expect(await service.verifyToken(refreshed)).toBeNull();
+    });
+
+    it('is not outlived by a token from the days of longer lifetimes', async () => {
+      // Tokens used to last 30 days, say, and now last 8 hours. Signing out with an old one
+      // must cover the old one's own expiry, not only today's shorter lifetime.
+      const service = plainService();
+      const admin = await service.verifyToken(await signIn(service));
+      const oldToken = jwt.sign(
+        { adminId: admin?.adminId, email: EMAIL, role: 'admin', type: 'admin' },
+        'test-secret',
+        { expiresIn: '30d', jwtid: `long-lived-${crypto.randomUUID()}` }
+      );
+      issuedTokenIds.push(tokenId(oldToken));
+
+      await service.logout(oldToken);
+
+      const record = await database
+        .collection('admin_revoked_tokens')
+        .findOne({ jti: tokenId(oldToken) });
+      expect((record?.['expiresAt'] as Date).getTime()).toBeGreaterThanOrEqual(expiry(oldToken));
+    });
+  });
+
+  describe('ending a token by its id, without holding the token', () => {
+    it('ends it in every service on the same database', async () => {
+      const service = plainService();
+      const token = await signIn(service);
+
+      await plainService().revokeTokenId(tokenId(token));
+
+      expect(await service.verifyToken(token)).toBeNull();
+    });
+
+    it('can be done twice', async () => {
+      const service = plainService();
+      const token = await signIn(service);
+
+      await service.revokeTokenId(tokenId(token));
+      await expect(service.revokeTokenId(tokenId(token))).resolves.toBeUndefined();
+
+      expect(await service.verifyToken(token)).toBeNull();
+    });
+
+    it('does nothing without an id', async () => {
+      const service = plainService();
+      const token = await signIn(service);
+
+      await service.revokeTokenId('');
+
+      expect(await service.verifyToken(token)).toMatchObject({ email: EMAIL });
+    });
   });
 
   it('still uses a store it is handed, in place of the database', async () => {

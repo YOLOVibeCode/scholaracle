@@ -280,6 +280,54 @@ describe('Admin API as the server wires it', () => {
       expect(repair.status).toBe(401);
     });
 
+    it("signing another session out ends that session's token", async () => {
+      const server = await serverWithAllowlist(undefined);
+      const here = await signInThroughTheApi(server);
+      const elsewhere = await signInThroughTheApi(server);
+      const as = (signedIn: string, path: string): Promise<request.Response> =>
+        request(server).get(path).set('Authorization', `Bearer ${signedIn}`);
+
+      // The other session's id, as its own sessions list reports it.
+      const listed = (await as(elsewhere, '/api/admin/sessions')).body.sessions as Array<{
+        id: string;
+        isCurrent: boolean;
+      }>;
+      const target = listed.find((s) => s.isCurrent);
+      expect(target).toBeDefined();
+
+      const signOut = await request(server)
+        .delete(`/api/admin/sessions/${target!.id}`)
+        .set('Authorization', `Bearer ${here}`);
+      expect(signOut.status).toBe(200);
+
+      for (const path of EVERY_AREA) {
+        const res = await as(elsewhere, path);
+
+        expect({ path, status: res.status }).toEqual({ path, status: 401 });
+      }
+      expect((await as(here, '/api/admin/customers')).status).toBe(200);
+    });
+
+    it('a refreshed token is the same session and ends with it', async () => {
+      const server = await serverWithAllowlist(undefined);
+      const signedIn = await signInThroughTheApi(server);
+
+      const refresh = await request(server)
+        .post('/api/admin/auth/refresh')
+        .set('Authorization', `Bearer ${signedIn}`);
+      expect(refresh.status).toBe(200);
+      const refreshed = refresh.body.token as string;
+      const customers = (): Promise<request.Response> =>
+        request(server).get('/api/admin/customers').set('Authorization', `Bearer ${refreshed}`);
+      expect((await customers()).status).toBe(200);
+
+      await request(server)
+        .post('/api/admin/auth/logout')
+        .set('Authorization', `Bearer ${signedIn}`);
+
+      expect((await customers()).status).toBe(401);
+    });
+
     it('leaves another sign-in of the same admin working', async () => {
       const server = await serverWithAllowlist(undefined);
       const first = await signInThroughTheApi(server);

@@ -140,7 +140,8 @@ Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything nam
 |----------|---------|--------------|
 | `SENTRY_DSN` | API, workers, web | Error reporting. The web also reads `NEXT_PUBLIC_SENTRY_DSN` for errors in the browser. Set on no service on 26 Nov 2026, so errors reach the Railway logs and nothing else. |
 | `ADMIN_IP_ALLOWLIST` | API | Comma-separated addresses that may use the admin API: everything under `/api/admin`, admin sign-in included, and `POST /api/scrapers/repair`. Any other address gets 403. Unset: any address. Addresses are compared exactly, with no ranges, and the API's domain has only an IPv4 address, so list fixed IPv4 addresses such as an office or a VPN exit. A list without your own address locks every admin out until the variable is corrected or removed. |
-| `ADMIN_JWT_EXPIRES_IN` | API | How long an admin token lasts. Default `8h`. Signing out ends the token it is done with at once, in every admin area. |
+| `ADMIN_JWT_EXPIRES_IN` | API | How long an admin token lasts. Default `8h`. Signing out ends the token it is done with at once, in every admin area, and so does ending that session from another admin session. |
+| `JWT_ACCESS_EXPIRES_IN` | API | How long a parent's access token lasts. Default `15m`. A device whose session is signed out from another device keeps its access until this runs out, then cannot get a new token. The sessions page tells parents "within 15 minutes": change that sentence with this value. |
 | `RATE_LIMIT_ENABLED=true` | API | Limits admin sign-in to ten requests a minute per address. The lockout after five wrong admin passwords is always on. |
 | `SIGN_IN_ATTEMPT_LIMIT=off` | API | Turns off the limit on failed sign-ins (ten per account and address, a hundred per address, inside fifteen minutes). It exists for the day the limit refuses people it should not. Leave it unset. |
 | `RELAY_URL` | API | The store's address. Default `https://store.noctusoft.com`. |

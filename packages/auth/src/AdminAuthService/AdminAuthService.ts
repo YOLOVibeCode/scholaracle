@@ -90,6 +90,7 @@ export interface IAdminAuthService {
   ): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null>;
   refreshToken(token: string): Promise<IAdminAuthResult>;
   logout(token: string): Promise<boolean>;
+  revokeTokenId(tokenId: string, noEarlierThan?: Date): Promise<void>;
   requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }>;
   resetPasswordWithToken(
     token: string,
@@ -652,7 +653,12 @@ export class AdminAuthService implements IAdminAuthService {
       };
     }
 
-    const newToken = this._generateToken(decoded.adminId, decoded.email, decoded.role);
+    // The new token keeps the id of the one it replaces. Together they are one session, the
+    // one the sessions list shows under that id, and signing that session out ends them both.
+    // With a new id each time, a refreshed token belonged to no session and nothing could
+    // end it before it expired.
+    const tokenId = (jwt.decode(token) as { jti?: string } | null)?.jti;
+    const newToken = this._generateToken(decoded.adminId, decoded.email, decoded.role, tokenId);
 
     return {
       success: true,
@@ -671,14 +677,29 @@ export class AdminAuthService implements IAdminAuthService {
       const decoded = jwt.decode(token) as { jti?: string; exp?: number } | null;
       if (!decoded || !decoded.jti) return true;
 
-      const expiresAt = decoded.exp
-        ? new Date(decoded.exp * 1000)
-        : new Date(Date.now() + 8 * 60 * 60 * 1000);
-      await this._revokedTokenStore.revoke(decoded.jti, expiresAt);
+      await this.revokeTokenId(decoded.jti, decoded.exp ? new Date(decoded.exp * 1000) : undefined);
       return true;
     } catch {
       return true;
     }
+  }
+
+  /**
+   * End a token by its id, without holding the token. This is how an admin signs out another
+   * of their sessions: the sessions list knows a session by its token id.
+   *
+   * The record lasts as long as a token issued this instant would, because a refreshed token
+   * keeps its id and may have been issued just now. `noEarlierThan` is the expiry of a token
+   * the caller does hold, for the case where token lifetimes were once longer than they are
+   * today.
+   */
+  public async revokeTokenId(tokenId: string, noEarlierThan?: Date): Promise<void> {
+    if (!tokenId) return;
+    const issuedNow = jwt.decode(
+      jwt.sign({}, this._jwtSecret, { expiresIn: this._jwtExpiresIn } as jwt.SignOptions)
+    ) as { exp: number };
+    const until = Math.max(issuedNow.exp * 1000, noEarlierThan?.getTime() ?? 0);
+    await this._revokedTokenStore.revoke(tokenId, new Date(until));
   }
 
   /**
@@ -749,8 +770,12 @@ export class AdminAuthService implements IAdminAuthService {
    * @param role - Admin role
    * @returns JWT token
    */
-  private _generateToken(adminId: string, email: string, role: AdminRole): string {
-    const jti = crypto.randomUUID();
+  private _generateToken(
+    adminId: string,
+    email: string,
+    role: AdminRole,
+    jti: string = crypto.randomUUID()
+  ): string {
     return jwt.sign({ adminId, email, role, type: 'admin' }, this._jwtSecret, {
       expiresIn: this._jwtExpiresIn,
       jwtid: jti,
