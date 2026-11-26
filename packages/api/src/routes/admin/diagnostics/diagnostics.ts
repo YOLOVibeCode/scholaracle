@@ -11,7 +11,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface IDiagnosticsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   readonly sendGridApiKey?: string;
   readonly sendGridFromEmail?: string;
   readonly sendGridFromName?: string;

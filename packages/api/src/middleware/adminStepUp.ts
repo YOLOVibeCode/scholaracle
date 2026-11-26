@@ -13,7 +13,7 @@ export interface IAdminStepUpPayload {
 
 export interface IAdminStepUpOptions {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   /**
    * Max age for a step-up token, in ms. Defaults to 5 minutes.
    */

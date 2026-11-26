@@ -12,7 +12,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface ISubscriptionsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 async function handleGetSubscriptions(

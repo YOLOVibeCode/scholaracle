@@ -6,6 +6,7 @@ import { ERROR_CODES, ValidationError } from '@scholaracle/contracts';
 import { runScraperRepairProposal } from '@scholaracle/agents';
 import { selectorTableJsonForRecipe } from '../../services/scraperRepair/selectorTableForRecipe';
 import { adminAuthMiddleware } from '../../middleware/adminAuth';
+import { adminIpRestrictFromEnv } from '../../middleware/adminIpRestrict';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { MemoryRateLimiter, rateLimitMiddleware } from '../../middleware/rateLimit';
 import { checkScraperRepairPlanQuota } from '../../services/scraperRepair/scraperRepairQuota';
@@ -32,7 +33,7 @@ const bodySchema = z.object({
 
 export interface IScrapersRepairRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   readonly assetStore?: IAssetStore;
   readonly defaultBillingUserId?: string;
 }
@@ -50,6 +51,9 @@ export function createScrapersRepairRouter(config: IScrapersRepairRouterConfig):
 
   router.post(
     '/repair',
+    // This route takes an admin token but sits outside /api/admin, so the admin address
+    // allowlist the server puts in front of /api/admin is repeated here.
+    adminIpRestrictFromEnv(),
     express.json({ limit: '200kb' }),
     adminAuth,
     burst,

@@ -7,7 +7,7 @@ import { asyncHandler } from '../../../middleware/asyncHandler';
 
 export interface IAdminAiRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 function startOfUtcMonth(now: Date): Date {

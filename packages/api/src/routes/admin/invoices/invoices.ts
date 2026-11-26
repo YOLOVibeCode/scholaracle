@@ -9,7 +9,7 @@ import sgMail from '@sendgrid/mail';
 
 export interface IInvoicesRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   readonly sendGridApiKey?: string;
   readonly fromEmail?: string;
   readonly fromName?: string;
