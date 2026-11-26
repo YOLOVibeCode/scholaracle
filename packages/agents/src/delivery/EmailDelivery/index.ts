@@ -2,6 +2,7 @@ export { EmailDelivery } from './EmailDelivery';
 export type { IEmailDeliveryConfig } from './EmailDelivery';
 export type { IEmailTransport, IEmailEnvelope, IEmailTransportResult } from './IEmailTransport';
 export { SendGridTransport } from './SendGridTransport';
+export { acceptRelayKeys } from './acceptRelayKeys';
 export { SmtpTransport } from './SmtpTransport';
 export type { ISmtpTransportConfig } from './SmtpTransport';
 export { buildDigestEmail, gradeBarColorForPercent, renderGradeBar } from './digestEmailTemplate';

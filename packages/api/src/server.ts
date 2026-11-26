@@ -110,6 +110,7 @@ import {
   SendGridTransport,
   SmtpTransport,
   MongoQueue,
+  acceptRelayKeys,
 } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
@@ -156,6 +157,9 @@ export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined)
   };
   const client = m.client;
   if (!client) return;
+  // The key behind the relay is the relay's. Without this the library prints
+  // `API key does not start with "SG.".` on every setApiKey, once per sender at boot.
+  acceptRelayKeys(mail);
   const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
   const original = m.setApiKey?.bind(m);
   if (original) {
