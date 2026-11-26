@@ -55,6 +55,7 @@ export function clearParentSessionAndRedirect(
   document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
   document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   rememberSessionRedirectReason(reason);
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full page load on purpose: it drops every in-memory copy of the session
   window.location.href = `/login?reason=${reason}`;
 }
 
