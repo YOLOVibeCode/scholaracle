@@ -16,6 +16,47 @@ export interface IInvoicesRouterConfig {
   readonly baseUrl?: string;
 }
 
+/** What the invoice email needs from a payment. */
+export interface IInvoiceEmailPayment {
+  readonly amount: number;
+  readonly createdAt: Date;
+  readonly description?: string;
+}
+
+export interface IInvoiceEmail {
+  readonly to: string;
+  readonly from: { readonly email: string; readonly name: string };
+  readonly subject: string;
+  readonly html: string;
+}
+
+/**
+ * The invoice email. Its sender is the one the server sends every other email from
+ * (SENDGRID_FROM_EMAIL and SENDGRID_FROM_NAME), unless the router config names another.
+ */
+export function buildInvoiceEmail(
+  payment: IInvoiceEmailPayment,
+  to: string,
+  config: Pick<IInvoicesRouterConfig, 'fromEmail' | 'fromName' | 'baseUrl'>,
+  env: NodeJS.ProcessEnv = process.env
+): IInvoiceEmail {
+  const fromEmail =
+    config.fromEmail ??
+    env['SENDGRID_FROM_EMAIL'] ??
+    env['EMAIL_FROM'] ??
+    'notifications@scholarmancy.com';
+  const fromName = config.fromName ?? env['SENDGRID_FROM_NAME'] ?? 'Scholarmancy';
+  const baseUrl = config.baseUrl ?? env['BASE_URL'] ?? 'http://localhost:2800';
+  const amount = `$${(payment.amount / 100).toFixed(2)}`;
+
+  return {
+    to,
+    from: { email: fromEmail, name: fromName },
+    subject: `Scholarmancy Invoice — ${amount}`,
+    html: `<p>Hi,</p><p>Here is your invoice for <strong>${amount}</strong> on ${payment.createdAt.toLocaleDateString()}.</p><p>${payment.description ?? ''}</p><p><a href="${baseUrl}/dashboard/billing">View in Dashboard</a></p><p>— Scholarmancy</p>`,
+  };
+}
+
 /**
  * POST /api/admin/invoices/:id/send
  * Send (resend) invoice to customer by payment/invoice id.
@@ -53,15 +94,12 @@ async function handleSendInvoice(
   }
 
   sgMail.setApiKey(apiKey);
-  const fromEmail = config.fromEmail ?? process.env['EMAIL_FROM'] ?? 'noreply@scholaracle.com';
-  const fromName = config.fromName ?? 'Scholaracle';
-  const baseUrl = config.baseUrl ?? process.env['BASE_URL'] ?? 'http://localhost:2800';
-
+  const email = buildInvoiceEmail(payment, user.email, config);
   await sgMail.send({
-    to: user.email,
-    from: { email: fromEmail, name: fromName },
-    subject: `Scholaracle Invoice — $${(payment.amount / 100).toFixed(2)}`,
-    html: `<p>Hi,</p><p>Here is your invoice for <strong>$${(payment.amount / 100).toFixed(2)}</strong> on ${payment.createdAt.toLocaleDateString()}.</p><p>${payment.description ?? ''}</p><p><a href="${baseUrl}/dashboard/billing">View in Dashboard</a></p><p>— Scholaracle</p>`,
+    to: email.to,
+    from: { email: email.from.email, name: email.from.name },
+    subject: email.subject,
+    html: email.html,
   });
 
   res.status(200).json({ success: true, message: 'Invoice sent' });

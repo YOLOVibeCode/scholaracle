@@ -356,7 +356,7 @@ export async function runClientScrape(host: IClientScrapeHost): Promise<ISlcInge
   };
 
   // 6. Upload
-  await emit('uploading', 'Uploading to Scholaracle...');
+  await emit('uploading', 'Uploading to Scholarmancy...');
 
   try {
     await uploader.upload(envelope);

@@ -167,7 +167,10 @@ export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined)
   apply();
 }
 
-function getSendGridConfig(config: IServerConfig): {
+/** The mail key and the sender every email from the API goes out under. Exported for tests. */
+export function getSendGridConfig(
+  config: Pick<IServerConfig, 'sendGridApiKey' | 'sendGridFromEmail' | 'sendGridFromName'>
+): {
   readonly apiKey: string;
   readonly fromEmail: string;
   readonly fromName: string;
@@ -178,7 +181,7 @@ function getSendGridConfig(config: IServerConfig): {
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
       'notifications@scholarmancy.com',
-    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
+    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholarmancy',
   };
 }
 
