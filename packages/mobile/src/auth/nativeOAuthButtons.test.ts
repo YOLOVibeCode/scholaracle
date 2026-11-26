@@ -12,25 +12,18 @@ describe('nativeOAuthButtonFlags', () => {
     } else delete process.env['EXPO_PUBLIC_MICROSOFT_CLIENT_ID'];
   });
 
-  it('shows Apple on iOS even when Google/Microsoft env vars are unset', () => {
-    delete process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID'];
-    delete process.env['EXPO_PUBLIC_MICROSOFT_CLIENT_ID'];
-    expect(nativeOAuthButtonFlags('ios')).toEqual({
-      apple: true,
-      google: false,
-      microsoft: false,
-      anyProvider: true,
-    });
+  it('offers Sign in with Apple on iOS', () => {
+    expect(nativeOAuthButtonFlags('ios')).toEqual({ apple: true });
   });
 
-  it('hides Apple on Android but can still show other providers', () => {
+  it('offers no provider button on Android', () => {
+    expect(nativeOAuthButtonFlags('android')).toEqual({ apple: false });
+  });
+
+  it('offers nothing but Apple even when Google or Microsoft client ids are set at build time', () => {
     process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID'] = 'g-client';
-    delete process.env['EXPO_PUBLIC_MICROSOFT_CLIENT_ID'];
-    expect(nativeOAuthButtonFlags('android')).toEqual({
-      apple: false,
-      google: true,
-      microsoft: false,
-      anyProvider: true,
-    });
+    process.env['EXPO_PUBLIC_MICROSOFT_CLIENT_ID'] = 'm-client';
+    expect(nativeOAuthButtonFlags('ios')).toEqual({ apple: true });
+    expect(nativeOAuthButtonFlags('android')).toEqual({ apple: false });
   });
 });

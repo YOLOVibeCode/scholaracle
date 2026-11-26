@@ -1,15 +1,12 @@
 /**
- * OAuth button visibility for the native login screen (used by NativeOAuthButtons).
+ * Which provider button the native login screen shows (used by NativeOAuthButtons).
+ *
+ * Only Sign in with Apple, on iOS. The API checks Apple's identity token itself, so the
+ * app sends nothing the API has to take on trust. Google and Microsoft need the same kind
+ * of check on the API before they can be offered here: the app is public, so it can never
+ * hold a secret that vouches for who someone is.
  */
 
-export function nativeOAuthButtonFlags(os: string): {
-  readonly apple: boolean;
-  readonly google: boolean;
-  readonly microsoft: boolean;
-  readonly anyProvider: boolean;
-} {
-  const apple = os === 'ios';
-  const google = Boolean(process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID']);
-  const microsoft = Boolean(process.env['EXPO_PUBLIC_MICROSOFT_CLIENT_ID']);
-  return { apple, google, microsoft, anyProvider: apple || google || microsoft };
+export function nativeOAuthButtonFlags(os: string): { readonly apple: boolean } {
+  return { apple: os === 'ios' };
 }
