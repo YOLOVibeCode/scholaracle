@@ -46,6 +46,7 @@ import {
   StudentRepository,
   SourceInviteRepository,
   createIndexes,
+  jobRecordTtlSeconds,
 } from '@scholaracle/database';
 import { SendGridPasswordResetEmailSender } from './services/PasswordResetEmailSender';
 import { SendGridEmailTransferConfirmationSender } from './services/EmailTransferConfirmationSender';
@@ -808,6 +809,12 @@ export async function startServer(config: IServerConfig = {}): Promise<void> {
 
   const database = await initializeDatabase(config);
   await createIndexes(database);
+  // Read back from the database, so the log says what is in force (0 would mean the queue
+  // loses any job the workers do not pick up within a minute of its due time).
+  logger.info(
+    { jobRecordTtlSeconds: await jobRecordTtlSeconds(database) },
+    'queue jobs are kept this long after they are due'
+  );
   await maybeBootstrapFirstAdmin(database);
   const app = createApp(config, database);
   const port = config.port ?? parseInt(process.env['PORT'] ?? '3000', 10);

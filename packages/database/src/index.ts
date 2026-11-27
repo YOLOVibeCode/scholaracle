@@ -77,7 +77,7 @@ export * from './repositories/OAuthAccountRepository';
 export * from './repositories/StudentMagicTokenRepository';
 export * from './repositories/MagicLoginTokenRepository';
 
-export { createIndexes } from './indexes';
+export { JOB_RECORD_TTL_SECONDS, createIndexes, jobRecordTtlSeconds } from './indexes';
 
 export {
   ACCOUNT_DELETION_AUDIT_COLLECTION,

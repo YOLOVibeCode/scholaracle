@@ -1,6 +1,70 @@
 import type { Db } from 'mongodb';
 
 /**
+ * How long the queue (`jobs`) keeps a job after the time it was due, in seconds.
+ *
+ * A day covers every retry (the backoff is counted in seconds), leaves a failed job there to
+ * be looked at, and matches how long the queue keeps a completed one (`MongoQueue`, on
+ * `completedAt`). It is also the limit on how late something can go out after an outage.
+ */
+export const JOB_RECORD_TTL_SECONDS = 24 * 60 * 60;
+
+interface IIndexDescription {
+  readonly name?: string;
+  readonly key: Record<string, unknown>;
+  readonly expireAfterSeconds?: number;
+}
+
+async function dueTimeIndex(database: Db): Promise<IIndexDescription | undefined> {
+  const hasQueue = await database.listCollections({ name: 'jobs' }, { nameOnly: true }).hasNext();
+  if (!hasQueue) {
+    return undefined;
+  }
+  const indexes: IIndexDescription[] = await database.collection('jobs').indexes();
+  return indexes.find((index) => Object.keys(index.key).join(',') === 'scheduledFor');
+}
+
+/**
+ * How many seconds after its due time the database removes a queue job, as the database has
+ * it now. `null` when nothing removes one (no queue yet, or an index with no limit).
+ */
+export async function jobRecordTtlSeconds(database: Db): Promise<number | null> {
+  return (await dueTimeIndex(database))?.expireAfterSeconds ?? null;
+}
+
+/**
+ * Has the database remove a queue job a day after it was due.
+ *
+ * The index used to be created with `expireAfterSeconds: 0`, which is right for an
+ * `expiresAt` field and wrong here: `scheduledFor` is when a job is due, so the database
+ * removed every job within a minute of that moment. A job the workers had not picked up by
+ * then was lost, a job being sent lost its record (so a failure could not be retried), and a
+ * failed job left nothing to look at.
+ *
+ * Databases that exist have the old index, and `createIndex` refuses to change the options
+ * of an index that is already there, so it is changed in place.
+ */
+async function ensureJobRecordTtl(database: Db): Promise<void> {
+  const jobs = database.collection('jobs');
+  const existing = await dueTimeIndex(database);
+  if (existing?.expireAfterSeconds === JOB_RECORD_TTL_SECONDS) {
+    return;
+  }
+  if (existing !== undefined && typeof existing.expireAfterSeconds === 'number') {
+    await database.command({
+      collMod: 'jobs',
+      index: { keyPattern: { scheduledFor: 1 }, expireAfterSeconds: JOB_RECORD_TTL_SECONDS },
+    });
+    return;
+  }
+  if (existing?.name !== undefined) {
+    // An index with no limit at all. Not every server version can add one in place.
+    await jobs.dropIndex(existing.name);
+  }
+  await jobs.createIndex({ scheduledFor: 1 }, { expireAfterSeconds: JOB_RECORD_TTL_SECONDS });
+}
+
+/**
  * Create all database indexes.
  *
  * @param database - MongoDB database instance
@@ -44,7 +108,7 @@ export async function createIndexes(database: Db): Promise<void> {
   // Jobs collection indexes (for MongoQueue)
   const jobsCollection = database.collection('jobs');
   await jobsCollection.createIndex({ status: 1, priority: -1, scheduledFor: 1 });
-  await jobsCollection.createIndex({ scheduledFor: 1 }, { expireAfterSeconds: 0 });
+  await ensureJobRecordTtl(database);
   await jobsCollection.createIndex({ createdAt: 1 });
 
   // Admin users collection indexes
