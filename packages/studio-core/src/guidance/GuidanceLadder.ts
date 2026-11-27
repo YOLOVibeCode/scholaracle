@@ -64,8 +64,9 @@ function dueWeekday(dueAt: Date, timezone: string): string {
   return dueAt.toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone });
 }
 
-function studentDeepLink(assignmentExternalId: string): string {
-  return `/studio/assignments/${assignmentExternalId}`;
+/** The student's worksheet page. Portal ids can hold spaces and slashes, so the id is encoded. */
+export function studentAssignmentPath(assignmentExternalId: string): string {
+  return `/studio/assignments/${encodeURIComponent(assignmentExternalId)}`;
 }
 
 function parentDeepLink(studentId: string): string {
@@ -153,15 +154,21 @@ export class GuidanceLadder {
           continue;
         }
       }
-      await this._sink.send({
+      const { deliveries } = await this._sink.send({
         audience,
         studentId: assignment.studentId,
         body: copyFor(step, assignment, audience),
         deepLink:
           audience === 'student'
-            ? studentDeepLink(assignment.assignmentExternalId)
+            ? studentAssignmentPath(assignment.assignmentExternalId)
             : parentDeepLink(assignment.studentId),
+        assignmentExternalId: assignment.assignmentExternalId,
       });
+      if (deliveries === 0) {
+        // Nobody to tell (a student with no login, say). Not a send: it is not recorded,
+        // and it is not one of the student's two a day.
+        continue;
+      }
       if (audience === 'student') {
         await this._log.recordStudentLadderSend(assignment.studentId);
       }

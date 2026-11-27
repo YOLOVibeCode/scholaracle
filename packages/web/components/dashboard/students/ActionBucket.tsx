@@ -10,6 +10,15 @@ export interface ActionBucketProps {
   readonly bucket: IActionBucketType;
   readonly onItemClick?: (item: IActionItem) => void;
   readonly onNudge?: (item: IActionItem) => void;
+  /** The assignment whose nudge is on its way, if any. */
+  readonly nudgingId?: string | null;
+  /** The last nudge that was not sent, and why. */
+  readonly nudgeError?: INudgeError | null;
+}
+
+export interface INudgeError {
+  readonly assignmentExternalId: string;
+  readonly message: string;
 }
 
 type BucketId = IActionBucketType['id'];
@@ -30,7 +39,13 @@ function leftBorderClass(id: BucketId): string {
   }
 }
 
-export function ActionBucket({ bucket, onItemClick, onNudge }: ActionBucketProps) {
+export function ActionBucket({
+  bucket,
+  onItemClick,
+  onNudge,
+  nudgingId = null,
+  nudgeError = null,
+}: ActionBucketProps) {
   const defaultOpen = bucket.id !== 'caught_up';
   const [open, setOpen] = useState(defaultOpen);
   const borderClass = leftBorderClass(bucket.id);
@@ -73,6 +88,12 @@ export function ActionBucket({ bucket, onItemClick, onNudge }: ActionBucketProps
                 item={item}
                 onItemClick={onItemClick}
                 onNudge={onNudge}
+                nudging={nudgingId === item.assignmentExternalId}
+                nudgeError={
+                  nudgeError?.assignmentExternalId === item.assignmentExternalId
+                    ? nudgeError.message
+                    : undefined
+                }
               />
             ))
           )}

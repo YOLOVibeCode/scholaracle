@@ -16,7 +16,12 @@ export interface INudgeRoutesDeps {
   readonly database: Db;
   readonly studentRepository: StudentRepository;
   readonly userRepository: UserRepository;
-  readonly sink: INotificationSink;
+  /**
+   * What sends the nudge. `createApp` passes the sender that queues it for the workers
+   * process. When it is missing the route refuses: it used to record the nudge, answer 200
+   * and send nothing, which is how the board came to say "Nudged" for nudges nobody got.
+   */
+  readonly sink?: INotificationSink;
 }
 
 function getUserId(req: Request): string | null {
@@ -43,22 +48,19 @@ async function requireOwnedStudent(
   return student;
 }
 
-const noopSink: INotificationSink = {
-  async send(): Promise<void> {
-    return;
-  },
-};
-
 /**
  * Parent-only nudge. Mounted on `/api/students` (already requireParent).
  */
 export function registerNudgeRoutes(router: Router, deps: INudgeRoutesDeps): void {
-  const publisher = new NudgePublisher({
-    database: deps.database,
-    studentRepository: deps.studentRepository,
-    userRepository: deps.userRepository,
-    sink: deps.sink,
-  });
+  const publisher =
+    deps.sink === undefined
+      ? null
+      : new NudgePublisher({
+          database: deps.database,
+          studentRepository: deps.studentRepository,
+          userRepository: deps.userRepository,
+          sink: deps.sink,
+        });
 
   router.post(
     '/:id/assignments/:externalId/nudge',
@@ -66,6 +68,10 @@ export function registerNudgeRoutes(router: Router, deps: INudgeRoutesDeps): voi
       const userId = getUserId(req);
       if (!userId) {
         throw new AuthenticationError('Unauthorized');
+      }
+      if (publisher === null) {
+        res.status(503).json({ success: false, error: 'Nudges are not set up on this server' });
+        return;
       }
       const studentId = req.params['id'] ?? '';
       const externalId = req.params['externalId'] ?? '';
@@ -92,5 +98,3 @@ export function registerNudgeRoutes(router: Router, deps: INudgeRoutesDeps): voi
     })
   );
 }
-
-export { noopSink };

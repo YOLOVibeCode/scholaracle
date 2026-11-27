@@ -64,7 +64,7 @@ import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLog
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
 import { registerStudentLoginRoutes } from './studentLogin';
 import type { IMagicLinkSender } from '../../services/provision/MagicLinkSender';
-import { noopSink, registerNudgeRoutes } from './nudge';
+import { registerNudgeRoutes } from './nudge';
 import type { ISharingEmailSender } from '../../services/sharing/SharingInviteEmailSender';
 import {
   SharingService,
@@ -94,7 +94,10 @@ export interface IStudentsRouterConfig {
   readonly sharing?: SharingService;
   /** Sender for sharing invitations and owner notices; used only when `sharing` is absent. */
   readonly sharingEmailSender?: ISharingEmailSender;
-  /** Optional sink for parent nudges (student-only). Defaults to no-op. */
+  /**
+   * What sends a parent's nudge to the student. Without one the nudge route answers 503
+   * rather than recording a nudge that goes nowhere.
+   */
   readonly nudgeSink?: import('@scholaracle/interfaces').INotificationSink;
   /** Optional sender for magic login links (email + SMS). */
   readonly magicLinkSender?: IMagicLinkSender;
@@ -442,7 +445,7 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
     database: config.database,
     studentRepository,
     userRepository,
-    sink: config.nudgeSink ?? noopSink,
+    sink: config.nudgeSink,
   });
 
   /**

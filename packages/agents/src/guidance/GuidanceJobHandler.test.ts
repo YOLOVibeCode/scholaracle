@@ -7,6 +7,8 @@ import type {
   IGuidanceClock,
   IGuidanceSendLog,
   INotificationSink,
+  INotificationSinkMessage,
+  INotificationSinkResult,
   LadderStep,
 } from '@scholaracle/interfaces';
 
@@ -34,13 +36,9 @@ class FakeState implements IAssignmentState {
 
 class FakeSink implements INotificationSink {
   public readonly sent: Array<{ audience: 'student' | 'parent' }> = [];
-  public async send(input: {
-    readonly audience: 'student' | 'parent';
-    readonly studentId: string;
-    readonly body: string;
-    readonly deepLink: string;
-  }): Promise<void> {
+  public async send(input: INotificationSinkMessage): Promise<INotificationSinkResult> {
     this.sent.push({ audience: input.audience });
+    return { deliveries: 1 };
   }
 }
 

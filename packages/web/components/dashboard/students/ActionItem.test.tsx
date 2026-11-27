@@ -40,6 +40,39 @@ describe('ActionItem nudge', () => {
     expect(screen.queryByTestId('action-item-needs-help')).toBeNull();
   });
 
+  it('says why a nudge was not sent, and leaves the button usable', () => {
+    render(
+      <ActionItem
+        item={ITEM}
+        onNudge={jest.fn()}
+        nudgeError="Emma has no student login to send a nudge to."
+      />
+    );
+    const message = screen.getByTestId('action-item-nudge-error');
+    expect(message).toHaveTextContent('Emma has no student login to send a nudge to.');
+    expect(message).toHaveAttribute('role', 'alert');
+    expect(screen.getByTestId('action-item-nudge')).toBeEnabled();
+  });
+
+  it('shows no message when nothing went wrong', () => {
+    render(<ActionItem item={ITEM} onNudge={jest.fn()} />);
+    expect(screen.queryByTestId('action-item-nudge-error')).toBeNull();
+  });
+
+  it('does not open the assignment when the message is clicked', () => {
+    const onItemClick = jest.fn();
+    render(
+      <ActionItem
+        item={ITEM}
+        onItemClick={onItemClick}
+        onNudge={jest.fn()}
+        nudgeError="Not sent."
+      />
+    );
+    fireEvent.click(screen.getByTestId('action-item-nudge-error'));
+    expect(onItemClick).not.toHaveBeenCalled();
+  });
+
   it('formatNudgedAgo uses hours for a 2h window', () => {
     const now = new Date('2026-08-25T18:00:00.000Z');
     expect(formatNudgedAgo('2026-08-25T16:00:00.000Z', now)).toBe('Nudged 2h ago');

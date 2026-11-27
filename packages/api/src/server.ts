@@ -112,6 +112,7 @@ import {
   SmtpTransport,
   MongoQueue,
   acceptRelayKeys,
+  createReminderSink,
 } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
@@ -494,6 +495,15 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         emailTransferConfirmation,
         sharing,
         magicLinkSender,
+        // The parent's Nudge button. Queued here; the workers process sends the push to the
+        // student's phone and the email, as it does for the reminder ladder.
+        ...(notificationQueue && {
+          nudgeSink: createReminderSink({
+            database,
+            queue: notificationQueue,
+            webOrigin: baseUrl,
+          }),
+        }),
       })
     );
     // Sharing across students (invite several at once, pending list, accept/decline, leave, mine).

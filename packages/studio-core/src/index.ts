@@ -43,7 +43,12 @@ export { submitWithRollback, type ISubmitWithRollback } from './optimisticUpdate
 export { deriveTaskNeeds } from './taskNeeds';
 export { dueAtMs, compareByDueAsc, sortByDueAsc, type IHasDueAt } from './dueOrder';
 export { buildWeekDays, calendarDayOffset, localDayOf, isValidTimeZone } from './weekDays';
-export { GuidanceLadder, resolveLadderStep, isQuietHour } from './guidance/GuidanceLadder';
+export {
+  GuidanceLadder,
+  resolveLadderStep,
+  isQuietHour,
+  studentAssignmentPath,
+} from './guidance/GuidanceLadder';
 export type {
   ILadderAssignment,
   IGuidanceLadderDeps,
