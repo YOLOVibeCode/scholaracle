@@ -14,6 +14,7 @@ import { AlertType, SERVER_AI_CONSENT_LABEL, alertTypeLabel } from '@scholaracle
 import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog';
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
+import { smsSwitchAfterOptIn, textAlertsNote } from '@/lib/settings/textAlerts';
 
 /** Every alert type the API knows, in the contracts' order; labels come from contracts too. */
 const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
@@ -139,6 +140,9 @@ export default function SettingsPage() {
       }
     })();
   }, []);
+
+  // What is still missing before alerts can go by text, said under the SMS switch.
+  const smsNote = textAlertsNote({ phone, smsConsent, smsNotifications });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -326,7 +330,11 @@ export default function SettingsPage() {
             </div>
             <SmsOptInCheckbox
               checked={smsConsent}
-              onChange={setSmsConsent}
+              onChange={(ticked) => {
+                setSmsConsent(ticked);
+                // The opt-in asks for texts: the SMS switch below follows it.
+                setSmsNotifications(smsSwitchAfterOptIn(ticked));
+              }}
               disabled={isSaving || !isLoaded}
               id="settings-sms-consent"
             />
@@ -414,8 +422,18 @@ export default function SettingsPage() {
                 onChange={(e) => setSmsNotifications(e.target.checked)}
                 disabled={isSaving || !isLoaded}
                 aria-label="SMS notifications"
+                aria-describedby={smsNote ? 'notify-sms-note' : undefined}
               />
             </div>
+            {smsNote && (
+              <p
+                id="notify-sms-note"
+                data-testid="sms-toggle-note"
+                className="text-sm text-amber-700 dark:text-amber-400"
+              >
+                {smsNote}
+              </p>
+            )}
 
             <div className="border-t pt-4 space-y-4">
               <h4 className="font-medium">Quiet Hours</h4>

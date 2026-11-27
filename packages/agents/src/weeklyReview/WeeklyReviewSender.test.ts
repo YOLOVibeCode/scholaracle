@@ -63,7 +63,15 @@ interface IHouseholdOptions {
   readonly ownerAlertPrefs?: IStudentData['ownerAlertPrefs'];
   readonly sharedWith?: IStudentData['sharedWith'];
   readonly name?: string;
+  /**
+   * What the owner's account says about texts: the opt-in box and the text switch. Left out,
+   * the account has a number and never asked for texts.
+   */
+  readonly ownerAccount?: { readonly optIn: boolean; readonly textSwitch: boolean };
 }
+
+/** An owner's account with texts on: the opt-in ticked and the text switch on. */
+const TEXTS_ON = { optIn: true, textSwitch: true } as const;
 
 interface IHousehold {
   readonly ownerId: ObjectId;
@@ -114,6 +122,14 @@ describe('WeeklyReviewSender', () => {
       email: 'owner@example.com',
       name: 'Ricardo Owner',
       phone: '+15125550100',
+      ...(options.ownerAccount !== undefined
+        ? {
+            smsConsent: options.ownerAccount.optIn,
+            preferences: {
+              notifications: { push: true, email: true, sms: options.ownerAccount.textSwitch },
+            },
+          }
+        : {}),
       role: 'parent',
       ...(options.ownerTimeZone !== undefined ? { timezone: options.ownerTimeZone } : {}),
     });
@@ -440,6 +456,7 @@ describe('WeeklyReviewSender', () => {
     const noDeviceAdult = await seedAdultUser(false);
     const home = await seedHousehold({
       ownerTimeZone: 'America/Chicago',
+      ownerAccount: TEXTS_ON,
       ownerAlertPrefs: {
         receiveAlerts: true,
         alertChannels: ['email', 'sms'],
@@ -521,6 +538,88 @@ describe('WeeklyReviewSender', () => {
     }
     expect(queue.jobs[0]!.payload.agentType).toBe(AgentType.STUDENT);
     expect(queue.jobs).toHaveLength(5);
+  });
+
+  describe("the owner's copy by text follows the owner's own text switch", () => {
+    const adultJobs = (): Array<[NotificationChannel, string]> =>
+      queue.jobs
+        .filter((j) => j.payload.agentType === AgentType.PARENT)
+        .map((j) => [j.channel, j.payload.userId]);
+
+    const BY_EMAIL_ALONE = [[NotificationChannel.EMAIL, 'owner@example.com']];
+    const BY_EMAIL_AND_TEXT = [
+      [NotificationChannel.EMAIL, 'owner@example.com'],
+      [NotificationChannel.SMS, '+15125550100'],
+    ];
+    /** A record without channels: the owner asked for the copy and saved nothing else. */
+    const COPY_AND_NOTHING_ELSE = {
+      receiveAlerts: true,
+      weeklyReviewCopy: true,
+    } as IStudentData['ownerAlertPrefs'];
+
+    async function copyGoesTo(options: IHouseholdOptions): Promise<unknown> {
+      const home = await seedHousehold({ ownerTimeZone: 'America/Chicago', ...options });
+      await seedWeek(home, SUNDAY_1805_CHICAGO);
+      await sender(SUNDAY_1805_CHICAGO).runTick();
+      return adultJobs();
+    }
+
+    it.each([
+      ['never asked for texts', undefined],
+      ['turned the text switch off', { optIn: true, textSwitch: false }],
+      ['unticked the opt-in', { optIn: false, textSwitch: true }],
+    ])(
+      'sends no text to an owner who %s, though text is among their channels',
+      async (_what, ownerAccount) => {
+        expect(
+          await copyGoesTo({
+            ...(ownerAccount !== undefined ? { ownerAccount } : {}),
+            ownerAlertPrefs: {
+              receiveAlerts: true,
+              alertChannels: ['email', 'sms'],
+              weeklyReviewCopy: true,
+            },
+          })
+        ).toEqual(BY_EMAIL_ALONE);
+      }
+    );
+
+    it('sends no text to an owner who turned texts off for this student, with texts on for the account', async () => {
+      expect(
+        await copyGoesTo({
+          ownerAccount: TEXTS_ON,
+          ownerAlertPrefs: {
+            receiveAlerts: true,
+            alertChannels: ['email'],
+            weeklyReviewCopy: true,
+            textsOff: true,
+          },
+        })
+      ).toEqual(BY_EMAIL_ALONE);
+    });
+
+    it('texts an owner whose channels were saved without text before the account had texts', async () => {
+      expect(
+        await copyGoesTo({
+          ownerAccount: TEXTS_ON,
+          ownerAlertPrefs: {
+            receiveAlerts: true,
+            alertChannels: ['email'],
+            weeklyReviewCopy: true,
+          },
+        })
+      ).toEqual(BY_EMAIL_AND_TEXT);
+    });
+
+    it('texts an owner with texts on who saved no channels for the student', async () => {
+      expect(
+        await copyGoesTo({ ownerAccount: TEXTS_ON, ownerAlertPrefs: COPY_AND_NOTHING_ELSE })
+      ).toEqual(BY_EMAIL_AND_TEXT);
+    });
+
+    it('reaches an owner with texts off who saved no channels by email alone', async () => {
+      expect(await copyGoesTo({ ownerAlertPrefs: COPY_AND_NOTHING_ELSE })).toEqual(BY_EMAIL_ALONE);
+    });
   });
 
   it('nobody to tell: enqueues nothing and keeps no row, so a toggle later that day still works', async () => {

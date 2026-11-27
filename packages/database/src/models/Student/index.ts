@@ -4,8 +4,10 @@ export {
   DEFAULT_SHARED_ALERT_CHANNELS,
   effectiveOwnerAlertPrefs,
   effectiveSharedAlertPrefs,
+  ownerTextsOffAfterSave,
 } from './Student';
 export type {
+  IOwnerAccountChannels,
   IStudentData,
   IDataSource,
   IDataSourceCredentials,

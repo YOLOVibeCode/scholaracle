@@ -1657,6 +1657,153 @@ describe('Students API Routes', () => {
         });
       }
     });
+
+    describe("the owner's texts for a student follow the owner's own account", () => {
+      /** What Settings stores for the account: the number, the opt-in box, the text switch. */
+      async function saveAccount(optIn: boolean, textSwitch: boolean): Promise<void> {
+        await database.collection('users').updateOne(
+          { email: 'students@example.com' },
+          {
+            $set: {
+              phone: '+15125550100',
+              smsConsent: optIn,
+              'preferences.notifications.sms': textSwitch,
+            },
+          }
+        );
+      }
+      async function ownerChannels(studentId: string): Promise<unknown> {
+        const res = await request(app)
+          .get(`/api/students/${studentId}/contacts`)
+          .set('Authorization', `Bearer ${testToken}`);
+        expect(res.status).toBe(200);
+        expect(res.body[0]).toMatchObject({ isOwner: true });
+        return res.body[0].alertChannels;
+      }
+      async function newStudent(): Promise<string> {
+        const createRes = await request(app)
+          .post('/api/students')
+          .set('Authorization', `Bearer ${testToken}`)
+          .send({ name: 'Contact Test Student', grade: 9 });
+        return createRes.body.id as string;
+      }
+
+      /** Saves the owner's channels for a student, as the phone app does; returns what it is told. */
+      async function saveChannels(studentId: string, body: object): Promise<unknown> {
+        const res = await request(app)
+          .put(`/api/students/${studentId}/owner-alert-prefs`)
+          .set('Authorization', `Bearer ${testToken}`)
+          .send(body);
+        expect(res.status).toBe(200);
+        return res.body.ownerAlertPrefs.alertChannels;
+      }
+      async function storedPrefs(studentId: string): Promise<Record<string, unknown>> {
+        const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+        return doc?.['ownerAlertPrefs'] as Record<string, unknown>;
+      }
+
+      it('shows email alone for an owner who saved nothing and has texts off', async () => {
+        const studentId = await newStudent();
+
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+        await saveAccount(true, false);
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+        await saveAccount(false, true);
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+      });
+
+      it('shows text as well once the account has texts on', async () => {
+        const studentId = await newStudent();
+        await saveAccount(true, true);
+
+        expect(await ownerChannels(studentId)).toEqual(['email', 'sms']);
+      });
+
+      it('channels saved while the account has texts off do not turn texts off for later', async () => {
+        const studentId = await newStudent();
+        await saveAccount(false, false);
+
+        expect(
+          await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email', 'push'] })
+        ).toEqual(['email', 'push']);
+        expect(await ownerChannels(studentId)).toEqual(['email', 'push']);
+        expect('textsOff' in (await storedPrefs(studentId))).toBe(false);
+
+        await saveAccount(true, true);
+        expect(await ownerChannels(studentId)).toEqual(['email', 'push', 'sms']);
+      });
+
+      it('leaving text out while the account has texts on turns texts off for that student alone, and choosing text turns them back on', async () => {
+        const studentId = await newStudent();
+        const sibling = await newStudent();
+        await saveAccount(true, true);
+
+        expect(
+          await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email'] })
+        ).toEqual(['email']);
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+        expect(await storedPrefs(studentId)).toMatchObject({ textsOff: true });
+        expect(await ownerChannels(sibling)).toEqual(['email', 'sms']);
+
+        expect(
+          await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email', 'sms'] })
+        ).toEqual(['email', 'sms']);
+        expect(await ownerChannels(studentId)).toEqual(['email', 'sms']);
+        expect('textsOff' in (await storedPrefs(studentId))).toBe(false);
+      });
+
+      it('does not show text asked for while the account has texts off, and shows it once texts are on', async () => {
+        const studentId = await newStudent();
+        await saveAccount(true, false);
+
+        expect(
+          await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email', 'sms'] })
+        ).toEqual(['email']);
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+
+        await saveAccount(true, true);
+        expect(await ownerChannels(studentId)).toEqual(['email', 'sms']);
+      });
+
+      it('keeps what the owner said about texts through saves made while the account has texts off', async () => {
+        const studentId = await newStudent();
+        await saveAccount(true, true);
+        await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email'] });
+
+        await saveAccount(true, false);
+        expect(
+          await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email', 'push'] })
+        ).toEqual(['email', 'push']);
+        expect(await storedPrefs(studentId)).toMatchObject({ textsOff: true });
+
+        await saveAccount(true, true);
+        expect(await ownerChannels(studentId)).toEqual(['email', 'push']);
+      });
+
+      it('keeps what the owner said about texts through a save that leaves the channels out', async () => {
+        const studentId = await newStudent();
+        await saveAccount(true, true);
+        await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email'] });
+
+        expect(await saveChannels(studentId, { receiveAlerts: true })).toEqual(['email']);
+        expect(await storedPrefs(studentId)).toMatchObject({ textsOff: true });
+        expect(await ownerChannels(studentId)).toEqual(['email']);
+      });
+
+      it('an owner who turned every channel off stays silenced when their account gets texts', async () => {
+        const studentId = await newStudent();
+        // Written as stored: the route does not take an empty list of channels today.
+        await database
+          .collection('students')
+          .updateOne(
+            { _id: new ObjectId(studentId) },
+            { $set: { ownerAlertPrefs: { receiveAlerts: false, alertChannels: [] } } }
+          );
+
+        await saveAccount(true, true);
+        expect(await ownerChannels(studentId)).toEqual([]);
+      });
+    });
   });
 
   describe('PUT /api/students/:id/contacts/:email alertTypes patch', () => {
@@ -1901,11 +2048,12 @@ describe('Students API Routes', () => {
       const res = await request(app)
         .put(`/api/students/${studentId}/owner-alert-prefs`)
         .set('Authorization', `Bearer ${testToken}`)
-        .send({ receiveAlerts: true, alertChannels: ['email', 'sms'] });
+        .send({ receiveAlerts: true, alertChannels: ['email', 'push'] });
       expect(res.status).toBe(200);
-      expect(res.body.ownerAlertPrefs).toMatchObject({
+      // Text is not among them: it follows the owner's account (see the contacts list tests).
+      expect(res.body.ownerAlertPrefs).toEqual({
         receiveAlerts: true,
-        alertChannels: ['email', 'sms'],
+        alertChannels: ['email', 'push'],
         weeklyReviewCopy: false,
       });
     });

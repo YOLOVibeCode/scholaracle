@@ -945,6 +945,65 @@ describe('/api/sharing (S1)', () => {
         weeklyReviewCopy: false,
       });
     });
+
+    it('shows an owner text among their channels when their account has texts on, and only the owner', async () => {
+      const ava = await createStudent('Ava');
+      const christian = await createStudent('Christian');
+      const inv = await invite({ email: JESSICA, label: 'parent', studentIds: [ava] });
+      await request(app)
+        .post('/api/sharing/invites/accept')
+        .set('Authorization', `Bearer ${jessica.token}`)
+        .send({ inviteGroupId: inv.body.inviteGroupId })
+        .expect(200);
+      // The owner chose channels for Christian, and none for Ava.
+      await request(app)
+        .put(`/api/students/${christian}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ receiveAlerts: true, alertChannels: ['push'] })
+        .expect(200);
+      // What Settings stores when the number, the opt-in box and the text switch are on.
+      const textsOn = {
+        phone: '+15125550100',
+        smsConsent: true,
+        'preferences.notifications.sms': true,
+      };
+      await database
+        .collection('users')
+        .updateMany({ email: { $in: [OWNER, JESSICA] } }, { $set: textsOn });
+
+      const channelsFor = async (who: IUserCtx): Promise<Record<string, unknown>> => {
+        const mine = await request(app)
+          .get('/api/sharing/mine')
+          .set('Authorization', `Bearer ${who.token}`)
+          .expect(200);
+        return Object.fromEntries(
+          (mine.body.students as { name: string; alerts: { alertChannels: unknown } }[]).map(
+            (s) => [s.name, s.alerts.alertChannels]
+          )
+        );
+      };
+
+      // Christian's channels were saved before the account had texts: they do not turn texts off.
+      expect(await channelsFor(owner)).toEqual({
+        Ava: ['email', 'sms'],
+        Christian: ['push', 'sms'],
+      });
+      // Another adult's channels are the ones on their row, whatever their account says.
+      expect(await channelsFor(jessica)).toEqual({ Ava: ['email', 'push'] });
+
+      // Leaving text out now, with texts on, turns texts off for Christian alone.
+      await request(app)
+        .put(`/api/students/${christian}/owner-alert-prefs`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ receiveAlerts: true, alertChannels: ['push'] })
+        .expect(200);
+      expect(await channelsFor(owner)).toEqual({ Ava: ['email', 'sms'], Christian: ['push'] });
+
+      await database
+        .collection('users')
+        .updateOne({ email: OWNER }, { $set: { 'preferences.notifications.sms': false } });
+      expect(await channelsFor(owner)).toEqual({ Ava: ['email'], Christian: ['push'] });
+    });
   });
 
   // ── plan limits ────────────────────────────────────────────────────────────

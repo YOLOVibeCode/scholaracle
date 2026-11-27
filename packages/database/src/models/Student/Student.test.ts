@@ -4,6 +4,9 @@ import {
   DEFAULT_SHARED_ALERT_CHANNELS,
   effectiveOwnerAlertPrefs,
   effectiveSharedAlertPrefs,
+  ownerTextsOffAfterSave,
+  type IOwnerAlertPrefs,
+  type SharedAlertChannel,
 } from './Student';
 import type { ObjectId } from 'mongodb';
 
@@ -617,6 +620,109 @@ describe('Student', () => {
       });
     });
 
+    describe("the owner's texts follow the owner's own account", () => {
+      const saved = (
+        alertChannels: readonly SharedAlertChannel[],
+        textsOff?: boolean
+      ): IOwnerAlertPrefs => ({
+        receiveAlerts: true,
+        alertChannels,
+        ...(textsOff !== undefined ? { textsOff } : {}),
+      });
+      const channels = (
+        prefs: IOwnerAlertPrefs | undefined,
+        texts: boolean
+      ): readonly SharedAlertChannel[] => effectiveOwnerAlertPrefs(prefs, { texts }).alertChannels;
+
+      it('an owner who saved nothing for the student gets texts when their account has texts on', () => {
+        expect(effectiveOwnerAlertPrefs(undefined, { texts: true })).toEqual({
+          receiveAlerts: true,
+          alertChannels: ['email', 'sms'],
+          weeklyReviewCopy: false,
+        });
+        expect(channels(undefined, false)).toEqual(['email']);
+        expect(DEFAULT_OWNER_ALERT_CHANNELS).toEqual(['email']);
+      });
+
+      it('channels saved without text do not turn texts off: they were saved before texts were on', () => {
+        expect(channels(saved(['email']), true)).toEqual(['email', 'sms']);
+        expect(channels(saved(['email', 'push']), true)).toEqual(['email', 'push', 'sms']);
+        expect(channels(saved(['push'], false), true)).toEqual(['push', 'sms']);
+      });
+
+      it('keeps the order of channels saved with text', () => {
+        expect(channels(saved(['sms', 'push']), true)).toEqual(['sms', 'push']);
+        expect(channels(saved(['sms']), true)).toEqual(['sms']);
+      });
+
+      it('an owner who turned texts off for the student gets none, whatever was saved', () => {
+        expect(channels(saved(['email'], true), true)).toEqual(['email']);
+        expect(channels(saved(['email', 'sms'], true), true)).toEqual(['email']);
+      });
+
+      it('with texts off for the account no student has text, whatever was saved', () => {
+        expect(channels(saved(['email', 'sms']), false)).toEqual(['email']);
+        expect(channels(saved(['sms', 'push'], false), false)).toEqual(['push']);
+        expect(channels(saved(['sms']), false)).toEqual([]);
+      });
+
+      it('an owner who turned every channel off stays silenced when their account has texts on', () => {
+        expect(channels(saved([]), true)).toEqual([]);
+      });
+
+      it('says nothing about texts to a caller that does not know the account: the channels as saved', () => {
+        expect(effectiveOwnerAlertPrefs(saved(['email'])).alertChannels).toEqual(['email']);
+        expect(effectiveOwnerAlertPrefs(saved(['sms', 'push'], true)).alertChannels).toEqual([
+          'sms',
+          'push',
+        ]);
+      });
+
+      it('does not hand on what was said about texts: it is in the channels', () => {
+        expect(effectiveOwnerAlertPrefs(saved(['email'], true), { texts: true })).toEqual({
+          receiveAlerts: true,
+          alertChannels: ['email'],
+          weeklyReviewCopy: false,
+        });
+      });
+    });
+
+    describe('ownerTextsOffAfterSave', () => {
+      const before = (textsOff?: boolean): IOwnerAlertPrefs => ({
+        receiveAlerts: true,
+        alertChannels: ['email'],
+        ...(textsOff !== undefined ? { textsOff } : {}),
+      });
+
+      it('leaving text out turns texts off for the student while the account has texts on', () => {
+        expect(ownerTextsOffAfterSave(undefined, ['email'], { texts: true })).toBe(true);
+        expect(ownerTextsOffAfterSave(before(false), ['email', 'push'], { texts: true })).toBe(
+          true
+        );
+        expect(ownerTextsOffAfterSave(before(), [], { texts: true })).toBe(true);
+      });
+
+      it('leaving text out says nothing while the account has texts off: text was not on offer', () => {
+        expect(ownerTextsOffAfterSave(undefined, ['email'], { texts: false })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(), ['email', 'push'], { texts: false })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(false), [], { texts: false })).toBe(false);
+        // What they said earlier, while texts were on, stands.
+        expect(ownerTextsOffAfterSave(before(true), ['email'], { texts: false })).toBe(true);
+      });
+
+      it('choosing text turns texts back on for the student, whatever the account says', () => {
+        expect(ownerTextsOffAfterSave(before(true), ['email', 'sms'], { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(true), ['sms'], { texts: false })).toBe(false);
+      });
+
+      it('a save that says nothing about channels keeps what was said about texts', () => {
+        expect(ownerTextsOffAfterSave(before(true), undefined, { texts: true })).toBe(true);
+        expect(ownerTextsOffAfterSave(before(false), undefined, { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(), undefined, { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(undefined, undefined, { texts: true })).toBe(false);
+      });
+    });
+
     it('a shared adult with no stored channels reads as email + push (spec §8 Q4)', () => {
       expect(effectiveSharedAlertPrefs({})).toEqual({
         receiveAlerts: true,
@@ -661,6 +767,57 @@ describe('Student', () => {
       expect(shared?.channels).toEqual(['email', 'push']);
       expect(student.alertPrefsFor('m')?.alertChannels).toEqual(['email', 'push']);
       expect(student.alertPrefsFor('owner-1')?.alertChannels).toEqual(['email']);
+    });
+
+    it('getAllAlertRecipients and alertPrefsFor read the owner default with the account of the owner', () => {
+      const student = new Student({
+        userId: 'owner-1',
+        name: 'Ava',
+        sharedWith: [
+          {
+            userId: 'm',
+            email: 'm@example.com',
+            phone: '+15125550111',
+            role: 'parent',
+            status: 'accepted',
+            invitedAt: new Date(),
+          },
+        ],
+      });
+
+      const withTexts = student.getAllAlertRecipients('o@example.com', '+15125550100', {
+        texts: true,
+      });
+      const withoutTexts = student.getAllAlertRecipients('o@example.com', undefined, {
+        texts: false,
+      });
+
+      expect(withTexts[0]).toMatchObject({
+        isPrimary: true,
+        phone: '+15125550100',
+        channels: ['email', 'sms'],
+      });
+      expect(withoutTexts[0]).toMatchObject({ isPrimary: true, channels: ['email'] });
+      expect(student.alertPrefsFor('owner-1', { texts: true })?.alertChannels).toEqual([
+        'email',
+        'sms',
+      ]);
+      expect(student.alertPrefsFor('owner-1', { texts: false })?.alertChannels).toEqual(['email']);
+      // Another adult has their own row: the account of the owner says nothing about them.
+      expect(withTexts[1]).toMatchObject({ isPrimary: false, channels: ['email', 'push'] });
+      expect(student.alertPrefsFor('m', { texts: true })?.alertChannels).toEqual(['email', 'push']);
+    });
+
+    it('leaves out an owner who turned alerts off for the student, texts or not', () => {
+      const student = new Student({
+        userId: 'owner-1',
+        name: 'Ava',
+        ownerAlertPrefs: { receiveAlerts: false, alertChannels: ['email', 'sms'] },
+      });
+
+      expect(
+        student.getAllAlertRecipients('o@example.com', '+15125550100', { texts: true })
+      ).toEqual([]);
     });
   });
 });
