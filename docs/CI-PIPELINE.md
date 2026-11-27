@@ -29,7 +29,7 @@ Three gates, each one meaningful. Prod **never ships** without dev E2E green.
 
 | File | Trigger | What it does |
 |------|---------|--------------|
-| [ci.yml](.github/workflows/ci.yml) | PR to main/develop, workflow_call | Lint (strict), build, unit tests (8 matrix), docker build |
+| [ci.yml](.github/workflows/ci.yml) | PR to main/develop, workflow_call | Lint (strict), build, unit tests (12 matrix), docker build |
 | [e2e.yml](.github/workflows/e2e.yml) | PR, workflow_call, manual | Playwright E2E. Localhost mode on PR; deployed mode when called from deploy.yml |
 | [deploy.yml](.github/workflows/deploy.yml) | Push to main, manual | CI → deploy dev → wait healthy → E2E vs dev → deploy prod |
 | [auto-merge.yml](.github/workflows/auto-merge.yml) | PR opened/synced by owner | Enables GitHub auto-merge (squash) so PR lands when checks pass |
@@ -61,11 +61,27 @@ This means:
 ## Branch protection
 
 `main` requires:
-- All 10 required status checks (Quality Gate, Build, Test matrix ×8).
+- 15 status checks: `Quality Gate (Lint & Format)`, `Build`, `Gitleaks`, and the 12 `Test (…)` jobs
+  (agents, api, auth, browser-extension, connector, contracts, database, mobile, scraper-core,
+  studio-core, web, workers).
 - Linear history (no merge commits; squash-merge only).
-- Up-to-date branch before merge (`strict: true`).
+- No force pushes and no deletion of the branch.
 
-**No review requirement** — by design. Auto-merge handles merging when checks pass.
+It does **not** require:
+- The branch to be up to date with `main` before merge (`strict: false`). Two pull requests can
+  each pass on their own and still break `main` together; the Deploy run after the merge is what
+  catches that, before production.
+- Four checks that run on every pull request but are not on the required list: `Install`,
+  `Docker build (pre-deploy)`, `Mobile bundle check` and `Playwright E2E (localhost)`. Auto-merge
+  waits only for the required checks, so a pull request that is ready for review can merge while
+  one of these four is still running or has failed. To have all of them finish first, keep the
+  pull request a draft until every check is green, then mark it ready.
+- A review. **No review requirement** — by design. Auto-merge handles merging when checks pass.
+
+Admins can override these rules (`enforce_admins: false`).
+
+Read the live rules with `gh api repos/YOLOVibeCode/scholaracle/branches/main/protection`. If this
+section and that answer disagree, the answer is right and this section needs an edit.
 
 ## Auto-merge behaviour
 
