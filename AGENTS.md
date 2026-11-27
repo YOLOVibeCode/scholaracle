@@ -94,7 +94,9 @@ Notes for a fresh environment:
   `companionDevSeed.generated.ts`. Never commit that file.
 - `e2e` (`packages/e2e`) needs the web, API, and MongoDB running on the fixed
   ports plus Mailpit. It cannot run in a fresh clone; do not attempt it. Its
-  `pnpm test` is a no-op echo on purpose. E2E runs in CI after merge.
+  `pnpm test` is a no-op echo on purpose. CI runs E2E for you twice: on every
+  pull request against a local stack (`Playwright E2E (localhost)`), and after
+  the merge against dev, before production is released.
 - `scraper-playwright` has no unit tests; Playwright browsers are not needed
   for anything else. Do not install them.
 - No `.env` file is required for unit tests or type-check. Do not create one.
