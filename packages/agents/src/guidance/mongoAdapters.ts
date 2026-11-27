@@ -11,16 +11,19 @@ import type {
 import { StudentRepository } from '@scholaracle/database';
 import { calendarDayKey } from '@scholaracle/studio-core';
 import { slcStudentFilter } from '../studio/slcStudentFilter';
-import { CLOSED_STATUSES, MISSING_STATUSES, normalizeStatus } from '../studio/studioTaskClassify';
+import { CLOSED_STATUSES, normalizeStatus } from '../studio/studioTaskClassify';
 
 /**
- * The portal's status as the ladder needs it, read the way the student's own pages read it
- * (`studioTaskClassify`), so a reminder never contradicts what those pages show.
+ * The portal's status as the ladder needs it. Closed is what the student's own pages call
+ * closed (`studioTaskClassify`), so no reminder goes out about work those pages show as
+ * done. Missing is the portal's own "missing" and nothing else: the reminders after the
+ * deadline say "is still missing", and "late" is not that. Canvas, the one portal that
+ * reports it, means work handed in after the deadline.
  */
 function ladderStatus(raw: unknown): AssignmentLadderStatus {
   const status = normalizeStatus(raw);
   if (CLOSED_STATUSES.has(status)) return 'closed';
-  if (MISSING_STATUSES.has(status)) return 'missing';
+  if (status === 'missing') return 'missing';
   return 'open';
 }
 

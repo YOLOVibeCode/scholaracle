@@ -51,7 +51,20 @@ export function ladderStepEnd(step: LadderStep, dueAt: Date, timezone: string): 
 }
 
 /**
- * Future ladder fire times for an assignment. Past windows are omitted.
+ * The two reminders that go out after the deadline. They say the work is missing, so the
+ * ladder sends them only once the portal has marked it missing.
+ */
+export function isAfterDeadline(step: LadderStep): boolean {
+  return OFFSETS[step].hoursUntilDue < 0;
+}
+
+/**
+ * The reminders a sync queues for an assignment, and when each is to run.
+ *
+ * One still to come runs at its time. One before the deadline whose time has passed is left
+ * out: a sync does not send "due Thursday" late. One after the deadline whose time has
+ * passed runs now, for as long as it is the current one. Those two wait for the portal to
+ * mark the work missing, and a sync that comes late is the first to see that it has.
  */
 export function scheduleGuidanceSteps(
   now: Date,
@@ -60,9 +73,15 @@ export function scheduleGuidanceSteps(
 ): readonly IScheduledGuidanceStep[] {
   const out: IScheduledGuidanceStep[] = [];
   for (const step of LADDER_STEPS) {
-    const scheduledFor = ladderFireTime(step, dueAt, timezone);
-    if (scheduledFor.getTime() <= now.getTime()) continue;
-    out.push({ step, scheduledFor });
+    const fireAt = ladderFireTime(step, dueAt, timezone);
+    if (fireAt.getTime() > now.getTime()) {
+      out.push({ step, scheduledFor: fireAt });
+    } else if (
+      isAfterDeadline(step) &&
+      now.getTime() < ladderStepEnd(step, dueAt, timezone).getTime()
+    ) {
+      out.push({ step, scheduledFor: now });
+    }
   }
   return out;
 }

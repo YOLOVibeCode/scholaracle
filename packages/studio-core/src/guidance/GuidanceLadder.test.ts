@@ -642,6 +642,74 @@ describe('GuidanceLadder', () => {
       ]);
     });
   });
+
+  describe('after the deadline', () => {
+    // The two reminders after the deadline tell the parent the work "is still missing" and
+    // the student it is "still open". That is the portal's to say. Work it has not marked
+    // missing may be done on paper, not marked yet, or handed in since the last sync.
+    const AFTER = ['t12h', 't72h'] as const;
+    const BEFORE = ['t48h', 't18h'] as const;
+
+    it.each(AFTER)(
+      'says nothing at %s about work the portal has not marked missing',
+      async (step) => {
+        const { engine, sink, log } = ladder(AT[step], { status: 'open' });
+
+        expect(await engine.evaluate(ASSIGNMENT, step)).toEqual(skippedAs('not_missing'));
+
+        expect(sink.sent).toEqual([]);
+        // Nothing is taken, so a later copy of the job is free to send.
+        expect(log.taken.size).toBe(0);
+        expect(log.studentCount).toBe(0);
+      }
+    );
+
+    it.each(AFTER)('speaks at %s once the portal marks the work missing', async (step) => {
+      const { engine, sink } = ladder(AT[step], { status: 'missing' });
+
+      expect(await engine.evaluate(ASSIGNMENT, step)).toEqual(SENT);
+
+      expect(sink.sent.map((message) => message.audience)).toEqual(
+        step === 't12h' ? ['student', 'parent'] : ['parent']
+      );
+    });
+
+    it.each(BEFORE)(
+      'still reminds at %s, before the deadline, about work the portal gives no status for',
+      async (step) => {
+        const { engine, sink } = ladder(AT[step], { status: 'open' });
+
+        expect(await engine.evaluate(ASSIGNMENT, step)).toEqual(SENT);
+
+        expect(sink.sent.map((message) => message.audience)).toEqual(['student']);
+      }
+    );
+
+    it('sends when a later copy of the job finds the portal has marked the work missing', async () => {
+      const log = new FakeLog();
+      const sink = new FakeSink();
+      // Friday 11:59 am: the last sync was before the deadline, so the portal's word is not in.
+      const onTime = ladder(AT.t12h, { status: 'open', log, sink }).engine;
+      expect(await onTime.evaluate(ASSIGNMENT, 't12h')).toEqual(skippedAs('not_missing'));
+
+      // Friday evening's sync sees it marked missing and queues the reminder again.
+      const evening = new Date(AT.t12h.getTime() + 8 * HOUR_MS);
+      const later = ladder(evening, { status: 'missing', log, sink }).engine;
+      expect(await later.evaluate(ASSIGNMENT, 't12h')).toEqual(SENT);
+
+      expect(sink.sent.map((message) => [message.audience, message.body])).toEqual([
+        ['student', 'Still open — tap to pick it up.'],
+        ['parent', 'Cell Division is still missing.'],
+      ]);
+    });
+
+    it('does not hold through quiet hours a reminder there is nothing to say in', async () => {
+      // Sunday 11:59 pm, inside quiet hours.
+      const { engine } = ladder(AT.t72h, { status: 'open', quietHours: TEN_TO_SEVEN });
+
+      expect(await engine.evaluate(ASSIGNMENT, 't72h')).toEqual(skippedAs('not_missing'));
+    });
+  });
 });
 
 describe('ISP — GuidanceLadder stays host-agnostic', () => {

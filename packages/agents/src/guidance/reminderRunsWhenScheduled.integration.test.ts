@@ -9,7 +9,8 @@ import { MongoQueue, type IJob } from '../queue/MongoQueue';
 import { createMongoGuidanceProcessor } from './createMongoGuidanceProcessor';
 import { enqueueGuidanceJobs } from './enqueueGuidanceJobs';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 const TZ = 'America/Chicago';
 const STUDENT_PORTAL_ID = 'portal-student-1';
 
@@ -125,12 +126,15 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
   /**
    * What a sync leaves behind: the assignment's row as the portal has it now, and a job for
    * each reminder still to come. `at` is when the sync ran; a week ahead when not given.
+   * `status` is the portal's word for the work at that moment: not handed in yet when not
+   * given, and null for a portal that gives no status.
    */
   async function syncSees(
     externalId: string,
     title: string,
     dueAt: Date,
-    at: Date = new Date(dueAt.getTime() - 7 * DAY_MS)
+    at: Date = new Date(dueAt.getTime() - 7 * DAY_MS),
+    status: string | null = 'not_started'
   ): Promise<void> {
     await db.collection('slc_assignments').updateOne(
       { userId: ownerId.toString(), externalId, studentExternalId: STUDENT_PORTAL_ID },
@@ -138,7 +142,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
         $set: {
           deletedAt: null,
           observedAt: at,
-          record: { title, dueAt: dueAt.toISOString(), status: 'missing' },
+          record: { title, dueAt: dueAt.toISOString(), ...(status === null ? {} : { status }) },
         },
       },
       { upsert: true }
@@ -148,6 +152,21 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
       { studentId, assignmentExternalId: externalId, title, dueAt, timezone: TZ },
       at
     );
+  }
+
+  /**
+   * The deadline passes with nothing handed in. The queue runs up to `at`, and the sync at
+   * `at` finds the portal has marked the work missing. Six hours after the deadline when
+   * not given.
+   */
+  async function portalMarksItMissing(
+    externalId: string,
+    title: string,
+    dueAt: Date,
+    at: Date = new Date(dueAt.getTime() + 6 * HOUR_MS)
+  ): Promise<void> {
+    await runEachJobWhenItIsDue(at);
+    await syncSees(externalId, title, dueAt, at, 'missing');
   }
 
   /**
@@ -170,8 +189,9 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
     }
   }
 
-  it('sends all four for work due at 11:59 pm', async () => {
+  it('sends all four for work due at 11:59 pm that is not handed in', async () => {
     await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+    await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
 
     await runEachJobWhenItIsDue();
 
@@ -204,6 +224,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
     ['11:59 pm the day after the clocks go forward', '2027-03-16T04:59:00.000Z'],
   ])('sends all four for work due at %s', async (_label, dueIso) => {
     await syncSees('essay-1', 'Essay', new Date(dueIso));
+    await portalMarksItMissing('essay-1', 'Essay', new Date(dueIso));
 
     await runEachJobWhenItIsDue();
 
@@ -225,6 +246,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
         new Date(THURSDAY_1159PM.getTime() - (7 - sync) * DAY_MS)
       );
     }
+    await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
 
     await runEachJobWhenItIsDue();
 
@@ -245,6 +267,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
     it('holds a reminder that falls in them until they end, instead of dropping it', async () => {
       // Three days after an 11:59 pm deadline is 11:59 pm.
       await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
 
       await runEachJobWhenItIsDue();
 
@@ -259,6 +282,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
 
     it('holds the twelve-hours-after reminder for a 3 pm deadline from 3 am until 7 am', async () => {
       await syncSees('essay-1', 'Essay', new Date('2026-12-03T21:00:00.000Z'));
+      await portalMarksItMissing('essay-1', 'Essay', new Date('2026-12-03T21:00:00.000Z'));
 
       await runEachJobWhenItIsDue();
 
@@ -278,6 +302,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
           new Date(THURSDAY_1159PM.getTime() - (7 - sync) * DAY_MS)
         );
       }
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
 
       await runEachJobWhenItIsDue();
 
@@ -289,6 +314,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
     it('says nothing for the old deadline: the jobs queued for the new one speak for it', async () => {
       await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
       await syncSees('bio-lab-2', 'Cell Division', MONDAY_1159PM, new Date('2026-11-28T12:00:00Z'));
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', MONDAY_1159PM);
 
       await runEachJobWhenItIsDue();
 
@@ -320,6 +346,7 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
       const wednesdayEvening = new Date('2026-12-03T01:00:00.000Z');
       await runEachJobWhenItIsDue(wednesdayEvening);
       await syncSees('bio-lab-2', 'Cell Division', MONDAY_1159PM, wednesdayEvening);
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', MONDAY_1159PM);
 
       await runEachJobWhenItIsDue();
 
@@ -353,13 +380,133 @@ describe('reminders queued by a sync, each run at the time it was scheduled for'
       await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
       const wednesdayEvening = new Date('2026-12-03T01:00:00.000Z');
       await runEachJobWhenItIsDue(wednesdayEvening);
-      await syncSees('bio-lab-2', 'Cell Division', MONDAY_1159PM, wednesdayEvening);
+      // The teacher keeps the work flagged as missing while giving more time, so the moved
+      // deadline is the only thing that keeps the old deadline's jobs quiet.
+      await syncSees('bio-lab-2', 'Cell Division', MONDAY_1159PM, wednesdayEvening, 'missing');
 
       // Up to the new deadline: the old one's "is still missing" (Friday) and "still
       // outstanding" (Sunday night) both fall in here.
       await runEachJobWhenItIsDue(MONDAY_1159PM);
 
       expect(sink.sent.filter((message) => message.to === 'parent')).toEqual([]);
+    });
+  });
+
+  describe('after the deadline', () => {
+    // "Is still missing" is said when the portal says it, not when a deadline has passed.
+    const BEFORE_THE_DEADLINE: Array<readonly [string, string]> = [
+      ['student', '2026-12-01T22:00:00.000Z'],
+      ['student', '2026-12-03T22:00:00.000Z'],
+    ];
+    const hoursAfter = (hours: number): Date =>
+      new Date(THURSDAY_1159PM.getTime() + hours * HOUR_MS);
+
+    it('says nothing about work a portal that gives no status never marks missing', async () => {
+      // A gradebook: the work is listed with a due date and, later, a grade.
+      for (const at of [hoursAfter(-7 * 24), hoursAfter(6), hoursAfter(30), hoursAfter(80)]) {
+        await runEachJobWhenItIsDue(at);
+        await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM, at, null);
+      }
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.whoAndWhen()).toEqual(BEFORE_THE_DEADLINE);
+    });
+
+    it('does not call work missing that may have been handed in since the last sync', async () => {
+      // The last sync ran a week before the deadline. Nothing is known after that.
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.whoAndWhen()).toEqual(BEFORE_THE_DEADLINE);
+    });
+
+    it('says nothing about work handed in after the deadline', async () => {
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      await runEachJobWhenItIsDue(hoursAfter(6));
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM, hoursAfter(6), 'late');
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.whoAndWhen()).toEqual(BEFORE_THE_DEADLINE);
+    });
+
+    it('tells them with the first sync that sees the work marked missing, when that comes late', async () => {
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      // No sync again until Friday 7:59 pm: eight hours after the reminder's time.
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM, hoursAfter(20));
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.sent.slice(2)).toEqual([
+        { to: 'student', body: 'Still open — tap to pick it up.', at: '2026-12-05T01:59:00.000Z' },
+        { to: 'parent', body: 'Cell Division is still missing.', at: '2026-12-05T01:59:00.000Z' },
+        {
+          to: 'parent',
+          body: 'Cell Division is still outstanding. Worth a short check-in.',
+          at: '2026-12-07T05:59:00.000Z',
+        },
+      ]);
+    });
+
+    it('holds that reminder until quiet hours end when the late sync runs at night', async () => {
+      await ownerKeepsTheDefaultQuietHours();
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      // Friday 10:59 pm.
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM, hoursAfter(23));
+
+      await runEachJobWhenItIsDue(hoursAfter(48));
+
+      expect(sink.whoAndWhen().slice(2)).toEqual([
+        ['student', '2026-12-05T13:00:00.000Z'], // Saturday 7 am
+        ['parent', '2026-12-05T13:00:00.000Z'],
+      ]);
+    });
+
+    it('sends only the three-day reminder when the first sync to see it missing comes after three days', async () => {
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      // Monday 7:59 am.
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM, hoursAfter(80));
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.sent.slice(2)).toEqual([
+        {
+          to: 'parent',
+          body: 'Cell Division is still outstanding. Worth a short check-in.',
+          at: '2026-12-07T13:59:00.000Z',
+        },
+      ]);
+    });
+
+    it('says nothing when the first sync to see it missing comes after the last reminder has had its day', async () => {
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      await portalMarksItMissing('bio-lab-2', 'Cell Division', THURSDAY_1159PM, hoursAfter(100));
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.whoAndWhen()).toEqual(BEFORE_THE_DEADLINE);
+    });
+
+    it('sends each once when sync after sync sees the work marked missing', async () => {
+      await syncSees('bio-lab-2', 'Cell Division', THURSDAY_1159PM);
+      for (const hours of [6, 20, 30, 50, 80, 90]) {
+        await portalMarksItMissing(
+          'bio-lab-2',
+          'Cell Division',
+          THURSDAY_1159PM,
+          hoursAfter(hours)
+        );
+      }
+
+      await runEachJobWhenItIsDue();
+
+      expect(sink.whoAndWhen().slice(2)).toEqual([
+        ['student', '2026-12-04T17:59:00.000Z'],
+        ['parent', '2026-12-04T17:59:00.000Z'],
+        ['parent', '2026-12-07T05:59:00.000Z'],
+      ]);
     });
   });
 

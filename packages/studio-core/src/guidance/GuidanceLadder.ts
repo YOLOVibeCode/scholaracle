@@ -7,7 +7,7 @@ import type {
   LadderStep,
 } from '@scholaracle/interfaces';
 import { quietHoursEnd, type IQuietHoursConfig } from './quietHours';
-import { ladderFireTime, ladderStepEnd } from './scheduleGuidanceSteps';
+import { isAfterDeadline, ladderFireTime, ladderStepEnd } from './scheduleGuidanceSteps';
 
 export interface ILadderAssignment {
   readonly studentId: string;
@@ -34,6 +34,8 @@ export type LadderSkip =
   | 'removed'
   /** Due at another time now. The jobs queued when the due time changed speak for it. */
   | 'rescheduled'
+  /** After the deadline, and the portal has not marked the work missing. */
+  | 'not_missing'
   /** Before the reminder's time. */
   | 'too_early'
   /** The next reminder is due, or the work is: this one is out of date. */
@@ -138,6 +140,12 @@ export class GuidanceLadder {
     // same instant. Any other time, or none, is a deadline that moved.
     if (current.dueAt === null || current.dueAt.getTime() !== assignment.dueAt.getTime()) {
       return skipped('rescheduled');
+    }
+    // After the deadline the reminders say the work is missing. That is the portal's to say:
+    // work it has not marked missing may be done on paper, not marked yet, or handed in
+    // since the last sync. The sync that sees it marked queues the reminder again.
+    if (isAfterDeadline(step) && current.status !== 'missing') {
+      return skipped('not_missing');
     }
 
     const now = this._clock.now();

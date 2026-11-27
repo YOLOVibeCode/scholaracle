@@ -75,16 +75,18 @@ describe('MongoAssignmentState', () => {
     expect(await state.current(STUDENT, 'bio-lab-2')).toEqual({ status: 'missing', dueAt: DUE });
   });
 
-  // The same reading as the student's own pages (`studioTaskClassify`): excused work is
-  // closed like finished work, and late counts with missing.
+  // Closed is what the student's own pages call closed (`studioTaskClassify`): finished
+  // work, and excused work. Missing is the portal's own "missing" and nothing else. "Late"
+  // is not it: Canvas, the one portal that reports it, means work handed in after the
+  // deadline.
   it.each([
     ['submitted', 'closed'],
     ['graded', 'closed'],
     ['excused', 'closed'],
     [' Submitted ', 'closed'],
     ['missing', 'missing'],
-    ['late', 'missing'],
     ['MISSING', 'missing'],
+    ['late', 'open'],
     ['not_started', 'open'],
     ['in_progress', 'open'],
     ['unknown', 'open'],
