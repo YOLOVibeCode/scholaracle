@@ -3,6 +3,7 @@
 import { useMemo, useState, type JSX } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { qrPicture } from '@/lib/qr/qrPicture';
 
 export interface IConnectOnPhonePanelProps {
   readonly studentId?: string;
@@ -18,7 +19,8 @@ function buildConnectDeepLink(studentId?: string): string {
 export function ConnectOnPhonePanel({ studentId }: IConnectOnPhonePanelProps): JSX.Element {
   const [copied, setCopied] = useState(false);
   const href = useMemo(() => buildConnectDeepLink(studentId), [studentId]);
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(href)}`;
+  // Drawn here, not fetched: the link holds the student's id and must not go to an image service.
+  const qr = useMemo(() => qrPicture(href), [href]);
 
   const handleCopy = async (): Promise<void> => {
     try {
@@ -52,15 +54,20 @@ export function ConnectOnPhonePanel({ studentId }: IConnectOnPhonePanelProps): J
         </p>
       </div>
       <div className="flex flex-col items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element -- external QR data URL service */}
-        <img
-          src={qrSrc}
-          alt="QR code to open Scholarmancy on your phone"
+        <svg
+          role="img"
+          aria-label="QR code to open Scholarmancy on your phone"
+          viewBox={`0 0 ${qr.size} ${qr.size}`}
           width={200}
           height={200}
-          className="rounded-md border bg-white p-2"
+          shapeRendering="crispEdges"
+          className="rounded-md border"
           data-testid="connect-phone-qr"
-        />
+        >
+          {/* Black on white in every theme: a camera cannot read a code on a dark card. */}
+          <rect width={qr.size} height={qr.size} fill="#ffffff" />
+          <path d={qr.path} fill="#000000" />
+        </svg>
         <p className="text-xs font-mono break-all text-center text-muted-foreground px-1">{href}</p>
         <Button type="button" variant="outline" onClick={() => void handleCopy()} data-testid="button-copy-connect-link">
           {copied ? 'Copied' : 'Copy link'}
