@@ -255,3 +255,20 @@ export class User {
     };
   }
 }
+
+/**
+ * Whether this account asked for texts: it has a number, the opt-in box is ticked and the
+ * text switch is on. This is the account's own say. Whether the number may be texted (the
+ * consent on record, a STOP reply) is asked where a text is resolved and where it is sent.
+ *
+ * @param account - The account as the model reads it, or nothing when there is none
+ */
+export function accountTextsOn(
+  account: Pick<User, 'phone' | 'smsConsent' | 'preferences'> | null | undefined
+): boolean {
+  if (account === null || account === undefined) return false;
+  const hasNumber = typeof account.phone === 'string' && account.phone.trim() !== '';
+  return (
+    hasNumber && account.smsConsent === true && account.preferences?.notifications?.sms === true
+  );
+}

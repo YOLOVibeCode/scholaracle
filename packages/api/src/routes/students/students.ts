@@ -13,7 +13,9 @@ import {
   CourseTutorialOverrideRepository,
   PLAN_FEATURES,
   DEFAULT_OWNER_ALERT_CHANNELS,
+  accountTextsOn,
   effectiveOwnerAlertPrefs,
+  ownerTextsOffAfterSave,
   effectiveSharedAlertPrefs,
   type IDataSource,
   type IDataSourceCredentials,
@@ -558,7 +560,8 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         status: 'accepted',
         isOwner: true,
         isAdmin: true,
-        ...effectiveOwnerAlertPrefs(student.ownerAlertPrefs),
+        // Shown as delivery reads them: the owner's own account decides whether text is one.
+        ...effectiveOwnerAlertPrefs(student.ownerAlertPrefs, { texts: accountTextsOn(owner) }),
       },
       ...student.sharedWith.map((sp, i): ISharingPerson => ({
         userId: sp.userId,
@@ -1171,17 +1174,27 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         throw new ValidationError('weeklyReviewCopy must be a boolean');
       }
       // Same validation as the sharing routes: only email | sms | push, deduplicated.
+      const chosen = parseChannels(body.alertChannels);
       // alertTypes: an array narrows; null or absent means every type (no key stored).
       const alertTypes = parseAlertTypesPatch(body.alertTypes);
+      // The owner's texts follow their own account. Leaving text out here turns texts off for
+      // this student only while the account has texts on; otherwise text was not on offer.
+      const owner = await userRepository.findById(userId).catch(() => null);
+      const account = { texts: accountTextsOn(owner) };
+      const textsOff = ownerTextsOffAfterSave(student.ownerAlertPrefs, chosen, account);
       // Whole-object replace: an omitted weekly-review toggle is off (student review §3.3 Q2).
       const prefs: IOwnerAlertPrefs = {
         receiveAlerts: body.receiveAlerts ?? true,
-        alertChannels: parseChannels(body.alertChannels) ?? DEFAULT_OWNER_ALERT_CHANNELS,
+        alertChannels: chosen ?? DEFAULT_OWNER_ALERT_CHANNELS,
         ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
         weeklyReviewCopy: body.weeklyReviewCopy === true,
+        ...(textsOff ? { textsOff: true } : {}),
       };
       await studentRepository.update(student._id!, { ownerAlertPrefs: prefs });
-      res.status(200).json({ success: true, ownerAlertPrefs: prefs });
+      // What the owner is told is what delivery will do: the same view as the contacts list.
+      res
+        .status(200)
+        .json({ success: true, ownerAlertPrefs: effectiveOwnerAlertPrefs(prefs, account) });
     })
   );
 

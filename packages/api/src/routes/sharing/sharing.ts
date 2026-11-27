@@ -12,7 +12,9 @@ import {
 import {
   StudentRepository,
   UserRepository,
+  accountTextsOn,
   effectiveSharedAlertPrefs,
+  type IOwnerAccountChannels,
   type Student,
 } from '@scholaracle/database';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -45,13 +47,15 @@ function requireUserEmail(req: Request): string {
 function myStudentView(
   student: Student,
   userId: string,
-  names: Map<string, string>
+  names: Map<string, string>,
+  account: IOwnerAccountChannels
 ): IMySharingStudent | null {
   const access = student.accessFor(userId);
   if (access === null) return null;
   const studentId = student._id?.toString() ?? '';
-  // One source of truth for defaults (Student model) so display matches delivery.
-  const alerts = student.alertPrefsFor(userId) ?? effectiveSharedAlertPrefs({});
+  // One source of truth (Student model) so display matches delivery. For a student the
+  // caller owns, their own account decides whether text is among the channels.
+  const alerts = student.alertPrefsFor(userId, account) ?? effectiveSharedAlertPrefs({});
   if (access === 'owner') {
     return { studentId, name: student.name, access, alerts };
   }
@@ -234,7 +238,10 @@ export function sharingRouter(config: ISharingRouterConfig): Router {
     '/mine',
     asyncHandler(async (req: Request, res: Response) => {
       const userId = requireUserId(req);
-      const accessible = await students.findByUserId(userId);
+      const [accessible, caller] = await Promise.all([
+        students.findByUserId(userId),
+        users.findById(userId).catch(() => null),
+      ]);
       const names = await inviterNameMap(
         users,
         accessible.flatMap((s) => {
@@ -242,9 +249,10 @@ export function sharingRouter(config: ISharingRouterConfig): Router {
           return inviterId ? [inviterId] : [];
         })
       );
+      const account: IOwnerAccountChannels = { texts: accountTextsOn(caller) };
       const view: IMySharingView = {
         students: accessible.flatMap((s) => {
-          const item = myStudentView(s, userId, names);
+          const item = myStudentView(s, userId, names, account);
           return item ? [item] : [];
         }),
       };

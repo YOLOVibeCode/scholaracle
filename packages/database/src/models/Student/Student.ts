@@ -118,6 +118,13 @@ export interface IOwnerAlertPrefs {
   readonly alertTypes?: readonly string[];
   /** Copy of the student's weekly review to the owner (spec §3.3 Q2). Off unless true. */
   readonly weeklyReviewCopy?: boolean;
+  /**
+   * The owner left text out for this student while their account had texts on. That, or an
+   * empty `alertChannels` (every channel off), is what turns the owner's texts off for one
+   * student. A list that merely lacks text does not: one saved while the account had no
+   * texts could not include it.
+   */
+  readonly textsOff?: boolean;
 }
 
 /** One person's alert preferences for a student (owner or accepted adult), as the resolver reads them. */
@@ -132,20 +139,86 @@ export interface IPersonAlertPrefs {
 /** The owner's channels when they never set any (unchanged product default). */
 export const DEFAULT_OWNER_ALERT_CHANNELS: readonly SharedAlertChannel[] = ['email'];
 
+/** What the owner's own account says about the channels it decides for every student. */
+export interface IOwnerAccountChannels {
+  /** The account has texts on (`accountTextsOn`): a number, the opt-in and the text switch. */
+  readonly texts: boolean;
+}
+
 /**
  * A shared adult's channels when the invitation chose none (sharing-spec §8 Q4). Written at
  * accept time and used as the read-time default, so storage, delivery and display agree.
  */
 export const DEFAULT_SHARED_ALERT_CHANNELS: readonly SharedAlertChannel[] = ['email', 'push'];
 
-/** The owner's effective alert preferences for a student. */
-export function effectiveOwnerAlertPrefs(prefs: IOwnerAlertPrefs | undefined): IPersonAlertPrefs {
+/**
+ * Whether the owner gets this student's alerts by text. Their own account decides: the
+ * opt-in says "text me grade and assignment alerts", so an owner with texts on gets them for
+ * every student, except one they turned every channel off for or left text out for while
+ * texts were on.
+ */
+function ownerGetsTexts(
+  prefs: IOwnerAlertPrefs | undefined,
+  account: IOwnerAccountChannels
+): boolean {
+  const silenced = prefs?.alertChannels !== undefined && prefs.alertChannels.length === 0;
+  return account.texts && prefs?.textsOff !== true && !silenced;
+}
+
+/** The saved channels, with text put in or taken out as the owner's account decides. */
+function withOwnerTexts(
+  saved: readonly SharedAlertChannel[],
+  texts: boolean
+): readonly SharedAlertChannel[] {
+  if (!texts) return saved.filter((channel) => channel !== 'sms');
+  return saved.includes('sms') ? saved : [...saved, 'sms'];
+}
+
+/**
+ * The owner's effective alert preferences for a student: what delivery uses and what the
+ * owner is shown.
+ *
+ * Email and push are the ones saved for the student (email when nothing was saved). Text is
+ * not read from the saved list: it follows the owner's account (`ownerGetsTexts`).
+ *
+ * @param account - What the owner's account says. Left out, by a caller that asks about
+ *   email, push or alert types only, the channels are the saved ones and say nothing
+ *   reliable about texts.
+ */
+export function effectiveOwnerAlertPrefs(
+  prefs: IOwnerAlertPrefs | undefined,
+  account?: IOwnerAccountChannels
+): IPersonAlertPrefs {
+  const saved = prefs?.alertChannels ?? DEFAULT_OWNER_ALERT_CHANNELS;
   return {
     receiveAlerts: prefs?.receiveAlerts !== false,
-    alertChannels: prefs?.alertChannels ?? DEFAULT_OWNER_ALERT_CHANNELS,
+    alertChannels:
+      account === undefined ? saved : withOwnerTexts(saved, ownerGetsTexts(prefs, account)),
     ...(prefs?.alertTypes !== undefined ? { alertTypes: prefs.alertTypes } : {}),
     weeklyReviewCopy: prefs?.weeklyReviewCopy === true,
   };
+}
+
+/**
+ * Whether the owner has turned texts off for this student, once their channels are saved.
+ *
+ * Leaving text out says so only while the account has texts on. With texts off for the
+ * account the text switch is shown off whatever was saved, so a list without text is not a
+ * choice against texts: what was said earlier stands.
+ *
+ * @param before - The preferences saved so far, if any
+ * @param chosen - The channels in this save; undefined when it says nothing about channels
+ * @param account - What the owner's account says at the time of the save
+ */
+export function ownerTextsOffAfterSave(
+  before: IOwnerAlertPrefs | undefined,
+  chosen: readonly SharedAlertChannel[] | undefined,
+  account: IOwnerAccountChannels
+): boolean {
+  const saidBefore = before?.textsOff === true;
+  if (chosen === undefined) return saidBefore;
+  if (chosen.includes('sms')) return false;
+  return account.texts ? true : saidBefore;
 }
 
 /** A shared adult's effective alert preferences for a student (pending or accepted row). */
@@ -245,13 +318,17 @@ export class Student {
 
   /**
    * Get all alert recipients: owner (if opted in) + accepted contacts with receiveAlerts.
+   *
+   * @param ownerAccount - What the owner's account says about channels they did not choose
+   *   for this student (see `effectiveOwnerAlertPrefs`)
    */
   public getAllAlertRecipients(
     ownerEmail: string,
-    ownerPhone?: string
+    ownerPhone?: string,
+    ownerAccount?: IOwnerAccountChannels
   ): readonly IAlertRecipientResolved[] {
     const out: IAlertRecipientResolved[] = [];
-    const ownerPrefs = effectiveOwnerAlertPrefs(this.ownerAlertPrefs);
+    const ownerPrefs = effectiveOwnerAlertPrefs(this.ownerAlertPrefs, ownerAccount);
     if (ownerPrefs.receiveAlerts) {
       out.push({
         email: ownerEmail,
@@ -342,9 +419,12 @@ export class Student {
    * The caller's own alert preferences for this student, or null when they have no access
    * (sharing-spec §4.5). Owner: `ownerAlertPrefs`; accepted adult: their `sharedWith` row.
    * `receiveAlerts: false` or no channels means the person has silenced this student.
+   *
+   * @param account - What this person's own account says. It is read for the owner only:
+   *   another adult's channels are the ones on their row.
    */
-  public alertPrefsFor(userId: string): IPersonAlertPrefs | null {
-    if (this.isOwner(userId)) return effectiveOwnerAlertPrefs(this.ownerAlertPrefs);
+  public alertPrefsFor(userId: string, account?: IOwnerAccountChannels): IPersonAlertPrefs | null {
+    if (this.isOwner(userId)) return effectiveOwnerAlertPrefs(this.ownerAlertPrefs, account);
     const row = this.sharedWith.find((sp) => sp.status === 'accepted' && sp.userId === userId);
     return row ? effectiveSharedAlertPrefs(row) : null;
   }

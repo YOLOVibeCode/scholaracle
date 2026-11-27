@@ -1,6 +1,11 @@
 import type { Db } from 'mongodb';
 import { SCHOLARMANCY_SMS_PURPOSE } from '@scholaracle/contracts';
-import { SmsConsentRepository, StudentRepository, UserRepository } from '@scholaracle/database';
+import {
+  accountTextsOn,
+  SmsConsentRepository,
+  StudentRepository,
+  UserRepository,
+} from '@scholaracle/database';
 import type { IResolvedRecipient } from './service/NotificationService/NotificationService';
 import { normalizePhoneE164 } from './sms/normalizePhoneE164';
 
@@ -28,6 +33,7 @@ async function textableNumber(
  * channels (email / sms / push) and alert types (sharing-spec §4.5):
  * - `parentEmail` is set only when the person chose email and has an address;
  * - `parentPhone` is set only when the person chose text and their number may be texted;
+ *   for the owner, only when their account has texts on as well (`accountTextsOn`);
  * - `userId` is set for the owner and every accepted adult (they always have one once accepted);
  * - `push` is set when the person chose push, so delivery reaches their own devices;
  * - `alertTypes` is passed through when the person narrowed it (unset or empty = all).
@@ -45,10 +51,14 @@ export async function resolveAllAlertRecipients(
 
   const owner = await userRepo.findById(student.userId.toString());
   const ownerEmail = owner?.email ?? '';
-  const ownerPhone = owner?.phone;
+  // The owner's own text switch decides the owner's texts. With it off, their number is not
+  // used at all. With it on, the student model gives them text for this student unless they
+  // turned it off for this one (`effectiveOwnerAlertPrefs`).
+  const ownerTexts = accountTextsOn(owner);
+  const ownerPhone = ownerTexts ? owner?.phone : undefined;
 
   const studentAlertEmail = student.alertEmail?.trim();
-  const resolved = student.getAllAlertRecipients(ownerEmail, ownerPhone);
+  const resolved = student.getAllAlertRecipients(ownerEmail, ownerPhone, { texts: ownerTexts });
   const out: IResolvedRecipient[] = [];
   for (const r of resolved) {
     const hasEmail = r.channels.includes('email');

@@ -9,7 +9,13 @@ import {
   type IStudentSession,
   type IWeekView,
 } from '@scholaracle/contracts';
-import { Student, UserRepository, type IStudentData } from '@scholaracle/database';
+import {
+  Student,
+  UserRepository,
+  accountTextsOn,
+  effectiveOwnerAlertPrefs,
+  type IStudentData,
+} from '@scholaracle/database';
 import { WeekGuide } from '@scholaracle/studio-core';
 import { hasPushDevice } from '../push/hasPushDevice';
 import { createMongoTodaySource } from '../studio/mongoTodaySource';
@@ -410,11 +416,14 @@ export class WeeklyReviewSender {
     const adults: IAdult[] = [];
     if (student.ownerAlertPrefs?.weeklyReviewCopy === true) {
       const owner = await users.findById(student.userId.toString()).catch(() => null);
+      // The same rule as for alerts: the owner's own text switch decides the owner's texts.
+      // With it off, text is not among the channels, so the number is not used.
+      const texts = accountTextsOn(owner);
       adults.push({
         email: owner?.email,
         phone: owner?.phone,
         userId: owner?._id?.toString(),
-        channels: student.ownerAlertPrefs.alertChannels ?? ['email'],
+        channels: effectiveOwnerAlertPrefs(student.ownerAlertPrefs, { texts }).alertChannels,
       });
     }
     for (const adult of student.sharedWith) {

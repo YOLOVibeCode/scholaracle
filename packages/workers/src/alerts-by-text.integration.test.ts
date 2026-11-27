@@ -61,8 +61,15 @@ interface IRelayRequest {
 interface IHouseholdOptions {
   /** The owner's daily digest. On is what a new account has. */
   readonly dailyDigest?: boolean;
-  /** The owner's channels for this student. */
+  /**
+   * The owner's channels saved for this student. Left out, nothing was saved: that is every
+   * owner who only uses the website, where there is nowhere to choose them.
+   */
   readonly channels?: readonly string[];
+  /** The owner left text out for this student in the phone app while their account had texts on. */
+  readonly textsOffForStudent?: boolean;
+  /** The owner's account: the opt-in box and the text switch. Both on unless said otherwise. */
+  readonly account?: { readonly optIn?: boolean; readonly textSwitch?: boolean };
   /** Consent for the owner's number: on record (default), never given, or withdrawn (STOP). */
   readonly consent?: 'given' | 'none' | 'withdrawn';
   readonly quietHours?: { readonly start: string; readonly end: string };
@@ -158,7 +165,7 @@ describe('alerts by text', () => {
     id: ObjectId,
     email: string,
     phone: string,
-    options: Pick<IHouseholdOptions, 'dailyDigest' | 'quietHours'>
+    options: Pick<IHouseholdOptions, 'dailyDigest' | 'quietHours' | 'account'>
   ): Record<string, unknown> {
     return {
       _id: id,
@@ -167,14 +174,14 @@ describe('alerts by text', () => {
       name: 'A Parent',
       role: 'parent',
       phone,
-      smsConsent: true,
+      smsConsent: options.account?.optIn ?? true,
       // Quiet hours are given on the UTC clock so that a test can place them around now.
       timezone: 'UTC',
       preferences: {
         notifications: {
           push: true,
           email: true,
-          sms: true,
+          sms: options.account?.textSwitch ?? true,
           quietHours: {
             enabled: options.quietHours !== undefined,
             start: options.quietHours?.start ?? '22:00',
@@ -208,7 +215,15 @@ describe('alerts by text', () => {
       userId: ownerId.toString(),
       name: 'Emma Lopez',
       dataSources: [],
-      ownerAlertPrefs: { receiveAlerts: true, alertChannels: options.channels ?? ['email', 'sms'] },
+      ...(options.channels !== undefined
+        ? {
+            ownerAlertPrefs: {
+              receiveAlerts: true,
+              alertChannels: options.channels,
+              ...(options.textsOffForStudent === true ? { textsOff: true } : {}),
+            },
+          }
+        : {}),
       sharedWith:
         options.coparent !== undefined
           ? [
@@ -467,20 +482,82 @@ describe('alerts by text', () => {
       }
     );
 
-    it('does not text a parent who chose email only', async () => {
-      const home = await household({ channels: ['email'], dailyDigest: false });
+    it('does not text a parent who turned texts off for this student in the phone app', async () => {
+      const off = await household({
+        channels: ['email'],
+        textsOffForStudent: true,
+        dailyDigest: false,
+      });
+      const kept = await household({ channels: ['email', 'push'], textsOffForStudent: true });
+      const { service, summaries } = serviceWithKey();
+
+      await raise(service, gradeDrop(off.studentId));
+      await raise(service, needsHelp(off.studentId));
+      await raise(service, gradeDrop(kept.studentId));
+
+      expect(await textJobs()).toEqual([]);
+      expect(await waiting()).toBe(0);
+      expect(await summaries.flush(NOON_CENTRAL)).toEqual({ sent: 0, dropped: 0, waiting: 0 });
+    });
+
+    it.each([
+      ['email alone', ['email']],
+      ['email and push', ['email', 'push']],
+      ['text alone', ['sms']],
+    ])(
+      'texts a parent whose channels for this student were saved as %s: their account decides',
+      async (_what, channels) => {
+        // A list saved in the phone app before the account had texts could not include text.
+        const home = await household({ channels, dailyDigest: false });
+        const { service } = serviceWithKey();
+
+        await raise(service, gradeDrop(home.studentId));
+
+        expect((await textJobs()).map((job) => job.payload.userId)).toEqual([OWNER_PHONE]);
+      }
+    );
+
+    it('does not text a parent who turned every channel off for this student', async () => {
+      const home = await household({ channels: [], dailyDigest: false });
       const { service } = serviceWithKey();
 
       await raise(service, gradeDrop(home.studentId));
+      await raise(service, needsHelp(home.studentId));
 
       expect(await textJobs()).toEqual([]);
       expect(await waiting()).toBe(0);
     });
 
+    it.each([
+      ['turned the text switch off', { textSwitch: false }],
+      ['unticked the opt-in', { optIn: false }],
+    ])(
+      'neither texts nor keeps anything for a parent who %s in Settings',
+      async (_what, account) => {
+        // The consent for the number is still on record: the account is what says no.
+        const unchosen = await household({ account });
+        const chosen = await household({ account, channels: ['email', 'sms'] });
+        const digestOff = await household({ account, channels: ['sms'], dailyDigest: false });
+        const { service, summaries } = serviceWithKey();
+
+        await raise(service, gradeDrop(unchosen.studentId));
+        await raise(service, gradeDrop(chosen.studentId));
+        await raise(service, gradeDrop(digestOff.studentId));
+        await raise(service, needsHelp(digestOff.studentId));
+
+        expect(await textJobs()).toEqual([]);
+        expect(await waiting()).toBe(0);
+        expect(await summaries.flush(NOON_CENTRAL)).toEqual({ sent: 0, dropped: 0, waiting: 0 });
+        expect(relayRequests).toEqual([]);
+      }
+    );
+
     it('texts each adult who chose text on their own number, under their own account', async () => {
+      // The owner has texts off. The other adult opted in through their link and chose text
+      // on their row: that is what counts for them, not a switch on anybody's account.
       const home = await household({
         dailyDigest: false,
-        channels: ['email'],
+        account: { textSwitch: false },
         coparent: { channels: ['sms'] },
       });
       const { service } = serviceWithKey();

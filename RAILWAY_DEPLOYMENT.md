@@ -138,15 +138,20 @@ Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything nam
 
 With `NOCTUSOFT_API_KEY` set, a text goes only to a number that has consent on record (the box ticked at sign-up or in Settings, or the opt-in link a co-parent is sent) and that did not reply STOP.
 
+Who gets a student's alerts by text:
+
+- The account owner, when their own account has texts on: a mobile number, the opt-in box ticked and "SMS Notifications" on in Settings. That covers every student they own, except one they turned text off for in the phone app while their account had texts on (stored as `ownerAlertPrefs.textsOff`), or turned every channel off for. Channels saved for a student before the account had texts do not turn texts off. With texts off for the account the owner gets none, whatever was saved per student, and the phone app shows text off.
+- Another adult the student is shared with, when text is among the channels on their row and they opted in through their link.
+
 | Text | When it goes |
 |------|--------------|
-| Daily summary ("Your daily summary: 3 new alerts.") | Once a day, in the hour from 18:00 UTC, to an adult who chose text for a student and has the daily digest on, which is the default. It counts the alerts kept for them since the last one. |
-| One text per alert | At once, to an adult who chose text and turned the daily digest off. |
+| Daily summary ("Your daily summary: 3 new alerts.") | Once a day, in the hour from 18:00 UTC, to an adult who gets texts and has the daily digest on, which is the default. It counts the alerts kept for them since the last one. |
+| One text per alert | At once, to an adult who gets texts and turned the daily digest off. |
 | A student asked for help | At once, whatever the digest setting. |
 | Agenda reminder | When a parent presses Send Reminder and picks SMS. |
 | Student sign-in link | When a parent sends the link by SMS. |
 | Opt-in confirmation | Once, after a co-parent opts in through their link. |
-| Copy of the weekly review | With `WEEKLY_REVIEW_ENABLED`, to an adult who asked for the copy and chose text. |
+| Copy of the weekly review | With `WEEKLY_REVIEW_ENABLED`, to an adult who asked for the copy and gets texts. |
 
 The alerts that reach adults are missing assignments, grade drops, suggestions and help requests. Deadlines, tests, workload and praise go to the student only.
 
