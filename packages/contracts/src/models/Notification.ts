@@ -7,7 +7,13 @@ export interface NotificationData {
   readonly id?: string;
   readonly agentType: AgentType;
   readonly studentId: string;
+  /** Where this copy goes: an account id, or the person's email address or phone number. */
   readonly userId: string;
+  /**
+   * The account of the person this copy is for, when `userId` holds their address instead.
+   * What is logged about the copy is logged for this account, so it goes when the account does.
+   */
+  readonly recipientUserId?: string;
   readonly subject: string;
   readonly body: string;
   readonly priority: NotificationPriority;
@@ -24,6 +30,8 @@ export interface INotificationPayload {
   readonly agentType: AgentType;
   readonly studentId: string;
   readonly userId: string;
+  /** See `NotificationData.recipientUserId`. */
+  readonly recipientUserId?: string;
   readonly subject: string;
   readonly body: string;
   readonly priority: NotificationPriority;
@@ -48,6 +56,7 @@ export class Notification {
   public readonly agentType: AgentType;
   public readonly studentId: string;
   public readonly userId: string;
+  public readonly recipientUserId?: string;
   public subject: string;
   public body: string;
   public readonly priority: NotificationPriority;
@@ -70,6 +79,9 @@ export class Notification {
     this.agentType = data.agentType;
     this.studentId = data.studentId;
     this.userId = data.userId;
+    if (typeof data.recipientUserId === 'string' && data.recipientUserId !== '') {
+      this.recipientUserId = data.recipientUserId;
+    }
     this.subject = data.subject;
     this.body = data.body;
     this.priority = data.priority;
@@ -112,6 +124,7 @@ export class Notification {
       agentType: payload.agentType,
       studentId: payload.studentId,
       userId: payload.userId,
+      recipientUserId: payload.recipientUserId,
       subject: payload.subject,
       body: payload.body,
       priority: payload.priority,

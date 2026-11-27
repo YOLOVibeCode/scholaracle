@@ -7,9 +7,11 @@ import {
   SMS_CONSENT_REQUIRED_MESSAGE,
   SMS_CONTACT_OPT_IN_SOURCE,
 } from '@scholaracle/contracts';
+import { SmsNotSentError } from '@scholaracle/agents';
 import { SmsConsentRepository, SmsContactOptInInviteRepository } from '@scholaracle/database';
 import { smsOptInRouter } from './smsOptIn';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { logger } from '../../logger';
 
 describe('public SMS opt-in (/api/sms/optin)', () => {
   let app: Express;
@@ -17,6 +19,12 @@ describe('public SMS opt-in (/api/sms/optin)', () => {
   let client: MongoClient;
   let mongoServer: MongoMemoryServer;
   const sent: { to: string; body: string }[] = [];
+  const sendTransactional = jest.fn(
+    async (to: string, body: string): Promise<{ messageId: string }> => {
+      sent.push({ to, body });
+      return { messageId: 'SM1' };
+    }
+  );
   const studentId = new ObjectId();
 
   beforeAll(async () => {
@@ -24,12 +32,7 @@ describe('public SMS opt-in (/api/sms/optin)', () => {
     client = new MongoClient(mongoServer.getUri());
     await client.connect();
     database = client.db('sms_optin_router_test');
-    const guardedSmsSender = {
-      sendTransactional: jest.fn(async (to: string, body: string) => {
-        sent.push({ to, body });
-        return { messageId: 'SM1' };
-      }),
-    };
+    const guardedSmsSender = { sendTransactional };
     app = express();
     app.use(express.json());
     app.use(
@@ -134,4 +137,43 @@ describe('public SMS opt-in (/api/sms/optin)', () => {
     expect(sent).toEqual([{ to: '+15125550100', body: expect.stringContaining('opted in') }]);
     expect((await request(app).get(`/api/sms/optin/${token}`)).status).toBe(404);
   });
+
+  it.each([
+    [
+      'the text was refused',
+      new SmsNotSentError('relay_unreachable', 'unavailable'),
+      'relay_unreachable',
+    ],
+    [
+      'something else broke',
+      new Error('E11000 duplicate key { phoneE164: "+15125550100" }'),
+      'unexpected_error',
+    ],
+  ])(
+    'keeps the consent when the confirmation could not be sent (%s), and logs why as a code',
+    async (_what, failure, reason) => {
+      const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      sendTransactional.mockRejectedValueOnce(failure);
+      const token = await issue();
+
+      try {
+        const res = await request(app)
+          .post(`/api/sms/optin/${token}`)
+          .send({ phone: '(512) 555-0100', consent: true });
+
+        expect(res.status).toBe(200);
+        expect(
+          await new SmsConsentRepository(database).hasActiveConsent(
+            '+15125550100',
+            SCHOLARMANCY_SMS_PURPOSE
+          )
+        ).toBe(true);
+        expect(warn).toHaveBeenCalledWith({ reason }, 'opt-in confirmation text failed');
+        // Neither the number nor what the error says is in the log.
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('5125550100');
+      } finally {
+        warn.mockRestore();
+      }
+    }
+  );
 });

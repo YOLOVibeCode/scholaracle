@@ -21,20 +21,19 @@ import {
   UserRepository,
   SmsDigestPendingRepository,
   EmailDigestPendingRepository,
-  CommunicationLogRepository,
   type IEmailDigestPendingItem,
 } from '@scholaracle/database';
 import { flushEmailDigests } from './digest/digest-flush';
+import { SmsDigestFlusher } from './digest/sms-digest-flush';
 import { flushGlanceEmails } from './glance/glance-flush';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { createSmsStack, buildSmsDigestBody } from '@scholaracle/agents';
+import { createSmsStack, describeSmsStack, type ISmsStack } from '@scholaracle/agents';
 import { PushDelivery, ExpoPushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
 import type { MailService } from '@sendgrid/mail';
-import type { GuardedSmsSender } from '@scholaracle/agents';
 import { SyncStalenessMonitor, buildSyncStalenessConfigFromEnv } from './sync-staleness-monitor';
 import { logger } from './logger';
 import { initSentry } from './sentry';
@@ -88,53 +87,6 @@ function smsWebOrigin(): string {
 }
 
 /**
- * Flush pending SMS digest: send one combined SMS per user with digest enabled, then clear pending.
- * Intended to run once per day at SMS_DIGEST_UTC_HOUR.
- */
-async function flushSmsDigests(database: Db, guardedSender: GuardedSmsSender): Promise<void> {
-  const repo = new SmsDigestPendingRepository(database);
-  const userIds = await repo.getDistinctUserIds();
-  if (userIds.length === 0) return;
-
-  for (const userId of userIds) {
-    const items = await repo.findByUserId(userId);
-    if (items.length === 0) continue;
-    const phone = items[0]!.phone;
-    // One segment: count + details link (joined email bodies ran to 10+ segments).
-    const body = buildSmsDigestBody(items.length, smsWebOrigin());
-    const commLogRepo = new CommunicationLogRepository(database);
-    try {
-      await guardedSender.sendTransactional(phone, body, {
-        userId,
-        subject: `SMS Digest (${items.length} alerts)`,
-        templateName: 'sms_digest',
-        triggeredBy: 'scheduled',
-      });
-      await repo.deleteByUserId(userId);
-    } catch (err) {
-      logger.error({ err, userId, job: 'sms-digest' }, 'failed to send SMS digest');
-      await commLogRepo
-        .create({
-          userId,
-          channel: 'sms',
-          type: 'notification',
-          subject: `SMS Digest (${items.length} alerts)`,
-          content: body,
-          recipientPhone: phone,
-          status: 'failed',
-          failedAt: new Date(),
-          failureReason: err instanceof Error ? err.message : String(err),
-          triggeredBy: 'scheduled',
-          templateName: 'sms_digest',
-        })
-        .catch(() => {
-          /* best effort */
-        });
-    }
-  }
-}
-
-/**
  * Create email transport from config (SendGrid or SMTP).
  */
 function getEmailTransport(config: IWorkerConfig): IEmailTransport {
@@ -166,15 +118,16 @@ function getEmailTransport(config: IWorkerConfig): IEmailTransport {
  * @param config - Worker configuration
  * @param database - Optional DB for digest preference and pending queue
  * @param emailTransport - Optional shared email transport (for digest flush); when not provided, created internally
+ * @param smsStack - The process's one SMS stack, or null when texts are off
  * @returns Notification service instance
  */
 function initializeNotificationService(
   config: IWorkerConfig,
   database?: Db,
-  emailTransport?: IEmailTransport
+  emailTransport?: IEmailTransport,
+  smsStack: ISmsStack | null = null
 ): NotificationService {
   const sendGridConfig = getSendGridConfig(config);
-  const smsStack = database ? createSmsStack(database) : null;
 
   const transport: IEmailTransport = emailTransport ?? getEmailTransport(config);
 
@@ -410,8 +363,17 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
 
   const sendGridConfig = getSendGridConfig(config);
   const emailTransport = getEmailTransport(config);
+  // One SMS stack for the process: alert texts and the daily summary go through the same gate.
+  const smsStack = createSmsStack(database);
+  const texts = describeSmsStack(smsStack);
+  logger.info({ texts: texts.texts }, texts.message);
   // Initialize notification service (with SMS/email digest when database is available)
-  const notificationService = initializeNotificationService(config, database, emailTransport);
+  const notificationService = initializeNotificationService(
+    config,
+    database,
+    emailTransport,
+    smsStack
+  );
 
   // Resolve all alert recipients for a student (owner + accepted contacts)
   const resolveAll = (studentId: string): ReturnType<typeof resolveAllAlertRecipients> =>
@@ -437,14 +399,16 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
   // Start notification worker
   notificationWorker.start();
 
-  const digestSmsStack = createSmsStack(database);
-  if (digestSmsStack) {
+  if (smsStack) {
+    const smsDigests = new SmsDigestFlusher(database, smsStack.guardedSender, {
+      webOrigin: smsWebOrigin(),
+    });
     safeInterval(
       'sms-digest',
       async () => {
         const now = new Date();
         if (now.getUTCHours() === DIGEST_UTC_HOUR) {
-          await flushSmsDigests(database, digestSmsStack.guardedSender);
+          await smsDigests.flush(now);
         }
       },
       60_000

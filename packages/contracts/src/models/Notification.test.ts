@@ -298,4 +298,36 @@ describe('Notification', () => {
       expect(notification.actionTakenAt).toBeInstanceOf(Date);
     });
   });
+
+  describe('whose copy it is', () => {
+    // An email or a text is addressed to the person's address, so `userId` holds the address.
+    const toAPhone = { ...validData, id: 'n-1', userId: '+15125550100' };
+
+    it("keeps the person's account id next to the address it is sent to", () => {
+      const notification = new Notification({ ...toAPhone, recipientUserId: 'account-1' });
+
+      expect(notification.userId).toBe('+15125550100');
+      expect(notification.recipientUserId).toBe('account-1');
+    });
+
+    it('carries the account id through a deliver job', () => {
+      const notification = Notification.fromPayload({
+        ...toAPhone,
+        recipientUserId: 'account-1',
+      });
+
+      expect(notification.recipientUserId).toBe('account-1');
+    });
+
+    it('has no account id unless one was given', () => {
+      expect(new Notification(toAPhone).recipientUserId).toBeUndefined();
+      expect(Notification.fromPayload(toAPhone).recipientUserId).toBeUndefined();
+    });
+
+    it('takes an empty account id for none, so a log row never has an empty owner', () => {
+      expect(
+        new Notification({ ...toAPhone, recipientUserId: '' }).recipientUserId
+      ).toBeUndefined();
+    });
+  });
 });

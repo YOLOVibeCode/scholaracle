@@ -7,8 +7,14 @@ export {
   AGENDA_REMINDER_TRIGGER,
   SMS_SEGMENT_LIMIT,
 } from './alertSmsTemplates';
-export { NoctusoftSmsRelayClient } from './NoctusoftSmsRelayClient';
-export { GuardedSmsSender } from './GuardedSmsSender';
-export type { IGuardedSmsSendMeta } from './GuardedSmsSender';
-export { createSmsStack } from './createSmsStack';
+export { NoctusoftSmsRelayClient, SmsRelayError } from './NoctusoftSmsRelayClient';
+export type {
+  INoctusoftSmsRelayOptions,
+  INoctusoftSmsRelayResult,
+} from './NoctusoftSmsRelayClient';
+export { GuardedSmsSender, SmsNotSentError, isSmsRecipientReason } from './GuardedSmsSender';
+export type { IGuardedSmsSendMeta, SmsFailureKind } from './GuardedSmsSender';
+export { createSmsStack, describeSmsStack } from './createSmsStack';
 export type { ISmsStack } from './createSmsStack';
+export { resolveSmsAppEnv } from './smsAppEnv';
+export type { SmsAppEnv } from './smsAppEnv';

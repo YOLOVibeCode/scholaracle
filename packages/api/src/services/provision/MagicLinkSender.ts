@@ -1,6 +1,6 @@
-import type { IEmailTransport } from '@scholaracle/agents';
-import type { GuardedSmsSender } from '@scholaracle/agents';
-import { SCHOLARMANCY_SMS_BRAND } from '@scholaracle/contracts';
+import { SmsNotSentError } from '@scholaracle/agents';
+import type { GuardedSmsSender, IEmailTransport } from '@scholaracle/agents';
+import { AppError, ERROR_CODES, SCHOLARMANCY_SMS_BRAND } from '@scholaracle/contracts';
 
 export interface IMagicLinkEmailConfig {
   readonly fromEmail: string;
@@ -60,16 +60,62 @@ export class MagicLinkSender implements IMagicLinkSender {
     });
   }
 
+  /**
+   * @throws {AppError} when the link was not texted, with a sentence for the person who asked
+   */
   public async sendSms(params: ISendMagicLinkParams): Promise<void> {
     if (!this._guardedSms) {
-      throw new Error('SMS delivery is not configured');
+      throw new AppError('Texts are not available right now. Send the link by email instead.', {
+        status: 503,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+      });
     }
     const { to, loginUrl } = params;
     // Short copy keeps brand + link + STOP in one segment (see ensureBrandSmsBody).
     const body = `Sign-in link (expires in 24h): ${loginUrl}`;
-    await this._guardedSms.sendTransactional(to, body, {
-      templateName: 'magic_link',
-      triggeredBy: 'system',
+    try {
+      await this._guardedSms.sendTransactional(to, body, {
+        templateName: 'magic_link',
+        triggeredBy: 'system',
+      });
+    } catch (error: unknown) {
+      throw error instanceof SmsNotSentError ? linkNotTexted(error) : error;
+    }
+  }
+}
+
+/**
+ * A sign-in link that was not texted, as an answer for the person who asked for it. The
+ * number is one they typed: it may be anybody's, so the sentence says what they can do,
+ * and neither the number nor the reason's code is in it.
+ */
+function linkNotTexted(failure: SmsNotSentError): AppError {
+  if (failure.reason === 'no_consent') {
+    return new AppError(
+      'That number has not turned on texts from Scholarmancy. Send the link by email instead.',
+      { status: 409, code: ERROR_CODES.CONFLICT }
+    );
+  }
+  if (failure.reason === 'opted_out') {
+    return new AppError(
+      'That number has opted out of texts from Scholarmancy. Send the link by email instead.',
+      { status: 409, code: ERROR_CODES.CONFLICT }
+    );
+  }
+  if (failure.kind === 'recipient') {
+    return new AppError('That is not a number we can text. Send the link by email instead.', {
+      status: 400,
+      code: ERROR_CODES.VALIDATION_ERROR,
     });
   }
+  if (failure.kind === 'rate_limited') {
+    return new AppError('Too many texts to that number for now. Try again later.', {
+      status: 429,
+      code: ERROR_CODES.RATE_LIMITED,
+    });
+  }
+  return new AppError('The link could not be texted. Try again later, or send it by email.', {
+    status: 503,
+    code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+  });
 }

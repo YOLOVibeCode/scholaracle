@@ -43,9 +43,15 @@ export class SmsDigestPendingRepository {
     }));
   }
 
-  /** Remove all pending items for a user after sending the digest. */
-  async deleteByUserId(userId: string): Promise<number> {
-    const result = await this._collection.deleteMany({ userId });
+  /**
+   * Remove a user's pending items after their digest is dealt with. With `createdUpTo`,
+   * only the items created up to that moment go: one that arrived while the digest was
+   * on its way stays for the next digest.
+   */
+  async deleteByUserId(userId: string, createdUpTo?: Date): Promise<number> {
+    const result = await this._collection.deleteMany(
+      createdUpTo === undefined ? { userId } : { userId, createdAt: { $lte: createdUpTo } }
+    );
     return result.deletedCount;
   }
 
