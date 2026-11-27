@@ -68,6 +68,22 @@ function wantsPush(
   return recipient.push === true && typeof recipient.userId === 'string' && recipient.userId !== '';
 }
 
+/**
+ * Does this recipient get a text of their own? A number is on a resolved recipient only
+ * when the person chose text. The account is needed as well: their daily digest and quiet
+ * hours are read from it, and the history of the text is kept for it.
+ */
+function wantsText(
+  recipient: IResolvedRecipient
+): recipient is IResolvedRecipient & { parentPhone: string; userId: string } {
+  return (
+    typeof recipient.parentPhone === 'string' &&
+    recipient.parentPhone !== '' &&
+    typeof recipient.userId === 'string' &&
+    recipient.userId !== ''
+  );
+}
+
 /** @deprecated Use IResolvedRecipient (singular). Kept for backwards compat. */
 export type IResolvedRecipients = IResolvedRecipient;
 
@@ -84,6 +100,11 @@ export interface INotificationServiceSmsDigestOptions {
     subject: string,
     body: string
   ) => Promise<void>;
+  /**
+   * For a text that goes at once: the time before which this person is not to be texted
+   * (their quiet hours), or null when it can go now. `severity` is the alert's.
+   */
+  readonly getTextNotBefore?: (userId: string, severity: string) => Promise<Date | null>;
 }
 
 export interface IEmailDigestPreference {
@@ -377,6 +398,8 @@ export class NotificationService {
         : [resolvedRecipients]
       : [{}];
     const isDefaultSingleRecipient = isLegacySentinel(recipients);
+    // Without a text service (no key) nothing is queued or kept for a text.
+    const canText = this._deliveryRouter.supports(NotificationChannel.SMS);
 
     for (const agent of this._agents) {
       if (!agent.handles(alert)) continue;
@@ -410,28 +433,10 @@ export class NotificationService {
           !isDefaultSingleRecipient
         )
           continue;
-        if (
-          channel === NotificationChannel.SMS &&
-          !recipient.parentPhone &&
-          !isDefaultSingleRecipient
-        )
-          continue;
-        // Push is per person (each recipient's own devices); enqueued after the channel loop.
+        // Text and push are per person (their own number, their own devices), whatever the
+        // notification lists: both are enqueued after the channel loop.
+        if (channel === NotificationChannel.SMS && !isDefaultSingleRecipient) continue;
         if (channel === NotificationChannel.PUSH && !isDefaultSingleRecipient) continue;
-
-        if (
-          mayDefer &&
-          channel === NotificationChannel.SMS &&
-          recipient.userId &&
-          recipient.parentPhone
-        ) {
-          const deferred = await this._tryDeferSmsToDigestEnqueue(
-            recipient,
-            notification.subject,
-            notification.body
-          );
-          if (deferred) continue;
-        }
 
         if (
           mayDefer &&
@@ -446,9 +451,7 @@ export class NotificationService {
         const to =
           channel === NotificationChannel.EMAIL
             ? (recipient.parentEmail ?? notification.userId)
-            : channel === NotificationChannel.SMS
-              ? (recipient.parentPhone ?? notification.userId)
-              : notification.userId;
+            : notification.userId;
 
         const payload: INotificationPayload = { ...basePayload, userId: to };
         const jobId = await queue.add(
@@ -460,6 +463,11 @@ export class NotificationService {
         deliveryJobIds.push(jobId);
       }
 
+      if (!useStudent && canText && wantsText(recipient)) {
+        const jobId = await this._enqueueText(alert, queue, basePayload, recipient);
+        if (jobId !== null) deliveryJobIds.push(jobId);
+      }
+
       if (!useStudent && wantsPush(recipient)) {
         deliveryJobIds.push(await this._enqueuePush(queue, basePayload, recipient.userId));
       }
@@ -469,6 +477,42 @@ export class NotificationService {
     if (parentNotification) parentNotification.markSent();
 
     return { notifications, deliveryJobIds };
+  }
+
+  /**
+   * One text for this person, to their own number. It is kept for their daily text summary
+   * when they have one, unless the alert is one that goes at once. A text that goes at once
+   * still waits until their quiet hours end.
+   *
+   * @returns the deliver job's id, or null when the text was kept for the summary
+   */
+  private async _enqueueText(
+    alert: Alert,
+    queue: MongoQueue,
+    basePayload: INotificationPayload,
+    recipient: IResolvedRecipient & { parentPhone: string; userId: string }
+  ): Promise<string | null> {
+    if (!sendsAtOnce(alert)) {
+      const kept = await this._tryDeferSmsToDigestEnqueue(
+        recipient,
+        basePayload.subject,
+        basePayload.body
+      );
+      if (kept) return null;
+    }
+    const notBefore =
+      (await this._smsDigestOptions?.getTextNotBefore?.(recipient.userId, alert.severity)) ?? null;
+    const payload: INotificationPayload = {
+      ...basePayload,
+      userId: recipient.parentPhone,
+      recipientUserId: recipient.userId,
+    };
+    return queue.add(
+      'deliver',
+      'deliver-one',
+      { notificationPayload: payload, channel: NotificationChannel.SMS },
+      { maxAttempts: 5, ...(notBefore !== null ? { scheduledFor: notBefore } : {}) }
+    );
   }
 
   /** One push deliver job addressed to this person's account (their registered devices). */

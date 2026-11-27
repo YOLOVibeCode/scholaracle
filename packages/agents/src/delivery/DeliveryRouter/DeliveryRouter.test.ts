@@ -238,4 +238,24 @@ describe('DeliveryRouter', () => {
       expect(mockPushDelivery.deliver).not.toHaveBeenCalled();
     });
   });
+
+  describe('supports', () => {
+    const only =
+      (channel: NotificationChannel) =>
+      (asked: NotificationChannel): boolean =>
+        asked === channel;
+
+    it('says yes for a channel one of its services delivers, and no for any other', () => {
+      mockEmailDelivery.supports.mockImplementation(only(NotificationChannel.EMAIL));
+      mockPushDelivery.supports.mockImplementation(only(NotificationChannel.PUSH));
+      mockSmsDelivery.supports.mockImplementation(only(NotificationChannel.SMS));
+      // The workers build the router without a text service when no key is set.
+      const withoutTexts = new DeliveryRouter([mockEmailDelivery, mockPushDelivery]);
+
+      expect(deliveryRouter.supports(NotificationChannel.SMS)).toBe(true);
+      expect(withoutTexts.supports(NotificationChannel.SMS)).toBe(false);
+      expect(withoutTexts.supports(NotificationChannel.EMAIL)).toBe(true);
+      expect(withoutTexts.supports(NotificationChannel.PUSH)).toBe(true);
+    });
+  });
 });

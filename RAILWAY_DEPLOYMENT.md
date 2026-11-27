@@ -134,6 +134,26 @@ Each of these is off when unset, except `STALENESS_ENABLED`, which is on when un
 
 Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything named `NEXT_PUBLIC_` is sent to browsers.
 
+#### What is sent by text
+
+With `NOCTUSOFT_API_KEY` set, a text goes only to a number that has consent on record (the box ticked at sign-up or in Settings, or the opt-in link a co-parent is sent) and that did not reply STOP.
+
+| Text | When it goes |
+|------|--------------|
+| Daily summary ("Your daily summary: 3 new alerts.") | Once a day, in the hour from 18:00 UTC, to an adult who chose text for a student and has the daily digest on, which is the default. It counts the alerts kept for them since the last one. |
+| One text per alert | At once, to an adult who chose text and turned the daily digest off. |
+| A student asked for help | At once, whatever the digest setting. |
+| Agenda reminder | When a parent presses Send Reminder and picks SMS. |
+| Student sign-in link | When a parent sends the link by SMS. |
+| Opt-in confirmation | Once, after a co-parent opts in through their link. |
+| Copy of the weekly review | With `WEEKLY_REVIEW_ENABLED`, to an adult who asked for the copy and chose text. |
+
+The alerts that reach adults are missing assignments, grade drops, suggestions and help requests. Deadlines, tests, workload and praise go to the student only.
+
+A text for an alert that goes at once waits until the person's quiet hours end: 22:00 to 07:00 on their own clock unless they changed it. A critical alert does not wait, unless they turned that exception off. The daily summary goes at 18:00 UTC whatever the quiet hours are; that is between 8 am and 2 pm in the fifty states.
+
+Without the key nothing is queued and nothing is kept for a text, so setting the key later does not send what happened before.
+
 ### Optional
 
 | Variable | Service | What it does |
