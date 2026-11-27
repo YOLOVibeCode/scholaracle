@@ -1,4 +1,4 @@
-import { calendarDayKey, zonedLocalDate, atLocalHourOnCalendarDay } from './zonedTime';
+import { calendarDayKey, zonedLocalDate, atLocalHourOnCalendarDay, localClock } from './zonedTime';
 
 describe('zonedTime', () => {
   it('formats a calendar day in the parent timezone', () => {
@@ -26,6 +26,43 @@ describe('zonedTime', () => {
   it('builds a zoned local date', () => {
     const d = zonedLocalDate('America/Chicago', 2026, 1, 15, 16);
     expect(calendarDayKey(d, 'America/Chicago')).toBe('2026-01-15');
+  });
+
+  it('builds a zoned local date to the minute', () => {
+    expect(zonedLocalDate('America/Chicago', 2026, 12, 7, 6, 30).toISOString()).toBe(
+      '2026-12-07T12:30:00.000Z'
+    );
+  });
+
+  it('rolls a day past the end of the month into the next month', () => {
+    // "November 31st" is how the day after November 30th is asked for.
+    expect(zonedLocalDate('America/Chicago', 2026, 11, 31, 7).toISOString()).toBe(
+      '2026-12-01T13:00:00.000Z'
+    );
+  });
+
+  it('reads the wall clock in a zone: the date, the hour and the minute', () => {
+    expect(localClock(new Date('2026-12-04T05:59:00.000Z'), 'America/Chicago')).toEqual({
+      year: 2026,
+      month: 12,
+      day: 3,
+      hour: 23,
+      minute: 59,
+    });
+    expect(localClock(new Date('2026-12-04T06:00:00.000Z'), 'America/Chicago')).toEqual({
+      year: 2026,
+      month: 12,
+      day: 4,
+      hour: 0,
+      minute: 0,
+    });
+    expect(localClock(new Date('2026-11-08T12:45:00.000Z'), 'Asia/Kolkata')).toEqual({
+      year: 2026,
+      month: 11,
+      day: 8,
+      hour: 18,
+      minute: 15,
+    });
   });
 
   it.each([

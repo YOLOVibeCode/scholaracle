@@ -43,21 +43,31 @@ export { submitWithRollback, type ISubmitWithRollback } from './optimisticUpdate
 export { deriveTaskNeeds } from './taskNeeds';
 export { dueAtMs, compareByDueAsc, sortByDueAsc, type IHasDueAt } from './dueOrder';
 export { buildWeekDays, calendarDayOffset, localDayOf, isValidTimeZone } from './weekDays';
-export {
-  GuidanceLadder,
-  resolveLadderStep,
-  isQuietHour,
-  studentAssignmentPath,
-} from './guidance/GuidanceLadder';
+export { GuidanceLadder, studentAssignmentPath } from './guidance/GuidanceLadder';
 export type {
   ILadderAssignment,
   IGuidanceLadderDeps,
-  IQuietHoursConfig,
+  LadderOutcome,
+  LadderSkip,
 } from './guidance/GuidanceLadder';
-export { scheduleGuidanceSteps, toGuidanceJobData } from './guidance/scheduleGuidanceSteps';
+export { quietHoursEnd } from './guidance/quietHours';
+export type { IQuietHoursConfig } from './guidance/quietHours';
+export {
+  LADDER_STEPS,
+  ladderFireTime,
+  ladderStepEnd,
+  scheduleGuidanceSteps,
+  toGuidanceJobData,
+} from './guidance/scheduleGuidanceSteps';
 export type { IScheduledGuidanceStep } from './guidance/scheduleGuidanceSteps';
 export { SystemGuidanceClock } from './guidance/SystemGuidanceClock';
-export { calendarDayKey, zonedLocalDate, atLocalHourOnCalendarDay } from './guidance/zonedTime';
+export {
+  calendarDayKey,
+  zonedLocalDate,
+  atLocalHourOnCalendarDay,
+  localClock,
+} from './guidance/zonedTime';
+export type { ILocalClock } from './guidance/zonedTime';
 export { WorkPack, createStaticWorkPackSource } from './WorkPack';
 export { humanAssignmentStatus } from './humanAssignmentStatus';
 export {

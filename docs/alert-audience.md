@@ -67,10 +67,48 @@ with a line telling the parent to create a login under Settings, Student logins.
 Each ladder reminder goes out once. Every sync queues an assignment's coming reminders again,
 so a reminder that comes due has one job for each sync since the assignment appeared, and the
 worker runs ten jobs at once. The ladder therefore takes a reminder before it sends it
-(`IGuidanceSendLog.claim`: one row in `guidance_sends` for each step and audience, keyed by
-`_id` so only one caller can have it) and gives it back when nobody was told, so a failed send
-is tried again. The student's two a day are taken the same way (`guidance_student_days`), which
-keeps the limit when several assignments come due at the same moment.
+(`IGuidanceSendLog.claim`: one row in `guidance_sends` for each step, due time and audience,
+keyed by `_id` so only one caller can have it) and gives it back when nobody was told, so a
+failed send is tried again. The student's two a day are taken the same way
+(`guidance_student_days`), which keeps the limit when several assignments come due at the same
+moment.
+
+#### When each ladder reminder goes
+
+| Step  | Goes out                                                                        | To                 | Good until      |
+| ----- | ------------------------------------------------------------------------------- | ------------------ | --------------- |
+| T-48h | 4 pm local on the day that is 48 hours before the deadline (32 to 56 hours ahead) | student            | the T-18h time  |
+| T-18h | 4 pm local on the day that is 18 hours before the deadline (2 to 26 hours ahead)  | student            | the deadline    |
+| T+12h | 12 hours after the deadline                                                     | student and parent | the T+72h time  |
+| T+72h | 72 hours after the deadline                                                     | parent             | 24 hours later  |
+
+"Local" is the time zone of the sync that queued the job: the computer the connector runs on.
+
+One function gives the time to both sides, `ladderFireTime` in studio-core. The API queues a
+job for that time on every sync (`scheduleGuidanceJobsFromOps`), and the ladder checks the job
+against the same time when the workers run it. A job that runs late (a deploy restarted the
+workers, or the reminder was held) is still sent until its "good until" time (`ladderStepEnd`)
+and dropped after it, so "due soon" is never said about work that is already late.
+
+The ladder reads the assignment again before it sends (`MongoAssignmentState.current`, the
+rows the student's own pages list, with the portal's status read as those pages read it in
+`studioTaskClassify`):
+
+- Submitted, graded or excused: nothing more is sent.
+- No longer listed by the portal: nothing is sent.
+- Due at another time now: this job sends nothing. The sync that saw the new time queued jobs
+  for it, and those are new reminders: "due Thursday" having gone out does not stop "due
+  Monday".
+
+Quiet hours hold a reminder; they do not drop it. They are the owner's
+(`preferences.notifications.quietHours`, on from 22:00 to 07:00 unless changed) and apply to
+the student's reminders too. A job that runs inside them is queued again for the minute they
+end (`quietHoursEnd`) and sent then if it is still good. For a 23:59 deadline the T+72h
+reminder comes due at 23:59 and goes out at 07:00.
+
+The workers log `reminder sent` and `reminder held until quiet hours end` at info, and
+`reminder not sent` with the reason at debug. The lines carry the step and the job id, never a
+name or the wording.
 
 When `showGrades` is false (the default), student copy must not include percent, letter grade, or points.
 
@@ -91,7 +129,7 @@ Mongo source as `GET /api/studio/week`, and `assertNoGradeLeak` runs on it befor
 
 - **NotificationService:** `packages/agents/src/service/NotificationService/NotificationService.ts` — generates student and parent notifications; respects `alertAudience` for which to generate/deliver, including the agent path and enqueue-deliver path.
 - **Alert audience config:** `packages/agents/src/config/alert-audience.ts`
-- **Guidance ladder:** `packages/studio-core/src/guidance/GuidanceLadder.ts` — T-48h / T-18h / T+12h / T+72h with fakes; jobs on `MongoQueue`.
+- **Guidance ladder:** `packages/studio-core/src/guidance/GuidanceLadder.ts` — T-48h / T-18h / T+12h / T+72h with fakes; jobs on `MongoQueue`. Times in `scheduleGuidanceSteps.ts` (`ladderFireTime`, `ladderStepEnd`), quiet hours in `quietHours.ts`; the workers' side is `packages/agents/src/guidance/` (`createMongoGuidanceProcessor`, `GuidanceJobHandler`, `mongoAdapters`).
 - **Reminder and nudge sender:** `packages/agents/src/guidance/createReminderSink.ts`, `ReminderNotificationSink.ts`, `reminderRecipients.ts`; wired in `packages/workers/src/worker.ts` and `packages/api/src/server.ts` (`nudgeServerWiring.test.ts` checks the API side).
 - **Worker:** `packages/agents/src/worker/NotificationWorker/NotificationWorker.ts`
 - **Delivery:** `packages/agents/src/delivery/EmailDelivery/EmailDelivery.ts`, `SMSDelivery/SMSDelivery.ts`
