@@ -170,19 +170,50 @@ export class NotificationWorker {
     }
   }
 
+  /**
+   * Deliver one message by one channel. It ends in one of three ways:
+   * - delivered: the job is completed;
+   * - it could not go out at all (no phone, no address, no service for the channel): logged
+   *   and completed, because trying again would end the same way;
+   * - the attempt failed: logged and handed back to the queue, which retries it.
+   */
   private async _processDeliverJob(job: IJob): Promise<void> {
+    const jobId = job._id.toString();
+    const channel = job.data['channel'] as NotificationChannel | undefined;
     try {
       const payload = job.data[
         'notificationPayload'
       ] as import('@scholaracle/contracts').INotificationPayload;
-      const channel = job.data['channel'] as NotificationChannel;
       if (!payload || channel == null) {
         throw new Error('Deliver job missing notificationPayload or channel');
       }
-      await this._notificationService.deliverOne(payload, channel);
-      await this._queue.complete(job._id.toString());
+      const result = await this._notificationService.deliverOne(payload, channel);
+      if (!result.success) {
+        logger.warn(
+          {
+            job: 'notification-worker',
+            jobId,
+            channel,
+            reason: result.error ?? 'no reason given',
+          },
+          'notification not delivered'
+        );
+      }
+      await this._queue.complete(jobId);
     } catch (error) {
-      await this._queue.fail(job._id.toString(), error as Error);
+      // What the error says can name the recipient: log its kind, not its text.
+      logger.warn(
+        {
+          job: 'notification-worker',
+          jobId,
+          channel,
+          error: error instanceof Error ? error.name : 'unknown',
+          attempt: job.attempts + 1,
+          of: job.maxAttempts,
+        },
+        'notification delivery failed'
+      );
+      await this._queue.fail(jobId, error as Error);
     }
   }
 

@@ -42,7 +42,7 @@ describe('ExpoPushDelivery', () => {
   });
 
   it('should send via injected sender and succeed', async () => {
-    const send = jest.fn().mockResolvedValue({ ok: true });
+    const send = jest.fn().mockResolvedValue({ outcome: 'tickets', tickets: [{ status: 'ok' }] });
     const tokenStore: IExpoPushTokenStore = {
       getTokens: async () => ['ExponentPushToken[abc]'],
     };
@@ -58,14 +58,14 @@ describe('ExpoPushDelivery', () => {
     ]);
   });
 
-  it('should surface sender errors', async () => {
+  it('should surface a request the sender says was refused', async () => {
     const delivery = new ExpoPushDelivery({
       tokenStore: { getTokens: async () => ['ExponentPushToken[abc]'] },
-      send: async () => ({ ok: false, error: 'rate limited' }),
+      send: async () => ({ outcome: 'refused', reason: 'http 401 UNAUTHORIZED' }),
     });
     const result = await delivery.deliver(makeNotification());
     expect(result.success).toBe(false);
-    expect(result.error).toBe('rate limited');
+    expect(result.error).toBe('Expo refused the request: http 401 UNAUTHORIZED');
   });
 });
 
@@ -118,7 +118,7 @@ describe('buildPushData', () => {
   });
 
   it('is what deliver() sends as data', async () => {
-    const send = jest.fn().mockResolvedValue({ ok: true });
+    const send = jest.fn().mockResolvedValue({ outcome: 'tickets', tickets: [{ status: 'ok' }] });
     const delivery = new ExpoPushDelivery({
       tokenStore: { getTokens: async () => ['ExponentPushToken[abc]'] },
       send,
