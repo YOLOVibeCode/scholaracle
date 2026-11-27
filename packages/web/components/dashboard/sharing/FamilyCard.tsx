@@ -76,6 +76,9 @@ const CHANNELS: readonly { value: SharingAlertChannel; label: string }[] = [
   { value: 'push', label: 'Push' },
 ];
 
+/** What comes back when alerts are turned on and no channel was left: as the phone app does. */
+const CHANNELS_BACK_ON: readonly SharingAlertChannel[] = ['email', 'push'];
+
 function rowKey(person: ISharingPerson, index: number): string {
   if (person.isOwner) return 'owner';
   return person.email ?? person.userId ?? String(index);
@@ -105,6 +108,14 @@ function MyAlertsPanel({
   const toggle = <T,>(list: readonly T[], value: T): readonly T[] =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
+  const turnAlerts = (on: boolean): void => {
+    setReceiveAlerts(on);
+    // After Silence no channel is left. Turning alerts on with none would reach nobody.
+    if (on && channels.length === 0) setChannels(CHANNELS_BACK_ON);
+  };
+  // Alerts on with no way to send them is not a choice the person can mean: Silence says that.
+  const needsChannel = receiveAlerts && channels.length === 0;
+
   return (
     <div
       className="mt-3 space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3"
@@ -119,7 +130,7 @@ function MyAlertsPanel({
       <label className="flex items-center gap-3 text-sm">
         <Switch
           checked={receiveAlerts}
-          onCheckedChange={setReceiveAlerts}
+          onCheckedChange={turnAlerts}
           disabled={saving}
           data-testid="family-alerts-receive"
         />
@@ -145,6 +156,15 @@ function MyAlertsPanel({
         {channels.includes('sms') && person.smsStatus !== 'opted_in' && (
           <p className="text-xs text-muted-foreground">
             Texts start after you opt in from the link the inviter shared.
+          </p>
+        )}
+        {needsChannel && (
+          <p
+            id="family-alerts-hint"
+            data-testid="family-alerts-hint"
+            className="text-xs text-amber-700 dark:text-amber-400"
+          >
+            Pick at least one way to get alerts, or press Silence.
           </p>
         )}
       </fieldset>
@@ -182,7 +202,8 @@ function MyAlertsPanel({
           type="button"
           size="sm"
           onClick={() => onSave({ receiveAlerts, alertChannels: channels, alertTypes: types })}
-          disabled={saving}
+          disabled={saving || needsChannel}
+          aria-describedby={needsChannel ? 'family-alerts-hint' : undefined}
           data-testid="family-alerts-save"
         >
           {saving ? 'Saving…' : 'Save'}

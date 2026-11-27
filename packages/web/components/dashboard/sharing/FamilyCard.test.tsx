@@ -228,6 +228,100 @@ describe('FamilyCard', () => {
     expect(onLeft).toHaveBeenCalled();
   });
 
+  describe('My alerts after Silence', () => {
+    const openMyAlerts = async (robert: ISharingPerson): Promise<HTMLElement> => {
+      api.listPeople.mockResolvedValue([OWNER, robert]);
+      api.updatePerson.mockResolvedValue({ success: true });
+      render(
+        <FamilyCard studentId="s-ava" studentName="Ava" access="member" viewer={asRobert} onShare={jest.fn()} />
+      );
+      await screen.findByTestId('family-row-owner');
+      fireEvent.click(screen.getByTestId('family-my-alerts-robert@example.com'));
+      return screen.findByTestId('family-my-alerts-panel');
+    };
+    const channel = (panel: HTMLElement, name: string): HTMLElement =>
+      within(panel).getByTestId(`family-alerts-channel-${name}`);
+
+    it('turning alerts back on brings email and push back, as the phone app does', async () => {
+      const panel = await openMyAlerts({ ...ROBERT, receiveAlerts: false, alertChannels: [] });
+      expect(within(panel).getByTestId('family-alerts-receive')).not.toBeChecked();
+      expect(channel(panel, 'email')).not.toBeChecked();
+      expect(channel(panel, 'push')).not.toBeChecked();
+
+      fireEvent.click(within(panel).getByTestId('family-alerts-receive'));
+
+      expect(channel(panel, 'email')).toBeChecked();
+      expect(channel(panel, 'push')).toBeChecked();
+      expect(channel(panel, 'sms')).not.toBeChecked();
+      fireEvent.click(within(panel).getByTestId('family-alerts-save'));
+      await waitFor(() =>
+        expect(api.updatePerson).toHaveBeenCalledWith(
+          's-ava',
+          'robert@example.com',
+          expect.objectContaining({ receiveAlerts: true, alertChannels: ['email', 'push'] })
+        )
+      );
+    });
+
+    it('turning alerts back on keeps the channels that were left', async () => {
+      const panel = await openMyAlerts({ ...ROBERT, receiveAlerts: false, alertChannels: ['sms'] });
+
+      fireEvent.click(within(panel).getByTestId('family-alerts-receive'));
+
+      expect(channel(panel, 'sms')).toBeChecked();
+      expect(channel(panel, 'email')).not.toBeChecked();
+      expect(channel(panel, 'push')).not.toBeChecked();
+    });
+
+    it('with alerts on and no channel ticked it asks for one and saves nothing', async () => {
+      const panel = await openMyAlerts(ROBERT);
+      const save = within(panel).getByTestId('family-alerts-save');
+      expect(within(panel).queryByTestId('family-alerts-hint')).not.toBeInTheDocument();
+
+      fireEvent.click(channel(panel, 'email'));
+      fireEvent.click(channel(panel, 'push'));
+
+      const hint = within(panel).getByTestId('family-alerts-hint');
+      expect(hint).toHaveTextContent('Pick at least one way to get alerts, or press Silence.');
+      expect(save).toBeDisabled();
+      expect(save.getAttribute('aria-describedby')).toBe(hint.id);
+      fireEvent.click(save);
+      expect(api.updatePerson).not.toHaveBeenCalled();
+
+      fireEvent.click(channel(panel, 'email'));
+      expect(within(panel).queryByTestId('family-alerts-hint')).not.toBeInTheDocument();
+      expect(save).toBeEnabled();
+      expect(save.getAttribute('aria-describedby')).toBeNull();
+    });
+
+    it('turning alerts off leaves the channels as they are, and saves', async () => {
+      const panel = await openMyAlerts(ROBERT);
+      fireEvent.click(channel(panel, 'email'));
+      fireEvent.click(channel(panel, 'push'));
+
+      fireEvent.click(within(panel).getByTestId('family-alerts-receive'));
+
+      expect(within(panel).getByTestId('family-alerts-receive')).not.toBeChecked();
+      expect(channel(panel, 'email')).not.toBeChecked();
+      expect(channel(panel, 'push')).not.toBeChecked();
+      fireEvent.click(within(panel).getByTestId('family-alerts-save'));
+      await waitFor(() =>
+        expect(api.updatePerson).toHaveBeenCalledWith(
+          's-ava',
+          'robert@example.com',
+          expect.objectContaining({ receiveAlerts: false, alertChannels: [] })
+        )
+      );
+    });
+
+    it('with alerts off, no channel is needed: that is what off means', async () => {
+      const panel = await openMyAlerts({ ...ROBERT, receiveAlerts: false, alertChannels: [] });
+
+      expect(within(panel).queryByTestId('family-alerts-hint')).not.toBeInTheDocument();
+      expect(within(panel).getByTestId('family-alerts-save')).toBeEnabled();
+    });
+  });
+
   it('reloads the list when refreshToken is bumped (the Share dialog just sent an invitation)', async () => {
     api.listPeople.mockResolvedValueOnce([OWNER]).mockResolvedValueOnce([OWNER, PENDING]);
     const { rerender } = render(

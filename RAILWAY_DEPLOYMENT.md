@@ -140,7 +140,7 @@ With `NOCTUSOFT_API_KEY` set, a text goes only to a number that has consent on r
 
 Who gets a student's alerts by text:
 
-- The account owner, when their own account has texts on: a mobile number, the opt-in box ticked and "SMS Notifications" on in Settings. That covers every student they own, except one they turned text off for in the phone app while their account had texts on (stored as `ownerAlertPrefs.textsOff`), or turned every channel off for. Channels saved for a student before the account had texts do not turn texts off. With texts off for the account the owner gets none, whatever was saved per student, and the phone app shows text off.
+- The account owner, when their own account has texts on: a mobile number, the opt-in box ticked and "SMS Notifications" on in Settings. That covers every student they own, except one they turned text off for in the phone app while their account had texts on (stored as `ownerAlertPrefs.textsOff`), or turned every channel off for. Channels saved for a student before the account had texts do not turn texts off, and neither does silencing a student: texts come back with the alerts. With texts off for the account the owner gets none, whatever was saved per student, and the phone app shows text off.
 - Another adult the student is shared with, when text is among the channels on their row and they opted in through their link.
 
 | Text | When it goes |

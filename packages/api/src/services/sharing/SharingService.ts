@@ -88,7 +88,13 @@ function parseStudentIds(raw: unknown, fallback?: readonly string[]): readonly s
   return ids;
 }
 
-/** Validates an `alertChannels` body field: array of email | sms | push, deduplicated. */
+/**
+ * Validates an `alertChannels` body field: array of email | sms | push, deduplicated.
+ *
+ * An empty array is a valid choice for a person's own settings: it is what "Silence" sends
+ * (sharing-spec §2, "silence" = all channels off). Only an invitation needs a channel
+ * (`parseInviteChannels`).
+ */
 export function parseChannels(raw: unknown): readonly SharingAlertChannel[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
@@ -98,7 +104,13 @@ export function parseChannels(raw: unknown): readonly SharingAlertChannel[] | un
   if (!channels.every((c): c is SharingAlertChannel => CHANNELS.includes(c as never))) {
     throw new ValidationError('alertChannels may only contain email, sms or push');
   }
-  if (channels.length === 0) {
+  return channels;
+}
+
+/** The channels of an invitation: a person who is invited must be reachable somehow. */
+function parseInviteChannels(raw: unknown): readonly SharingAlertChannel[] | undefined {
+  const channels = parseChannels(raw);
+  if (channels?.length === 0) {
     throw new ValidationError('alertChannels must include at least one of email, sms or push');
   }
   return channels;
@@ -134,7 +146,7 @@ export function parseSharingInviteBody(
   }
   const name = optionalString(b['name']);
   const phone = optionalString(b['phone']);
-  const alertChannels = parseChannels(b['alertChannels']);
+  const alertChannels = parseInviteChannels(b['alertChannels']);
   const alertTypes = parseAlertTypes(b['alertTypes']);
   return {
     email: normalizeEmail(email),
