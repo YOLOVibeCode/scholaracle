@@ -1,3 +1,4 @@
+import { writeInsight } from './insightOutcome';
 import type { LlmClient } from './llm-client';
 
 export interface IGlanceInsightInput {
@@ -50,15 +51,11 @@ export class GlanceInsightService {
 
     const userPrompt = `${parts.join('\n')}\n\nWrite a brief daily snapshot insight.`;
 
-    try {
-      const response = await this._llm.complete([{ role: 'user' as const, content: userPrompt }], {
+    return writeInsight('glance-insight', () =>
+      this._llm.complete([{ role: 'user' as const, content: userPrompt }], {
         maxTokens: 150,
         system: systemPrompt,
-      });
-      const text = response.content.trim();
-      return text.length > 0 ? text : undefined;
-    } catch {
-      return undefined;
-    }
+      })
+    );
   }
 }

@@ -30,6 +30,20 @@ export interface ILlmClientConfig {
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 
 /**
+ * The relay or the vendor answered with an error status. The message quotes the reply,
+ * and a relay's reply can quote part of the key it was sent: log `status`, not `message`.
+ */
+export class LlmHttpError extends Error {
+  public readonly status: number;
+
+  constructor(status: number, reply: string) {
+    super(`LLM API error ${status}: ${reply}`);
+    this.name = 'LlmHttpError';
+    this.status = status;
+  }
+}
+
+/**
  * Thin wrapper over the Anthropic Messages API.
  * Uses fetch directly — no SDK dependency.
  */
@@ -87,7 +101,7 @@ export class LlmClient {
       if (isBudget) {
         throw new AiBudgetError('LLM relay monthly budget exceeded');
       }
-      throw new Error(`LLM API error ${res.status}: ${text}`);
+      throw new LlmHttpError(res.status, text);
     }
 
     const json = (await res.json()) as {

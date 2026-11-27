@@ -1,4 +1,5 @@
 import type { IEmailDigestPendingItem } from '@scholaracle/database';
+import { writeInsight } from './insightOutcome';
 import type { LlmClient } from './llm-client';
 
 export interface IDigestInsightServiceConfig {
@@ -48,15 +49,11 @@ export class DigestInsightService {
       .filter(Boolean)
       .join('\n');
 
-    try {
-      const response = await this._llm.complete([{ role: 'user' as const, content: userPrompt }], {
+    return writeInsight('digest-insight', () =>
+      this._llm.complete([{ role: 'user' as const, content: userPrompt }], {
         maxTokens: 150,
         system: systemPrompt,
-      });
-      const text = response.content.trim();
-      return text.length > 0 ? text : undefined;
-    } catch {
-      return undefined;
-    }
+      })
+    );
   }
 }
