@@ -4,6 +4,7 @@ export type {
   INotificationSink,
   INotificationSinkMessage,
   INotificationSinkResult,
+  IGuidanceSend,
   IGuidanceSendLog,
   AssignmentLadderStatus,
   LadderStep,

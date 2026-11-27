@@ -1,6 +1,7 @@
 import type {
   IAssignmentState,
   IGuidanceClock,
+  IGuidanceSend,
   IGuidanceSendLog,
   INotificationSink,
   LadderStep,
@@ -130,10 +131,6 @@ export class GuidanceLadder {
       return;
     }
 
-    if (await this._log.alreadySent(assignment.studentId, assignment.assignmentExternalId, step)) {
-      return;
-    }
-
     if (
       (step === 't48h' || step === 't18h') &&
       this._clock.localHour(assignment.timezone) !== LOCAL_SEND_HOUR
@@ -145,13 +142,44 @@ export class GuidanceLadder {
       return;
     }
 
-    const audiences = audiencesFor(step);
-    let sentAny = false;
-    for (const audience of audiences) {
+    for (const audience of audiencesFor(step)) {
+      await this._tellOnce(step, assignment, audience);
+    }
+  }
+
+  /**
+   * Tells one audience, once. Many copies of the same job run at the same moment (one for
+   * each sync since the assignment appeared), so the reminder is taken before it is sent
+   * and only the caller that got it sends. It is given back when nobody was told: there was
+   * nobody to tell (a student with no login, say), the student has had the day's two, or the
+   * send failed and the job will be tried again. A reminder given back is not recorded as
+   * sent and is not one of the student's two a day.
+   */
+  private async _tellOnce(
+    step: LadderStep,
+    assignment: ILadderAssignment,
+    audience: 'student' | 'parent'
+  ): Promise<void> {
+    const send: IGuidanceSend = {
+      studentId: assignment.studentId,
+      assignmentExternalId: assignment.assignmentExternalId,
+      step,
+      audience,
+    };
+    if (!(await this._log.claim(send))) {
+      return;
+    }
+
+    let tookOneOfTodays = false;
+    let told = false;
+    try {
       if (audience === 'student') {
-        const used = await this._log.studentLadderSendsToday(assignment.studentId);
-        if (used >= this._maxStudent) {
-          continue;
+        tookOneOfTodays = await this._log.claimStudentSendToday(
+          assignment.studentId,
+          this._maxStudent
+        );
+        if (!tookOneOfTodays) {
+          return;
         }
       }
       const { deliveries } = await this._sink.send({
@@ -164,18 +192,14 @@ export class GuidanceLadder {
             : parentDeepLink(assignment.studentId),
         assignmentExternalId: assignment.assignmentExternalId,
       });
-      if (deliveries === 0) {
-        // Nobody to tell (a student with no login, say). Not a send: it is not recorded,
-        // and it is not one of the student's two a day.
-        continue;
+      told = deliveries > 0;
+    } finally {
+      if (!told) {
+        if (tookOneOfTodays) {
+          await this._log.releaseStudentSendToday(assignment.studentId);
+        }
+        await this._log.release(send);
       }
-      if (audience === 'student') {
-        await this._log.recordStudentLadderSend(assignment.studentId);
-      }
-      sentAny = true;
-    }
-    if (sentAny) {
-      await this._log.markSent(assignment.studentId, assignment.assignmentExternalId, step);
     }
   }
 }

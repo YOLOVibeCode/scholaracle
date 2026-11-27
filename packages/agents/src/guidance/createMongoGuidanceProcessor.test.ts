@@ -5,9 +5,11 @@ import type { ObjectId } from 'mongodb';
 describe('createMongoGuidanceProcessor', () => {
   it('returns a function that evaluates a guidance job against Mongo adapters', async () => {
     const findOne = jest.fn().mockResolvedValue(null);
-    const updateOne = jest.fn().mockResolvedValue({});
+    const updateOne = jest.fn().mockResolvedValue({ matchedCount: 1 });
+    const insertOne = jest.fn().mockResolvedValue({});
+    const deleteOne = jest.fn().mockResolvedValue({});
     const database = {
-      collection: jest.fn().mockReturnValue({ findOne, updateOne }),
+      collection: jest.fn().mockReturnValue({ findOne, updateOne, insertOne, deleteOne }),
     } as unknown as import('mongodb').Db;
     // Reached only when this runs at 4 pm in New York (the ladder's send hour): the sink
     // must still answer as a real one does.

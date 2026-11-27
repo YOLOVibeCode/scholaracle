@@ -4,11 +4,11 @@ import type {
   AssignmentLadderStatus,
   IAssignmentState,
   IGuidanceClock,
+  IGuidanceSend,
   IGuidanceSendLog,
   INotificationSink,
   INotificationSinkMessage,
   INotificationSinkResult,
-  LadderStep,
 } from '@scholaracle/interfaces';
 import { GuidanceLadder, isQuietHour, type ILadderAssignment } from './GuidanceLadder';
 
@@ -49,36 +49,45 @@ class FakeSink implements INotificationSink {
   public readonly sent: INotificationSinkMessage[] = [];
   /** People this household has no way to reach (a student with no login, say). */
   public readonly unreachable = new Set<'student' | 'parent'>();
+  /** The next send to this audience fails once, as when the queue cannot be written. */
+  public failNextFor: 'student' | 'parent' | null = null;
 
   public async send(input: INotificationSinkMessage): Promise<INotificationSinkResult> {
+    if (this.failNextFor === input.audience) {
+      this.failNextFor = null;
+      throw new Error('the queue is down');
+    }
     if (this.unreachable.has(input.audience)) return { deliveries: 0 };
     this.sent.push({ ...input });
     return { deliveries: 1 };
   }
 }
 
+function keyOf(send: IGuidanceSend): string {
+  return `${send.studentId}:${send.assignmentExternalId}:${send.step}:${send.audience}`;
+}
+
+/** Hands a reminder to one caller, as the real log does: the check and the taking are one step. */
 class FakeLog implements IGuidanceSendLog {
-  public readonly sentSteps = new Set<string>();
+  /** Reminders taken and not given back. */
+  public readonly taken = new Set<string>();
   public studentCount = 0;
-  public async alreadySent(
-    studentId: string,
-    assignmentExternalId: string,
-    step: LadderStep
-  ): Promise<boolean> {
-    return this.sentSteps.has(`${studentId}:${assignmentExternalId}:${step}`);
+
+  public async claim(send: IGuidanceSend): Promise<boolean> {
+    if (this.taken.has(keyOf(send))) return false;
+    this.taken.add(keyOf(send));
+    return true;
   }
-  public async markSent(
-    studentId: string,
-    assignmentExternalId: string,
-    step: LadderStep
-  ): Promise<void> {
-    this.sentSteps.add(`${studentId}:${assignmentExternalId}:${step}`);
+  public async release(send: IGuidanceSend): Promise<void> {
+    this.taken.delete(keyOf(send));
   }
-  public async studentLadderSendsToday(): Promise<number> {
-    return this.studentCount;
-  }
-  public async recordStudentLadderSend(): Promise<void> {
+  public async claimStudentSendToday(_studentId: string, limit: number): Promise<boolean> {
+    if (this.studentCount >= limit) return false;
     this.studentCount += 1;
+    return true;
+  }
+  public async releaseStudentSendToday(): Promise<void> {
+    this.studentCount -= 1;
   }
 }
 
@@ -178,11 +187,11 @@ describe('GuidanceLadder', () => {
       await engine.evaluate(ASSIGNMENT);
 
       expect(sink.sent).toEqual([]);
-      expect(log.sentSteps.size).toBe(0);
+      expect(log.taken.size).toBe(0);
       expect(log.studentCount).toBe(0);
     });
 
-    it('still tells the parent at T+12h and records that step', async () => {
+    it('still tells the parent at T+12h and records that the parent was told', async () => {
       const now = new Date(DUE.getTime() + 12 * 60 * 60 * 1000);
       const sink = new FakeSink();
       sink.unreachable.add('student');
@@ -191,8 +200,76 @@ describe('GuidanceLadder', () => {
       await engine.evaluate(ASSIGNMENT);
 
       expect(sink.sent.map((s) => s.audience)).toEqual(['parent']);
-      expect([...log.sentSteps]).toEqual([`${STUDENT}:${CELL}:t12h`]);
+      expect([...log.taken]).toEqual([`${STUDENT}:${CELL}:t12h:parent`]);
       expect(log.studentCount).toBe(0);
+    });
+  });
+
+  describe('when many copies of one reminder run at the same moment', () => {
+    // Every sync queues an assignment's coming reminders again, so by the time one is due
+    // there are as many copies of its job as there were syncs, and the worker runs ten at once.
+    it('sends it once', async () => {
+      const now = new Date(DUE.getTime() - 48 * 60 * 60 * 1000);
+      const { engine, sink } = ladder(now, 16);
+
+      await Promise.all(Array.from({ length: 10 }, () => engine.evaluate(ASSIGNMENT)));
+
+      expect(sink.sent).toHaveLength(1);
+    });
+
+    it('tells the student and the parent once each at T+12h', async () => {
+      const now = new Date(DUE.getTime() + 12 * 60 * 60 * 1000);
+      const { engine, sink } = ladder(now, 14);
+
+      await Promise.all(Array.from({ length: 10 }, () => engine.evaluate(ASSIGNMENT)));
+
+      expect(sink.sent.map((s) => s.audience).sort()).toEqual(['parent', 'student']);
+    });
+
+    it('keeps to two a day for the student when three assignments come due together', async () => {
+      const now = new Date(DUE.getTime() - 48 * 60 * 60 * 1000);
+      const { engine, sink, log } = ladder(now, 16);
+
+      await Promise.all(
+        ['a-1', 'a-2', 'a-3'].map((assignmentExternalId) =>
+          engine.evaluate({ ...ASSIGNMENT, assignmentExternalId })
+        )
+      );
+
+      expect(sink.sent).toHaveLength(2);
+      expect(log.studentCount).toBe(2);
+      // The third was not sent, so it is not recorded as sent either.
+      expect(log.taken.size).toBe(2);
+    });
+  });
+
+  describe('when a send fails', () => {
+    it('gives the reminder back, so the next try sends it', async () => {
+      const now = new Date(DUE.getTime() - 48 * 60 * 60 * 1000);
+      const sink = new FakeSink();
+      sink.failNextFor = 'student';
+      const { engine, log } = ladder(now, 16, 'missing', { sink });
+
+      await expect(engine.evaluate(ASSIGNMENT)).rejects.toThrow('the queue is down');
+      expect(log.taken.size).toBe(0);
+      expect(log.studentCount).toBe(0);
+
+      await engine.evaluate(ASSIGNMENT);
+      expect(sink.sent.map((s) => s.audience)).toEqual(['student']);
+      expect(log.studentCount).toBe(1);
+    });
+
+    it("tells the parent on the next try, and not the student again, when it was the parent's send that failed", async () => {
+      const now = new Date(DUE.getTime() + 12 * 60 * 60 * 1000);
+      const sink = new FakeSink();
+      sink.failNextFor = 'parent';
+      const { engine, log } = ladder(now, 14, 'missing', { sink });
+
+      await expect(engine.evaluate(ASSIGNMENT)).rejects.toThrow('the queue is down');
+      await engine.evaluate(ASSIGNMENT);
+
+      expect(sink.sent.map((s) => s.audience)).toEqual(['student', 'parent']);
+      expect(log.studentCount).toBe(1);
     });
   });
 
