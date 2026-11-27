@@ -545,6 +545,8 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
         baseUrl,
         // Does nothing until the Sign in with Apple key variables are set on this server.
         appleTokenRevoker: new AppleTokenRevoker(appleRevocationConfigFromEnv()),
+        // Account deletion removes the household's synced files from here.
+        assetStore: createAssetStore(),
       })
     );
     app.use(

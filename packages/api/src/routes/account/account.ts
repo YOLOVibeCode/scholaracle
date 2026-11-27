@@ -21,6 +21,7 @@ import {
 } from '../../services/email-transfer';
 import { AccountDeletionService } from '../../services/account-deletion';
 import type { IAppleTokenRevoker } from '../../services/apple/appleTokenRevocation';
+import type { IAssetStore } from '../../services/assets/IAssetStore';
 import { logger } from '../../logger';
 
 function getUserId(req: Request): string | null {
@@ -33,6 +34,11 @@ export interface IAccountRouterConfig {
   readonly emailService?: IEmailTransferEmailService;
   /** Revokes Sign in with Apple tokens at account deletion. Absent = nothing is revoked. */
   readonly appleTokenRevoker?: IAppleTokenRevoker;
+  /**
+   * Where synced files are stored. Account deletion removes the household's files from it.
+   * Absent = rows are deleted and files are left.
+   */
+  readonly assetStore?: IAssetStore;
 }
 
 /** Best effort: logs the outcome (no token, code or account id) and never throws. */
@@ -344,7 +350,9 @@ export function createAccountRouter(config: IAccountRouterConfig): Router {
         await revokeAppleTokens(config.appleTokenRevoker, code, aud, sub);
       }
 
-      const deletionService = new AccountDeletionService(config.database);
+      const deletionService = new AccountDeletionService(config.database, {
+        assetStore: config.assetStore,
+      });
       await deletionService.deleteParentAccount(userId);
 
       res.status(200).json({ success: true } satisfies IAccountDeleteResponse);
