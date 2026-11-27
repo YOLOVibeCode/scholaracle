@@ -4,7 +4,8 @@
  * @jest-environment jsdom
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EditStudentPage from './page';
 import { studentsApi, type IStudent } from '@/lib/api/students';
 
@@ -101,6 +102,58 @@ describe('EditStudentPage (TDD / ISP)', () => {
       expect(screen.queryByTestId('button-share-student')).toBeNull();
       expect(screen.queryByTestId('input-student-name')).toBeNull();
       expect(screen.queryByTestId('button-save-student')).toBeNull();
+    });
+  });
+
+  // The dev server mounts the page twice (React strict mode), so the student is loaded twice.
+  // An answer that arrived after the form was on screen used to put the stored name back over
+  // what the parent was typing, and Save then sent the old name.
+  describe('the student is loaded twice', () => {
+    function deferred(): { promise: Promise<IStudent>; resolve: (student: IStudent) => void } {
+      let resolve!: (student: IStudent) => void;
+      const promise = new Promise<IStudent>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    }
+
+    async function renderWithTwoLoads() {
+      const earlier = deferred();
+      const latest = deferred();
+      mockGetById.mockReset();
+      mockGetById.mockReturnValueOnce(earlier.promise).mockReturnValueOnce(latest.promise);
+      render(
+        <StrictMode>
+          <EditStudentPage />
+        </StrictMode>
+      );
+      await waitFor(() => expect(mockGetById).toHaveBeenCalledTimes(2));
+      return { earlier, latest };
+    }
+
+    const nameField = () => screen.getByTestId('input-student-name') as HTMLInputElement;
+
+    it('keeps what the parent typed when the earlier load answers late', async () => {
+      const { earlier, latest } = await renderWithTwoLoads();
+
+      await act(async () => latest.resolve(OWNED));
+      fireEvent.change(nameField(), { target: { value: 'Renamed Student' } });
+      expect(nameField().value).toBe('Renamed Student');
+
+      await act(async () => earlier.resolve(OWNED));
+
+      expect(nameField().value).toBe('Renamed Student');
+    });
+
+    it('shows the form once the latest load has answered, not before', async () => {
+      const { earlier, latest } = await renderWithTwoLoads();
+
+      await act(async () => earlier.resolve(OWNED));
+      expect(screen.getByText('Loading student...')).toBeTruthy();
+      expect(screen.queryByTestId('input-student-name')).toBeNull();
+
+      await act(async () => latest.resolve(OWNED));
+      expect(nameField().value).toBe('Test Student');
     });
   });
 });

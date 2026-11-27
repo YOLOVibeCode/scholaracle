@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { StudentAccess } from '@scholaracle/contracts';
@@ -70,11 +70,19 @@ export default function EditStudentPage() {
     setViewer(getSessionUser());
   }, []);
 
+  // Only the latest load may change the page. The student can be loaded more than once at a
+  // time (the dev server mounts the page twice, connecting a source reloads it), and an answer
+  // that arrives late must not put the stored name back over what the parent is typing.
+  const latestLoad = useRef(0);
+
   const loadStudent = useCallback(async () => {
     if (!studentId) return;
+    const load = ++latestLoad.current;
+    const isLatest = (): boolean => load === latestLoad.current;
     setIsLoading(true);
     try {
       const data = await studentsApi.getById(studentId);
+      if (!isLatest()) return;
       if (data) {
         setStudent(data);
         setName(data.name);
@@ -84,9 +92,10 @@ export default function EditStudentPage() {
         setError('Student not found');
       }
     } catch (err) {
+      if (!isLatest()) return;
       setError(err instanceof Error ? err.message : 'Failed to load student');
     } finally {
-      setIsLoading(false);
+      if (isLatest()) setIsLoading(false);
     }
   }, [studentId]);
 
