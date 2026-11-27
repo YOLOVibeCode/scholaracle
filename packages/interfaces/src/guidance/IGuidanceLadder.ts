@@ -4,14 +4,29 @@
 
 export interface IGuidanceClock {
   now(): Date;
-  /** Local hour 0–23 in the given IANA timezone. */
-  localHour(timezone: string): number;
 }
 
-export type AssignmentLadderStatus = 'missing' | 'submitted' | 'graded' | 'unknown';
+/**
+ * How the portal has an assignment, as far as reminders go:
+ * - `closed`: submitted, graded or excused. There is nothing more to do.
+ * - `missing`: the portal marks it missing or late.
+ * - `open`: anything else, including no status at all.
+ */
+export type AssignmentLadderStatus = 'closed' | 'missing' | 'open';
+
+/** An assignment as the latest sync left it. */
+export interface IAssignmentNow {
+  readonly status: AssignmentLadderStatus;
+  /** When it is due now. Null when it no longer has a due time. */
+  readonly dueAt: Date | null;
+}
 
 export interface IAssignmentState {
-  status(studentId: string, assignmentExternalId: string): Promise<AssignmentLadderStatus>;
+  /**
+   * The assignment as it stands now, read when a reminder is about to go out. Null when
+   * the portal no longer lists it.
+   */
+  current(studentId: string, assignmentExternalId: string): Promise<IAssignmentNow | null>;
 }
 
 /** One reminder or nudge, for one audience of one student. */
@@ -45,11 +60,17 @@ export interface INotificationSink {
 
 export type LadderStep = 't48h' | 't18h' | 't12h' | 't72h';
 
-/** One reminder: one step of one assignment, for the student or for the parent. */
+/**
+ * One reminder: one step of one assignment due at one time, for the student or for the
+ * parent. When a teacher moves the deadline the reminders for the new time are new ones:
+ * "due Thursday" having gone out does not stand in for "due Monday".
+ */
 export interface IGuidanceSend {
   /** The student's Mongo id. */
   readonly studentId: string;
   readonly assignmentExternalId: string;
+  /** The due time the reminder is about. */
+  readonly dueAt: Date;
   readonly step: LadderStep;
   readonly audience: 'student' | 'parent';
 }

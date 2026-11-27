@@ -2,10 +2,14 @@ import type { OpenTaskKind } from '@scholaracle/interfaces';
 
 export const DUE_SOON_MS = 72 * 60 * 60 * 1000;
 
-const CLOSED_STATUSES = new Set(['submitted', 'graded', 'excused']);
+/** Portal says there is nothing more to do: the work is finished, or the student is excused. */
+export const CLOSED_STATUSES = new Set(['submitted', 'graded', 'excused']);
 
 /** Portal says the work is finished (excused is not finished work). */
 export const DONE_STATUSES = new Set(['submitted', 'graded']);
+
+/** Portal flags the work as not handed in. */
+export const MISSING_STATUSES = new Set(['missing', 'late']);
 
 /** The one way a portal status token is compared anywhere in the studio adapters. */
 export function normalizeStatus(status: unknown): string {
@@ -25,7 +29,7 @@ export function classifyOpenTask(
   now: Date
 ): OpenTaskKind | null {
   const normalized = normalizeStatus(status);
-  if (normalized === 'missing' || normalized === 'late') return 'missing';
+  if (MISSING_STATUSES.has(normalized)) return 'missing';
   if (CLOSED_STATUSES.has(normalized)) return null;
   if (dueAt === undefined) return null;
   const delta = dueAt.getTime() - now.getTime();

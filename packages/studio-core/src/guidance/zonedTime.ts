@@ -45,21 +45,36 @@ function localTimeOf(date: Date, timeZone: string): { hour: number; minute: numb
   return { hour: hour === 24 ? 0 : hour, minute: part('minute') };
 }
 
+export interface ILocalClock {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+}
+
+/** The date and the time on a wall clock in `timeZone` at `date`. */
+export function localClock(date: Date, timeZone: string): ILocalClock {
+  return { ...calendarYmd(date, timeZone), ...localTimeOf(date, timeZone) };
+}
+
 /**
- * Instant that is `hour`:00 on `year-month-day` in `timeZone`.
+ * Instant that is `hour`:`minute` on `year-month-day` in `timeZone`. A day past the end of
+ * the month rolls into the next, so "the day after" can be asked for as `day + 1`.
  */
 export function zonedLocalDate(
   timeZone: string,
   year: number,
   month: number,
   day: number,
-  hour: number
+  hour: number,
+  minute: number = 0
 ): Date {
-  let utc = Date.UTC(year, month - 1, day, hour, 0, 0);
+  let utc = Date.UTC(year, month - 1, day, hour, minute, 0);
   for (let i = 0; i < 8; i += 1) {
     const local = calendarYmd(new Date(utc), timeZone);
     const time = localTimeOf(new Date(utc), timeZone);
-    const wanted = Date.UTC(year, month - 1, day, hour);
+    const wanted = Date.UTC(year, month - 1, day, hour, minute);
     const got = Date.UTC(local.year, local.month - 1, local.day, time.hour, time.minute);
     const delta = wanted - got;
     if (delta === 0) break;

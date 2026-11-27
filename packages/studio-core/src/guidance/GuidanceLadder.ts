@@ -6,11 +6,8 @@ import type {
   INotificationSink,
   LadderStep,
 } from '@scholaracle/interfaces';
-
-export interface IQuietHoursConfig {
-  readonly start: string;
-  readonly end: string;
-}
+import { quietHoursEnd, type IQuietHoursConfig } from './quietHours';
+import { ladderFireTime, ladderStepEnd } from './scheduleGuidanceSteps';
 
 export interface ILadderAssignment {
   readonly studentId: string;
@@ -29,36 +26,33 @@ export interface IGuidanceLadderDeps {
   readonly maxStudentPushesPerDay?: number;
 }
 
-const HOUR_MS = 60 * 60 * 1000;
-const STEP_TOLERANCE_HOURS = 0.51;
-const LOCAL_SEND_HOUR = 16;
+/** Why a reminder job ended without anybody being told. */
+export type LadderSkip =
+  /** Submitted, graded or excused since the job was queued. */
+  | 'closed'
+  /** The portal no longer lists the assignment. */
+  | 'removed'
+  /** Due at another time now. The jobs queued when the due time changed speak for it. */
+  | 'rescheduled'
+  /** Before the reminder's time. */
+  | 'too_early'
+  /** The next reminder is due, or the work is: this one is out of date. */
+  | 'too_late'
+  /** Another copy of the job sent it, there is nobody to tell, or the student has had the day's limit. */
+  | 'nobody_told';
+
+/** What became of one reminder job. */
+export type LadderOutcome =
+  | { readonly kind: 'sent' }
+  /** It fell in quiet hours. Run the job again at `until`, when they end. */
+  | { readonly kind: 'held'; readonly until: Date }
+  | { readonly kind: 'skipped'; readonly why: LadderSkip };
+
+const MINUTE_MS = 60 * 1000;
 const MAX_STUDENT_DEFAULT = 2;
 
-function hoursUntilDue(now: Date, dueAt: Date): number {
-  return (dueAt.getTime() - now.getTime()) / HOUR_MS;
-}
-
-export function resolveLadderStep(now: Date, dueAt: Date): LadderStep | null {
-  const hours = hoursUntilDue(now, dueAt);
-  if (Math.abs(hours - 48) <= STEP_TOLERANCE_HOURS) return 't48h';
-  if (Math.abs(hours - 18) <= STEP_TOLERANCE_HOURS) return 't18h';
-  if (Math.abs(hours + 12) <= STEP_TOLERANCE_HOURS) return 't12h';
-  if (Math.abs(hours + 72) <= STEP_TOLERANCE_HOURS) return 't72h';
-  return null;
-}
-
-function parseHour(hhmm: string): number {
-  const hour = Number(hhmm.slice(0, 2));
-  return Number.isFinite(hour) ? hour : 0;
-}
-
-export function isQuietHour(localHour: number, quietHours?: IQuietHoursConfig): boolean {
-  if (quietHours === undefined) return false;
-  const start = parseHour(quietHours.start);
-  const end = parseHour(quietHours.end);
-  if (start === end) return false;
-  if (start < end) return localHour >= start && localHour < end;
-  return localHour >= start || localHour < end;
+function skipped(why: LadderSkip): LadderOutcome {
+  return { kind: 'skipped', why };
 }
 
 function dueWeekday(dueAt: Date, timezone: string): string {
@@ -120,54 +114,82 @@ export class GuidanceLadder {
     this._maxStudent = deps.maxStudentPushesPerDay ?? MAX_STUDENT_DEFAULT;
   }
 
-  public async evaluate(assignment: ILadderAssignment): Promise<void> {
-    const status = await this._state.status(assignment.studentId, assignment.assignmentExternalId);
-    if (status === 'submitted' || status === 'graded') {
-      return;
+  /**
+   * Runs one reminder job: `step` of `assignment`, as it was when the job was queued.
+   *
+   * The assignment is read again first, because days pass between a sync queueing the job
+   * and the job running: the work may be turned in, taken down, or due at another time.
+   * Then the clock: a job runs at the time `ladderFireTime` gave it, or later when the
+   * workers were busy or it was held, and is good until `ladderStepEnd`. In quiet hours it is
+   * held until they end, not dropped.
+   */
+  public async evaluate(assignment: ILadderAssignment, step: LadderStep): Promise<LadderOutcome> {
+    const current = await this._state.current(
+      assignment.studentId,
+      assignment.assignmentExternalId
+    );
+    if (current === null) {
+      return skipped('removed');
+    }
+    if (current.status === 'closed') {
+      return skipped('closed');
+    }
+    // The job and the row come from the same portal record, so an unchanged due time is the
+    // same instant. Any other time, or none, is a deadline that moved.
+    if (current.dueAt === null || current.dueAt.getTime() !== assignment.dueAt.getTime()) {
+      return skipped('rescheduled');
     }
 
-    const step = resolveLadderStep(this._clock.now(), assignment.dueAt);
-    if (step === null) {
-      return;
+    const now = this._clock.now();
+    const fireAt = ladderFireTime(step, assignment.dueAt, assignment.timezone);
+    // The queue does not hand a job out before its time. A minute's grace covers two
+    // machines whose clocks differ slightly.
+    if (now.getTime() < fireAt.getTime() - MINUTE_MS) {
+      return skipped('too_early');
+    }
+    const endsAt = ladderStepEnd(step, assignment.dueAt, assignment.timezone);
+    if (now.getTime() >= endsAt.getTime()) {
+      return skipped('too_late');
     }
 
-    if (
-      (step === 't48h' || step === 't18h') &&
-      this._clock.localHour(assignment.timezone) !== LOCAL_SEND_HOUR
-    ) {
-      return;
+    const quietUntil = quietHoursEnd(now, assignment.timezone, this._quietHours);
+    if (quietUntil !== null) {
+      return quietUntil.getTime() < endsAt.getTime()
+        ? { kind: 'held', until: quietUntil }
+        : skipped('too_late');
     }
 
-    if (isQuietHour(this._clock.localHour(assignment.timezone), this._quietHours)) {
-      return;
-    }
-
+    let anyoneTold = false;
     for (const audience of audiencesFor(step)) {
-      await this._tellOnce(step, assignment, audience);
+      if (await this._tellOnce(step, assignment, audience)) {
+        anyoneTold = true;
+      }
     }
+    return anyoneTold ? { kind: 'sent' } : skipped('nobody_told');
   }
 
   /**
-   * Tells one audience, once. Many copies of the same job run at the same moment (one for
-   * each sync since the assignment appeared), so the reminder is taken before it is sent
-   * and only the caller that got it sends. It is given back when nobody was told: there was
-   * nobody to tell (a student with no login, say), the student has had the day's two, or the
-   * send failed and the job will be tried again. A reminder given back is not recorded as
-   * sent and is not one of the student's two a day.
+   * Tells one audience, once, and says whether it did. Many copies of the same job run at
+   * the same moment (one for each sync since the assignment appeared), so the reminder is
+   * taken before it is sent and only the caller that got it sends. It is given back when
+   * nobody was told: there was nobody to tell (a student with no login, say), the student
+   * has had the day's two, or the send failed and the job will be tried again. A reminder
+   * given back is not recorded as sent and is not one of the student's two a day.
    */
   private async _tellOnce(
     step: LadderStep,
     assignment: ILadderAssignment,
     audience: 'student' | 'parent'
-  ): Promise<void> {
+  ): Promise<boolean> {
     const send: IGuidanceSend = {
       studentId: assignment.studentId,
       assignmentExternalId: assignment.assignmentExternalId,
+      dueAt: assignment.dueAt,
       step,
       audience,
     };
     if (!(await this._log.claim(send))) {
-      return;
+      return false;
     }
 
     let tookOneOfTodays = false;
@@ -179,7 +201,7 @@ export class GuidanceLadder {
           this._maxStudent
         );
         if (!tookOneOfTodays) {
-          return;
+          return false;
         }
       }
       const { deliveries } = await this._sink.send({
@@ -201,5 +223,6 @@ export class GuidanceLadder {
         await this._log.release(send);
       }
     }
+    return told;
   }
 }

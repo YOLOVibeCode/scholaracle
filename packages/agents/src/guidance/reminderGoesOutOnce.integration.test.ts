@@ -47,6 +47,7 @@ describe('a reminder that is due, with one copy of its job for every sync', () =
   let sink: RecordingSink;
   let worker: NotificationWorker;
   let studentId: string;
+  let ownerUserId: string;
 
   beforeAll(async () => {
     client = new MongoClient(process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017');
@@ -73,6 +74,7 @@ describe('a reminder that is due, with one copy of its job for every sync', () =
     const ownerId = new ObjectId();
     const student = new ObjectId();
     studentId = student.toString();
+    ownerUserId = ownerId.toString();
     await db.collection('users').insertOne({
       _id: ownerId,
       email: 'owner@example.com',
@@ -91,7 +93,7 @@ describe('a reminder that is due, with one copy of its job for every sync', () =
     worker = new NotificationWorker(queue, {} as unknown as NotificationService, {
       pollIntervalMs: 20,
       concurrency: 10,
-      processGuidanceJob: createMongoGuidanceProcessor(db, sink),
+      processGuidanceJob: createMongoGuidanceProcessor(db, sink, queue),
     });
   });
 
@@ -102,6 +104,7 @@ describe('a reminder that is due, with one copy of its job for every sync', () =
   /** An assignment that fell due twelve hours ago and is still not turned in. */
   async function seedAssignmentDueTwelveHoursAgo(externalId: string, dueAt: Date): Promise<void> {
     await db.collection('slc_assignments').insertOne({
+      userId: ownerUserId,
       externalId,
       studentExternalId: STUDENT_PORTAL_ID,
       deletedAt: null,

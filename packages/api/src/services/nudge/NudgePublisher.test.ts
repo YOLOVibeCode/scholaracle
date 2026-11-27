@@ -15,9 +15,6 @@ class FakeClock implements IGuidanceClock {
   public now(): Date {
     return this.nowDate;
   }
-  public localHour(): number {
-    return 16;
-  }
 }
 
 class FakeSink implements INotificationSink {

@@ -1,21 +1,21 @@
-import { MongoClient, type Db } from 'mongodb';
+import { MongoClient, ObjectId, type Db } from 'mongodb';
 import type { IGuidanceClock, IGuidanceSend } from '@scholaracle/interfaces';
-import { MongoGuidanceSendLog } from './mongoAdapters';
+import { MongoAssignmentState, MongoGuidanceSendLog } from './mongoAdapters';
 
 class FixedClock implements IGuidanceClock {
   public constructor(public nowDate: Date) {}
   public now(): Date {
     return this.nowDate;
   }
-  public localHour(): number {
-    return 16;
-  }
 }
 
 const STUDENT = '65f000000000000000000001';
+/** Thursday 3 December 2026, 11:59 pm in Chicago. */
+const DUE = new Date('2026-12-04T05:59:00.000Z');
 const REMINDER: IGuidanceSend = {
   studentId: STUDENT,
   assignmentExternalId: 'bio-lab-2',
+  dueAt: DUE,
   step: 't48h',
   audience: 'student',
 };
@@ -23,6 +23,146 @@ const REMINDER: IGuidanceSend = {
 function countTrue(answers: readonly boolean[]): number {
   return answers.filter(Boolean).length;
 }
+
+describe('MongoAssignmentState', () => {
+  const OWNER = '65f0000000000000000000a1';
+  const PORTAL_STUDENT = 'portal-student-1';
+  let client: MongoClient;
+  let db: Db;
+  let state: MongoAssignmentState;
+
+  beforeAll(async () => {
+    client = new MongoClient(process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017');
+    await client.connect();
+    db = client.db(`guidance_assignment_state_${process.pid}`);
+  });
+
+  afterAll(async () => {
+    await db.dropDatabase();
+    await client.close();
+  });
+
+  beforeEach(async () => {
+    await db.collection('students').deleteMany({});
+    await db.collection('slc_assignments').deleteMany({});
+    await db.collection('students').insertOne({
+      _id: new ObjectId(STUDENT),
+      userId: new ObjectId(OWNER),
+      studentId: PORTAL_STUDENT,
+      name: 'Emma',
+    });
+    state = new MongoAssignmentState(db);
+  });
+
+  /** A row as ingest writes it: the owner's partition, the portal's ids, the portal's record. */
+  async function synced(overrides: Record<string, unknown> = {}): Promise<void> {
+    await db.collection('slc_assignments').insertOne({
+      userId: OWNER,
+      provider: 'canvas',
+      adapterId: 'canvas-1',
+      externalId: 'bio-lab-2',
+      studentExternalId: PORTAL_STUDENT,
+      observedAt: new Date('2026-11-30T12:00:00.000Z'),
+      deletedAt: null,
+      record: { title: 'Cell Division', status: 'missing', dueAt: DUE.toISOString() },
+      ...overrides,
+    });
+  }
+
+  it('reads the status and the due time the latest sync left', async () => {
+    await synced();
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toEqual({ status: 'missing', dueAt: DUE });
+  });
+
+  // The same reading as the student's own pages (`studioTaskClassify`): excused work is
+  // closed like finished work, and late counts with missing.
+  it.each([
+    ['submitted', 'closed'],
+    ['graded', 'closed'],
+    ['excused', 'closed'],
+    [' Submitted ', 'closed'],
+    ['missing', 'missing'],
+    ['late', 'missing'],
+    ['MISSING', 'missing'],
+    ['not_started', 'open'],
+    ['in_progress', 'open'],
+    ['unknown', 'open'],
+    ['', 'open'],
+    [undefined, 'open'],
+    [42, 'open'],
+  ])('reads a portal status of %p as %s', async (portal, expected) => {
+    await synced({ record: { title: 'Cell Division', status: portal, dueAt: DUE.toISOString() } });
+
+    expect((await state.current(STUDENT, 'bio-lab-2'))?.status).toBe(expected);
+  });
+
+  it.each([
+    ['none at all', undefined],
+    ['an empty one', ''],
+    ['words', 'next week'],
+    ['a number', 20261204],
+  ])('says there is no due time when the portal gave %s', async (_label, dueAt) => {
+    await synced({ record: { title: 'Cell Division', status: 'missing', dueAt } });
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toEqual({ status: 'missing', dueAt: null });
+  });
+
+  it('says the work is gone when the portal no longer lists it', async () => {
+    await synced({ deletedAt: new Date('2026-12-01T12:00:00.000Z') });
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toBeNull();
+  });
+
+  it('says the work is gone when it was never synced', async () => {
+    await synced({ externalId: 'another-assignment' });
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toBeNull();
+  });
+
+  it("does not read another student's work with the same id", async () => {
+    await synced({ studentExternalId: 'portal-student-2' });
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toBeNull();
+  });
+
+  it("does not read another family's row, even with the same portal ids", async () => {
+    // Ids are only unique within one school's portal: two portals can both have a student
+    // "portal-student-1" with an assignment "bio-lab-2".
+    await synced({
+      userId: '65f0000000000000000000b2',
+      observedAt: new Date('2026-12-02T12:00:00.000Z'),
+      record: { title: 'Other school', status: 'submitted', dueAt: '2026-12-09T05:59:00.000Z' },
+    });
+    await synced();
+
+    expect(await state.current(STUDENT, 'bio-lab-2')).toEqual({ status: 'missing', dueAt: DUE });
+  });
+
+  it('goes by the source that saw the work last when two list it', async () => {
+    await synced({ observedAt: new Date('2026-11-30T12:00:00.000Z') });
+    await synced({
+      provider: 'district-portal',
+      adapterId: 'district-1',
+      observedAt: new Date('2026-12-01T12:00:00.000Z'),
+      record: { title: 'Cell Division', status: 'submitted', dueAt: DUE.toISOString() },
+    });
+
+    expect((await state.current(STUDENT, 'bio-lab-2'))?.status).toBe('closed');
+  });
+
+  it('says the work is gone for a student who is', async () => {
+    await synced();
+
+    expect(await state.current('65f000000000000000000009', 'bio-lab-2')).toBeNull();
+  });
+
+  it('says the work is gone for an id that is not an id, without throwing', async () => {
+    await synced();
+
+    expect(await state.current('not-an-id', 'bio-lab-2')).toBeNull();
+  });
+});
 
 describe('MongoGuidanceSendLog', () => {
   let client: MongoClient;
@@ -68,6 +208,18 @@ describe('MongoGuidanceSendLog', () => {
       expect(await log.claim({ ...REMINDER, step: 't18h' })).toBe(true);
       expect(await log.claim({ ...REMINDER, assignmentExternalId: 'bio-lab-3' })).toBe(true);
       expect(await log.claim({ ...REMINDER, studentId: '65f000000000000000000002' })).toBe(true);
+    });
+
+    it('treats the same step for a new due time as a new reminder', async () => {
+      const monday = new Date('2026-12-08T05:59:00.000Z');
+      expect(await log.claim(REMINDER)).toBe(true);
+
+      expect(await log.claim({ ...REMINDER, dueAt: monday })).toBe(true);
+      expect(await log.claim({ ...REMINDER, dueAt: monday })).toBe(false);
+      // The same instant, however the date object was made.
+      expect(await log.claim({ ...REMINDER, dueAt: new Date('2026-12-03T23:59:00-06:00') })).toBe(
+        false
+      );
     });
 
     it('takes a portal id as it comes: quotes, colons, spaces and slashes', async () => {

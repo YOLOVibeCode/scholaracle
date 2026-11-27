@@ -426,9 +426,11 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     resolveAllAlertRecipients: resolveAll,
     // Ladder reminders go out as `deliver` jobs on this same queue: a push to the phone and
     // an email with a link. The API builds the same sender for the parent's Nudge button.
+    // The queue is also where a reminder that falls in quiet hours waits until they end.
     processGuidanceJob: createMongoGuidanceProcessor(
       database,
-      createReminderSink({ database, queue: mongoQueue, webOrigin: smsWebOrigin() })
+      createReminderSink({ database, queue: mongoQueue, webOrigin: smsWebOrigin() }),
+      mongoQueue
     ),
   });
 

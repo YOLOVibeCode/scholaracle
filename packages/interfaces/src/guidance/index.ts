@@ -1,5 +1,6 @@
 export type {
   IGuidanceClock,
+  IAssignmentNow,
   IAssignmentState,
   INotificationSink,
   INotificationSinkMessage,
