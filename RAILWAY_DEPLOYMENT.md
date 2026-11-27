@@ -138,6 +138,8 @@ Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything nam
 
 With `NOCTUSOFT_API_KEY` set, a text goes only to a number that has consent on record (the box ticked at sign-up or in Settings, or the opt-in link a co-parent is sent) and that did not reply STOP.
 
+The consent is for one number, and the record follows what the person says in Settings. Unticking the box (in the phone app: turning Text off), changing the number or removing it withdraws the consent for the old number, and from then on no text goes to that number, whichever student it is about. A STOP reply does the same. START brings back a consent that was on record, and so does unticking the box and ticking it again. Saving Settings with the box left ticked changes nothing on record: the day the consent was given stays, and a STOP reply stands.
+
 Who gets a student's alerts by text:
 
 - The account owner, when their own account has texts on: a mobile number, the opt-in box ticked and "SMS Notifications" on in Settings. That covers every student they own, except one they turned text off for in the phone app while their account had texts on (stored as `ownerAlertPrefs.textsOff`), or turned every channel off for. Channels saved for a student before the account had texts do not turn texts off, and neither does silencing a student: texts come back with the alerts. With texts off for the account the owner gets none, whatever was saved per student, and the phone app shows text off.

@@ -1,13 +1,23 @@
 import { Router, type Request, type Response } from 'express';
 import type { Db } from 'mongodb';
-import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
+import {
+  AuthenticationError,
+  NotFoundError,
+  SCHOLARMANCY_SMS_PURPOSE,
+  ValidationError,
+} from '@scholaracle/contracts';
 import {
   UserRepository,
   CommunicationLogRepository,
   SmsConsentRepository,
 } from '@scholaracle/database';
 import { LlmClient, normalizePhoneE164, resolveLlmConfig } from '@scholaracle/agents';
-import { recordSmsOptInFromRequest } from '../../services/sms/recordSmsOptIn';
+import {
+  accountSmsConsentAfterSave,
+  recordSmsConsentGivenBySave,
+  smsConsentWithdrawnBySave,
+  storedAccountSmsConsent,
+} from '../../services/sms/smsConsentOnSave';
 import type { IAuthService } from '@scholaracle/auth';
 import type { IAuthenticatedRequest } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -527,6 +537,14 @@ async function handleUpdateSettings(
     },
   };
 
+  // The text consent on record follows what the person says here about the number and the box.
+  const consentBefore = storedAccountSmsConsent(user);
+  const consentAfter = accountSmsConsentAfterSave(consentBefore, {
+    phone: normalizedPhone,
+    phoneSent: profile?.phone !== undefined,
+    consent: profile?.smsConsent === undefined ? undefined : profileSmsConsent,
+  });
+
   const userUpdate: {
     preferences: IUserPreferences;
     timezone?: string;
@@ -539,13 +557,22 @@ async function handleUpdateSettings(
   if (profile?.phone !== undefined) {
     userUpdate.phone = normalizedPhone ?? undefined;
   }
-  if (profile?.smsConsent !== undefined) {
-    userUpdate.smsConsent = profileSmsConsent;
+  if (profile?.smsConsent !== undefined || consentAfter.consent !== consentBefore.consent) {
+    userUpdate.smsConsent = consentAfter.consent;
+  }
+
+  // Withdrawn before the account changes: if the save fails after this, fewer texts go out.
+  const withdrawnFrom = smsConsentWithdrawnBySave(consentBefore, consentAfter);
+  if (withdrawnFrom !== undefined) {
+    await consentRepo.recordOptOut(withdrawnFrom, SCHOLARMANCY_SMS_PURPOSE);
   }
   await userRepository.update(userId, userUpdate);
-  if (profileSmsConsent && normalizedPhone) {
-    await recordSmsOptInFromRequest(consentRepo, req, normalizedPhone, '/dashboard/settings');
-  }
+  await recordSmsConsentGivenBySave(
+    consentRepo,
+    req,
+    { before: consentBefore, after: consentAfter },
+    '/dashboard/settings'
+  );
 
   const responseBody = buildSettingsResponse(updatedPreferences);
   res.status(200).json({
