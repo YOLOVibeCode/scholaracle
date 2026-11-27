@@ -18,6 +18,7 @@ import { settingsRouter } from './routes/settings/settings';
 import { consentsRouter } from './routes/consents/consents';
 import { authMiddleware } from './middleware/auth';
 import { requireParent, requireStudent } from './middleware/requireRole';
+import { adminIpRestrictFromEnv } from './middleware/adminIpRestrict';
 import { studioRouter } from './routes/studio/studio';
 import { requestIdMiddleware } from './middleware/requestId';
 import { createErrorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -110,6 +111,7 @@ import {
   SendGridTransport,
   SmtpTransport,
   MongoQueue,
+  acceptRelayKeys,
 } from '@scholaracle/agents';
 import type { INotificationDelivery } from '@scholaracle/interfaces';
 import type { MailService } from '@sendgrid/mail';
@@ -156,6 +158,9 @@ export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined)
   };
   const client = m.client;
   if (!client) return;
+  // The key behind the relay is the relay's. Without this the library prints
+  // `API key does not start with "SG.".` on every setApiKey, once per sender at boot.
+  acceptRelayKeys(mail);
   const apply = (): void => client.setDefaultRequest('baseUrl', baseUrl);
   const original = m.setApiKey?.bind(m);
   if (original) {
@@ -167,7 +172,10 @@ export function applySendGridBaseUrl(mail: unknown, baseUrl: string | undefined)
   apply();
 }
 
-function getSendGridConfig(config: IServerConfig): {
+/** The mail key and the sender every email from the API goes out under. Exported for tests. */
+export function getSendGridConfig(
+  config: Pick<IServerConfig, 'sendGridApiKey' | 'sendGridFromEmail' | 'sendGridFromName'>
+): {
   readonly apiKey: string;
   readonly fromEmail: string;
   readonly fromName: string;
@@ -178,7 +186,7 @@ function getSendGridConfig(config: IServerConfig): {
       config.sendGridFromEmail ??
       process.env['SENDGRID_FROM_EMAIL'] ??
       'notifications@scholarmancy.com',
-    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholaracle',
+    fromName: config.sendGridFromName ?? process.env['SENDGRID_FROM_NAME'] ?? 'Scholarmancy',
   };
 }
 
@@ -404,6 +412,9 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       sendGrid
     );
 
+    // The access token's lifetime is also how long a device stays signed in after its session
+    // is signed out from another device. The sessions page says so ("within 15 minutes"):
+    // keep the two in step if this default changes.
     const authService = new AuthService(
       database,
       jwtSecret,
@@ -580,7 +591,7 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       consentsRouter({ database })
     );
     // Agenda API routes (unified assignments + recurring events)
-    app.use('/api/agenda', agendaRouter({ database, notificationService }));
+    app.use('/api/agenda', agendaRouter({ database, notificationService, jwtSecret }));
     // SLC ingestion (device auth is public; approval uses user JWT; ingestion uses connector JWT)
     app.use(
       '/api/ingest/v1',
@@ -652,6 +663,11 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
     app.use('/api/scrapers', scrapersRoutes);
 
     // Admin API routes (separate authentication)
+    // The address allowlist comes first, so a request from an address that is not on it is
+    // refused before any admin route, sign-in included. It lets everything through when
+    // ADMIN_IP_ALLOWLIST is unset. The one admin-token route outside /api/admin,
+    // POST /api/scrapers/repair, applies the same allowlist itself.
+    app.use('/api/admin', adminIpRestrictFromEnv());
     const adminRevokedTokenStore = new AdminRevokedTokenRepository(database);
     const adminMfaTokenStore = new AdminMFATokenRepository(database);
     const adminStepUpChallengeStore = new AdminStepUpChallengeRepository(database);
@@ -718,21 +734,25 @@ export function createApp(config: IServerConfig = {}, database?: Db): Express {
       process.env['RELAY_WEBHOOK_SECRET'];
     const storeClient = storeConfig ? new NoctusoftStoreClient(storeConfig) : undefined;
 
-    app.use('/api/admin/subscriptions', subscriptionsRouter({ database }));
+    // Every admin router takes the server's token secret, the one admin sign-in signs with.
+    // Their config types require it: six of these were once mounted without it, checked
+    // tokens against their own defaults, and would have answered 401 to a signed-in admin
+    // wherever those differed (routes/admin/adminServerWiring.test.ts).
+    app.use('/api/admin/subscriptions', subscriptionsRouter({ database, jwtSecret }));
     app.use(
       '/api/admin/payments',
-      paymentsRouter({ database, ...(storeClient ? { storeClient } : {}) })
+      paymentsRouter({ database, jwtSecret, ...(storeClient ? { storeClient } : {}) })
     );
-    app.use('/api/admin/coupons', couponsRouter({ database }));
+    app.use('/api/admin/coupons', couponsRouter({ database, jwtSecret }));
     app.use('/api/admin/invoices', invoicesRouter({ database, jwtSecret }));
     app.use('/api/admin/audit-logs', auditLogsRouter({ database, jwtSecret }));
     app.use('/api/admin/communications', communicationsRouter({ database, jwtSecret }));
     app.use('/api/admin/users', adminUsersRouter({ database, jwtSecret }));
-    app.use('/api/admin/analytics', analyticsRouter({ database }));
+    app.use('/api/admin/analytics', analyticsRouter({ database, jwtSecret }));
     app.use('/api/admin/ai', createAdminAiRouter({ database, jwtSecret }));
-    app.use('/api/admin/reports', reportsRouter({ database }));
+    app.use('/api/admin/reports', reportsRouter({ database, jwtSecret }));
     app.use('/api/admin/diagnostics', createDiagnosticsRouter({ database, jwtSecret }));
-    app.use('/api/admin', notesRouter({ database }));
+    app.use('/api/admin', notesRouter({ database, jwtSecret }));
 
     // Webhook ingestion (delivery tracking)
     app.use('/api/webhooks/communications', communicationsWebhooksRouter({ database }));

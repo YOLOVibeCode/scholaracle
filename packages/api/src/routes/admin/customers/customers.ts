@@ -22,7 +22,7 @@ export { maskEmail, maskPhone };
 
 export interface ICustomersRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
   /** When provided, used for admin-triggered password reset email (send-reset). */
   readonly authService?: AuthService;
   /** When provided, used to send "password changed by admin" email after set-password. */

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { FeedbackMenuButton } from '@/components/FeedbackMenuButton';
 
 export const metadata = {
   title: 'Support | Scholarmancy',
@@ -78,6 +79,8 @@ export default function SupportPage() {
               <Button asChild variant="outline">
                 <Link href="/">Back to Home</Link>
               </Button>
+              {/* Phones only: there the feedback widget's floating button is not drawn. */}
+              <FeedbackMenuButton />
             </div>
 
             <div className="border-t pt-6">

@@ -28,13 +28,8 @@ interface IAuthState {
 interface IAuthActions {
   login(email: string, password: string): Promise<void>;
   register(email: string, password: string, name: string): Promise<void>;
-  loginWithOAuth(
-    provider: 'google' | 'apple' | 'microsoft',
-    providerAccountId: string,
-    email: string,
-    name: string,
-    oauthExtra?: { appleIdentityToken?: string; appleNonce?: string }
-  ): Promise<void>;
+  /** Sign in with Apple: the identity token and its raw nonce from the Apple sheet. */
+  loginWithApple(identityToken: string, rawNonce: string, name?: string): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -137,52 +132,13 @@ export function AuthProvider({
     }
   }, []);
 
-  const loginWithOAuth = useCallback(
-    async (
-      provider: 'google' | 'apple' | 'microsoft',
-      providerAccountId: string,
-      email: string,
-      name: string,
-      oauthExtra?: { appleIdentityToken?: string; appleNonce?: string }
-    ) => {
+  // The server verifies the identity token itself and takes the account id and email from
+  // it. Nothing in the app vouches for who the person is, and no server secret ships in it.
+  const loginWithApple = useCallback(
+    async (identityToken: string, rawNonce: string, name?: string) => {
       setState((s) => ({ ...s, isAuthenticating: true, error: null }));
       try {
-        // Apple is verified by the server from the identity token alone: no shared secret ships in
-        // the app, and the email/id in the request are never trusted.
-        if (
-          provider === 'apple' &&
-          oauthExtra?.appleIdentityToken !== undefined &&
-          oauthExtra.appleNonce !== undefined
-        ) {
-          const apple = await apiClient.loginWithApple(
-            oauthExtra.appleIdentityToken,
-            oauthExtra.appleNonce,
-            name
-          );
-          setState((s) => ({
-            ...s,
-            isLoggedIn: true,
-            isAuthenticating: false,
-            error: null,
-            accountEpoch: s.accountEpoch + 1,
-            ...roleFields(apple.user ?? null),
-          }));
-          return;
-        }
-        const internalSecret = process.env['EXPO_PUBLIC_INTERNAL_API_SECRET'] ?? '';
-        const res = await apiClient.loginWithOAuth(
-          provider,
-          providerAccountId,
-          email,
-          name,
-          internalSecret,
-          provider === 'apple'
-            ? {
-                appleIdentityToken: oauthExtra?.appleIdentityToken,
-                appleNonce: oauthExtra?.appleNonce,
-              }
-            : undefined
-        );
+        const res = await apiClient.loginWithApple(identityToken, rawNonce, name);
         setState((s) => ({
           ...s,
           isLoggedIn: true,
@@ -210,7 +166,7 @@ export function AuthProvider({
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, loginWithOAuth, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, loginWithApple, logout }}>
       {children}
     </AuthContext.Provider>
   );

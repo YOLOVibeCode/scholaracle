@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { Db } from 'mongodb';
 import {
+  AdminRevokedTokenRepository,
   AdminUserRepository,
   AdminUserRepository as AdminUserRepo,
   type IAdminRevokedTokenStore,
@@ -9,8 +10,28 @@ import {
   type IPasswordResetTokenStore,
 } from '@scholaracle/database';
 import type { IAdminUserData, AdminRole } from '@scholaracle/database';
+import { AttemptLimiter, type IAttemptLimiter } from '../AttemptLimiter';
 import { MFAService, type IMFAService } from '../MFAService';
 import type { IPasswordResetEmailSender } from '../PasswordResetEmailSender';
+
+/** Wrong authenticator codes an admin may enter inside one window, at sign-in and step-up together. */
+const CODE_ATTEMPTS_MAX = 5;
+const CODE_ATTEMPTS_WINDOW_MS = 15 * 60 * 1000;
+
+/** What an admin is told once the allowance of wrong authenticator codes is used up. */
+export function tooManyWrongCodesMessage(retryAfterSeconds: number): string {
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  return `Too many wrong codes. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+}
+
+/** What `checkAuthenticatorCode` found. */
+export type AdminCodeCheck =
+  | { readonly status: 'ok' }
+  | { readonly status: 'invalid' }
+  /** The admin has used the allowance of wrong codes; the code was not checked. */
+  | { readonly status: 'tooManyAttempts'; readonly retryAfterSeconds: number }
+  /** No such active admin, or the admin has no authenticator. */
+  | { readonly status: 'unavailable' };
 
 export interface IAdminAuthResult {
   readonly success: boolean;
@@ -28,6 +49,10 @@ export interface IAdminAuthResult {
     readonly role: AdminRole;
   };
   readonly error?: string;
+  /** True when the admin has used the allowance of wrong authenticator codes. The code was not checked. */
+  readonly tooManyAttempts?: boolean;
+  /** With `tooManyAttempts`: whole seconds until codes are checked again. */
+  readonly retryAfterSeconds?: number;
 }
 
 export interface IAdminTokenPayload {
@@ -47,6 +72,11 @@ export interface IAdminAuthService {
   ): Promise<IAdminAuthResult>;
   login(email: string, password: string): Promise<IAdminAuthResult>;
   verifyMFAToken(mfaToken: string, totpToken: string): Promise<IAdminAuthResult>;
+  /**
+   * Check a signed-in admin's authenticator code (step-up before a sensitive action). Wrong
+   * codes count against the same allowance as wrong codes at sign-in.
+   */
+  checkAuthenticatorCode(adminId: string, totpToken: string): Promise<AdminCodeCheck>;
   /** Get QR code and manual key for MFA setup (requires valid mfaSetupToken from login). */
   getMFASetupData(
     mfaSetupToken: string
@@ -60,6 +90,7 @@ export interface IAdminAuthService {
   ): Promise<{ adminId: string; type: 'step_up'; issuedAt: number; expiresAt: number } | null>;
   refreshToken(token: string): Promise<IAdminAuthResult>;
   logout(token: string): Promise<boolean>;
+  revokeTokenId(tokenId: string, noEarlierThan?: Date): Promise<void>;
   requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }>;
   resetPasswordWithToken(
     token: string,
@@ -80,10 +111,21 @@ export class AdminAuthService implements IAdminAuthService {
   /** In-memory fallback when _mfaTokenStore is not provided (e.g. tests). */
   private readonly _mfaTokens: Map<string, { adminId: string; secret: string; expiresAt: Date }> =
     new Map();
-  private readonly _revokedTokenStore?: IAdminRevokedTokenStore;
+  /**
+   * Where signed-out tokens are recorded. Always present: a service that is handed no store
+   * keeps the record in its database. Leaving the store out used to mean "record nothing and
+   * check nothing", and every admin area but sign-in built its service that way, so a
+   * signed-out token went on working in those areas until it expired.
+   */
+  private readonly _revokedTokenStore: IAdminRevokedTokenStore;
   private readonly _passwordResetTokenStore?: IPasswordResetTokenStore;
   private readonly _passwordResetEmailSender?: IPasswordResetEmailSender;
   private readonly _adminBaseUrl?: string;
+  /**
+   * Wrong authenticator codes per admin. Without it the six-digit code could be guessed by
+   * anyone who has the password: a wrong code cost nothing and could be repeated at will.
+   */
+  private readonly _codeAttempts: IAttemptLimiter;
 
   constructor(
     database: Db,
@@ -94,17 +136,21 @@ export class AdminAuthService implements IAdminAuthService {
     mfaTokenStore?: IAdminMFATokenStore,
     passwordResetTokenStore?: IPasswordResetTokenStore,
     passwordResetEmailSender?: IPasswordResetEmailSender,
-    adminBaseUrl?: string
+    adminBaseUrl?: string,
+    codeAttempts?: IAttemptLimiter
   ) {
     this._adminRepository = new AdminUserRepository(database);
     this._mfaService = mfaService ?? new MFAService();
+    this._codeAttempts =
+      codeAttempts ??
+      new AttemptLimiter({ maxFailures: CODE_ATTEMPTS_MAX, windowMs: CODE_ATTEMPTS_WINDOW_MS });
     this._jwtSecret =
       jwtSecret ??
       process.env['ADMIN_JWT_SECRET'] ??
       process.env['JWT_SECRET'] ??
       'default-admin-secret';
     this._jwtExpiresIn = jwtExpiresIn ?? process.env['ADMIN_JWT_EXPIRES_IN'] ?? '8h';
-    this._revokedTokenStore = revokedTokenStore;
+    this._revokedTokenStore = revokedTokenStore ?? new AdminRevokedTokenRepository(database);
     this._mfaTokenStore = mfaTokenStore;
     this._passwordResetTokenStore = passwordResetTokenStore;
     this._passwordResetEmailSender = passwordResetEmailSender;
@@ -259,7 +305,7 @@ export class AdminAuthService implements IAdminAuthService {
       }
 
       // MFA is enabled: require TOTP verification
-      const mfaToken = this._generateMFAToken(admin._id!.toString(), admin.mfaSecret);
+      const mfaToken = await this._generateMFAToken(admin._id!.toString(), admin.mfaSecret);
 
       return {
         success: false,
@@ -437,6 +483,18 @@ export class AdminAuthService implements IAdminAuthService {
         };
       }
 
+      // The token is ours, so the admin id is real: count this try before the code is checked.
+      // A token we do not accept never gets here, so it cannot use up an admin's tries.
+      const attempt = this._codeAttempts.begin(decoded.adminId);
+      if (!attempt.allowed) {
+        return {
+          success: false,
+          error: tooManyWrongCodesMessage(attempt.retryAfterSeconds),
+          tooManyAttempts: true,
+          retryAfterSeconds: attempt.retryAfterSeconds,
+        };
+      }
+
       // Verify TOTP token
       const isValid = this._mfaService.verifyToken(mfaData.secret, totpToken);
       if (!isValid) {
@@ -445,6 +503,7 @@ export class AdminAuthService implements IAdminAuthService {
           error: 'Invalid MFA code',
         };
       }
+      this._codeAttempts.succeed(decoded.adminId);
 
       // Get admin
       const admin = await this._adminRepository.findById(decoded.adminId);
@@ -500,7 +559,7 @@ export class AdminAuthService implements IAdminAuthService {
         return null;
       }
 
-      if (this._revokedTokenStore && decoded.jti) {
+      if (decoded.jti) {
         const revoked = await this._revokedTokenStore.isRevoked(decoded.jti);
         if (revoked) return null;
       }
@@ -515,6 +574,28 @@ export class AdminAuthService implements IAdminAuthService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Check a signed-in admin's authenticator code, for step-up before a sensitive action.
+   * Wrong codes count against the same allowance as wrong codes at sign-in, so a stolen session
+   * cannot be used to guess the code either.
+   */
+  public async checkAuthenticatorCode(adminId: string, totpToken: string): Promise<AdminCodeCheck> {
+    const admin = await this._adminRepository.findById(adminId);
+    if (!admin || !admin.isActive || !admin.mfaEnabled || !admin.mfaSecret) {
+      return { status: 'unavailable' };
+    }
+
+    const attempt = this._codeAttempts.begin(adminId);
+    if (!attempt.allowed) {
+      return { status: 'tooManyAttempts', retryAfterSeconds: attempt.retryAfterSeconds };
+    }
+    if (!this._mfaService.verifyToken(admin.mfaSecret, totpToken)) {
+      return { status: 'invalid' };
+    }
+    this._codeAttempts.succeed(adminId);
+    return { status: 'ok' };
   }
 
   /**
@@ -572,7 +653,12 @@ export class AdminAuthService implements IAdminAuthService {
       };
     }
 
-    const newToken = this._generateToken(decoded.adminId, decoded.email, decoded.role);
+    // The new token keeps the id of the one it replaces. Together they are one session, the
+    // one the sessions list shows under that id, and signing that session out ends them both.
+    // With a new id each time, a refreshed token belonged to no session and nothing could
+    // end it before it expired.
+    const tokenId = (jwt.decode(token) as { jti?: string } | null)?.jti;
+    const newToken = this._generateToken(decoded.adminId, decoded.email, decoded.role, tokenId);
 
     return {
       success: true,
@@ -591,16 +677,29 @@ export class AdminAuthService implements IAdminAuthService {
       const decoded = jwt.decode(token) as { jti?: string; exp?: number } | null;
       if (!decoded || !decoded.jti) return true;
 
-      if (this._revokedTokenStore) {
-        const expiresAt = decoded.exp
-          ? new Date(decoded.exp * 1000)
-          : new Date(Date.now() + 8 * 60 * 60 * 1000);
-        await this._revokedTokenStore.revoke(decoded.jti, expiresAt);
-      }
+      await this.revokeTokenId(decoded.jti, decoded.exp ? new Date(decoded.exp * 1000) : undefined);
       return true;
     } catch {
       return true;
     }
+  }
+
+  /**
+   * End a token by its id, without holding the token. This is how an admin signs out another
+   * of their sessions: the sessions list knows a session by its token id.
+   *
+   * The record lasts as long as a token issued this instant would, because a refreshed token
+   * keeps its id and may have been issued just now. `noEarlierThan` is the expiry of a token
+   * the caller does hold, for the case where token lifetimes were once longer than they are
+   * today.
+   */
+  public async revokeTokenId(tokenId: string, noEarlierThan?: Date): Promise<void> {
+    if (!tokenId) return;
+    const issuedNow = jwt.decode(
+      jwt.sign({}, this._jwtSecret, { expiresIn: this._jwtExpiresIn } as jwt.SignOptions)
+    ) as { exp: number };
+    const until = Math.max(issuedNow.exp * 1000, noEarlierThan?.getTime() ?? 0);
+    await this._revokedTokenStore.revoke(tokenId, new Date(until));
   }
 
   /**
@@ -671,8 +770,12 @@ export class AdminAuthService implements IAdminAuthService {
    * @param role - Admin role
    * @returns JWT token
    */
-  private _generateToken(adminId: string, email: string, role: AdminRole): string {
-    const jti = crypto.randomUUID();
+  private _generateToken(
+    adminId: string,
+    email: string,
+    role: AdminRole,
+    jti: string = crypto.randomUUID()
+  ): string {
     return jwt.sign({ adminId, email, role, type: 'admin' }, this._jwtSecret, {
       expiresIn: this._jwtExpiresIn,
       jwtid: jti,
@@ -686,16 +789,19 @@ export class AdminAuthService implements IAdminAuthService {
    * @param secret - MFA secret
    * @returns MFA token
    */
-  private _generateMFAToken(adminId: string, secret: string): string {
+  private async _generateMFAToken(adminId: string, secret: string): Promise<string> {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
     const expiresAtDate = new Date(expiresAt);
     const token = jwt.sign({ adminId, type: 'mfa', expiresAt }, this._jwtSecret, {
       expiresIn: this._mfaTokenExpiresIn,
     } as jwt.SignOptions) as string;
 
-    // Store MFA data in DB when store is provided; otherwise in-memory
+    // Store MFA data in DB when store is provided; otherwise in-memory.
+    // The write is awaited: the password step answers only once the token can be found
+    // again, so a code sent straight after cannot arrive before it, and a write that fails
+    // fails the sign-in instead of handing out a token that will never be accepted.
     if (this._mfaTokenStore) {
-      void this._mfaTokenStore.create(token, adminId, secret, expiresAtDate);
+      await this._mfaTokenStore.create(token, adminId, secret, expiresAtDate);
     } else {
       this._mfaTokens.set(token, { adminId, secret, expiresAt: expiresAtDate });
     }

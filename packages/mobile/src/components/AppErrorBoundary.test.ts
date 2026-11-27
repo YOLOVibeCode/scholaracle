@@ -97,6 +97,15 @@ describe('UpdateRequiredScreen', () => {
     expect(Linking.openURL).toHaveBeenCalledWith('https://store.test/app');
   });
 
+  it('names the button for what it does, because the link is TestFlight until a store has the app', () => {
+    const tree = UpdateRequiredScreen({
+      message: null,
+      storeUrl: 'https://testflight.apple.com/join/example',
+    });
+    expect(textOf(findByTestId(tree, 'update-required-store'))).toBe('Get the update');
+    expect(textOf(tree)).not.toMatch(/store/i);
+  });
+
   it('falls back to default copy and hides the button without a store link', () => {
     const tree = UpdateRequiredScreen({ message: null, storeUrl: null });
     expect(textOf(tree)).toContain(DEFAULT_UPDATE_MESSAGE);

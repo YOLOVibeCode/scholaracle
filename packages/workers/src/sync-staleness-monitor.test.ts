@@ -4,6 +4,7 @@ import type { IEmailTransport } from '@scholaracle/agents';
 import {
   SyncStalenessMonitor,
   buildSyncStalenessConfigFromEnv,
+  hasNewsSinceLastAlert,
   isDataSourceStale,
   latestSyncDate,
 } from './sync-staleness-monitor';
@@ -51,6 +52,48 @@ describe('sync staleness (lastSuccessAt)', () => {
       staleThreshold
     );
     expect(isStale).toBe(false);
+  });
+});
+
+describe('hasNewsSinceLastAlert', () => {
+  const alertedAt = new Date('2026-11-20T12:00:00.000Z');
+  const before = new Date('2026-11-17T12:00:00.000Z');
+  const after = new Date('2026-11-21T12:00:00.000Z');
+
+  it('is true for an owner who was never emailed', () => {
+    expect(hasNewsSinceLastAlert(undefined, [{ key: 's1:canvas', lastSynced: before }])).toBe(true);
+  });
+
+  it('is false when the same sources are still stale and none has synced since the email', () => {
+    const lastAlert = { alertedAt, sourceKeys: ['s1:canvas', 's1:skyward'] };
+    expect(
+      hasNewsSinceLastAlert(lastAlert, [
+        { key: 's1:canvas', lastSynced: before },
+        { key: 's1:skyward', lastSynced: null },
+      ])
+    ).toBe(false);
+  });
+
+  it('is false when one of the sources in the email has recovered and the rest are unchanged', () => {
+    const lastAlert = { alertedAt, sourceKeys: ['s1:canvas', 's1:skyward'] };
+    expect(hasNewsSinceLastAlert(lastAlert, [{ key: 's1:skyward', lastSynced: before }])).toBe(
+      false
+    );
+  });
+
+  it('is true when a source that was not in the email goes stale', () => {
+    const lastAlert = { alertedAt, sourceKeys: ['s1:canvas'] };
+    expect(
+      hasNewsSinceLastAlert(lastAlert, [
+        { key: 's1:canvas', lastSynced: before },
+        { key: 's2:canvas', lastSynced: before },
+      ])
+    ).toBe(true);
+  });
+
+  it('is true when a source synced after the email and is stale again', () => {
+    const lastAlert = { alertedAt, sourceKeys: ['s1:canvas'] };
+    expect(hasNewsSinceLastAlert(lastAlert, [{ key: 's1:canvas', lastSynced: after }])).toBe(true);
   });
 });
 
@@ -167,6 +210,7 @@ describe('SyncStalenessMonitor', () => {
       mockTransport = { send: jest.fn().mockResolvedValue(undefined) };
       await database.collection('students').deleteMany({});
       await database.collection('users').deleteMany({});
+      await database.collection('sync_staleness_alerts').deleteMany({});
     });
 
     async function seedOwnerAndStudent(params: {
@@ -232,6 +276,199 @@ describe('SyncStalenessMonitor', () => {
       expect(payload.html).toContain('Pat &lt;Young&gt;');
       expect(payload.html).not.toContain('<strong>Pat <Young></strong>');
       expect(payload.text).toContain('open the app');
+    });
+
+    describe('one email per stale spell', () => {
+      const DAY_MS = 24 * 60 * 60_000;
+
+      /** A new monitor is what a deploy gives the worker: nothing in memory, the same database. */
+      function newMonitor(now?: () => number): SyncStalenessMonitor {
+        return new SyncStalenessMonitor(database, mockTransport, {
+          staleThresholdMs: TWENTY_FOUR_H_MS,
+          fromEmail: 'from@test.com',
+          fromName: 'Scholarmancy',
+          ...(now ? { now } : {}),
+        });
+      }
+
+      function sentEmails(): { subject: string; text: string; html: string }[] {
+        return (mockTransport.send as jest.Mock).mock.calls.map(
+          (call) => call[0] as { subject: string; text: string; html: string }
+        );
+      }
+
+      it('does not email the owner again on the next check', async () => {
+        const ownerId = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+
+        const monitor = newMonitor();
+        await monitor.runCheck();
+        await monitor.runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not email the owner again after the worker restarts', async () => {
+        const ownerId = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+
+        await newMonitor().runCheck();
+        await newMonitor().runCheck();
+        await newMonitor().runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(1);
+      });
+
+      it('emails again when the source worked after the alert and has stopped again', async () => {
+        const ownerId = new ObjectId();
+        const firstCheck = Date.now() - 20 * DAY_MS;
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(firstCheck - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+        await newMonitor(() => firstCheck).runCheck();
+        expect(mockTransport.send).toHaveBeenCalledTimes(1);
+
+        // The parent syncs the day after the email. Then the source goes quiet for four days.
+        await database
+          .collection('students')
+          .updateOne(
+            { userId: ownerId },
+            { $set: { 'dataSources.0.lastSuccessAt': new Date(firstCheck + DAY_MS) } }
+          );
+        await newMonitor(() => firstCheck + 5 * DAY_MS).runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(2);
+      });
+
+      it('stays quiet while the source keeps working after the alert', async () => {
+        const ownerId = new ObjectId();
+        const firstCheck = Date.now() - 20 * DAY_MS;
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(firstCheck - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+        await newMonitor(() => firstCheck).runCheck();
+
+        await database
+          .collection('students')
+          .updateOne(
+            { userId: ownerId },
+            { $set: { 'dataSources.0.lastSuccessAt': new Date(firstCheck + DAY_MS) } }
+          );
+        await newMonitor(() => firstCheck + DAY_MS + 60 * 60_000).runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(1);
+      });
+
+      it('emails again when a source the owner was not told about goes stale', async () => {
+        const ownerId = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+        await newMonitor().runCheck();
+
+        await database.collection('students').insertOne({
+          _id: new ObjectId(),
+          userId: ownerId,
+          name: 'Blake',
+          dataSources: [
+            {
+              id: 'src-2',
+              displayName: 'Skyward',
+              enabled: true,
+              lastSuccessAt: new Date(Date.now() - 5 * DAY_MS),
+            },
+          ],
+        });
+        await newMonitor().runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(2);
+        const second = sentEmails()[1]!;
+        expect(second.text).toContain('Avery — Canvas');
+        expect(second.text).toContain('Blake — Skyward');
+      });
+
+      it('tries again on the next check when the email could not be sent', async () => {
+        const ownerId = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+        (mockTransport.send as jest.Mock).mockRejectedValueOnce(new Error('mail is down'));
+
+        await newMonitor().runCheck();
+        await newMonitor().runCheck();
+        await newMonitor().runCheck();
+
+        // One failed attempt, one that went out, and nothing after it.
+        expect(mockTransport.send).toHaveBeenCalledTimes(2);
+      });
+
+      it('keeps one owner’s alert from silencing another owner', async () => {
+        const firstOwner = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId: firstOwner,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+        await newMonitor().runCheck();
+
+        const secondOwner = new ObjectId();
+        await database
+          .collection('users')
+          .insertOne({ _id: secondOwner, email: 'other@test.com', name: 'Robin' });
+        await database.collection('students').insertOne({
+          _id: new ObjectId(),
+          userId: secondOwner,
+          name: 'Drew',
+          dataSources: [
+            {
+              id: 'src-1',
+              displayName: 'Canvas',
+              enabled: true,
+              lastSuccessAt: new Date(Date.now() - 4 * DAY_MS),
+            },
+          ],
+        });
+        await newMonitor().runCheck();
+
+        expect(mockTransport.send).toHaveBeenCalledTimes(2);
+        const recipients = (mockTransport.send as jest.Mock).mock.calls.map(
+          (call) => (call[0] as { to: string }).to
+        );
+        expect(recipients).toEqual(['parent@test.com', 'other@test.com']);
+      });
+
+      it('signs the email as Scholarmancy, the name parents know', async () => {
+        const ownerId = new ObjectId();
+        await seedOwnerAndStudent({
+          ownerId,
+          lastSuccessAt: new Date(Date.now() - 3 * DAY_MS),
+          studentName: 'Avery',
+        });
+
+        await newMonitor().runCheck();
+
+        const email = sentEmails()[0]!;
+        expect(email.subject).toBe('Scholarmancy: Sync has not run in 24+ hours');
+        expect(email.text).toContain('— The Scholarmancy Team');
+        expect(email.html).toContain('— The Scholarmancy Team');
+        expect(`${email.subject} ${email.text} ${email.html}`).not.toContain('Scholaracle');
+      });
     });
   });
 });

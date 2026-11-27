@@ -7,7 +7,7 @@ import { AdminAuthService } from '@scholaracle/auth';
 
 export interface IReportsRouterConfig {
   readonly database: Db;
-  readonly jwtSecret?: string;
+  readonly jwtSecret: string;
 }
 
 async function handleExportCustomers(

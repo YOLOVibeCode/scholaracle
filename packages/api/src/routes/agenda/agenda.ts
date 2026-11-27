@@ -18,6 +18,12 @@ import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
 export interface IAgendaRouterConfig {
   readonly database: Db;
   readonly notificationService?: NotificationService;
+  /**
+   * The secret the server signs tokens with. Pass the server's own, so the agenda accepts
+   * exactly the tokens every other route accepts. Left out, AuthService falls back to
+   * JWT_SECRET and then to its own default, which is not the server's development default.
+   */
+  readonly jwtSecret?: string;
 }
 
 export type AgendaImportance = 'critical' | 'high' | 'medium' | 'low';
@@ -149,7 +155,7 @@ export function isAgendaAiEnabled(env: NodeJS.ProcessEnv = process.env): boolean
 
 export function agendaRouter(config: IAgendaRouterConfig): Router {
   const router = Router();
-  const authService = new AuthService(config.database);
+  const authService = new AuthService(config.database, config.jwtSecret);
   const overridesRepo = new AgendaOverrideRepository(config.database);
   const studentRepo = new StudentRepository(config.database);
 

@@ -19,7 +19,7 @@ export interface IMFAService {
 export class MFAService implements IMFAService {
   private readonly _serviceName: string;
 
-  constructor(serviceName: string = 'Scholaracle Admin') {
+  constructor(serviceName: string = 'Scholarmancy Admin') {
     this._serviceName = serviceName;
   }
 

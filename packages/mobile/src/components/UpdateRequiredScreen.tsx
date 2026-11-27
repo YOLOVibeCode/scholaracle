@@ -22,7 +22,8 @@ export function UpdateRequiredScreen({ message, storeUrl }: IProps): React.React
           accessibilityRole="button"
           testID="update-required-store"
         >
-          <Text style={styles.buttonText}>Open the store</Text>
+          {/* The link is whatever the server sends: TestFlight today, a store page later. */}
+          <Text style={styles.buttonText}>Get the update</Text>
         </Pressable>
       ) : null}
     </View>

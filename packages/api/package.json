@@ -38,7 +38,7 @@
     "archiver": "^7.0.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
+    "express": "^4.22.3",
     "firebase-admin": "^12.0.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
@@ -48,7 +48,7 @@
     "playwright": "^1.58.2",
     "rrule": "^2.7.2",
     "ua-parser-js": "^2.0.9",
-    "zod": "^4.1.13"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.6",

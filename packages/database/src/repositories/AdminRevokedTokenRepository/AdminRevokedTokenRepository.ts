@@ -22,13 +22,17 @@ export class AdminRevokedTokenRepository implements IAdminRevokedTokenStore {
     this._collection = database.collection<RevokedDocument>('admin_revoked_tokens');
   }
 
+  /**
+   * Record a token id as revoked until `expiresAt`. Telling it about the same id again is
+   * fine (there is one record per id), and the record keeps the later of the expiry times
+   * it was given, so a second call can never bring a revoked token back early.
+   */
   public async revoke(jti: string, expiresAt: Date): Promise<void> {
-    const now = new Date();
-    await this._collection.insertOne({
-      jti,
-      expiresAt,
-      createdAt: now,
-    });
+    await this._collection.updateOne(
+      { jti },
+      { $max: { expiresAt }, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
   }
 
   public async isRevoked(jti: string): Promise<boolean> {

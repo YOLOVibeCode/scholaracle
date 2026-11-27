@@ -52,11 +52,16 @@ async function handleListAdminSessions(
 
 /**
  * DELETE /api/admin/sessions/:id - Revoke a specific admin session (must own it).
+ *
+ * The session's token is ended first, then the row is marked. Marking the row alone signs
+ * nobody out: nothing reads the mark, so the other device went on working until its token
+ * expired. A session is listed under its token's id, and a refreshed token keeps that id.
  */
 async function handleRevokeAdminSession(
   req: Request,
   res: Response,
-  sessionRepo: SessionRepository
+  sessionRepo: SessionRepository,
+  adminAuthService: AdminAuthService
 ): Promise<void> {
   const authReq = req as IAdminAuthenticatedRequest;
   const adminId = authReq.adminId;
@@ -75,6 +80,7 @@ async function handleRevokeAdminSession(
     throw new NotFoundError('Session not found');
   }
 
+  await adminAuthService.revokeTokenId(session.refreshTokenFamilyId);
   await sessionRepo.revokeById(sessionId);
   res.status(200).json({ success: true });
 }
@@ -94,7 +100,9 @@ export function adminSessionsRouter(config: IAdminSessionsRouterConfig): Router 
   router.delete(
     '/:id',
     adminAuthMiddleware(config.adminAuthService),
-    asyncHandler((req: Request, res: Response) => handleRevokeAdminSession(req, res, sessionRepo))
+    asyncHandler((req: Request, res: Response) =>
+      handleRevokeAdminSession(req, res, sessionRepo, config.adminAuthService)
+    )
   );
 
   return router;

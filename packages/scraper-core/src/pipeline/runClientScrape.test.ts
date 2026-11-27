@@ -166,11 +166,7 @@ describe('runClientScrape skeleton capture', () => {
     };
     await expect(runClientScrape(host)).rejects.toThrow('portal timed out');
     expect(uploadSkeleton).toHaveBeenCalledTimes(1);
-    expect(uploadSkeleton).toHaveBeenCalledWith(
-      expect.any(String),
-      'src-1',
-      SKELETON_PAYLOAD
-    );
+    expect(uploadSkeleton).toHaveBeenCalledWith(expect.any(String), 'src-1', SKELETON_PAYLOAD);
   });
 
   it('does not upload a skeleton when extraction succeeds', async () => {
@@ -186,6 +182,17 @@ describe('runClientScrape skeleton capture', () => {
     });
     await runClientScrape(host);
     expect(uploadSkeleton).not.toHaveBeenCalled();
+  });
+});
+
+describe('runClientScrape progress', () => {
+  it('tells the parent it is uploading to Scholarmancy, the name on their phone', async () => {
+    const { host, progress } = makeHost([COURSE]);
+
+    await runClientScrape(host);
+
+    expect(progress).toContain('uploading:Uploading to Scholarmancy...');
+    expect(progress.join('\n')).not.toContain('Scholaracle');
   });
 });
 
@@ -329,10 +336,7 @@ describe('runClientScrape ingest telemetry', () => {
       },
     };
     const { host } = makeHost(
-      [
-        op('course', 'c-1', { title: 'Algebra' }),
-        op('assignment', 'a-1', { title: 'HW1' }),
-      ],
+      [op('course', 'c-1', { title: 'Algebra' }), op('assignment', 'a-1', { title: 'HW1' })],
       { uploader }
     );
     await runClientScrape(host);

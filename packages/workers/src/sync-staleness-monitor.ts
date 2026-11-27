@@ -8,8 +8,13 @@ import { logger } from './logger';
 // ---------------------------------------------------------------------------
 // Periodically checks all students with enabled data sources. If any source
 // hasn't synced within the configured threshold, sends a single alert email
-// to the account owner. Tracks which alerts have been sent so the same owner
-// is not spammed on every tick.
+// to the account owner.
+//
+// One email per stale spell. Each alert is written to the database with the
+// sources it named, so the next check, and the worker a deploy starts, both
+// know the owner has been told. The owner hears again only when a source that
+// was not in the last email goes stale, or when a source synced after that
+// email and has stopped again.
 // ---------------------------------------------------------------------------
 
 export interface ISyncStalenessMonitorConfig {
@@ -25,6 +30,8 @@ export interface ISyncStalenessMonitorConfig {
   readonly fromEmail: string;
   /** From name for alert emails. */
   readonly fromName: string;
+  /** The clock, in epoch milliseconds (default Date.now). Tests pass their own. */
+  readonly now?: () => number;
 }
 
 /** Env-driven fields for the staleness monitor (fromEmail/fromName set elsewhere). */
@@ -51,6 +58,18 @@ interface IStudentRecord {
   readonly userId: unknown;
   readonly dataSources?: readonly IStudentDataSource[];
 }
+
+/** The last stale-sync email an account owner was sent. One document per owner. */
+interface IStaleAlertRecord {
+  /** The owner's user id, as a string. */
+  readonly _id: string;
+  readonly alertedAt: Date;
+  /** The sources that email named: `<student id>:<source id>`. */
+  readonly sourceKeys: readonly string[];
+}
+
+/** Where the monitor keeps who has been told about what. */
+export const STALE_ALERTS_COLLECTION = 'sync_staleness_alerts';
 
 const DEFAULT_INITIAL_DELAY_MS = 30_000;
 const DEFAULT_CHECK_INTERVAL_MS = 60 * 60_000; // 1 hour
@@ -112,9 +131,33 @@ function formatLastSynced(lastSynced: Date | null): string {
 }
 
 interface IStaleSourceLine {
+  /** `<student id>:<source id>`; what the alert record remembers. */
+  readonly key: string;
   readonly studentName: string;
   readonly sourceName: string;
   readonly lastSynced: Date | null;
+}
+
+function staleSourceKey(student: IStudentRecord, ds: IStudentDataSource): string {
+  return `${String(student._id)}:${ds.id ?? ds.pluginId ?? ds.displayName ?? 'source'}`;
+}
+
+/**
+ * Whether the owner has something new to hear. Exported for tests.
+ * True when they were never emailed, when a stale source was not in the last email, or when
+ * a stale source synced after that email (it worked again and has stopped again).
+ */
+export function hasNewsSinceLastAlert(
+  lastAlert: Pick<IStaleAlertRecord, 'alertedAt' | 'sourceKeys'> | undefined,
+  staleSources: readonly Pick<IStaleSourceLine, 'key' | 'lastSynced'>[]
+): boolean {
+  if (!lastAlert) return true;
+  const alertedAt = new Date(lastAlert.alertedAt).getTime();
+  return staleSources.some(
+    (source) =>
+      !lastAlert.sourceKeys.includes(source.key) ||
+      (source.lastSynced !== null && source.lastSynced.getTime() > alertedAt)
+  );
 }
 
 function buildStaleSourceTextLines(lines: readonly IStaleSourceLine[]): string {
@@ -146,11 +189,9 @@ export class SyncStalenessMonitor {
   private readonly _thresholdMs: number;
   private readonly _fromEmail: string;
   private readonly _fromName: string;
+  private readonly _now: () => number;
   private _interval: ReturnType<typeof setInterval> | null = null;
   private _initialTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Set of userId strings that have already been alerted in this process lifetime. Resets on restart. */
-  private readonly _alertedOwners = new Set<string>();
 
   constructor(db: Db, transport: IEmailTransport, config: ISyncStalenessMonitorConfig) {
     this._db = db;
@@ -161,6 +202,7 @@ export class SyncStalenessMonitor {
     this._thresholdMs = config.staleThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS;
     this._fromEmail = config.fromEmail;
     this._fromName = config.fromName;
+    this._now = config.now ?? Date.now;
   }
 
   public start(): void {
@@ -207,7 +249,7 @@ export class SyncStalenessMonitor {
   // -------------------------------------------------------------------------
 
   public async runCheck(): Promise<void> {
-    const now = Date.now();
+    const now = this._now();
     const staleThreshold = new Date(now - this._thresholdMs);
 
     const students = this._db.collection('students');
@@ -232,6 +274,7 @@ export class SyncStalenessMonitor {
             staleByOwner.set(ownerKey, { ownerUserId: ownerKey, staleSources: [] });
           }
           staleByOwner.get(ownerKey)!.staleSources.push({
+            key: staleSourceKey(student, ds),
             studentName: student.name ?? 'Unknown Student',
             sourceName: ds.displayName ?? ds.pluginId ?? 'Unknown Source',
             lastSynced: latestSyncDate(ds),
@@ -242,9 +285,15 @@ export class SyncStalenessMonitor {
 
     if (staleByOwner.size === 0) return;
 
+    const alerts = this._db.collection<IStaleAlertRecord>(STALE_ALERTS_COLLECTION);
+    const lastAlertByOwner = new Map<string, IStaleAlertRecord>();
+    for (const record of await alerts.find({ _id: { $in: [...staleByOwner.keys()] } }).toArray()) {
+      lastAlertByOwner.set(record._id, record);
+    }
+
     const users = this._db.collection('users');
     for (const [ownerKey, info] of staleByOwner) {
-      if (this._alertedOwners.has(ownerKey)) continue;
+      if (!hasNewsSinceLastAlert(lastAlertByOwner.get(ownerKey), info.staleSources)) continue;
 
       let owner: Record<string, unknown> | null = null;
       try {
@@ -267,13 +316,33 @@ export class SyncStalenessMonitor {
 
       try {
         await this._sendStaleAlert(email, ownerName, info.staleSources, thresholdHours);
-        this._alertedOwners.add(ownerKey);
         logger.info(
           { email, staleCount: info.staleSources.length, job: 'staleness-monitor' },
           'stale-sync alert sent'
         );
       } catch (err) {
+        // Nothing is recorded, so the next check tries this owner again.
         logger.error({ err, email, job: 'staleness-monitor' }, 'failed to send stale-sync alert');
+        continue;
+      }
+
+      try {
+        await alerts.updateOne(
+          { _id: ownerKey },
+          {
+            $set: {
+              alertedAt: new Date(now),
+              sourceKeys: info.staleSources.map((source) => source.key),
+            },
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        // The email went out but the record did not: the next check will send it once more.
+        logger.error(
+          { err, ownerKey, job: 'staleness-monitor' },
+          'stale-sync alert sent but not recorded'
+        );
       }
     }
   }
@@ -287,7 +356,7 @@ export class SyncStalenessMonitor {
     const sourceLines = buildStaleSourceTextLines(staleSources);
     const sourceHtmlLines = buildStaleSourceHtmlLines(staleSources);
     const safeOwner = escapeHtml(ownerName);
-    const subject = `Scholaracle: Sync has not run in ${thresholdHours}+ hours`;
+    const subject = `Scholarmancy: Sync has not run in ${thresholdHours}+ hours`;
 
     const guidance =
       'Please open the app on your phone and run a sync for the affected student(s).';
@@ -302,7 +371,7 @@ This means grade and assignment updates may not be current. ${guidance}
 
 If you believe this is an error, please contact support.
 
-— The Scholaracle Team`;
+— The Scholarmancy Team`;
 
     const html = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h2 style="color: #d97706;">Sync Alert</h2>
@@ -313,7 +382,7 @@ If you believe this is an error, please contact support.
   </ul>
   <p>This means grade and assignment updates may not be current. ${escapeHtml(guidance)}</p>
   <p>If you believe this is an error, please contact support.</p>
-  <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">— The Scholaracle Team</p>
+  <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">— The Scholarmancy Team</p>
 </div>`;
 
     await this._transport.send({
@@ -323,10 +392,5 @@ If you believe this is an error, please contact support.
       text,
       html,
     });
-  }
-
-  /** Clear the alerted set (e.g. after a successful sync proves connectivity is restored). */
-  public clearAlerts(): void {
-    this._alertedOwners.clear();
   }
 }

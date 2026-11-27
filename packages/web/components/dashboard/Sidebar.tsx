@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { ScholarmancyLogo } from '@/components/brand/ScholarmancyLogo';
 import { usePathname } from 'next/navigation';
-import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail, CheckSquare } from 'lucide-react';
+import { Home, BookOpen, Bell, Settings, GraduationCap, Calendar, CreditCard, LayoutDashboard, Plug, UserCircle, ListTodo, Mail, CheckSquare, MessageSquare } from 'lucide-react';
 import { useStudentView } from '@/lib/contexts/StudentViewContext';
+import { openFeedback } from '@/lib/feedback/feedback';
+import { useFeedbackInMenu } from '@/lib/feedback/useFeedbackInMenu';
 import {
   Sidebar as SidebarComponent,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -15,6 +18,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 
 const parentMenuItems = [
@@ -42,6 +46,35 @@ function getStudentMenuItems(studentId: string) {
     { title: 'Emails', url: `${base}/emails`, icon: Mail },
     { title: 'Back to my dashboard', url: '/dashboard', icon: Home },
   ];
+}
+
+/**
+ * "Send feedback" at the foot of the menu, on phones only: there the feedback widget's
+ * floating button is not drawn, because it sat on top of the page's own buttons.
+ */
+function SidebarFeedback() {
+  const { setOpenMobile } = useSidebar();
+  const inMenu = useFeedbackInMenu();
+  if (!inMenu) return null;
+  return (
+    <SidebarFooter>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            data-testid="sidebar-send-feedback"
+            onClick={() => {
+              // Close the drawer first: while it is open it keeps the keyboard focus inside itself.
+              setOpenMobile(false);
+              openFeedback();
+            }}
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            <span>Send feedback</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarFooter>
+  );
 }
 
 export function Sidebar() {
@@ -82,6 +115,7 @@ export function Sidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFeedback />
     </SidebarComponent>
   );
 }

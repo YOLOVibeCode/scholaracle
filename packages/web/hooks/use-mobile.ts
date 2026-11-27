@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-const MOBILE_BREAKPOINT = 768;
+/** Below this width the dashboard navigation is a drawer, not a column. */
+export const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);

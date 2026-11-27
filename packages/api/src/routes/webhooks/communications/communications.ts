@@ -7,6 +7,7 @@ import {
 } from '@scholaracle/database';
 import { AuthenticationError, NotFoundError, ValidationError } from '@scholaracle/contracts';
 import { asyncHandler } from '../../../middleware/asyncHandler';
+import { sameSecret } from '../../../security/sameSecret';
 
 export interface ICommunicationsWebhooksRouterConfig {
   readonly database: Db;
@@ -35,8 +36,8 @@ export function communicationsWebhooksRouter(config: ICommunicationsWebhooksRout
     '/status',
     asyncHandler(async (req: Request, res: Response) => {
       // Shared-secret check: 401 status must stay exactly as-is for the provider.
-      const provided = (req.headers['x-webhook-secret'] as string | undefined) ?? '';
-      if (!provided || provided !== secret) {
+      const provided = req.headers['x-webhook-secret'];
+      if (!sameSecret(provided, secret)) {
         throw new AuthenticationError('Unauthorized');
       }
 

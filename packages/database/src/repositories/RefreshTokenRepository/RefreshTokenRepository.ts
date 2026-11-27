@@ -11,6 +11,8 @@ export interface IRefreshTokenStore {
   ): Promise<{ userId: string; familyId: string; revokedAt: Date | null } | null>;
   revokeByTokenHash(tokenHash: string): Promise<void>;
   revokeFamily(familyId: string): Promise<void>;
+  /** Ends every token of the user outside one family. Returns how many it ended. */
+  revokeAllForUserExcept(userId: string, keepFamilyId: string): Promise<number>;
 }
 
 interface TokenDocument {
@@ -86,5 +88,22 @@ export class RefreshTokenRepository implements IRefreshTokenStore {
   public async revokeFamily(familyId: string): Promise<void> {
     const now = new Date();
     await this._collection.updateMany({ familyId }, { $set: { revokedAt: now } });
+  }
+
+  /**
+   * End every refresh token of the user outside one family: "sign out all other devices".
+   * It goes by the tokens themselves, so a device is signed out whether or not it has a row
+   * in the sessions list.
+   */
+  public async revokeAllForUserExcept(userId: string, keepFamilyId: string): Promise<number> {
+    const result = await this._collection.updateMany(
+      {
+        userId: new ObjectId(userId),
+        familyId: { $ne: keepFamilyId },
+        revokedAt: { $exists: false },
+      },
+      { $set: { revokedAt: new Date() } }
+    );
+    return result.modifiedCount;
   }
 }

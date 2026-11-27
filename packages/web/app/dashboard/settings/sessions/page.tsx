@@ -69,7 +69,8 @@ export default function SessionsPage() {
         <CardHeader>
           <CardTitle>Sessions</CardTitle>
           <CardDescription>
-            Devices where you are signed in. Revoke any session you don&apos;t recognize.
+            Devices where you are signed in. Revoke any session you don&apos;t recognize. A revoked
+            device is signed out within 15 minutes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

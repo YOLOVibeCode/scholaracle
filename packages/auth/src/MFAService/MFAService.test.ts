@@ -23,6 +23,14 @@ describe('MFAService', () => {
 
       expect(result1.secret).not.toBe(result2.secret);
     });
+
+    it('labels the authenticator entry Scholarmancy Admin when no other name is given', () => {
+      const result = new MFAService().generateSecret('admin@test.com');
+
+      const label = decodeURIComponent(result.qrCodeUrl);
+      expect(label).toContain('Scholarmancy Admin (admin@test.com)');
+      expect(label).not.toContain('Scholaracle');
+    });
   });
 
   describe('verifyToken', () => {

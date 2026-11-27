@@ -12,6 +12,13 @@ import type { IUserData, User, UserRole } from '@scholaracle/database';
 import type { OAuthProvider } from '@scholaracle/database';
 import type { IPasswordResetEmailSender } from '../PasswordResetEmailSender';
 
+/**
+ * What `login` answers when the email or the password is wrong. An unknown email and a
+ * suspended account get the same words, so the answer does not tell which accounts exist.
+ * Any other `error` from `login` means the sign-in could not be checked at all.
+ */
+export const INVALID_CREDENTIALS_ERROR = 'Invalid email or password';
+
 export interface IAuthUserPayload {
   readonly id: string;
   readonly email: string;
@@ -91,6 +98,8 @@ export interface IAuthService {
   resetPasswordWithToken(token: string, newPassword: string): Promise<IRequestPasswordResetResult>;
   refreshAccessToken(refreshToken: string): Promise<IRefreshResult | { error: string }>;
   revokeRefreshToken(refreshToken: string): Promise<{ success: boolean; error?: string }>;
+  revokeRefreshTokenFamily(familyId: string): Promise<void>;
+  revokeOtherRefreshTokenFamilies(userId: string, keepFamilyId: string): Promise<void>;
   /**
    * Issue a JWT + refresh for an already-authenticated user (magic-link consume).
    * By default only student-role, non-suspended users succeed.
@@ -295,14 +304,14 @@ export class AuthService implements IAuthService {
       if (!user) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 
       if (user.isSuspended) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 
@@ -311,7 +320,7 @@ export class AuthService implements IAuthService {
       if (!isValidPassword) {
         return {
           success: false,
-          error: 'Invalid email or password',
+          error: INVALID_CREDENTIALS_ERROR,
         };
       }
 
@@ -692,6 +701,31 @@ export class AuthService implements IAuthService {
       await this._refreshTokenStore.revokeFamily(existing.familyId);
     }
     return { success: true };
+  }
+
+  /**
+   * End a session by its family id, for when the session's refresh token is not at hand:
+   * this is how one device signs another out. Every refresh token of the family stops
+   * working, so that device cannot get a new access token. The access token it already
+   * holds keeps working until it runs out. The caller checks that the family belongs to
+   * the account that is asking.
+   */
+  public async revokeRefreshTokenFamily(familyId: string): Promise<void> {
+    if (!this._refreshTokenStore || !familyId) return;
+    await this._refreshTokenStore.revokeFamily(familyId);
+  }
+
+  /**
+   * End every session of the account but one: "sign out all other devices". It goes by the
+   * account's refresh tokens, not by the sessions list, so a device is signed out whether or
+   * not the list shows it. Without a family to keep, nothing is ended.
+   */
+  public async revokeOtherRefreshTokenFamilies(
+    userId: string,
+    keepFamilyId: string
+  ): Promise<void> {
+    if (!this._refreshTokenStore || !userId || !keepFamilyId) return;
+    await this._refreshTokenStore.revokeAllForUserExcept(userId, keepFamilyId);
   }
 
   /** An OAuth sign-in ends a pending "set a password" prompt on an invitation-created account. */
