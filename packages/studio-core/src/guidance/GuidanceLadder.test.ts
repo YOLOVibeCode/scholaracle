@@ -6,6 +6,8 @@ import type {
   IGuidanceClock,
   IGuidanceSendLog,
   INotificationSink,
+  INotificationSinkMessage,
+  INotificationSinkResult,
   LadderStep,
 } from '@scholaracle/interfaces';
 import { GuidanceLadder, isQuietHour, type ILadderAssignment } from './GuidanceLadder';
@@ -44,19 +46,14 @@ class FakeState implements IAssignmentState {
 }
 
 class FakeSink implements INotificationSink {
-  public readonly sent: Array<{
-    audience: 'student' | 'parent';
-    studentId: string;
-    body: string;
-    deepLink: string;
-  }> = [];
-  public async send(input: {
-    readonly audience: 'student' | 'parent';
-    readonly studentId: string;
-    readonly body: string;
-    readonly deepLink: string;
-  }): Promise<void> {
+  public readonly sent: INotificationSinkMessage[] = [];
+  /** People this household has no way to reach (a student with no login, say). */
+  public readonly unreachable = new Set<'student' | 'parent'>();
+
+  public async send(input: INotificationSinkMessage): Promise<INotificationSinkResult> {
+    if (this.unreachable.has(input.audience)) return { deliveries: 0 };
     this.sent.push({ ...input });
+    return { deliveries: 1 };
   }
 }
 
@@ -150,6 +147,53 @@ describe('GuidanceLadder', () => {
     expect(parent?.deepLink).toContain(STUDENT);
     const student = sink.sent.find((s) => s.audience === 'student');
     expect(student?.body).toMatch(/Still open/i);
+  });
+
+  it('names the assignment in every send, so a tap on the phone can open it', async () => {
+    const now = new Date(DUE.getTime() + 12 * 60 * 60 * 1000);
+    const { engine, sink } = ladder(now, 14);
+    await engine.evaluate(ASSIGNMENT);
+    expect(sink.sent.map((s) => [s.audience, s.assignmentExternalId]).sort()).toEqual([
+      ['parent', CELL],
+      ['student', CELL],
+    ]);
+  });
+
+  it('builds a link that still works when the assignment id has a space or a slash in it', async () => {
+    const now = new Date(DUE.getTime() - 48 * 60 * 60 * 1000);
+    const { engine, sink } = ladder(now, 16);
+    await engine.evaluate({ ...ASSIGNMENT, assignmentExternalId: 'bio 101/lab #2' });
+    expect(sink.sent[0]?.deepLink).toBe('/studio/assignments/bio%20101%2Flab%20%232');
+    // The id itself goes on unchanged; only the link is encoded.
+    expect(sink.sent[0]?.assignmentExternalId).toBe('bio 101/lab #2');
+  });
+
+  describe('when a reminder has nobody to go to', () => {
+    it('is not recorded as sent and is not one of the two a day for the student', async () => {
+      const now = new Date(DUE.getTime() - 48 * 60 * 60 * 1000);
+      const sink = new FakeSink();
+      sink.unreachable.add('student');
+      const { engine, log } = ladder(now, 16, 'missing', { sink });
+
+      await engine.evaluate(ASSIGNMENT);
+
+      expect(sink.sent).toEqual([]);
+      expect(log.sentSteps.size).toBe(0);
+      expect(log.studentCount).toBe(0);
+    });
+
+    it('still tells the parent at T+12h and records that step', async () => {
+      const now = new Date(DUE.getTime() + 12 * 60 * 60 * 1000);
+      const sink = new FakeSink();
+      sink.unreachable.add('student');
+      const { engine, log } = ladder(now, 14, 'missing', { sink });
+
+      await engine.evaluate(ASSIGNMENT);
+
+      expect(sink.sent.map((s) => s.audience)).toEqual(['parent']);
+      expect([...log.sentSteps]).toEqual([`${STUDENT}:${CELL}:t12h`]);
+      expect(log.studentCount).toBe(0);
+    });
   });
 
   it('T+12h does not send if already submitted', async () => {

@@ -15,7 +15,10 @@ export interface ActionItemProps {
   readonly item: IActionItem;
   readonly onItemClick?: (item: IActionItem) => void;
   readonly onNudge?: (item: IActionItem) => void;
+  /** A nudge for this assignment is on its way; the button waits. */
   readonly nudging?: boolean;
+  /** Why the last nudge for this assignment was not sent. Shown under the button. */
+  readonly nudgeError?: string;
 }
 
 function statusBadgeClass(status: string): string {
@@ -119,7 +122,13 @@ function NeedsHelpNote({ item }: { item: IActionItem }) {
   );
 }
 
-export function ActionItem({ item, onItemClick, onNudge, nudging = false }: ActionItemProps) {
+export function ActionItem({
+  item,
+  onItemClick,
+  onNudge,
+  nudging = false,
+  nudgeError,
+}: ActionItemProps) {
   const gradeLabel =
     item.course.currentGrade != null
       ? `${item.course.currentGrade}%`
@@ -190,6 +199,16 @@ export function ActionItem({ item, onItemClick, onNudge, nudging = false }: Acti
             {asksForHelp ? 'Reply with a nudge' : 'Nudge'}
           </button>
         </div>
+      ) : null}
+      {onNudge && nudgeError ? (
+        <p
+          role="alert"
+          data-testid="action-item-nudge-error"
+          className="text-xs text-red-700 dark:text-red-300"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {nudgeError}
+        </p>
       ) : null}
     </div>
   );

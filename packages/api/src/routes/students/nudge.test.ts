@@ -40,6 +40,7 @@ describe('parent nudge API', () => {
     sent: [],
     async send(input) {
       this.sent.push({ audience: input.audience });
+      return { deliveries: 1 };
     },
   };
 
@@ -146,5 +147,48 @@ describe('parent nudge API', () => {
       .post(`/api/students/${emmaId}/assignments/${CELL}/nudge`)
       .set('Authorization', `Bearer ${emmaToken}`);
     expect(res.status).toBe(403);
+  });
+
+  describe('on a server that was given no way to send a nudge', () => {
+    interface IBoardItem {
+      readonly assignmentExternalId: string;
+      readonly lastNudgedAt?: string;
+    }
+
+    async function boardItems(): Promise<IBoardItem[]> {
+      const board = await request(app)
+        .get(`/api/students/${emmaId}/action-board`)
+        .set('Authorization', `Bearer ${parentToken}`);
+      expect(board.status).toBe(200);
+      return (board.body.buckets as Array<{ items: IBoardItem[] }>).flatMap((b) => b.items);
+    }
+
+    it('refuses and records nothing, so the board cannot claim a nudge nobody got', async () => {
+      const bare = express();
+      bare.use(express.json());
+      bare.use(
+        '/api/students',
+        authMiddleware(authService),
+        requireParent,
+        studentsRouter({ database, baseUrl: 'http://test.example', jwtSecret: 'test-secret' })
+      );
+      bare.use(createErrorHandler());
+
+      const fresh = (await boardItems()).find(
+        (i) => i.assignmentExternalId !== CELL && i.lastNudgedAt === undefined
+      );
+      if (fresh === undefined) throw new Error('The demo board has no assignment left to nudge');
+
+      const res = await request(bare)
+        .post(`/api/students/${emmaId}/assignments/${fresh.assignmentExternalId}/nudge`)
+        .set('Authorization', `Bearer ${parentToken}`);
+
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({ success: false, error: 'Nudges are not set up on this server' });
+      const after = (await boardItems()).find(
+        (i) => i.assignmentExternalId === fresh.assignmentExternalId
+      );
+      expect(after?.lastNudgedAt).toBeUndefined();
+    });
   });
 });

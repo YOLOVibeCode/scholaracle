@@ -9,8 +9,9 @@ import {
   type IStudentSession,
   type IWeekView,
 } from '@scholaracle/contracts';
-import { Student, UserRepository, type IStudentData, type User } from '@scholaracle/database';
+import { Student, UserRepository, type IStudentData } from '@scholaracle/database';
 import { WeekGuide } from '@scholaracle/studio-core';
+import { hasPushDevice } from '../push/hasPushDevice';
 import { createMongoTodaySource } from '../studio/mongoTodaySource';
 import { resolveStudentTimeZone } from '../studio/resolveStudentTimeZone';
 import { logger } from '../logger';
@@ -164,13 +165,6 @@ export function deliveryKey(
 ): string {
   const digest = createHash('sha256').update(recipient).digest('hex').slice(0, 16);
   return `${channel}:${audience}:${digest}`;
-}
-
-function hasPushDevice(user: User | null): user is User {
-  return (
-    user !== null &&
-    user.devices.some((d) => typeof d.pushToken === 'string' && d.pushToken.length > 0)
-  );
 }
 
 /**

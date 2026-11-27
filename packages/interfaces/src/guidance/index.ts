@@ -2,6 +2,8 @@ export type {
   IGuidanceClock,
   IAssignmentState,
   INotificationSink,
+  INotificationSinkMessage,
+  INotificationSinkResult,
   IGuidanceSendLog,
   AssignmentLadderStatus,
   LadderStep,

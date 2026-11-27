@@ -1,7 +1,12 @@
-import { NotFoundError, RateLimitError } from '@scholaracle/contracts';
+import { firstNameOf } from '@scholaracle/agents';
+import { ConflictError, NotFoundError, RateLimitError } from '@scholaracle/contracts';
 import type { StudentRepository, UserRepository } from '@scholaracle/database';
 import type { IGuidanceClock, INotificationSink, INudgePublisher } from '@scholaracle/interfaces';
-import { calendarDayKey, SystemGuidanceClock } from '@scholaracle/studio-core';
+import {
+  calendarDayKey,
+  studentAssignmentPath,
+  SystemGuidanceClock,
+} from '@scholaracle/studio-core';
 import type { Db } from 'mongodb';
 
 export interface INudgePublisherDeps {
@@ -64,16 +69,50 @@ export class NudgePublisher implements INudgePublisher {
       throw new RateLimitError('Already nudged this assignment today');
     }
 
-    await this._database
-      .collection('slc_assignments')
-      .updateOne({ _id: assignment._id }, { $set: { lastNudgedAt: now, updatedAt: now } });
+    const assignments = this._database.collection('slc_assignments');
+    const earlier = (assignment['lastNudgedAt'] as unknown) ?? null;
+    // Recorded before the send, and only if nobody recorded one since we looked (`null`
+    // matches "never nudged"). Two presses at the same moment: one wins, one is refused.
+    const claimed = await assignments.updateOne(
+      { _id: assignment._id, lastNudgedAt: earlier },
+      { $set: { lastNudgedAt: now, updatedAt: now } }
+    );
+    if (claimed.modifiedCount === 0) {
+      throw new RateLimitError('Already nudged this assignment today');
+    }
+
+    // Used when nothing went out: puts the record back, so the board does not say "Nudged"
+    // and the parent can try again today.
+    const release = async (): Promise<void> => {
+      await assignments.updateOne(
+        { _id: assignment._id, lastNudgedAt: now },
+        earlier === null ? { $unset: { lastNudgedAt: '' } } : { $set: { lastNudgedAt: earlier } }
+      );
+    };
 
     const title = (assignment['record'] as { title?: string } | undefined)?.title ?? 'Assignment';
-    await this._sink.send({
-      audience: 'student',
-      studentId,
-      body: `${title} — your parent asked you to pick this up. Open the worksheet.`,
-      deepLink: `/studio/assignments/${assignmentExternalId}`,
-    });
+    let deliveries: number;
+    try {
+      ({ deliveries } = await this._sink.send({
+        audience: 'student',
+        studentId,
+        body: `${title} — your parent asked you to pick this up. Open the worksheet.`,
+        deepLink: studentAssignmentPath(assignmentExternalId),
+        assignmentExternalId,
+      }));
+    } catch (error) {
+      await release();
+      throw error;
+    }
+
+    if (deliveries === 0) {
+      // A nudge goes to the student's own login (their phone and their email). No login,
+      // or one the parent took away: there is nobody to tell.
+      await release();
+      const who = firstNameOf(student.name, 'This student');
+      throw new ConflictError(
+        `${who} has no student login to send a nudge to. Create one under Settings, Student logins.`
+      );
+    }
   }
 }

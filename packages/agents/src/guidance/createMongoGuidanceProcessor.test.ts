@@ -9,7 +9,9 @@ describe('createMongoGuidanceProcessor', () => {
     const database = {
       collection: jest.fn().mockReturnValue({ findOne, updateOne }),
     } as unknown as import('mongodb').Db;
-    const sink = { send: jest.fn().mockResolvedValue(undefined) };
+    // Reached only when this runs at 4 pm in New York (the ladder's send hour): the sink
+    // must still answer as a real one does.
+    const sink = { send: jest.fn().mockResolvedValue({ deliveries: 1 }) };
     const process = createMongoGuidanceProcessor(database, sink);
     const job = {
       _id: { toString: () => 'j1' } as ObjectId,

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ApiClientError } from '@/lib/api/client';
 import { studentsApi, type IActionItem } from '@/lib/api/students';
 import { useAsyncData } from '@/lib/hooks';
 import { LoadingSkeleton } from '@/components/common';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
-import { ActionBucket } from './ActionBucket';
+import { ActionBucket, type INudgeError } from './ActionBucket';
 import { AssignmentDetailDrawer } from './AssignmentDetailDrawer';
 
 export interface ActionBoardProps {
@@ -14,17 +15,50 @@ export interface ActionBoardProps {
   readonly compact?: boolean;
 }
 
+const NUDGE_NOT_SENT = 'The nudge was not sent. Try again in a moment.';
+
+/**
+ * What to tell the parent when a nudge did not go out. A refusal (4xx) carries a line the
+ * server wrote for them: the student has no login, the assignment was already nudged today,
+ * only the account owner can nudge. Anything else is a fault on our side.
+ */
+export function nudgeFailureMessage(error: unknown): string {
+  if (
+    error instanceof ApiClientError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.message.trim() !== ''
+  ) {
+    return error.message;
+  }
+  return NUDGE_NOT_SENT;
+}
+
 export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
   const [drawerItem, setDrawerItem] = useState<IActionItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [nudgingId, setNudgingId] = useState<string | null>(null);
+  const [nudgeError, setNudgeError] = useState<INudgeError | null>(null);
   const { data, isLoading, error, retry, refresh } = useAsyncData(
     () => studentsApi.getActionBoard(studentId),
     { retryCount: 1 }
   );
 
   const handleNudge = async (item: IActionItem): Promise<void> => {
-    await studentsApi.nudge(studentId, item.assignmentExternalId);
-    await refresh();
+    const assignmentExternalId = item.assignmentExternalId;
+    setNudgeError(null);
+    setNudgingId(assignmentExternalId);
+    try {
+      await studentsApi.nudge(studentId, assignmentExternalId);
+    } catch (err) {
+      // Nothing was sent: say so under the assignment and leave the board as it is, so it
+      // never reads "Nudged" for a nudge nobody got.
+      setNudgeError({ assignmentExternalId, message: nudgeFailureMessage(err) });
+      return;
+    } finally {
+      setNudgingId(null);
+    }
+    refresh();
   };
 
   useEffect(() => {
@@ -83,6 +117,8 @@ export function ActionBoard({ studentId, compact = false }: ActionBoardProps) {
             onNudge={(item) => {
               void handleNudge(item);
             }}
+            nudgingId={nudgingId}
+            nudgeError={nudgeError}
             onItemClick={(item) => {
               setDrawerItem(item);
               setDrawerOpen(true);

@@ -48,7 +48,21 @@ Delivery services (Email, SMS, push) need a **delivery address**. Alerts store `
 
 Students have parent-provisioned logins (slice 6). Student-facing copy may be delivered in-app, as push once a token exists, or to the student login email. Students never receive portal credentials.
 
-Until push tokens are registered with `audience: 'student'`, email/SMS to the student login is optional (listed as a follow-up). The ladder still records the intended student send.
+Ladder reminders and the parent's Nudge go out through one sender, `createReminderSink`
+(`packages/agents/src/guidance/`). The workers process builds it for the ladder and the API
+builds it for `POST /api/students/:id/assignments/:externalId/nudge`; both put `deliver` jobs
+on the shared queue (`triggerType` / push `data.type` `assignment_reminder`):
+
+- **Student:** a push to the phones registered on the student's own login, and an email to
+  that login's address with a link to the worksheet (`/studio/assignments/:id`). Never to a
+  parent, and never with a link to a parent page. A login the parent revoked gets nothing.
+- **Parent (ladder only):** an email to the account owner with a link to the student's action
+  board, plus a push to the owner's own phones when they chose push for that student and have
+  not turned its alerts off.
+
+When there is nobody to reach (no student login), nothing is recorded as sent: the ladder does
+not mark the step or count it against the student's two a day, and the nudge route answers 409
+with a line telling the parent to create a login under Settings, Student logins.
 
 When `showGrades` is false (the default), student copy must not include percent, letter grade, or points.
 
@@ -70,5 +84,6 @@ Mongo source as `GET /api/studio/week`, and `assertNoGradeLeak` runs on it befor
 - **NotificationService:** `packages/agents/src/service/NotificationService/NotificationService.ts` — generates student and parent notifications; respects `alertAudience` for which to generate/deliver, including the agent path and enqueue-deliver path.
 - **Alert audience config:** `packages/agents/src/config/alert-audience.ts`
 - **Guidance ladder:** `packages/studio-core/src/guidance/GuidanceLadder.ts` — T-48h / T-18h / T+12h / T+72h with fakes; jobs on `MongoQueue`.
+- **Reminder and nudge sender:** `packages/agents/src/guidance/createReminderSink.ts`, `ReminderNotificationSink.ts`, `reminderRecipients.ts`; wired in `packages/workers/src/worker.ts` and `packages/api/src/server.ts` (`nudgeServerWiring.test.ts` checks the API side).
 - **Worker:** `packages/agents/src/worker/NotificationWorker/NotificationWorker.ts`
 - **Delivery:** `packages/agents/src/delivery/EmailDelivery/EmailDelivery.ts`, `SMSDelivery/SMSDelivery.ts`

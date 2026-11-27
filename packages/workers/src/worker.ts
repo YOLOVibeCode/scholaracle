@@ -15,7 +15,7 @@ import {
   LlmClient,
   resolveLlmConfig,
   createMongoGuidanceProcessor,
-  ReminderNotificationSink,
+  createReminderSink,
 } from '@scholaracle/agents';
 import {
   UserRepository,
@@ -424,24 +424,11 @@ export async function startWorker(config: IWorkerConfig = {}): Promise<void> {
     pollIntervalMs,
     concurrency,
     resolveAllAlertRecipients: resolveAll,
+    // Ladder reminders go out as `deliver` jobs on this same queue: a push to the phone and
+    // an email with a link. The API builds the same sender for the parent's Nudge button.
     processGuidanceJob: createMongoGuidanceProcessor(
       database,
-      new ReminderNotificationSink({
-        notificationService,
-        resolveEmail: async (audience, studentId): Promise<string | null> => {
-          const userRepository = new UserRepository(database);
-          if (audience === 'student') {
-            const studentUser = await userRepository.findByStudentId(studentId);
-            return studentUser?.email ?? null;
-          }
-          const student = await database
-            .collection('students')
-            .findOne({ _id: new ObjectId(studentId) });
-          if (student === null) return null;
-          const parent = await userRepository.findById(student['userId'] as string);
-          return parent?.email ?? null;
-        },
-      })
+      createReminderSink({ database, queue: mongoQueue, webOrigin: smsWebOrigin() })
     ),
   });
 
