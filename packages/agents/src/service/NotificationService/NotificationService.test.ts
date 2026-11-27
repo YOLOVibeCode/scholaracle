@@ -1,5 +1,9 @@
 import type { INotificationAgent } from '@scholaracle/interfaces';
-import { NotificationService } from './NotificationService';
+import {
+  NotificationService,
+  type INotificationServiceSmsDigestOptions,
+  type IResolvedRecipient,
+} from './NotificationService';
 import { StudentNotificationGenerator } from '../../generators/StudentNotificationGenerator';
 import { ParentNotificationGenerator } from '../../generators/ParentNotificationGenerator';
 import { DeliveryRouter } from '../../delivery/DeliveryRouter';
@@ -32,6 +36,8 @@ describe('NotificationService', () => {
 
     mockDeliveryRouter = {
       route: jest.fn(),
+      // Every channel has a service, as on a deployment with the text key set.
+      supports: jest.fn().mockReturnValue(true),
     } as unknown as jest.Mocked<DeliveryRouter>;
 
     notificationService = new NotificationService(
@@ -1386,6 +1392,305 @@ describe('NotificationService', () => {
         ['owner-id', NotificationChannel.PUSH],
         ['jess@example.com', NotificationChannel.EMAIL],
         ['jess-id', NotificationChannel.PUSH],
+      ]);
+    });
+  });
+
+  describe('a text for each person who chose text', () => {
+    const OWNER_PHONE = '+15125550100';
+    const owner = {
+      parentEmail: 'owner@example.com',
+      parentPhone: OWNER_PHONE,
+      userId: 'owner-id',
+      recipientType: 'parent' as const,
+    };
+    const gradeDrop = new Alert({
+      studentId: 'student-123',
+      type: AlertType.GRADE_DROP,
+      severity: 'warning',
+      relatedData: {},
+    });
+    const needsHelp = new Alert({
+      studentId: 'student-123',
+      type: AlertType.STUDENT_NEEDS_HELP,
+      severity: 'info',
+      relatedData: {},
+    });
+
+    interface IQueuedJob {
+      readonly to: string;
+      readonly channel: NotificationChannel;
+      readonly account?: string;
+      readonly options: unknown;
+    }
+    type AddCall = [
+      string,
+      string,
+      {
+        notificationPayload: { userId: string; recipientUserId?: string };
+        channel: NotificationChannel;
+      },
+      unknown,
+    ];
+    let queue: { add: jest.Mock };
+    const jobs = (): IQueuedJob[] =>
+      (queue.add.mock.calls as AddCall[]).map((call) => ({
+        to: call[2].notificationPayload.userId,
+        channel: call[2].channel,
+        account: call[2].notificationPayload.recipientUserId,
+        options: call[3],
+      }));
+    const texts = (): IQueuedJob[] => jobs().filter((j) => j.channel === NotificationChannel.SMS);
+
+    /** The workers' agents write notifications that list email only. */
+    function service(
+      alert: Alert,
+      sms?: INotificationServiceSmsDigestOptions,
+      channels: NotificationChannel[] = [NotificationChannel.EMAIL]
+    ): NotificationService {
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(true),
+        generate: jest.fn().mockReturnValue(
+          new Notification({
+            agentType: AgentType.PARENT,
+            studentId: 'student-123',
+            userId: 'student-123',
+            subject: 'Grade drop',
+            body: 'Math fell to 72.',
+            priority: NotificationPriority.HIGH,
+            triggerType: alert.type,
+            channels,
+          })
+        ),
+      };
+      return new NotificationService([agent], mockDeliveryRouter, sms);
+    }
+    const send = (
+      svc: NotificationService,
+      alert: Alert,
+      recipients: readonly IResolvedRecipient[]
+    ): ReturnType<NotificationService['processAlertEnqueueDeliver']> =>
+      svc.processAlertEnqueueDeliver(alert, queue as unknown as MongoQueue, recipients);
+
+    beforeEach(() => {
+      let queued = 0;
+      queue = { add: jest.fn().mockImplementation(() => Promise.resolve(`job-${++queued}`)) };
+    });
+
+    it('texts the person who chose text, and nobody else, though the notification lists email only', async () => {
+      const result = await send(service(gradeDrop), gradeDrop, [
+        owner,
+        { parentEmail: 'jess@example.com', userId: 'jess-id', recipientType: 'parent' },
+      ]);
+
+      expect(result.deliveryJobIds).toEqual(['job-1', 'job-2', 'job-3']);
+      expect(jobs()).toEqual([
+        {
+          to: 'owner@example.com',
+          channel: NotificationChannel.EMAIL,
+          account: undefined,
+          options: { maxAttempts: 5 },
+        },
+        // The history of a text is kept for the account, not under the phone number.
+        {
+          to: OWNER_PHONE,
+          channel: NotificationChannel.SMS,
+          account: 'owner-id',
+          options: { maxAttempts: 5 },
+        },
+        {
+          to: 'jess@example.com',
+          channel: NotificationChannel.EMAIL,
+          account: undefined,
+          options: { maxAttempts: 5 },
+        },
+      ]);
+    });
+
+    it('texts a person once when the notification lists text as well', async () => {
+      const both = [NotificationChannel.EMAIL, NotificationChannel.SMS];
+
+      await send(service(gradeDrop, undefined, both), gradeDrop, [owner]);
+
+      expect(texts()).toHaveLength(1);
+      expect(jobs()).toHaveLength(2);
+    });
+
+    it('queues nothing and keeps nothing for a text while no service can send one', async () => {
+      mockDeliveryRouter.supports.mockImplementation(
+        (channel) => channel !== NotificationChannel.SMS
+      );
+      const sms = {
+        getSmsDigestPreference: jest.fn().mockResolvedValue({ enabled: true }),
+        enqueueSmsForDigest: jest.fn().mockResolvedValue(undefined),
+      };
+
+      await send(service(gradeDrop, sms), gradeDrop, [owner]);
+      await send(service(needsHelp, sms), needsHelp, [owner]);
+
+      expect(texts()).toEqual([]);
+      expect(sms.enqueueSmsForDigest).not.toHaveBeenCalled();
+      // The emails are not affected.
+      expect(jobs().map((j) => j.channel)).toEqual([
+        NotificationChannel.EMAIL,
+        NotificationChannel.EMAIL,
+      ]);
+    });
+
+    it.each(['info', 'warning', 'critical'])(
+      'keeps a %s alert for the daily text summary of a person whose daily digest is on',
+      async (severity) => {
+        const alert = new Alert({
+          studentId: 'student-123',
+          type: AlertType.GRADE_DROP,
+          severity,
+          relatedData: {},
+        });
+        const sms = {
+          getSmsDigestPreference: jest.fn().mockResolvedValue({ enabled: true }),
+          enqueueSmsForDigest: jest.fn().mockResolvedValue(undefined),
+        };
+
+        const result = await send(service(alert, sms), alert, [owner]);
+
+        expect(sms.getSmsDigestPreference).toHaveBeenCalledWith('owner-id');
+        expect(sms.enqueueSmsForDigest).toHaveBeenCalledTimes(1);
+        expect(sms.enqueueSmsForDigest).toHaveBeenCalledWith(
+          'owner-id',
+          OWNER_PHONE,
+          'Grade drop',
+          'Math fell to 72.'
+        );
+        expect(texts()).toEqual([]);
+        // The job that was queued is the email; a text that was kept is no job.
+        expect(result.deliveryJobIds).toEqual(['job-1']);
+      }
+    );
+
+    it('texts at once a person whose daily digest is off', async () => {
+      const sms = {
+        getSmsDigestPreference: jest.fn().mockResolvedValue(null),
+        enqueueSmsForDigest: jest.fn().mockResolvedValue(undefined),
+      };
+
+      await send(service(gradeDrop, sms), gradeDrop, [owner]);
+
+      expect(sms.enqueueSmsForDigest).not.toHaveBeenCalled();
+      expect(texts()).toEqual([
+        {
+          to: OWNER_PHONE,
+          channel: NotificationChannel.SMS,
+          account: 'owner-id',
+          options: { maxAttempts: 5 },
+        },
+      ]);
+    });
+
+    it('texts at once when a student asks for help, daily digest or not', async () => {
+      const sms = {
+        getSmsDigestPreference: jest.fn().mockResolvedValue({ enabled: true }),
+        enqueueSmsForDigest: jest.fn().mockResolvedValue(undefined),
+      };
+
+      await send(service(needsHelp, sms), needsHelp, [owner]);
+
+      expect(sms.enqueueSmsForDigest).not.toHaveBeenCalled();
+      expect(texts()).toHaveLength(1);
+    });
+
+    it('holds a text that goes at once until the quiet hours of the person end', async () => {
+      const until = new Date('2026-11-28T13:00:00Z');
+      const sms = { getTextNotBefore: jest.fn().mockResolvedValue(until) };
+
+      await send(service(needsHelp, sms), needsHelp, [owner]);
+
+      expect(sms.getTextNotBefore).toHaveBeenCalledTimes(1);
+      expect(sms.getTextNotBefore).toHaveBeenCalledWith('owner-id', 'info');
+      expect(jobs()).toEqual([
+        // The email is not held.
+        {
+          to: 'owner@example.com',
+          channel: NotificationChannel.EMAIL,
+          account: undefined,
+          options: { maxAttempts: 5 },
+        },
+        {
+          to: OWNER_PHONE,
+          channel: NotificationChannel.SMS,
+          account: 'owner-id',
+          options: { maxAttempts: 5, scheduledFor: until },
+        },
+      ]);
+    });
+
+    it('sends it now when the person is not in quiet hours', async () => {
+      const sms = { getTextNotBefore: jest.fn().mockResolvedValue(null) };
+
+      await send(service(needsHelp, sms), needsHelp, [owner]);
+
+      expect(texts().map((j) => j.options)).toEqual([{ maxAttempts: 5 }]);
+    });
+
+    it('does not text the row that stands for the student', async () => {
+      await send(service(gradeDrop), gradeDrop, [
+        {
+          parentEmail: 'kid@school.edu',
+          parentPhone: '+15125550199',
+          userId: 'kid-id',
+          recipientType: 'student',
+        },
+      ]);
+
+      expect(jobs().map((j) => j.channel)).toEqual([NotificationChannel.EMAIL]);
+    });
+
+    it.each([
+      ['a number that belongs to no account', { parentPhone: '+15125550177' }],
+      ['a number whose account is blank', { parentPhone: '+15125550177', userId: '' }],
+      ['a blank number', { parentPhone: '', userId: 'someone-id' }],
+    ])('does not text %s', async (_what, person) => {
+      const sms = {
+        getSmsDigestPreference: jest.fn().mockResolvedValue({ enabled: true }),
+        enqueueSmsForDigest: jest.fn().mockResolvedValue(undefined),
+        getTextNotBefore: jest.fn().mockResolvedValue(null),
+      };
+
+      await send(service(needsHelp, sms), needsHelp, [
+        { parentEmail: 'someone@example.com', ...person },
+      ]);
+      await send(service(gradeDrop, sms), gradeDrop, [
+        { parentEmail: 'someone@example.com', ...person },
+      ]);
+
+      expect(jobs().map((j) => j.channel)).toEqual([
+        NotificationChannel.EMAIL,
+        NotificationChannel.EMAIL,
+      ]);
+      expect(sms.enqueueSmsForDigest).not.toHaveBeenCalled();
+      expect(sms.getTextNotBefore).not.toHaveBeenCalled();
+    });
+
+    it('does not text a person who left this kind of alert out', async () => {
+      await send(service(gradeDrop), gradeDrop, [
+        { ...owner, alertTypes: [AlertType.MISSING_ASSIGNMENT] },
+      ]);
+
+      expect(jobs()).toEqual([]);
+    });
+
+    it('keeps the call without resolved people as it was: text goes to the userId on the notification', async () => {
+      await service(gradeDrop, undefined, [NotificationChannel.SMS]).processAlertEnqueueDeliver(
+        gradeDrop,
+        queue as unknown as MongoQueue
+      );
+
+      expect(jobs()).toEqual([
+        {
+          to: 'student-123',
+          channel: NotificationChannel.SMS,
+          account: undefined,
+          options: { maxAttempts: 5 },
+        },
       ]);
     });
   });

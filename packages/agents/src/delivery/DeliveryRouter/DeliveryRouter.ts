@@ -12,6 +12,14 @@ export class DeliveryRouter {
   }
 
   /**
+   * Whether any service delivers this channel. A caller asks before it queues or keeps
+   * something for a channel that this deployment cannot send (texts without a key).
+   */
+  public supports(channel: NotificationChannel): boolean {
+    return this._services.some((service) => service.supports(channel));
+  }
+
+  /**
    * Route a notification to the appropriate delivery service.
    * If no service supports the channel, returns a skipped result instead of throwing,
    * so deployments with only email (e.g. dev/Mailpit) can still deliver.

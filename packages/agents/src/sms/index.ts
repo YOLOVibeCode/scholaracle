@@ -18,3 +18,5 @@ export { createSmsStack, describeSmsStack } from './createSmsStack';
 export type { ISmsStack } from './createSmsStack';
 export { resolveSmsAppEnv } from './smsAppEnv';
 export type { SmsAppEnv } from './smsAppEnv';
+export { createTextNotBeforeLookup, textNotBefore } from './textQuietHours';
+export type { ITextQuietHoursAccount } from './textQuietHours';

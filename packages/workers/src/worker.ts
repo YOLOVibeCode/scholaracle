@@ -28,7 +28,12 @@ import { SmsDigestFlusher } from './digest/sms-digest-flush';
 import { flushGlanceEmails } from './glance/glance-flush';
 import { EmailDelivery, SendGridTransport, SmtpTransport } from '@scholaracle/agents';
 import type { IEmailTransport } from '@scholaracle/agents';
-import { createSmsStack, describeSmsStack, type ISmsStack } from '@scholaracle/agents';
+import {
+  createSmsStack,
+  createTextNotBeforeLookup,
+  describeSmsStack,
+  type ISmsStack,
+} from '@scholaracle/agents';
 import { PushDelivery, ExpoPushDelivery } from '@scholaracle/agents';
 import { InAppDelivery } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
@@ -121,7 +126,7 @@ function getEmailTransport(config: IWorkerConfig): IEmailTransport {
  * @param smsStack - The process's one SMS stack, or null when texts are off
  * @returns Notification service instance
  */
-function initializeNotificationService(
+export function initializeNotificationService(
   config: IWorkerConfig,
   database?: Db,
   emailTransport?: IEmailTransport,
@@ -212,6 +217,8 @@ function initializeNotificationService(
           createdAt: new Date(),
         });
       },
+      // A text that goes at once still waits until the person's quiet hours end.
+      getTextNotBefore: createTextNotBeforeLookup(database),
     };
     emailDigestOptions = {
       getEmailDigestPreference: async (
