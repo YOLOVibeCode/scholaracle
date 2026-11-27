@@ -1,1 +1,5 @@
-export { AccountDeletionService } from './AccountDeletionService';
+export {
+  AccountDeletionService,
+  type IAccountDeletionOptions,
+  type IFilesNotRemovedReport,
+} from './AccountDeletionService';
