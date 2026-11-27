@@ -64,6 +64,14 @@ When there is nobody to reach (no student login), nothing is recorded as sent: t
 not mark the step or count it against the student's two a day, and the nudge route answers 409
 with a line telling the parent to create a login under Settings, Student logins.
 
+Each ladder reminder goes out once. Every sync queues an assignment's coming reminders again,
+so a reminder that comes due has one job for each sync since the assignment appeared, and the
+worker runs ten jobs at once. The ladder therefore takes a reminder before it sends it
+(`IGuidanceSendLog.claim`: one row in `guidance_sends` for each step and audience, keyed by
+`_id` so only one caller can have it) and gives it back when nobody was told, so a failed send
+is tried again. The student's two a day are taken the same way (`guidance_student_days`), which
+keeps the limit when several assignments come due at the same moment.
+
 When `showGrades` is false (the default), student copy must not include percent, letter grade, or points.
 
 ### Weekly review (student review spec §3.3, R4)

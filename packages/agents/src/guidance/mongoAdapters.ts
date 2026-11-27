@@ -1,11 +1,11 @@
-import type { Db } from 'mongodb';
+import type { Collection, Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import type {
   AssignmentLadderStatus,
   IAssignmentState,
   IGuidanceClock,
+  IGuidanceSend,
   IGuidanceSendLog,
-  LadderStep,
 } from '@scholaracle/interfaces';
 import { calendarDayKey } from '@scholaracle/studio-core';
 
@@ -34,6 +34,45 @@ export class MongoAssignmentState implements IAssignmentState {
   }
 }
 
+/** One reminder that was taken to be sent. The id names it, so it can exist only once. */
+interface ISendRow extends IGuidanceSend {
+  readonly _id: string;
+  readonly sentAt: Date;
+}
+
+/** How many ladder reminders a student has had on one day. One row a student a day. */
+interface IStudentDayRow {
+  readonly _id: string;
+  readonly studentId: string;
+  readonly dayKey: string;
+  readonly count: number;
+}
+
+/** Mongo's error code for "a row with this id is already there". */
+const DUPLICATE_KEY = 11000;
+
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === DUPLICATE_KEY
+  );
+}
+
+/**
+ * A row id made of its parts. A JSON list, because portal ids are free text: whatever
+ * characters one holds, the parts stay apart.
+ */
+function rowId(...parts: readonly string[]): string {
+  return JSON.stringify(parts);
+}
+
+/**
+ * Who has been told what, kept in Mongo.
+ *
+ * Both collections are keyed by `_id`, which the database keeps unique on its own, so the
+ * one-caller-only promise does not depend on an index somebody has to create first.
+ */
 export class MongoGuidanceSendLog implements IGuidanceSendLog {
   public constructor(
     private readonly _db: Db,
@@ -41,48 +80,68 @@ export class MongoGuidanceSendLog implements IGuidanceSendLog {
     private readonly _timezone: string = 'America/New_York'
   ) {}
 
-  public async alreadySent(
-    studentId: string,
-    assignmentExternalId: string,
-    step: LadderStep
-  ): Promise<boolean> {
-    const found = await this._db.collection('guidance_sends').findOne({
-      studentId,
-      assignmentExternalId,
-      step,
+  public async claim(send: IGuidanceSend): Promise<boolean> {
+    try {
+      await this._sends().insertOne({
+        _id: rowId(send.studentId, send.assignmentExternalId, send.step, send.audience),
+        studentId: send.studentId,
+        assignmentExternalId: send.assignmentExternalId,
+        step: send.step,
+        audience: send.audience,
+        sentAt: this._clock.now(),
+      });
+      return true;
+    } catch (error) {
+      if (isDuplicateKey(error)) return false;
+      throw error;
+    }
+  }
+
+  public async release(send: IGuidanceSend): Promise<void> {
+    await this._sends().deleteOne({
+      _id: rowId(send.studentId, send.assignmentExternalId, send.step, send.audience),
     });
-    return found !== null;
   }
 
-  public async markSent(
-    studentId: string,
-    assignmentExternalId: string,
-    step: LadderStep
-  ): Promise<void> {
-    await this._db
-      .collection('guidance_sends')
-      .updateOne(
-        { studentId, assignmentExternalId, step },
-        { $set: { studentId, assignmentExternalId, step, sentAt: this._clock.now() } },
-        { upsert: true }
-      );
-  }
-
-  public async studentLadderSendsToday(studentId: string): Promise<number> {
+  public async claimStudentSendToday(studentId: string, limit: number): Promise<boolean> {
+    if (limit <= 0) return false;
     const dayKey = calendarDayKey(this._clock.now(), this._timezone);
-    const doc = await this._db.collection('guidance_student_days').findOne({ studentId, dayKey });
-    return typeof doc?.['count'] === 'number' ? doc['count'] : 0;
+    const today = rowId(studentId, dayKey);
+    const days = this._days();
+    const takeOne = async (): Promise<boolean> => {
+      const taken = await days.updateOne(
+        { _id: today, count: { $lt: limit } },
+        { $inc: { count: 1 } }
+      );
+      return taken.matchedCount === 1;
+    };
+
+    if (await takeOne()) return true;
+    try {
+      // Either today's row is full or there is none yet. Starting it settles which.
+      await days.insertOne({ _id: today, studentId, dayKey, count: 1 });
+      return true;
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
+    // The row is there: full, or started by another caller a moment ago.
+    return takeOne();
   }
 
-  public async recordStudentLadderSend(studentId: string): Promise<void> {
+  public async releaseStudentSendToday(studentId: string): Promise<void> {
     const dayKey = calendarDayKey(this._clock.now(), this._timezone);
-    await this._db
-      .collection('guidance_student_days')
-      .updateOne(
-        { studentId, dayKey },
-        { $inc: { count: 1 }, $set: { studentId, dayKey } },
-        { upsert: true }
-      );
+    await this._days().updateOne(
+      { _id: rowId(studentId, dayKey), count: { $gt: 0 } },
+      { $inc: { count: -1 } }
+    );
+  }
+
+  private _sends(): Collection<ISendRow> {
+    return this._db.collection<ISendRow>('guidance_sends');
+  }
+
+  private _days(): Collection<IStudentDayRow> {
+    return this._db.collection<IStudentDayRow>('guidance_student_days');
   }
 }
 

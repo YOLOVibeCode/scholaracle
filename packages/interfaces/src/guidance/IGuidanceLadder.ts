@@ -45,10 +45,34 @@ export interface INotificationSink {
 
 export type LadderStep = 't48h' | 't18h' | 't12h' | 't72h';
 
+/** One reminder: one step of one assignment, for the student or for the parent. */
+export interface IGuidanceSend {
+  /** The student's Mongo id. */
+  readonly studentId: string;
+  readonly assignmentExternalId: string;
+  readonly step: LadderStep;
+  readonly audience: 'student' | 'parent';
+}
+
+/**
+ * Who has been told what. Each sync queues an assignment's coming reminders again and the
+ * worker runs ten jobs at once, so many callers ask about the same reminder at the same
+ * moment. Looking and taking are therefore one step: a caller that is given a reminder is
+ * the only one that sends it.
+ */
 export interface IGuidanceSendLog {
-  alreadySent(studentId: string, assignmentExternalId: string, step: LadderStep): Promise<boolean>;
-  markSent(studentId: string, assignmentExternalId: string, step: LadderStep): Promise<void>;
-  /** Student ladder pushes today. Positive / encouragement does not count. */
-  studentLadderSendsToday(studentId: string): Promise<number>;
-  recordStudentLadderSend(studentId: string): Promise<void>;
+  /**
+   * Takes this reminder for the caller. True for exactly one of any number of callers
+   * asking at once; false when another has it or it went out before.
+   */
+  claim(send: IGuidanceSend): Promise<boolean>;
+  /** Gives a taken reminder back so a later try can send it: nobody was told. */
+  release(send: IGuidanceSend): Promise<void>;
+  /**
+   * Takes one of the student's ladder reminders for today. False when `limit` are taken.
+   * Positive / encouragement does not count.
+   */
+  claimStudentSendToday(studentId: string, limit: number): Promise<boolean>;
+  /** Gives one of today's back: that reminder did not go out. */
+  releaseStudentSendToday(studentId: string): Promise<void>;
 }

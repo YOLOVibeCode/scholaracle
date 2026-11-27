@@ -42,17 +42,18 @@ class FakeSink implements INotificationSink {
   }
 }
 
+/** Nothing has gone out yet and the student has had none today. */
 class FakeLog implements IGuidanceSendLog {
-  public async alreadySent(): Promise<boolean> {
-    return false;
+  public async claim(): Promise<boolean> {
+    return true;
   }
-  public async markSent(): Promise<void> {
+  public async release(): Promise<void> {
     return;
   }
-  public async studentLadderSendsToday(): Promise<number> {
-    return 0;
+  public async claimStudentSendToday(): Promise<boolean> {
+    return true;
   }
-  public async recordStudentLadderSend(): Promise<void> {
+  public async releaseStudentSendToday(): Promise<void> {
     return;
   }
 }
