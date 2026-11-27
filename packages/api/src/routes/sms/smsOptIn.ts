@@ -10,7 +10,7 @@ import {
   buildSmsOptInLabelHtml,
   type ISmsContactOptInInvite,
 } from '@scholaracle/contracts';
-import { normalizePhoneE164, type GuardedSmsSender } from '@scholaracle/agents';
+import { normalizePhoneE164, SmsNotSentError, type GuardedSmsSender } from '@scholaracle/agents';
 import {
   SmsConsentRepository,
   SmsContactOptInInviteRepository,
@@ -117,7 +117,11 @@ export function smsOptInRouter(config: ISmsOptInRouterConfig): Router {
           }
         );
       } catch (err: unknown) {
-        logger.warn({ err }, 'opt-in confirmation text failed');
+        // The reason as a code only: what an error says can name the number.
+        logger.warn(
+          { reason: err instanceof SmsNotSentError ? err.reason : 'unexpected_error' },
+          'opt-in confirmation text failed'
+        );
       }
       res.status(200).json({ success: true });
     })

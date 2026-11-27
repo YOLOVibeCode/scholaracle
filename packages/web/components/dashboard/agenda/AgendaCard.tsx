@@ -13,6 +13,7 @@ import {
 import { MessageSquare, Mail, Bell, CheckCircle2 } from 'lucide-react';
 import type { IAgendaItem, AgendaImportance } from '@/lib/api/agenda';
 import { agendaApi } from '@/lib/api/agenda';
+import { ApiClientError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 const importanceBorder: Record<AgendaImportance, string> = {
@@ -40,14 +41,19 @@ export interface AgendaCardProps {
   onReminderSent: () => void;
 }
 
+const REMINDER_NOT_SENT = 'The reminder could not be sent. Try again later.';
+
 export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) {
   const [remindLoading, setRemindLoading] = useState(false);
+  const [remindError, setRemindError] = useState<string | null>(null);
   const importance = item.importance ?? 'medium';
   const borderClass = importanceBorder[importance];
-  const latestReminder = item.reminders?.[0];
+  // The newest reminder that went out. An attempt that failed is not a reminder.
+  const latestReminder = item.reminders?.find((reminder) => reminder.status !== 'failed');
 
   const handleSendReminder = async (channel: 'sms' | 'email') => {
     setRemindLoading(true);
+    setRemindError(null);
     try {
       const res = await agendaApi.sendReminder({
         itemId: item.id,
@@ -58,6 +64,10 @@ export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) 
         timeAt: item.timeAt,
       });
       if (res.success) onReminderSent();
+      else setRemindError(res.error ?? REMINDER_NOT_SENT);
+    } catch (error) {
+      // The server's own sentence says why (no number on file, texts not turned on, …).
+      setRemindError(error instanceof ApiClientError ? error.message : REMINDER_NOT_SENT);
     } finally {
       setRemindLoading(false);
     }
@@ -119,6 +129,15 @@ export function AgendaCard({ item, onSnooze, onReminderSent }: AgendaCardProps) 
                   {(latestReminder.channel ?? 'email').toUpperCase()} sent {formatReminderTime(latestReminder.sentAt)}
                 </span>
               </div>
+            )}
+            {remindError && (
+              <p
+                role="alert"
+                className="text-xs text-red-700 dark:text-red-300"
+                data-testid="agenda-reminder-error"
+              >
+                {remindError}
+              </p>
             )}
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">

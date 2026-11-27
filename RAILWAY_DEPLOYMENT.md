@@ -123,7 +123,7 @@ Each of these is off when unset, except `STALENESS_ENABLED`, which is on when un
 
 | Variable | Service | What it does |
 |----------|---------|--------------|
-| `NOCTUSOFT_API_KEY` | API and workers | Text messages. Without it no text is sent: the opt-in, alerts by text and the daily text digest all do nothing. The key is the product's relay key with the `sms` scope. |
+| `NOCTUSOFT_API_KEY` | API and workers | Text messages. Without it no text is sent: the opt-in, alerts by text and the daily text digest all do nothing. The key is the product's relay key with the `sms` scope. With it, a text reaches a phone only from the production environment: every text tells the relay where it comes from (`X-App-Env`), which is `production` where Railway's own `RAILWAY_ENVIRONMENT_NAME` is `production` and `dev` everywhere else, and the relay keeps a `dev` text in its catcher and sends nothing. Each service says at start which it is: `texts are off: NOCTUSOFT_API_KEY is not set`, `texts are on: they are sent`, or `texts are on: the relay captures them, none is sent`. |
 | `RELAY_INBOUND_SECRET` | API | Accepts inbound texts and delivery reports forwarded by the relay. |
 | `AGENDA_AI_ENABLED=true` | API | Agenda summaries written by a model, through the relay. |
 | `WEEKLY_REVIEW_ENABLED=true` | Workers | The student weekly review, Sundays at 18:00 local time. On in dev only. |
@@ -146,6 +146,7 @@ Never set `NEXT_PUBLIC_SEED_TOKEN` on the production web service. Everything nam
 | `SIGN_IN_ATTEMPT_LIMIT=off` | API | Turns off the limit on failed sign-ins (ten per account and address, a hundred per address, inside fifteen minutes). It exists for the day the limit refuses people it should not. Leave it unset. |
 | `RELAY_URL` | API | The store's address. Default `https://store.noctusoft.com`. |
 | `SENDGRID_REPLY_TO` | API | The reply-to address on mail the API sends. |
+| `SMS_APP_ENV` | API and workers | Overrules where texts say they come from (see `NOCTUSOFT_API_KEY` under "Switches"): `production`, `uat` or `dev`. A value it does not know counts as `dev`. Leave it unset: setting `production` on dev would send real texts from there. |
 | `AI_MODEL_MATCHING`, `AI_MODEL_TRIAGE`, `AI_MODEL_PATCH`, `AI_MODEL_ESCALATE`, `AI_MODEL_INSIGHTS` | API and workers | Which model each kind of call asks the relay for. The defaults are in `packages/agents/src/ai/models.ts`. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_S3_ENDPOINT` | API | Read only when `ASSET_STORE=s3`. |
 | `API_BASE_URL` | Workers | The API's address, when the code cannot work it out (`packages/agents/src/studio/resolveApiBaseUrl.ts`). |

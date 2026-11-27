@@ -1,1 +1,1 @@
-export { createSmsStack, type ISmsStack } from '@scholaracle/agents';
+export { createSmsStack, describeSmsStack, type ISmsStack } from '@scholaracle/agents';

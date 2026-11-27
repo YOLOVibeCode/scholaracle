@@ -28,6 +28,7 @@ jest.mock('@sendgrid/mail', () => {
 });
 
 import { startWorker, type IWorkerConfig } from './worker';
+import { logger } from './logger';
 import { MongoClient, type Db, type Collection } from 'mongodb';
 
 // Helper to trigger shutdown and wait
@@ -80,6 +81,8 @@ describe('Worker', () => {
       'SENDGRID_FROM_EMAIL',
       'SENDGRID_FROM_NAME',
       'NOCTUSOFT_API_KEY',
+      'RAILWAY_ENVIRONMENT_NAME',
+      'SMS_APP_ENV',
     ]) {
       savedEnv[key] = process.env[key];
     }
@@ -221,6 +224,64 @@ describe('Worker', () => {
       expect(mockMongoClient.connect).toHaveBeenCalled();
 
       await triggerShutdown();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // What the start log says about texts
+  // -------------------------------------------------------------------------
+
+  describe('what the start log says about texts', () => {
+    let info: jest.SpyInstance;
+
+    beforeEach(() => {
+      info = jest.spyOn(logger, 'info').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      info.mockRestore();
+    });
+
+    async function started(): Promise<void> {
+      await startWorker({ mongodbUri: 'mongodb://localhost:27017' });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await triggerShutdown();
+    }
+
+    it('that they are off, without a key', async () => {
+      delete process.env['NOCTUSOFT_API_KEY'];
+
+      await started();
+
+      expect(info).toHaveBeenCalledWith(
+        { texts: 'off' },
+        'texts are off: NOCTUSOFT_API_KEY is not set'
+      );
+    });
+
+    it('that the relay captures them, with a key outside the production environment', async () => {
+      process.env['NOCTUSOFT_API_KEY'] = 'nsk_test_sms_key';
+      delete process.env['RAILWAY_ENVIRONMENT_NAME'];
+      delete process.env['SMS_APP_ENV'];
+
+      await started();
+
+      expect(info).toHaveBeenCalledWith(
+        { texts: 'dev' },
+        'texts are on: the relay captures them, none is sent'
+      );
+    });
+
+    it('that they are sent, with a key in the production environment', async () => {
+      process.env['NOCTUSOFT_API_KEY'] = 'nsk_test_sms_key';
+      process.env['RAILWAY_ENVIRONMENT_NAME'] = 'production';
+      delete process.env['SMS_APP_ENV'];
+
+      await started();
+
+      expect(info).toHaveBeenCalledWith({ texts: 'production' }, 'texts are on: they are sent');
+      // The key itself is never part of what is logged.
+      expect(JSON.stringify(info.mock.calls)).not.toContain('nsk_test_sms_key');
     });
   });
 

@@ -1,11 +1,12 @@
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { MongoClient, type Db } from 'mongodb';
-import { resolveModelForRole } from '@scholaracle/agents';
+import { resolveModelForRole, SmsNotSentError } from '@scholaracle/agents';
 import { AuthService } from '@scholaracle/auth';
 import { StudentRepository } from '@scholaracle/database';
 import { agendaRouter } from './agenda';
 import { createErrorHandler } from '../../middleware/errorHandler';
+import { logger } from '../../logger';
 
 describe('Agenda API', () => {
   let app: Express;
@@ -573,6 +574,7 @@ describe('Agenda API', () => {
       });
 
     expect(res.status).toBe(200);
+    const account = await database.collection('users').findOne({ email: 'agenda@test.com' });
     expect(sendReminder).toHaveBeenCalledWith(
       'agenda@test.com',
       'email',
@@ -584,7 +586,201 @@ describe('Agenda API', () => {
           studentName: 'Emma',
           timeAt: '2026-10-14T17:00:00.000Z',
         }),
+        // The reminder goes to an address; what is logged about it belongs to the account.
+        recipientUserId: account?._id.toString(),
       }
     );
+  });
+
+  describe('a reminder that did not go out', () => {
+    const PHONE = '+15125550100';
+
+    function remindAppWith(sendReminder: jest.Mock, db: Db = database): Express {
+      const remindApp = express();
+      remindApp.use(express.json());
+      remindApp.use(
+        '/api/agenda',
+        agendaRouter({
+          database: db,
+          notificationService: { sendReminder } as unknown as Parameters<
+            typeof agendaRouter
+          >[0]['notificationService'],
+        })
+      );
+      remindApp.use(createErrorHandler());
+      return remindApp;
+    }
+
+    function remindAppThatAnswers(result: Record<string, unknown>): {
+      remindApp: Express;
+      sendReminder: jest.Mock;
+    } {
+      const sendReminder = jest.fn().mockResolvedValue(result);
+      return { remindApp: remindAppWith(sendReminder), sendReminder };
+    }
+
+    const remindByText = (
+      remindApp: Express,
+      itemId: string
+    ): Promise<{ status: number; body: { success?: boolean; error?: string } }> =>
+      request(remindApp)
+        .post('/api/agenda/remind')
+        .set('Authorization', `Bearer ${testToken}`)
+        .send({ itemId, channel: 'sms', title: 'Field trip form' });
+
+    beforeAll(async () => {
+      await database
+        .collection('users')
+        .updateOne({ email: 'agenda@test.com' }, { $set: { phone: PHONE } });
+    });
+
+    beforeEach(async () => {
+      await database
+        .collection('communication_logs')
+        .deleteMany({ relatedEntityType: 'agenda_item', relatedEntityId: /^item-unsent-/ });
+    });
+
+    it.each([
+      ['no_consent', 409, 'Texts are not turned on for your number'],
+      ['opted_out', 409, 'opted out of texts'],
+      ['invalid_phone', 409, 'not a number we can text'],
+      // Twilio's word for it: the number is not a mobile.
+      ['relay_21614', 409, 'not a number we can text'],
+      ['rate_limited', 429, 'Too many texts'],
+      ['relay_http_403', 503, 'could not be sent'],
+      ['No delivery service found for channel: sms', 503, 'could not be sent'],
+    ])('says so instead of "sent" (%s)', async (reason, status, words) => {
+      const { remindApp } = remindAppThatAnswers({ success: false, channel: 'sms', error: reason });
+
+      const res = await remindByText(remindApp, `item-unsent-${status}`);
+
+      expect(res.status).toBe(status);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error).toContain(words);
+      // What the person reads names no number and no code.
+      expect(res.body.error).not.toContain('5125550100');
+      expect(res.body.error).not.toContain(reason);
+    });
+
+    it('is kept in the history as failed, with the reason as a code', async () => {
+      const { remindApp } = remindAppThatAnswers({
+        success: false,
+        channel: 'sms',
+        error: 'no_consent',
+      });
+
+      await remindByText(remindApp, 'item-unsent-history');
+
+      const rows = await database
+        .collection('communication_logs')
+        .find({ relatedEntityId: 'item-unsent-history' })
+        .toArray();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        channel: 'sms',
+        status: 'failed',
+        failureReason: 'no_consent',
+      });
+      expect(rows[0]?.['sentAt']).toBeUndefined();
+    });
+
+    it('can be tried again at once: only a reminder that went out counts toward one an hour', async () => {
+      const refused = remindAppThatAnswers({ success: false, channel: 'sms', error: 'no_consent' });
+      const first = await remindByText(refused.remindApp, 'item-unsent-retry');
+      expect(first.status).toBe(409);
+
+      const accepted = remindAppThatAnswers({ success: true, channel: 'sms', messageId: 'SM1' });
+      const second = await remindByText(accepted.remindApp, 'item-unsent-retry');
+      expect(second.status).toBe(200);
+      // The answer gives the moment the history row was written with.
+      const sentRow = await database
+        .collection('communication_logs')
+        .findOne({ relatedEntityId: 'item-unsent-retry', status: 'sent' });
+      expect(second.body).toEqual({
+        success: true,
+        data: { sentAt: (sentRow?.['sentAt'] as Date).toISOString(), channel: 'sms' },
+      });
+
+      // The one that went out does count.
+      const third = await remindByText(accepted.remindApp, 'item-unsent-retry');
+      expect(third.status).toBe(429);
+      expect(accepted.sendReminder).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      [
+        'the relay could not be reached',
+        new SmsNotSentError('relay_unreachable', 'unavailable'),
+        'relay_unreachable',
+      ],
+      [
+        'the delivery broke in a way nobody expected',
+        new Error('SendGrid returned status 503'),
+        'SendGrid returned status 503',
+      ],
+      ['something that is not an error was thrown', 'boom', 'unknown_error'],
+    ])('says it could not be sent, in plain words, when %s', async (_what, thrown, reasonKept) => {
+      const sendReminder = jest.fn().mockRejectedValue(thrown);
+      const remindApp = remindAppWith(sendReminder);
+
+      const res = await remindByText(remindApp, 'item-unsent-thrown');
+
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({
+        success: false,
+        error: 'The reminder could not be sent. Try again later.',
+      });
+      const rows = await database
+        .collection('communication_logs')
+        .find({ relatedEntityId: 'item-unsent-thrown' })
+        .toArray();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ status: 'failed', failureReason: reasonKept });
+      expect(rows[0]?.['sentAt']).toBeUndefined();
+    });
+
+    it('still says "sent" when the reminder went out and only its history row could not be written', async () => {
+      const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const sendReminder = jest.fn().mockResolvedValue({ success: true, messageId: 'SM1' });
+      const historyDown = new Proxy(database, {
+        get(target, property, receiver): unknown {
+          if (property !== 'collection') return Reflect.get(target, property, receiver);
+          return (name: string): unknown => {
+            const collection = target.collection(name);
+            if (name !== 'communication_logs') return collection;
+            return new Proxy(collection, {
+              get(inner, key, innerReceiver): unknown {
+                if (key === 'insertOne') {
+                  return (): Promise<never> =>
+                    Promise.reject(new Error(`cannot write the row for ${PHONE}`));
+                }
+                const value: unknown = Reflect.get(inner, key, innerReceiver);
+                return typeof value === 'function'
+                  ? (value as (...args: unknown[]) => unknown).bind(inner)
+                  : value;
+              },
+            });
+          };
+        },
+      });
+
+      try {
+        const res = await remindByText(
+          remindAppWith(sendReminder, historyDown),
+          'item-unsent-history-down'
+        );
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(sendReminder).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+          { error: 'Error', channel: 'sms', sent: true },
+          'reminder history row could not be written'
+        );
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('5125550100');
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 });

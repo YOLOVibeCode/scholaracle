@@ -5,7 +5,7 @@ import {
   NotificationChannel,
   DeliveryError,
 } from '@scholaracle/contracts';
-import type { GuardedSmsSender } from '../../sms/GuardedSmsSender';
+import { SmsNotSentError, type GuardedSmsSender } from '../../sms/GuardedSmsSender';
 import { buildAlertSmsBody } from '../../sms/alertSmsTemplates';
 
 export interface ISmsDeliveryOptions {
@@ -40,6 +40,16 @@ export class SMSDelivery implements INotificationDelivery {
     return channel === NotificationChannel.SMS;
   }
 
+  /**
+   * Send the text for one notification. `userId` is the phone number; `recipientUserId`,
+   * when the job carries it, is the account the text is logged for.
+   *
+   * It ends in one of three ways, which is what the deliver worker acts on:
+   * - sent: a successful result;
+   * - it cannot be sent however often it is tried (no consent, opted out, not a number,
+   *   refused, rate limited): a result that says why, as a code, and is not tried again;
+   * - the relay could not be reached: thrown, so the queue tries again.
+   */
   public async deliver(notification: Notification): Promise<DeliveryResult> {
     try {
       const smsBody = buildAlertSmsBody(
@@ -51,7 +61,7 @@ export class SMSDelivery implements INotificationDelivery {
         this._webOrigin
       );
       const result = await this._guarded.sendTransactional(notification.userId, smsBody, {
-        userId: notification.userId,
+        userId: notification.recipientUserId,
         subject: notification.subject,
         templateName: `sms_${notification.triggerType}`,
         triggeredBy: 'system',
@@ -63,14 +73,16 @@ export class SMSDelivery implements INotificationDelivery {
         deliveredAt: new Date(),
       };
     } catch (error) {
+      if (error instanceof SmsNotSentError && error.kind !== 'unavailable') {
+        return { success: false, channel: NotificationChannel.SMS, error: error.reason };
+      }
       if (error instanceof DeliveryError) {
         throw error;
       }
-      throw new DeliveryError(
-        error instanceof Error ? error.message : 'Unknown SMS error',
-        NotificationChannel.SMS,
-        { notificationId: notification.id }
-      );
+      // What an unexpected error says is not kept: it can quote the number it choked on.
+      throw new DeliveryError('SMS not sent: unexpected_error', NotificationChannel.SMS, {
+        notificationId: notification.id,
+      });
     }
   }
 }

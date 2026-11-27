@@ -357,7 +357,9 @@ export class WeeklyReviewSender {
       audience: 'student' | 'adult',
       recipient: string,
       payloadStudentId: string,
-      content: { readonly subject: string; readonly body: string }
+      content: { readonly subject: string; readonly body: string },
+      /** The person's account, when `recipient` is their phone number. */
+      recipientUserId?: string
     ): void => {
       const key = deliveryKey(channel, audience, recipient);
       if (out.has(key)) return;
@@ -365,14 +367,17 @@ export class WeeklyReviewSender {
         key,
         channel,
         audience,
-        payload: payload(
-          audience === 'student' ? AgentType.STUDENT : AgentType.PARENT,
-          payloadStudentId,
-          recipient,
-          content,
-          triggerData,
-          channel
-        ),
+        payload: {
+          ...payload(
+            audience === 'student' ? AgentType.STUDENT : AgentType.PARENT,
+            payloadStudentId,
+            recipient,
+            content,
+            triggerData,
+            channel
+          ),
+          ...(recipientUserId !== undefined && recipientUserId !== '' ? { recipientUserId } : {}),
+        },
       });
     };
 
@@ -429,7 +434,7 @@ export class WeeklyReviewSender {
         add(NotificationChannel.EMAIL, 'adult', email, studentId, copy);
       }
       if (adult.channels.includes('sms') && phone !== '') {
-        add(NotificationChannel.SMS, 'adult', phone, studentId, copy);
+        add(NotificationChannel.SMS, 'adult', phone, studentId, copy, adult.userId);
       }
       if (adult.channels.includes('push') && adult.userId !== undefined && adult.userId !== '') {
         // The adult's own devices, keyed by their user id exactly as alert pushes are routed.

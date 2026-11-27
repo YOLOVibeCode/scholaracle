@@ -500,6 +500,13 @@ describe('WeeklyReviewSender', () => {
       [NotificationChannel.SMS, '+15125550199'],
       [NotificationChannel.PUSH, pushAdult.toString()],
     ]);
+    // A text goes to a phone number. The job also names the account it is for, when the
+    // person has one, so what is logged about the text belongs to that account.
+    expect(
+      adults
+        .filter((j) => j.channel === NotificationChannel.SMS)
+        .map((j) => j.payload.recipientUserId)
+    ).toEqual([home.ownerId.toString(), undefined]);
     for (const job of adults) {
       expect(job.payload).toMatchObject({
         studentId: home.studentId.toString(),

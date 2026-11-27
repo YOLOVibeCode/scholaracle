@@ -120,7 +120,7 @@ import type { MailService } from '@sendgrid/mail';
 import type { IEmailTransport } from '@scholaracle/agents';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
-import { createSmsStack } from './services/sms/createSmsStack';
+import { createSmsStack, describeSmsStack } from './services/sms/createSmsStack';
 import { maybeBootstrapFirstAdmin } from './bootstrap/maybeBootstrapAdmin';
 
 export interface IServerConfig {
@@ -210,6 +210,11 @@ function initializeNotificationService(
 } {
   const sendGridConfig = getSendGridConfig(config);
   const smsStack = database ? createSmsStack(database) : null;
+  if (database) {
+    // The start log says whether this process can text, and whether a text reaches a phone.
+    const texts = describeSmsStack(smsStack);
+    logger.info({ texts: texts.texts }, texts.message);
+  }
 
   const smtpHost = process.env['SMTP_HOST'];
   const transport: IEmailTransport = smtpHost

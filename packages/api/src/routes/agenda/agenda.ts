@@ -8,9 +8,15 @@ import {
   RateLimitError,
   ValidationError,
 } from '@scholaracle/contracts';
-import { AgendaIntelligenceService, resolveLlmConfig } from '@scholaracle/agents';
+import {
+  AgendaIntelligenceService,
+  isSmsRecipientReason,
+  resolveLlmConfig,
+  SmsNotSentError,
+} from '@scholaracle/agents';
 import { authMiddleware } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/asyncHandler';
+import { logger } from '../../logger';
 import { AgendaOverrideRepository, StudentRepository, UserRepository } from '@scholaracle/database';
 import type { NotificationService } from '@scholaracle/agents';
 import { checkAiRateLimit, recordAiUsage } from '../../services/ai-rate-limit';
@@ -24,6 +30,46 @@ export interface IAgendaRouterConfig {
    * JWT_SECRET and then to its own default, which is not the server's development default.
    */
   readonly jwtSecret?: string;
+}
+
+/**
+ * What to tell the person when a reminder did not go out. `reason` is the delivery's code
+ * (`no_consent`, `opted_out`, …); it stays in the history row and never reaches the screen.
+ */
+function reminderNotSent(reason: string | undefined): {
+  readonly status: number;
+  readonly message: string;
+} {
+  if (reason === 'no_consent') {
+    return {
+      status: 409,
+      message: 'Texts are not turned on for your number. Turn on text alerts in Settings first.',
+    };
+  }
+  if (reason === 'opted_out') {
+    return {
+      status: 409,
+      message:
+        'This number has opted out of texts from Scholarmancy. Reply START to turn them back on.',
+    };
+  }
+  // Not a phone number, or one Twilio says cannot get texts (a landline, for one).
+  if (isSmsRecipientReason(reason)) {
+    return {
+      status: 409,
+      message: 'The phone number on your account is not a number we can text.',
+    };
+  }
+  if (reason === 'rate_limited') {
+    return { status: 429, message: 'Too many texts to this number for now. Try again later.' };
+  }
+  return { status: 503, message: 'The reminder could not be sent. Try again later.' };
+}
+
+/** What is kept in the history about a delivery that broke. A text's reason is always a code. */
+function reasonThrown(error: unknown): string {
+  if (error instanceof SmsNotSentError) return error.reason;
+  return error instanceof Error ? error.message : 'unknown_error';
 }
 
 export type AgendaImportance = 'critical' | 'high' | 'medium' | 'low';
@@ -472,11 +518,13 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
         );
       }
 
+      // One reminder an hour means one that went out: an attempt that failed does not count.
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       const recent = await config.database.collection('communication_logs').findOne({
         userId,
         relatedEntityType: 'agenda_item',
         relatedEntityId: itemId,
+        status: { $ne: 'failed' },
         createdAt: { $gte: oneHourAgo },
       });
       if (recent) {
@@ -492,47 +540,25 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
       const body = `Reminder: ${parts.join(' — ')}.`;
       const subject = `Scholarmancy: ${displayTitle}`;
 
-      try {
-        const result = await config.notificationService.sendReminder(
-          recipient,
-          channel,
-          subject,
-          body,
-          {
-            triggerData: {
-              title: displayTitle,
-              studentName: studentName ? String(studentName) : undefined,
-              courseName: courseName ? String(courseName) : undefined,
-              timeAt: typeof timeAt === 'string' ? timeAt : undefined,
-            },
-          }
-        );
-
-        await config.database.collection('communication_logs').insertOne({
-          userId,
-          channel,
-          type: 'notification',
-          subject,
-          content: body,
-          recipientEmail: channel === 'email' ? recipient : undefined,
-          recipientPhone: channel === 'sms' ? recipient : undefined,
-          status: result.success ? 'sent' : 'failed',
-          sentAt: new Date(),
-          triggeredBy: 'user_action',
-          relatedEntityType: 'agenda_item',
-          relatedEntityId: itemId,
-          createdAt: new Date(),
-        });
-
-        res.status(200).json({
-          success: true,
-          data: {
-            sentAt: new Date().toISOString(),
-            channel,
+      // A delivery that cannot go out comes back as a result; one that broke is thrown.
+      // Either way the person is told, and the attempt is kept in the history as failed.
+      const failure = await config.notificationService
+        .sendReminder(recipient, channel, subject, body, {
+          triggerData: {
+            title: displayTitle,
+            studentName: studentName ? String(studentName) : undefined,
+            courseName: courseName ? String(courseName) : undefined,
+            timeAt: typeof timeAt === 'string' ? timeAt : undefined,
           },
-        });
-      } catch (err) {
-        await config.database.collection('communication_logs').insertOne({
+          recipientUserId: userId,
+        })
+        .then((result) => (result.success ? null : (result.error ?? 'not_delivered')))
+        .catch((error: unknown) => reasonThrown(error));
+
+      const at = new Date();
+      await config.database
+        .collection('communication_logs')
+        .insertOne({
           userId,
           channel,
           type: 'notification',
@@ -540,18 +566,34 @@ export function agendaRouter(config: IAgendaRouterConfig): Router {
           content: body,
           recipientEmail: channel === 'email' ? recipient : undefined,
           recipientPhone: channel === 'sms' ? recipient : undefined,
-          status: 'failed',
-          failureReason: err instanceof Error ? err.message : 'Unknown error',
+          ...(failure === null
+            ? { status: 'sent', sentAt: at }
+            : { status: 'failed', failedAt: at, failureReason: failure }),
           triggeredBy: 'user_action',
           relatedEntityType: 'agenda_item',
           relatedEntityId: itemId,
-          createdAt: new Date(),
+          createdAt: at,
+        })
+        .catch((error: unknown) => {
+          // The answer follows what happened to the reminder, not to its history row:
+          // "failed" for one that went out would invite a second.
+          logger.warn(
+            {
+              error: error instanceof Error ? error.name : 'unknown',
+              channel,
+              sent: failure === null,
+            },
+            'reminder history row could not be written'
+          );
         });
-        res.status(500).json({
-          success: false,
-          error: err instanceof Error ? err.message : 'Failed to send reminder',
-        });
+
+      if (failure !== null) {
+        const notSent = reminderNotSent(failure);
+        res.status(notSent.status).json({ success: false, error: notSent.message });
+        return;
       }
+
+      res.status(200).json({ success: true, data: { sentAt: at.toISOString(), channel } });
     })
   );
 

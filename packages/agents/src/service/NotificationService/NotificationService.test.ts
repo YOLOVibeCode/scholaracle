@@ -1454,4 +1454,47 @@ describe('NotificationService', () => {
       );
     });
   });
+
+  describe('sendReminder', () => {
+    const reminderService = (): { svc: NotificationService; route: jest.Mock } => {
+      const route = jest.fn().mockResolvedValue({
+        success: true,
+        channel: NotificationChannel.SMS,
+        messageId: 'SM1',
+      });
+      const router = { route } as unknown as jest.Mocked<DeliveryRouter>;
+      const agent: INotificationAgent = {
+        handles: jest.fn().mockReturnValue(false),
+        generate: jest.fn(),
+      };
+      return { svc: new NotificationService([agent], router), route };
+    };
+
+    it('sends to the address it is given and names the account the reminder is for', async () => {
+      const { svc, route } = reminderService();
+
+      const result = await svc.sendReminder('+15125550100', 'sms', 'Subject', 'Body', {
+        triggerData: { title: 'Field trip form' },
+        recipientUserId: 'account-1',
+      });
+
+      expect(result).toMatchObject({ success: true, messageId: 'SM1' });
+      expect(route).toHaveBeenCalledTimes(1);
+      const [notification, channel] = route.mock.calls[0] as [Notification, NotificationChannel];
+      expect(channel).toBe(NotificationChannel.SMS);
+      expect(notification.userId).toBe('+15125550100');
+      expect(notification.recipientUserId).toBe('account-1');
+      expect(notification.triggerType).toBe('agenda_remind');
+    });
+
+    it('names no account when it is given none', async () => {
+      const { svc, route } = reminderService();
+
+      await svc.sendReminder('parent@example.com', 'email', 'Subject', 'Body');
+
+      const [notification, channel] = route.mock.calls[0] as [Notification, NotificationChannel];
+      expect(channel).toBe(NotificationChannel.EMAIL);
+      expect(notification.recipientUserId).toBeUndefined();
+    });
+  });
 });

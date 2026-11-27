@@ -18,7 +18,12 @@ export interface IAgendaItem {
   readonly importance?: AgendaImportance;
   readonly aiSummary?: string;
   readonly labels?: readonly string[];
-  readonly reminders?: readonly { readonly sentAt: string; readonly channel?: string }[];
+  /** Newest first. `failed` is an attempt that did not go out; its `sentAt` is when it was tried. */
+  readonly reminders?: readonly {
+    readonly sentAt: string;
+    readonly channel?: string;
+    readonly status?: 'sent' | 'delivered' | 'failed';
+  }[];
 }
 
 export interface IAgendaResponse {

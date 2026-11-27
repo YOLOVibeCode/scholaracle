@@ -598,12 +598,15 @@ export class NotificationService {
       studentId?: string;
       /** Structured reminder (title, studentName, timeAt) for the SMS template. */
       triggerData?: unknown;
+      /** The account the reminder is for; what is logged about a text is logged for it. */
+      recipientUserId?: string;
     }
   ): Promise<DeliveryResult> {
     const notif = new Notification({
       agentType: AgentType.PARENT,
       studentId: options?.studentId ?? 'reminder',
       userId: recipient,
+      recipientUserId: options?.recipientUserId,
       subject,
       body,
       priority: NotificationPriority.MEDIUM,
