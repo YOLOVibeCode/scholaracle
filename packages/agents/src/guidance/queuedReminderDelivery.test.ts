@@ -4,7 +4,13 @@ import {
   type INotificationPayload,
   type NotificationChannel,
 } from '@scholaracle/contracts';
-import { DeliveryRouter, EmailDelivery, ExpoPushDelivery, type IEmailEnvelope } from '../delivery';
+import {
+  DeliveryRouter,
+  EmailDelivery,
+  ExpoPushDelivery,
+  type ExpoPushSendResult,
+  type IEmailEnvelope,
+} from '../delivery';
 import { ReminderNotificationSink, type IReminderQueue } from './ReminderNotificationSink';
 
 /**
@@ -52,9 +58,9 @@ function workers(tokensByUser: Record<string, readonly string[]>): {
       tokenStore: {
         getTokens: async (userId): Promise<readonly string[]> => tokensByUser[userId] ?? [],
       },
-      send: async (messages): Promise<{ ok: boolean }> => {
+      send: async (messages): Promise<ExpoPushSendResult> => {
         pushes.push(...messages);
-        return { ok: true };
+        return { outcome: 'tickets', tickets: messages.map(() => ({ status: 'ok' })) };
       },
     }),
   ]);
