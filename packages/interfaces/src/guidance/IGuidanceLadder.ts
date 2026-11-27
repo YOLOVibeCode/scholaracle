@@ -9,8 +9,8 @@ export interface IGuidanceClock {
 /**
  * How the portal has an assignment, as far as reminders go:
  * - `closed`: submitted, graded or excused. There is nothing more to do.
- * - `missing`: the portal marks it missing or late.
- * - `open`: anything else, including no status at all.
+ * - `missing`: the portal marks it missing.
+ * - `open`: anything else: not handed in yet, handed in late, or no status at all.
  */
 export type AssignmentLadderStatus = 'closed' | 'missing' | 'open';
 

@@ -72,10 +72,44 @@ describe('scheduleGuidanceSteps', () => {
   const TZ = 'America/New_York';
   const due = new Date('2026-08-27T16:00:00.000Z');
 
-  it('omits windows that have already passed', () => {
-    const now = new Date(due.getTime() + 20 * 60 * 60 * 1000);
-    const steps = scheduleGuidanceSteps(now, due, TZ);
-    expect(steps.map((s) => s.step)).toEqual(['t72h']);
+  const HOUR_MS = 60 * 60 * 1000;
+  const hoursAfterDue = (hours: number): Date => new Date(due.getTime() + hours * HOUR_MS);
+
+  it('leaves out a reminder before the deadline once its time has passed', () => {
+    // Tuesday 8 pm for work due Thursday noon: "due Thursday" was for 4 pm that day.
+    const steps = scheduleGuidanceSteps(new Date('2026-08-26T00:00:00.000Z'), due, TZ);
+
+    expect(steps.map((s) => s.step)).toEqual(['t18h', 't12h', 't72h']);
+  });
+
+  describe('a reminder after the deadline whose time has passed', () => {
+    // These two say the work is missing, and the ladder only says so once the portal does.
+    // A sync that comes late is the first to see what the portal says, so the reminder is
+    // queued to run now, while it is still the current one.
+    it('is queued for now until the next one is due', () => {
+      const now = hoursAfterDue(20);
+
+      expect(scheduleGuidanceSteps(now, due, TZ)).toEqual([
+        { step: 't12h', scheduledFor: now },
+        { step: 't72h', scheduledFor: hoursAfterDue(72) },
+      ]);
+    });
+
+    it('is queued for the minute it is due when the sync runs in that minute', () => {
+      const now = hoursAfterDue(12);
+
+      expect(scheduleGuidanceSteps(now, due, TZ)[0]).toEqual({ step: 't12h', scheduledFor: now });
+    });
+
+    it('gives way to the last one once that is due, which is queued for now for a day', () => {
+      const now = hoursAfterDue(80);
+
+      expect(scheduleGuidanceSteps(now, due, TZ)).toEqual([{ step: 't72h', scheduledFor: now }]);
+    });
+
+    it.each([96, 97, 24 * 30])('is not queued %i hours after the deadline', (hours) => {
+      expect(scheduleGuidanceSteps(hoursAfterDue(hours), due, TZ)).toEqual([]);
+    });
   });
 
   it('schedules remaining future windows including T-48h at 4pm local', () => {

@@ -75,14 +75,16 @@ moment.
 
 #### When each ladder reminder goes
 
-| Step  | Goes out                                                                        | To                 | Good until      |
-| ----- | ------------------------------------------------------------------------------- | ------------------ | --------------- |
-| T-48h | 4 pm local on the day that is 48 hours before the deadline (32 to 56 hours ahead) | student            | the T-18h time  |
-| T-18h | 4 pm local on the day that is 18 hours before the deadline (2 to 26 hours ahead)  | student            | the deadline    |
-| T+12h | 12 hours after the deadline                                                     | student and parent | the T+72h time  |
-| T+72h | 72 hours after the deadline                                                     | parent             | 24 hours later  |
+| Step  | Goes out                                                                          | To                 | Good until     |
+| ----- | --------------------------------------------------------------------------------- | ------------------ | -------------- |
+| T-48h | 4 pm local on the day that is 48 hours before the deadline (32 to 56 hours ahead) | student            | the T-18h time |
+| T-18h | 4 pm local on the day that is 18 hours before the deadline (2 to 26 hours ahead)  | student            | the deadline   |
+| T+12h | 12 hours after the deadline                                                       | student and parent | the T+72h time |
+| T+72h | 72 hours after the deadline                                                       | parent             | 24 hours later |
 
 "Local" is the time zone of the sync that queued the job: the computer the connector runs on.
+The two after the deadline go out only for work the portal marks missing, and can go out later
+than their time (see "After the deadline" below).
 
 One function gives the time to both sides, `ladderFireTime` in studio-core. The API queues a
 job for that time on every sync (`scheduleGuidanceJobsFromOps`), and the ladder checks the job
@@ -91,14 +93,34 @@ workers, or the reminder was held) is still sent until its "good until" time (`l
 and dropped after it, so "due soon" is never said about work that is already late.
 
 The ladder reads the assignment again before it sends (`MongoAssignmentState.current`, the
-rows the student's own pages list, with the portal's status read as those pages read it in
-`studioTaskClassify`):
+rows the student's own pages list):
 
-- Submitted, graded or excused: nothing more is sent.
+- Submitted, graded or excused (what those pages call closed, `studioTaskClassify`): nothing
+  more is sent.
 - No longer listed by the portal: nothing is sent.
 - Due at another time now: this job sends nothing. The sync that saw the new time queued jobs
   for it, and those are new reminders: "due Thursday" having gone out does not stop "due
   Monday".
+- After the deadline, and not marked missing by the portal: nothing is sent (see below).
+
+#### After the deadline: only work the portal marks missing
+
+T+12h tells the parent the work "is still missing" and the student it is "still open"; T+72h
+tells the parent it is "still outstanding". Those are sent only when the portal's own status
+for the work is `missing`. A deadline that has passed is not enough: the work may be done on
+paper, not marked yet, or handed in since the last sync, and a gradebook that lists every
+assignment with a due date would otherwise raise an alarm for each one twelve hours later.
+`late` does not count as missing: Canvas, the one portal that reports it, means work handed
+in after the deadline. Before the deadline the rule is the other way round: T-48h and T-18h go
+out unless the work is closed.
+
+The portal's word arrives with a sync, and a sync can come after the reminder's time. So a
+sync also queues an after-deadline reminder whose time has passed, to run at once, for as long
+as it is the current one ("good until" above); `scheduleGuidanceSteps` does this. The reminder
+then goes out with the first sync that sees the work marked missing: at 12 hours when a sync
+has already seen it, later when the next sync is later, and not at all when no sync sees it
+marked within four days of the deadline. It still goes out once, and quiet hours still hold
+it.
 
 Quiet hours hold a reminder; they do not drop it. They are the owner's
 (`preferences.notifications.quietHours`, on from 22:00 to 07:00 unless changed) and apply to
