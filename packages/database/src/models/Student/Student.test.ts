@@ -699,7 +699,33 @@ describe('Student', () => {
         expect(ownerTextsOffAfterSave(before(false), ['email', 'push'], { texts: true })).toBe(
           true
         );
-        expect(ownerTextsOffAfterSave(before(), [], { texts: true })).toBe(true);
+      });
+
+      it('turning every channel off says nothing about text: what was said before stands', () => {
+        expect(ownerTextsOffAfterSave(undefined, [], { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(), [], { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(before(true), [], { texts: true })).toBe(true);
+        expect(ownerTextsOffAfterSave(before(true), [], { texts: false })).toBe(true);
+      });
+
+      it('coming back from every channel off, text left out is not a refusal: it was not shown as on', () => {
+        const silenced = (textsOff?: boolean): IOwnerAlertPrefs => ({
+          receiveAlerts: false,
+          alertChannels: [],
+          ...(textsOff !== undefined ? { textsOff } : {}),
+        });
+
+        // "Turn alerts back on" in the phone app sends email and push in one tap.
+        expect(ownerTextsOffAfterSave(silenced(), ['email', 'push'], { texts: true })).toBe(false);
+        expect(ownerTextsOffAfterSave(silenced(), ['email'], { texts: false })).toBe(false);
+        // An owner who had turned texts off for the student before silencing still has them off.
+        expect(ownerTextsOffAfterSave(silenced(true), ['email', 'push'], { texts: true })).toBe(
+          true
+        );
+      });
+
+      it('text left out again by an owner who had turned it off keeps it off', () => {
+        expect(ownerTextsOffAfterSave(before(true), ['email', 'push'], { texts: true })).toBe(true);
       });
 
       it('leaving text out says nothing while the account has texts off: text was not on offer', () => {

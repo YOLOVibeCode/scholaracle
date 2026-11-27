@@ -2,7 +2,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { ObjectId, type Db } from 'mongodb';
 import { AuthService } from '@scholaracle/auth';
-import { AlertRepository, UserRepository } from '@scholaracle/database';
+import { AlertRepository, StudentRepository, UserRepository } from '@scholaracle/database';
 import { studentsRouter } from './students';
 import { authMiddleware } from '../../middleware/auth';
 import { requireParent } from '../../middleware/requireRole';
@@ -1790,18 +1790,42 @@ describe('Students API Routes', () => {
         expect(await ownerChannels(studentId)).toEqual(['email']);
       });
 
-      it('an owner who turned every channel off stays silenced when their account gets texts', async () => {
+      /** "Silence" and "Turn alerts back on", as the phone app sends them in one tap each. */
+      const SILENCE = { receiveAlerts: false, alertChannels: [] };
+      const BACK_ON = { receiveAlerts: true, alertChannels: ['email', 'push'] };
+
+      it('an owner who silenced a student stays silenced when their account gets texts', async () => {
         const studentId = await newStudent();
-        // Written as stored: the route does not take an empty list of channels today.
-        await database
-          .collection('students')
-          .updateOne(
-            { _id: new ObjectId(studentId) },
-            { $set: { ownerAlertPrefs: { receiveAlerts: false, alertChannels: [] } } }
-          );
+        expect(await saveChannels(studentId, SILENCE)).toEqual([]);
 
         await saveAccount(true, true);
         expect(await ownerChannels(studentId)).toEqual([]);
+      });
+
+      it('silencing a student and turning alerts back on leaves the texts of the owner as they were', async () => {
+        const studentId = await newStudent();
+        const sibling = await newStudent();
+        await saveAccount(true, true);
+
+        expect(await saveChannels(studentId, SILENCE)).toEqual([]);
+        expect(await storedPrefs(studentId)).toMatchObject({ receiveAlerts: false });
+        expect(await storedPrefs(studentId)).not.toHaveProperty('textsOff');
+        expect(await ownerChannels(sibling)).toEqual(['email', 'sms']);
+
+        // The app restores email and push. Text was not shown as on, so leaving it out is no refusal.
+        expect(await saveChannels(studentId, BACK_ON)).toEqual(['email', 'push', 'sms']);
+        expect(await storedPrefs(studentId)).not.toHaveProperty('textsOff');
+        expect(await ownerChannels(studentId)).toEqual(['email', 'push', 'sms']);
+      });
+
+      it('an owner who had turned texts off for a student still has them off after silencing and coming back', async () => {
+        const studentId = await newStudent();
+        await saveAccount(true, true);
+        await saveChannels(studentId, { receiveAlerts: true, alertChannels: ['email'] });
+
+        expect(await saveChannels(studentId, SILENCE)).toEqual([]);
+        expect(await saveChannels(studentId, BACK_ON)).toEqual(['email', 'push']);
+        expect(await storedPrefs(studentId)).toMatchObject({ textsOff: true });
       });
     });
   });
@@ -1920,6 +1944,135 @@ describe('Students API Routes', () => {
       const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
       const prefs = doc?.['ownerAlertPrefs'] as Record<string, unknown>;
       expect('alertTypes' in prefs).toBe(false);
+    });
+
+    describe('Silence: every channel off, as the web and the phone app send it (sharing-spec §2)', () => {
+      const SILENCE = { receiveAlerts: false, alertChannels: [] };
+
+      async function storedRow(studentId: string): Promise<Record<string, unknown>> {
+        const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+        return (doc?.['sharedWith'] as Record<string, unknown>[])[0] ?? {};
+      }
+      /** The person's row as the contacts list shows it to the owner. */
+      async function listedRow(studentId: string): Promise<Record<string, unknown>> {
+        const list = await request(app)
+          .get(`/api/students/${studentId}/contacts`)
+          .set('Authorization', `Bearer ${testToken}`);
+        expect(list.status).toBe(200);
+        return (list.body as Record<string, unknown>[]).find((p) => p['email'] === SELF) ?? {};
+      }
+      function saveOwnRow(studentId: string, body: object): request.Test {
+        return request(app)
+          .put(`/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`)
+          .set('Authorization', `Bearer ${selfToken}`)
+          .send(body);
+      }
+      /** The addresses an alert about this student would go to. */
+      async function reached(studentId: string): Promise<readonly (string | undefined)[]> {
+        const student = await new StudentRepository(database).findById(studentId);
+        return (student?.getAllAlertRecipients('students@example.com') ?? []).map((r) => r.email);
+      }
+
+      it('a shared adult silences a student: nothing reaches them, and their alert types are kept for later', async () => {
+        const studentId = await seedAcceptedContact();
+
+        const res = await saveOwnRow(studentId, SILENCE);
+
+        expect(res.status).toBe(200);
+        expect(await storedRow(studentId)).toMatchObject({
+          receiveAlerts: false,
+          alertChannels: [],
+          alertTypes: ['grade_drop'],
+        });
+        expect(await listedRow(studentId)).toMatchObject({
+          receiveAlerts: false,
+          alertChannels: [],
+        });
+        expect(await reached(studentId)).toEqual(['students@example.com']);
+      });
+
+      it('a silenced adult turns alerts back on with the channels the app restores', async () => {
+        const studentId = await seedAcceptedContact();
+        await saveOwnRow(studentId, SILENCE).expect(200);
+
+        const res = await saveOwnRow(studentId, {
+          receiveAlerts: true,
+          alertChannels: ['email', 'push'],
+        });
+
+        expect(res.status).toBe(200);
+        expect(await storedRow(studentId)).toMatchObject({
+          receiveAlerts: true,
+          alertChannels: ['email', 'push'],
+        });
+      });
+
+      it('an adult who unticks every channel and saves has no channel left', async () => {
+        const studentId = await seedAcceptedContact();
+
+        const res = await saveOwnRow(studentId, { receiveAlerts: true, alertChannels: [] });
+
+        expect(res.status).toBe(200);
+        expect(await storedRow(studentId)).toMatchObject({
+          receiveAlerts: true,
+          alertChannels: [],
+        });
+        expect(await listedRow(studentId)).toMatchObject({ alertChannels: [] });
+      });
+
+      it('an owner or admin silences a person the same way', async () => {
+        const studentId = await seedAcceptedContact();
+
+        const res = await request(app)
+          .put(`/api/students/${studentId}/contacts/${encodeURIComponent(SELF)}`)
+          .set('Authorization', `Bearer ${testToken}`)
+          .send(SILENCE);
+
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ success: true });
+        expect(await storedRow(studentId)).toMatchObject({
+          receiveAlerts: false,
+          alertChannels: [],
+        });
+      });
+
+      it('the owner silences a student for themself', async () => {
+        const studentId = await seedAcceptedContact();
+
+        const res = await request(app)
+          .put(`/api/students/${studentId}/owner-alert-prefs`)
+          .set('Authorization', `Bearer ${testToken}`)
+          .send(SILENCE);
+
+        expect(res.status).toBe(200);
+        expect(res.body.ownerAlertPrefs).toEqual({
+          receiveAlerts: false,
+          alertChannels: [],
+          weeklyReviewCopy: false,
+        });
+        expect(await reached(studentId)).toEqual([SELF]);
+      });
+
+      it('still refuses a channel it does not know, and a list that is not one', async () => {
+        const studentId = await seedAcceptedContact();
+
+        expect((await saveOwnRow(studentId, { alertChannels: ['fax'] })).status).toBe(400);
+        expect((await saveOwnRow(studentId, { alertChannels: 'email' })).status).toBe(400);
+        expect(await storedRow(studentId)).toMatchObject({ alertChannels: ['email', 'push'] });
+      });
+
+      it('still refuses to invite a person with no channel: they must be reachable somehow', async () => {
+        const studentId = await seedAcceptedContact();
+
+        const res = await request(app)
+          .post(`/api/students/${studentId}/contacts`)
+          .set('Authorization', `Bearer ${testToken}`)
+          .send({ email: 'unreachable@example.com', role: 'parent', alertChannels: [] });
+
+        expect(res.status).toBe(400);
+        const doc = await database.collection('students').findOne({ _id: new ObjectId(studentId) });
+        expect((doc?.['sharedWith'] as unknown[]).length).toBe(1);
+      });
     });
   });
 

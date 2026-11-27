@@ -202,9 +202,10 @@ export function effectiveOwnerAlertPrefs(
 /**
  * Whether the owner has turned texts off for this student, once their channels are saved.
  *
- * Leaving text out says so only while the account has texts on. With texts off for the
- * account the text switch is shown off whatever was saved, so a list without text is not a
- * choice against texts: what was said earlier stands.
+ * Leaving text out says so only for an owner who was shown text as on. With texts off for the
+ * account, or for a student they had silenced, the text switch is shown off whatever was
+ * saved, so a list without text is not a choice against texts: what was said earlier stands.
+ * Silence itself (no channel at all) is not one either, so texts come back with the alerts.
  *
  * @param before - The preferences saved so far, if any
  * @param chosen - The channels in this save; undefined when it says nothing about channels
@@ -216,9 +217,12 @@ export function ownerTextsOffAfterSave(
   account: IOwnerAccountChannels
 ): boolean {
   const saidBefore = before?.textsOff === true;
-  if (chosen === undefined) return saidBefore;
+  // Nothing said about channels, or every channel turned off ("Silence"): neither is about text.
+  if (chosen === undefined || chosen.length === 0) return saidBefore;
   if (chosen.includes('sms')) return false;
-  return account.texts ? true : saidBefore;
+  // Text left out. That turns it off only for an owner who had it. One whose account has texts
+  // off, or who comes back from silence, was not shown text as on.
+  return ownerGetsTexts(before, account) ? true : saidBefore;
 }
 
 /** A shared adult's effective alert preferences for a student (pending or accepted row). */

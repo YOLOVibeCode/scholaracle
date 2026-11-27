@@ -263,8 +263,13 @@ Jessica's phone:                         Label (Parent ▾)  Admin [ ]
   rows (no invite group) are shown one card per student and re-sent through
   `POST /api/sharing/invites/resend-contact`. The pricing page states that sharing is included.
 - Alerts: every accepted adult receives by their own channels (`email`, `sms`, `push`); push goes to each
-  person's own devices; a silenced adult gets nothing. Newly accepted adults default to `['email','push']`;
-  the owner keeps `['email']` unless set. Inbox lists alerts for students the caller can access, trimmed by
+  person's own devices; a silenced adult gets nothing. Silence is `receiveAlerts: false` with an empty
+  `alertChannels`, and both settings routes (`PUT /api/students/:id/contacts/:email`,
+  `PUT /api/students/:id/owner-alert-prefs`) take the empty list; only an invitation needs a channel.
+  Newly accepted adults default to `['email','push']`;
+  the owner keeps `['email']` unless set, plus text while their own account has texts on (see "What is
+  sent by text" in `RAILWAY_DEPLOYMENT.md`); silencing a student and turning alerts back on leaves the
+  owner's texts as they were. Inbox lists alerts for students the caller can access, trimmed by
   the caller's `alertTypes`; acknowledgement is per person (`acknowledgedBy`); legacy fields follow the owner;
   delete stays owner-only. Ingest now writes the student's account id on alert rows; two env-gated boot
   migrations (`ALERT_STUDENT_ID_MIGRATION`, then `ALERT_ACK_BY_MIGRATION`; dry-run → apply) rewrote legacy
