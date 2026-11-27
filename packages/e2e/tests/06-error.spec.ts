@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/auth';
-import { assertErrorMessage, assertAccessDenied } from '../helpers/assertions';
+import { assertAccessDenied } from '../helpers/assertions';
 
 /**
  * Layer 6: Error Handling Tests
@@ -68,16 +68,10 @@ test.describe('@error Layer 6: Error Handling', () => {
   });
 
   test('ERR-004: Permission Denied (non-admin)', async ({ page }) => {
-    // Non-admin users cannot access admin routes
-    await page.goto('/admin/settings');
-
-    // Should redirect to login or show 403
-    await page.waitForTimeout(600);
-    const is403 =
-      page.url().includes('403') || (await page.locator('body').textContent())?.includes('403');
-    const isRedirected = !page.url().includes('/admin/settings');
-
-    expect(is403 || isRedirected).toBe(true);
+    // Nobody is signed in here, so this visitor is not an admin. The admin area answers 403 or
+    // sends them away. It sends them away in the browser, after the page has loaded, so the
+    // helper waits for the address to change. A fixed pause was too short on a busy machine.
+    await assertAccessDenied(page, '/admin/settings');
   });
 
   test('ERR-005: Form Validation', async ({ page, loginAsRole }) => {

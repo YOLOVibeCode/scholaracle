@@ -56,7 +56,10 @@ test.describe('@studio Student studio (phone-width)', () => {
     );
 
     await page.locator('[data-testid="studio-primary-cta"]').click({ force: true });
-    await expect(page.locator('[data-testid="studio-pack-page"]')).toBeVisible();
+    // This test is usually the first in a run to open an assignment page, so the test server
+    // builds the page before it can show it. On CI that takes 5 to 8 seconds, and more than 10
+    // on a slow machine.
+    await expect(page.locator('[data-testid="studio-pack-page"]')).toBeVisible({ timeout: 30_000 });
     const packCta = page.locator('[data-testid="studio-pack-primary-cta"]');
     await expect(packCta).toHaveText('Open formulas.pdf');
 
