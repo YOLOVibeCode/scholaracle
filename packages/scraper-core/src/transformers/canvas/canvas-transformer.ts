@@ -104,11 +104,19 @@ function parseLetterGrade(text: string | undefined): string | undefined {
   return m ? m[1]! : undefined;
 }
 
+/**
+ * Canvas's word for the state of a submission, as the status the contract names.
+ *
+ * The order matters. "Unsubmitted" (not handed in yet) holds the letters of "submitted", so
+ * it is looked for first; read the other way round, every assignment still to do was
+ * recorded as turned in.
+ */
 function normalizeStatus(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const lower = raw.toLowerCase().trim();
   if (lower.includes('miss')) return 'missing';
   if (lower.includes('late')) return 'late';
+  if (lower.includes('unsubmit') || lower.includes('not submit')) return 'not_started';
   if (lower.includes('submit')) return 'submitted';
   if (lower.includes('grad')) return 'graded';
   if (lower.includes('excus')) return 'excused';
