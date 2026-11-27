@@ -233,6 +233,51 @@ describe('announcement body', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Assignment status
+// ---------------------------------------------------------------------------
+
+describe('assignment status', () => {
+  function recordedStatus(canvasStatus: string | undefined): unknown {
+    const extract = makeExtract({
+      courses: [
+        makeCourse({
+          assignments: [
+            { id: '987', name: 'Essay', dueDate: '2026-01-20T23:59:00Z', status: canvasStatus },
+          ],
+        }),
+      ],
+    });
+    const op = transformCanvasExtract(extract, ctx).find((o) => o.entity === 'assignment');
+    return op?.record?.['status'];
+  }
+
+  // "Unsubmitted" is Canvas's word for work not handed in yet. It holds the letters of
+  // "submitted" and was read as that: every assignment still to do counted as turned in.
+  it.each(['Unsubmitted', 'unsubmitted', ' UNSUBMITTED ', 'Not submitted', 'Not Submitted'])(
+    'reads %p as not started, not as submitted',
+    (canvasStatus) => {
+      expect(recordedStatus(canvasStatus)).toBe('not_started');
+    }
+  );
+
+  it.each([
+    ['Submitted', 'submitted'],
+    ['submitted', 'submitted'],
+    ['Graded', 'graded'],
+    ['Missing', 'missing'],
+    ['Late', 'late'],
+    ['Excused', 'excused'],
+    ['A word Canvas has not used before', 'unknown'],
+  ])('reads %p as %s', (canvasStatus, expected) => {
+    expect(recordedStatus(canvasStatus)).toBe(expected);
+  });
+
+  it('records no status when Canvas gives none', () => {
+    expect(recordedStatus(undefined)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Events and to-do items are transformed
 // ---------------------------------------------------------------------------
 

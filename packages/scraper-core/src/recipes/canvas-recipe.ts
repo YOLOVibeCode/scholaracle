@@ -57,6 +57,28 @@ function shouldIncludeCanvasCourse(
 }
 
 /**
+ * The state of the student's submission, in the words the transformer reads.
+ *
+ * `missing` and `late` are flags Canvas sets itself: past due with nothing handed in, and
+ * handed in after the deadline. `pending_review` is work that is handed in and waits for
+ * the teacher to mark it (a quiz with a written answer), so it counts as handed in.
+ */
+export function canvasSubmissionStatus(
+  submission:
+    | { readonly missing?: boolean; readonly late?: boolean; readonly workflow_state?: string }
+    | undefined
+): string | undefined {
+  if (!submission) return undefined;
+  if (submission.missing) return 'Missing';
+  if (submission.late) return 'Late';
+  if (submission.workflow_state === 'graded') return 'Graded';
+  if (submission.workflow_state === 'submitted') return 'Submitted';
+  if (submission.workflow_state === 'pending_review') return 'Submitted';
+  if (submission.workflow_state === 'unsubmitted') return 'Unsubmitted';
+  return undefined;
+}
+
+/**
  * Run the Canvas scrape recipe.
  *
  * @param driver - Runtime-specific page driver (Playwright, WebView, or extension)
@@ -121,14 +143,7 @@ export async function runCanvasRecipe(
     const assignments = rawAssignments
       .map((a) => {
         const sub = a.submission;
-        let status: string | undefined;
-        if (sub) {
-          if (sub.missing) status = 'Missing';
-          else if (sub.late) status = 'Late';
-          else if (sub.workflow_state === 'graded') status = 'Graded';
-          else if (sub.workflow_state === 'submitted') status = 'Submitted';
-          else if (sub.workflow_state === 'unsubmitted') status = 'Unsubmitted';
-        }
+        const status = canvasSubmissionStatus(sub);
         const attachments = (sub?.attachments ?? []).map((att) => ({
           name: (att.display_name ?? att.filename ?? '') as string,
           url: att.url as string | undefined,
