@@ -61,7 +61,7 @@ function account(saved: ISavedTexts): unknown {
 }
 
 async function openSettings(saved: ISavedTexts): Promise<void> {
-  (settingsApi.get as jest.Mock).mockResolvedValue(account(saved));
+  (settingsApi.load as jest.Mock).mockResolvedValue(account(saved));
   render(<SettingsPage />);
   await waitFor(() => expect(screen.getByTestId('settings-loaded')).toBeTruthy());
 }

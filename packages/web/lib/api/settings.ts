@@ -194,18 +194,27 @@ export const settingsApi = {
    */
   async get(): Promise<IUserSettingsResponse> {
     try {
-      const res = await apiClient.get<IUserSettingsResponse>('/settings');
-      return {
-        dashboard: { ...defaultSettings.dashboard, ...res.dashboard },
-        timezone: res.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-        notifications: { ...defaultSettings.notifications, ...res.notifications },
-        alerts: { ...defaultSettings.alerts, ...res.alerts },
-        profile: res.profile,
-      };
+      return await settingsApi.load();
     } catch (error) {
       console.error('Failed to load settings:', error);
       return { ...defaultSettings };
     }
+  },
+
+  /**
+   * The same settings, for a page that saves what it shows. It fails when the request fails:
+   * the defaults are not what the person saved, and a page that shows them as if they were
+   * writes them over the real ones on the next save.
+   */
+  async load(): Promise<IUserSettingsResponse> {
+    const res = await apiClient.get<IUserSettingsResponse>('/settings');
+    return {
+      dashboard: { ...defaultSettings.dashboard, ...res.dashboard },
+      timezone: res.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      notifications: { ...defaultSettings.notifications, ...res.notifications },
+      alerts: { ...defaultSettings.alerts, ...res.alerts },
+      profile: res.profile,
+    };
   },
 
   /**

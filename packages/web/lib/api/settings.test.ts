@@ -97,6 +97,44 @@ describe('settingsApi', () => {
   });
 
   // -------------------------------------------------------------------------
+  // load: for a page that saves what it shows
+  // -------------------------------------------------------------------------
+
+  describe('load', () => {
+    it('GETs /settings and fills what the server left out with the defaults', async () => {
+      fetchSpy.mockResolvedValue(
+        fakeResponse({
+          notifications: { push: false, email: true, sms: true },
+          alerts: { gradeDrop: 10, daysBeforeDeadline: 3, lowGradeThreshold: 70 },
+          profile: { name: 'A Parent', email: 'parent@example.com', phone: '+15125550100', smsConsent: true },
+        }),
+      );
+
+      const result = await settingsApi.load();
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${BASE}/settings`,
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result.notifications).toMatchObject({ push: false, email: true, sms: true });
+      expect(result.alerts).toMatchObject({ gradeDrop: 10, celebrateWins: true });
+      expect(result.profile).toMatchObject({ phone: '+15125550100', smsConsent: true });
+    });
+
+    it('fails when the request fails: defaults are not what the person saved', async () => {
+      fetchSpy.mockRejectedValue(new Error('Server error'));
+
+      await expect(settingsApi.load()).rejects.toThrow();
+    });
+
+    it('fails when the server answers with an error', async () => {
+      fetchSpy.mockResolvedValue(fakeResponse({ error: 'Internal error' }, 500));
+
+      await expect(settingsApi.load()).rejects.toThrow();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // update
   // -------------------------------------------------------------------------
 
