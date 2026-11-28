@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Save, Monitor, Link2, Unlink, History, Mail, MessageSquare, CheckCircle, XCircle, Clock, Pencil, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { EditDigestSlotDialog } from '@/components/settings/EditDigestSlotDialog
 import { StudentLoginsSection } from '@/components/settings/StudentLoginsSection';
 import { SmsOptInCheckbox } from '@/components/legal/SmsOptInCheckbox';
 import { smsSwitchAfterOptIn, textAlertsNote } from '@/lib/settings/textAlerts';
+import { FormErrorAlert } from '@/components/common';
 
 /** Every alert type the API knows, in the contracts' order; labels come from contracts too. */
 const ALERT_TYPE_KEYS: readonly string[] = Object.values(AlertType);
@@ -74,13 +75,17 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  // This page saves everything it shows. When the load failed it shows the defaults, not what
+  // the person saved, and a save would write them over the real settings: the number removed,
+  // the text consent withdrawn, the AI consent turned off. So such a page cannot be saved.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [notificationHistory, setNotificationHistory] = useState<INotificationHistoryItem[]>([]);
 
-  useEffect(() => {
-    void (async () => {
+  const loadSettings = useCallback(async (): Promise<void> => {
       try {
         const [s, consents] = await Promise.all([
-          settingsApi.get() as Promise<IUserSettingsResponse>,
+          settingsApi.load() as Promise<IUserSettingsResponse>,
           consentsApi.get(),
         ]);
         setServerAiEnabled(consents.serverAi);
@@ -132,20 +137,33 @@ export default function SettingsPage() {
         setEmphasizeWeakSubjects(s.alerts.emphasizeWeakSubjects ?? true);
         setCelebrateWins(s.alerts.celebrateWins ?? true);
         if (s.alerts.enabledTypes) setEnabledTypes(s.alerts.enabledTypes as Record<string, { enabled: boolean; severity: string }>);
+        setLoadFailed(false);
         settingsApi.getNotificationHistory().then(setNotificationHistory).catch(() => {});
       } catch {
-        // fallback handled by api
+        // Either request failed, or its answer could not be read. Nothing here is the person's.
+        setLoadFailed(true);
       } finally {
         setIsLoaded(true);
       }
-    })();
   }, []);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  const retryLoad = async (): Promise<void> => {
+    setIsRetrying(true);
+    await loadSettings();
+    setIsRetrying(false);
+  };
 
   // What is still missing before alerts can go by text, said under the SMS switch.
   const smsNote = textAlertsNote({ phone, smsConsent, smsNotifications });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Before the load, and after one that failed, the fields hold defaults. They are not saved.
+    if (!isLoaded || loadFailed) return;
     setIsSaving(true);
     setToast(null);
 
@@ -214,6 +232,26 @@ export default function SettingsPage() {
         <p className="text-gray-600 dark:text-gray-400">Manage your account preferences</p>
       </div>
 
+      {loadFailed && (
+        <FormErrorAlert data-testid="settings-load-failed" className="space-y-3 p-4">
+          <p className="font-medium">Your settings could not be loaded.</p>
+          <p>
+            They are not shown, so that what you saved before cannot be replaced by mistake.
+            Check your connection and try again.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void retryLoad()}
+            disabled={isRetrying}
+            data-testid="button-retry-settings"
+          >
+            {isRetrying ? 'Loading...' : 'Try again'}
+          </Button>
+        </FormErrorAlert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -281,7 +319,12 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      <form onSubmit={handleSubmit} data-testid="settings-form">
+      {/* After a load that failed the fields hold defaults: they are not shown as the person's. */}
+      <form
+        onSubmit={handleSubmit}
+        data-testid="settings-form"
+        className={loadFailed ? 'hidden' : undefined}
+      >
         {isLoaded && <span data-testid="settings-loaded" className="hidden" />}
         {toast && (
           <div role="alert" data-testid="toast" className="rounded-md border p-3 text-sm">
@@ -1154,7 +1197,11 @@ export default function SettingsPage() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" disabled={isSaving || !isLoaded} data-testid="button-save-settings">
+            <Button
+              type="submit"
+              disabled={isSaving || !isLoaded || loadFailed}
+              data-testid="button-save-settings"
+            >
               <Save className="mr-2 h-4 w-4" />
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>

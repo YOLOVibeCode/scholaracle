@@ -61,7 +61,7 @@ async function openSettings(): Promise<void> {
 describe('Settings on a narrow phone', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (settingsApi.get as jest.Mock).mockResolvedValue(ACCOUNT);
+    (settingsApi.load as jest.Mock).mockResolvedValue(ACCOUNT);
     (settingsApi.getNotificationHistory as jest.Mock).mockResolvedValue([]);
     (consentsApi.get as jest.Mock).mockResolvedValue({ serverAi: false });
   });
