@@ -13,6 +13,8 @@ import { test, expect } from '../fixtures/auth';
  * If Layer 2 fails → don't run
  */
 const PHONE = { width: 375, height: 812 } as const;
+/** The narrowest phones still in use. */
+const NARROW_PHONE = { width: 320, height: 640 } as const;
 
 /** The pages a parent reaches from the sidebar. */
 const SIDEBAR_PAGES = [
@@ -137,5 +139,17 @@ test.describe('@navigation Layer 3: Parent navigation at a phone width', () => {
     expect(listBox!.y + listBox!.height).toBeLessThanOrEqual(gradesBox!.y + 1);
     // Beside the list the grades had 170 px. Above them they have the width of the page.
     expect(gradesBox!.width).toBeGreaterThanOrEqual(300);
+  });
+
+  test('NAV-PHONE-005: on the narrowest phones (320 px) Settings and the workflow page fit', async ({
+    page,
+  }) => {
+    // The two pages with a row that was a few pixels wider than 320 px: three radio buttons in
+    // Settings, two date fields in the workflow filter bar.
+    const studentId = await firstStudentId(page);
+    await page.setViewportSize(NARROW_PHONE);
+
+    await expectFitsTheScreen(page, '/dashboard/settings');
+    await expectFitsTheScreen(page, `/dashboard/students/${studentId}/workflow`);
   });
 });
