@@ -140,8 +140,8 @@ export default function StudentEmailHistoryPage() {
         </p>
       </div>
 
-      {/* Status filter */}
-      <div className="flex gap-2">
+      {/* Status filter. The five buttons and the count are wider than a phone screen: they wrap. */}
+      <div className="flex flex-wrap gap-2" data-testid="email-status-filters">
         {STATUS_FILTERS.map((f) => (
           <Button
             key={f.value}
@@ -155,7 +155,7 @@ export default function StudentEmailHistoryPage() {
             {f.label}
           </Button>
         ))}
-        <div className="ml-auto text-sm text-muted-foreground self-center">
+        <div className="ml-auto text-sm text-muted-foreground self-center" data-testid="email-count">
           {total} email{total === 1 ? '' : 's'}
         </div>
       </div>

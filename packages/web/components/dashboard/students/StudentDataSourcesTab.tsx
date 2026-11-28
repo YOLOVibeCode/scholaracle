@@ -54,7 +54,7 @@ export function StudentDataSourcesTab({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Connected Sources</h2>
         {canManageSources && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2" data-testid="sources-actions">
             <Button
               type="button"
               variant="outline"

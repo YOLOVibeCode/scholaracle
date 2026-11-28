@@ -105,6 +105,45 @@ describe('EditStudentPage (TDD / ISP)', () => {
     });
   });
 
+  // The name and three buttons sat in one row that could not wrap. On a phone the row was wider
+  // than the screen, and the whole page (tabs, cards) scrolled sideways with it.
+  describe('the header on a narrow screen', () => {
+    /** The classes of an element, one by one: `sm:flex-wrap` is not `flex-wrap`. */
+    const classesOf = (element: HTMLElement): string[] => element.className.split(/\s+/);
+
+    it('lets the buttons go to a line of their own', async () => {
+      render(<EditStudentPage />);
+      await waitFor(() => expect(screen.getByTestId('student-header')).toBeTruthy());
+
+      expect(classesOf(screen.getByTestId('student-header'))).toContain('flex-wrap');
+    });
+
+    it('keeps the buttons together in one group that wraps too', async () => {
+      render(<EditStudentPage />);
+      await waitFor(() => expect(screen.getByTestId('student-header-actions')).toBeTruthy());
+
+      const actions = screen.getByTestId('student-header-actions');
+      expect(classesOf(actions)).toContain('flex-wrap');
+      for (const button of ['button-share-student', 'button-workflow', 'button-view-as-student']) {
+        expect(actions.contains(screen.getByTestId(button))).toBe(true);
+      }
+    });
+
+    it('gives the name room on its line and lets a long name break', async () => {
+      mockGetById.mockResolvedValue({ ...OWNED, name: 'Maximiliana-Alexandrina Featherstonehaugh' });
+      render(<EditStudentPage />);
+      await waitFor(() => expect(screen.getByTestId('student-header-title')).toBeTruthy());
+
+      const title = screen.getByTestId('student-header-title');
+      // Wide enough to start with that the buttons wrap before the name is squeezed.
+      expect(classesOf(title)).toEqual(expect.arrayContaining(['basis-48', 'grow', 'min-w-0']));
+      expect(title.contains(screen.getByTestId('back-link'))).toBe(false);
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(heading.textContent).toBe('Maximiliana-Alexandrina Featherstonehaugh');
+      expect(classesOf(heading)).toContain('break-words');
+    });
+  });
+
   // The dev server mounts the page twice (React strict mode), so the student is loaded twice.
   // An answer that arrived after the form was on screen used to put the stored name back over
   // what the parent was typing, and Save then sent the old name.

@@ -136,10 +136,14 @@ export function WorkflowFilterBar({
         </SelectContent>
       </Select>
 
-      <div className="flex items-center gap-2">
+      {/* The two date fields and the dash are 304 px, wider than a narrow phone leaves: the
+          second field goes under the first. */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="workflow-date-range">
         <Input
           type="date"
+          aria-label="From date"
           className="h-8 w-[140px]"
+          data-testid="workflow-date-from"
           value={filters.from ?? ''}
           onChange={(e) =>
             onFiltersChange({ ...filters, from: e.target.value || null })
@@ -148,7 +152,9 @@ export function WorkflowFilterBar({
         <span className="text-muted-foreground text-sm">–</span>
         <Input
           type="date"
+          aria-label="To date"
           className="h-8 w-[140px]"
+          data-testid="workflow-date-to"
           value={filters.to ?? ''}
           onChange={(e) =>
             onFiltersChange({ ...filters, to: e.target.value || null })

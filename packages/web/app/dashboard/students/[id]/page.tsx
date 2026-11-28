@@ -184,14 +184,18 @@ export default function EditStudentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      {/* On a phone the buttons go to a line of their own: a row that cannot wrap is wider than
+          the screen, and the tabs and cards below scroll sideways with it. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3" data-testid="student-header">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/dashboard/students" data-testid="back-link">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">{student?.name ?? 'Student'}</h1>
+        <div className="min-w-0 grow basis-48" data-testid="student-header-title">
+          <h1 className="break-words text-3xl font-bold tracking-tight">
+            {student?.name ?? 'Student'}
+          </h1>
           <p className="text-gray-600 dark:text-gray-400">
             {student?.grade
               ? `Grade ${student.grade}`
@@ -201,29 +205,34 @@ export default function EditStudentPage() {
           </p>
           <SharedWithYouLine access={student?.access} sharedByName={invitedBy?.name} />
         </div>
-        {mayShare && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShareOpen(true)}
-            data-testid="button-share-student"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Share
+        <div
+          className="flex flex-wrap items-center gap-2 sm:gap-4"
+          data-testid="student-header-actions"
+        >
+          {mayShare && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShareOpen(true)}
+              data-testid="button-share-student"
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+          )}
+          <Button variant="outline" size="sm" asChild data-testid="button-workflow">
+            <Link href={`/dashboard/students/${studentId}/workflow`}>
+              <ListTodo className="mr-2 h-4 w-4" />
+              Workflow
+            </Link>
           </Button>
-        )}
-        <Button variant="outline" size="sm" asChild data-testid="button-workflow">
-          <Link href={`/dashboard/students/${studentId}/workflow`}>
-            <ListTodo className="mr-2 h-4 w-4" />
-            Workflow
-          </Link>
-        </Button>
-        <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
-          <Link href={`/dashboard/students/${studentId}/view`}>
-            <LayoutDashboard className="mr-2 h-4 w-4" />
-            View as student
-          </Link>
-        </Button>
+          <Button variant="outline" size="sm" asChild data-testid="button-view-as-student">
+            <Link href={`/dashboard/students/${studentId}/view`}>
+              <LayoutDashboard className="mr-2 h-4 w-4" />
+              View as student
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div role="tablist" aria-label="Student sections" className="flex flex-wrap gap-2" data-testid="student-tabs">

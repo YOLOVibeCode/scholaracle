@@ -51,7 +51,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <div className="flex min-h-screen w-full">
           <Sidebar />
-          <div className="flex flex-1 flex-col">
+          {/* min-w-0: without it this column grows to fit its widest line of text that does not
+              wrap (a long title that should be cut short), and on a phone the whole page, header
+              included, becomes wider than the screen. */}
+          <div className="flex min-w-0 flex-1 flex-col" data-testid="dashboard-content">
             <header className="flex h-16 items-center gap-4 border-b px-4">
               <SidebarTrigger data-testid="mobile-menu-toggle" aria-label="Open navigation menu" />
               <div className="flex flex-1 items-center justify-end gap-4">

@@ -990,7 +990,8 @@ export default function SettingsPage() {
               <h4 className="font-medium">Communication Style</h4>
               <div className="space-y-2">
                 <Label>Tone</Label>
-                <div className="flex gap-4">
+                {/* Three choices in a row are wider than a narrow phone: they wrap. */}
+                <div className="flex flex-wrap gap-x-4 gap-y-2" data-testid="tone-options">
                   {(['formal', 'casual', 'encouraging'] as const).map((t) => (
                     <label key={t} className="flex items-center gap-2">
                       <input
@@ -1008,7 +1009,7 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Frequency</Label>
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-x-4 gap-y-2" data-testid="frequency-options">
                   {(['minimal', 'balanced', 'proactive'] as const).map((f) => (
                     <label key={f} className="flex items-center gap-2">
                       <input

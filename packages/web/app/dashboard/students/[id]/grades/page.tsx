@@ -96,15 +96,21 @@ export default function StudentGradesPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 gap-6 p-4" data-testid="student-grades-page">
-      <div className="w-32 shrink-0 lg:w-40">
+    // Below lg the course list sits above the grades: beside them it left the grades 170 px on a
+    // phone and 280 px on an upright tablet. On a phone the page adds no padding of its own to
+    // the layout's.
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-4 md:p-4 lg:flex-row lg:gap-6"
+      data-testid="student-grades-page"
+    >
+      <div className="lg:w-40 lg:shrink-0" data-testid="grades-course-list">
         <GradeSidebar
           courseGrades={courseGrades}
           selectedCourseId={selectedId}
           onSelectCourse={handleSelectCourse}
         />
       </div>
-      <div className="min-w-0 flex-1 space-y-4">
+      <div className="min-w-0 flex-1 space-y-4" data-testid="grades-content">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link href={`/dashboard/students/${studentId}`} data-testid="back-link">

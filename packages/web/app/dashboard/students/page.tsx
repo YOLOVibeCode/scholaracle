@@ -72,12 +72,16 @@ export default function StudentsPage() {
       {actionError && (
         <ErrorDisplay error={actionError} title="Error" onRetry={() => void loadStudents()} />
       )}
-      <div className="flex items-center justify-between">
+      {/* The title and the two buttons are wider than a phone screen: the buttons go under it. */}
+      <div
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3"
+        data-testid="students-header"
+      >
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Students</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your students</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canShare && (
             <Button variant="outline" data-testid="button-share" onClick={() => setShareOpen(true)}>
               <UserPlus className="mr-2 h-4 w-4" />
