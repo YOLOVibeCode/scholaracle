@@ -44,9 +44,14 @@ export function GradeSidebar({
     );
   }
 
+  // On a phone and an upright tablet the courses are a strip above the grades that scrolls
+  // sideways; from lg up they are the column beside them. Each course keeps a readable width in
+  // the strip.
+  const itemWidth = 'w-28 shrink-0 lg:w-full lg:shrink';
+
   return (
     <nav
-      className="flex flex-col gap-1 overflow-y-auto rounded-lg border bg-muted/20 p-2"
+      className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/20 p-2 lg:flex-col lg:overflow-y-auto"
       aria-label="Course grades"
       data-testid="grade-sidebar"
     >
@@ -83,7 +88,7 @@ export function GradeSidebar({
               type="button"
               key={course.courseExternalId}
               onClick={() => onSelectCourse(course.courseExternalId)}
-              className={`flex w-full flex-col rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/50 ${riskBorder} ${
+              className={`flex ${itemWidth} flex-col rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/50 ${riskBorder} ${
                 isSelected ? 'bg-muted/60 ring-1 ring-primary' : ''
               }`}
               data-testid={`grade-sidebar-course-${course.courseExternalId}`}
@@ -97,7 +102,7 @@ export function GradeSidebar({
         return (
           <div
             key={course.courseExternalId}
-            className={`flex w-full flex-col rounded-md px-2 py-2 ${riskBorder}`}
+            className={`flex ${itemWidth} flex-col rounded-md px-2 py-2 ${riskBorder}`}
             data-testid={`grade-sidebar-course-${course.courseExternalId}`}
           >
             {content}

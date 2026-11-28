@@ -79,4 +79,15 @@ describe('StudentDataSourcesTab', () => {
       expect(screen.getByTestId('button-connect-source')).toBeInTheDocument();
     });
   });
+
+  // The two buttons side by side are wider than a phone screen.
+  it('lets the two connect buttons wrap on a narrow screen', async () => {
+    listMock.mockResolvedValue([]);
+    render(<StudentDataSourcesTab studentId="stu-1" />);
+
+    const actions = await screen.findByTestId('sources-actions');
+    expect(actions).toHaveClass('flex-wrap');
+    expect(actions).toContainElement(screen.getByTestId('button-connect-to-integration'));
+    expect(actions).toContainElement(screen.getAllByTestId('button-connect-source')[0]);
+  });
 });

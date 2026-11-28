@@ -71,7 +71,7 @@ export default function StudentViewAlertsPage() {
         <p className="text-gray-600 dark:text-gray-400">Your notifications</p>
       </div>
 
-      <div role="tablist" aria-label="Alert Filters" className="flex gap-2" data-testid="alert-filters">
+      <div role="tablist" aria-label="Alert Filters" className="flex flex-wrap gap-2" data-testid="alert-filters">
         <button
           role="tab"
           aria-selected={activeFilter === 'all'}
@@ -131,12 +131,20 @@ export default function StudentViewAlertsPage() {
                 return (
                   <Card key={alert.id} data-testid="alert-item">
                     <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
-                          <Icon className={`h-5 w-5 mt-0.5 ${colorClass.split(' ')[0]}`} />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <CardTitle className="text-lg">{alert.type}</CardTitle>
+                      {/* The type is one long word. On a phone the button goes under the text
+                          instead of being pushed off the screen. */}
+                      <div
+                        className="flex flex-wrap items-start justify-between gap-2"
+                        data-testid="alert-row"
+                      >
+                        <div
+                          className="flex min-w-0 flex-1 basis-48 items-start gap-3"
+                          data-testid="alert-text"
+                        >
+                          <Icon className={`h-5 w-5 mt-0.5 shrink-0 ${colorClass.split(' ')[0]}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <CardTitle className="min-w-0 break-words text-lg">{alert.type}</CardTitle>
                               <Badge className={colorClass} data-testid="alert-severity">
                                 {alert.severity}
                               </Badge>
@@ -177,10 +185,10 @@ export default function StudentViewAlertsPage() {
                   <Card key={alert.id} className="opacity-60" data-testid="alert-item">
                     <CardHeader>
                       <div className="flex items-start gap-3">
-                        <Icon className={`h-5 w-5 mt-0.5 ${colorClass.split(' ')[0]}`} />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <CardTitle className="text-lg">{alert.type}</CardTitle>
+                        <Icon className={`h-5 w-5 mt-0.5 shrink-0 ${colorClass.split(' ')[0]}`} />
+                        <div className="min-w-0 flex-1" data-testid="alert-text-acknowledged">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <CardTitle className="min-w-0 break-words text-lg">{alert.type}</CardTitle>
                             <Badge className={colorClass}>{alert.severity}</Badge>
                             <Badge variant="outline">Acknowledged</Badge>
                           </div>
