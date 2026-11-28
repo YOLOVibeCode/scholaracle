@@ -11,10 +11,14 @@ export interface ISourceCourse {
   readonly provider: string;
   readonly title: string;
   readonly teacherName?: string;
+  /** Other teachers a source lists on the class (co-teachers, assistant coaches). */
+  readonly coTeacherNames?: readonly string[];
   readonly period?: string;
   readonly courseCode?: string;
   readonly grade?: number;
   readonly letterGrade?: string;
+  /** Courses of different students are never merged. */
+  readonly studentExternalId?: string;
 }
 
 export interface IMergedCourse {
@@ -30,6 +34,11 @@ export interface IMergedCourse {
   readonly period?: string;
   /** Which source is considered authoritative for grades. */
   readonly primarySourceId: string;
+  /**
+   * IDs this class had before sources that name it differently were joined on period and
+   * teacher. Data saved under one of these IDs belongs to this class.
+   */
+  readonly aliasMergedIds?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +48,13 @@ export interface IMergedCourse {
 interface IAnnotatedCourse {
   readonly source: ISourceCourse;
   readonly reconciled: IReconciledCourse;
-  readonly matchKey: string;
+}
+
+/** Courses that share a title, after conflicting periods and teachers were split apart. */
+interface ISubGroup {
+  readonly members: readonly IAnnotatedCourse[];
+  readonly mergedId: string;
+  readonly sourceKeys: ReadonlySet<string>;
 }
 
 function buildMatchKey(reconciled: IReconciledCourse): string {
@@ -80,6 +95,63 @@ function teacherToken(name: string): string {
   if (parts.length > 1) return parts[parts.length - 1]!;
   // Single word (username like "nchang"): return as-is for substring matching
   return lower;
+}
+
+const HONORIFICS = new Set(['mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'prof', 'coach', 'sr', 'sra']);
+const PLACEHOLDER_TEACHERS = new Set(['staff', 'tba', 'tbd', 'teacher', 'unknown', 'none', 'na']);
+
+interface ITeacherName {
+  readonly surnames: readonly string[];
+  readonly givenInitial?: string;
+  /** One word: a bare surname ("Mrs. Rivera") or a login ("arivera"). */
+  readonly bare: boolean;
+}
+
+function nameWords(text: string): string[] {
+  return text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f'’]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((w) => w !== '' && !HONORIFICS.has(w));
+}
+
+function parseTeacherName(raw: string): ITeacherName | undefined {
+  const comma = raw.indexOf(',');
+  const words = nameWords(comma >= 0 ? raw.slice(0, comma) : raw);
+  if (words.length === 0 || words.every((w) => PLACEHOLDER_TEACHERS.has(w))) return undefined;
+  if (comma >= 0) {
+    return { surnames: words, givenInitial: nameWords(raw.slice(comma + 1))[0]?.[0], bare: false };
+  }
+  if (words.length === 1) return { surnames: words, bare: true };
+  return { surnames: words.slice(1), givenInitial: words[0]![0], bare: false };
+}
+
+function bareMatches(bare: string, name: ITeacherName): boolean {
+  return name.surnames.some((surname) => {
+    if (bare === surname) return true;
+    if (surname.length < 4 || !bare.includes(surname)) return false;
+    const prefix = bare.slice(0, bare.indexOf(surname));
+    return prefix === '' || name.givenInitial == null || prefix[0] === name.givenInitial;
+  });
+}
+
+/**
+ * Whether two renderings of a teacher's name ("Rivera, Ana", "Ana Rivera", "Mrs. Rivera",
+ * "arivera") can be the same person: a shared surname, and no conflicting first initial.
+ * Placeholders such as "Staff" never agree with anything.
+ */
+export function teachersAgree(a: string, b: string): boolean {
+  const x = parseTeacherName(a);
+  const y = parseTeacherName(b);
+  if (x == null || y == null) return false;
+  if (x.bare && y.bare) return bareMatches(x.surnames[0]!, y) || bareMatches(y.surnames[0]!, x);
+  if (x.bare) return bareMatches(x.surnames[0]!, y);
+  if (y.bare) return bareMatches(y.surnames[0]!, x);
+  if (!x.surnames.some((s) => y.surnames.includes(s))) return false;
+  return x.givenInitial == null || y.givenInitial == null || x.givenInitial === y.givenInitial;
 }
 
 function firstDefined<T>(
@@ -142,16 +214,115 @@ function splitConflicting(group: readonly IAnnotatedCourse[]): IAnnotatedCourse[
   return subGroups;
 }
 
+/** `idScope` is empty for a single student, so those IDs never change. */
 function buildMergedId(
   matchKey: string,
   subGroup: readonly IAnnotatedCourse[],
-  wasSplit: boolean
+  wasSplit: boolean,
+  idScope: string
 ): string {
-  if (!wasSplit) return hashKey(matchKey);
+  if (!wasSplit) return hashKey(`${idScope}${matchKey}`);
 
   const teacher = firstDefined(subGroup, effectiveTeacher)?.toLowerCase() ?? '';
   const period = firstDefined(subGroup, effectivePeriod) ?? '';
-  return hashKey(`${matchKey}|${teacher}|${period}`);
+  return hashKey(`${idScope}${matchKey}|${teacher}|${period}`);
+}
+
+function sourceKey(a: IAnnotatedCourse): string {
+  return a.source.sourceId || a.source.provider;
+}
+
+function sharesSource(a: ISubGroup, b: ISubGroup): boolean {
+  for (const key of a.sourceKeys) {
+    if (b.sourceKeys.has(key)) return true;
+  }
+  return false;
+}
+
+/** "2", "p02", "2nd" and "Period 2" all name period 2. */
+function periodKey(period: string): string {
+  return normalizePeriod(period.trim().replace(/^period\s*/i, '')).replace(
+    /^(\d+)(?:st|nd|rd|th)$/,
+    '$1'
+  );
+}
+
+/** The one period that every member naming a period agrees on. */
+function classPeriod(members: readonly IAnnotatedCourse[]): string | undefined {
+  const periods = new Set<string>();
+  for (const m of members) {
+    const period = m.source.period?.trim() || m.reconciled.period?.toString();
+    if (period) periods.add(periodKey(period));
+  }
+  return periods.size === 1 ? [...periods][0] : undefined;
+}
+
+function teacherNames(members: readonly IAnnotatedCourse[]): string[] {
+  const names = new Set<string>();
+  for (const m of members) {
+    const listed = [
+      m.source.teacherName,
+      m.reconciled.teacherName,
+      ...(m.source.coTeacherNames ?? []),
+    ];
+    for (const name of listed) {
+      if (name?.trim()) names.add(name);
+    }
+  }
+  return [...names];
+}
+
+/** Different sources, one shared period, and a teacher both sides agree on. */
+function canJoin(x: ISubGroup, y: ISubGroup): boolean {
+  if (sharesSource(x, y)) return false;
+  const period = classPeriod(x.members);
+  if (period == null || period !== classPeriod(y.members)) return false;
+  const yTeachers = teacherNames(y.members);
+  return teacherNames(x.members).some((t) => yTeachers.some((u) => teachersAgree(t, u)));
+}
+
+/**
+ * Join sub-groups that are one class named differently by different sources. A pair joins only
+ * when neither side has a rival candidate from the same source, and a joined class never holds
+ * two classes from one source. Returns the classes in order of first appearance.
+ */
+function joinOnPeriodAndTeacher(subGroups: readonly ISubGroup[]): ISubGroup[][] {
+  const candidates = subGroups.map((x, i) =>
+    subGroups.flatMap((y, j) => (j !== i && canJoin(x, y) ? [j] : []))
+  );
+  const unrivalled = (i: number, j: number): boolean =>
+    candidates[i]!.every((k) => k === j || !sharesSource(subGroups[k]!, subGroups[j]!));
+
+  const parent = subGroups.map((_, i) => i);
+  const sourceKeys = subGroups.map((s) => new Set(s.sourceKeys));
+  const find = (i: number): number => {
+    let root = i;
+    while (parent[root] !== root) root = parent[root]!;
+    return root;
+  };
+
+  for (let i = 0; i < subGroups.length; i++) {
+    for (const j of candidates[i]!) {
+      if (j < i || !unrivalled(i, j) || !unrivalled(j, i)) continue;
+      const rootI = find(i);
+      const rootJ = find(j);
+      if (rootI === rootJ || [...sourceKeys[rootJ]!].some((k) => sourceKeys[rootI]!.has(k))) {
+        continue;
+      }
+      const [root, child] = rootI < rootJ ? [rootI, rootJ] : [rootJ, rootI];
+      parent[child] = root;
+      for (const key of sourceKeys[child]!) sourceKeys[root]!.add(key);
+    }
+  }
+
+  const classes = new Map<number, ISubGroup[]>();
+  subGroups.forEach((sub, i) => {
+    const root = find(i);
+    const members = classes.get(root) ?? [];
+    members.push(sub);
+    classes.set(root, members);
+  });
+  return [...classes.values()];
 }
 
 /**
@@ -171,10 +342,38 @@ function getSourcePriority(provider: string): number {
   return SOURCE_PRIORITY[provider] ?? 1;
 }
 
+/**
+ * The sub-group whose ID and title a joined class keeps: the gradebook of record first, then
+ * one with a grade, then the smallest ID so the choice does not depend on input order.
+ */
+function pickAnchor(joined: readonly ISubGroup[]): ISubGroup {
+  const rank = (sub: ISubGroup): readonly [number, number] => [
+    Math.max(...sub.members.map((m) => getSourcePriority(m.source.provider))),
+    sub.members.some((m) => m.source.grade != null) ? 1 : 0,
+  ];
+  return [...joined].sort((a, b) => {
+    const [priorityA, gradedA] = rank(a);
+    const [priorityB, gradedB] = rank(b);
+    if (priorityA !== priorityB) return priorityB - priorityA;
+    if (gradedA !== gradedB) return gradedB - gradedA;
+    return a.mergedId < b.mergedId ? -1 : 1;
+  })[0]!;
+}
+
+function buildJoinedCourse(joined: readonly ISubGroup[]): IMergedCourse {
+  const anchor = pickAnchor(joined);
+  const others = joined.filter((sub) => sub !== anchor);
+  return buildMergedCourse(
+    [...anchor.members, ...others.flatMap((sub) => sub.members)],
+    anchor.mergedId,
+    others.map((sub) => sub.mergedId).sort()
+  );
+}
+
 function buildMergedCourse(
   subGroup: readonly IAnnotatedCourse[],
-  matchKey: string,
-  wasSplit: boolean
+  mergedId: string,
+  aliasMergedIds: readonly string[]
 ): IMergedCourse {
   const first = subGroup[0]!;
   const sources = subGroup.map((a) => a.source);
@@ -204,7 +403,7 @@ function buildMergedCourse(
   }
 
   return {
-    mergedId: buildMergedId(matchKey, subGroup, wasSplit),
+    mergedId,
     normalizedTitle: first.reconciled.normalizedTitle,
     subject: first.reconciled.subject,
     isAP: first.reconciled.isAP,
@@ -215,7 +414,34 @@ function buildMergedCourse(
     teacherName: firstDefined(subGroup, effectiveTeacher),
     period: firstDefined(subGroup, effectivePeriod),
     primarySourceId: primarySource.source.sourceId,
+    ...(aliasMergedIds.length > 0 ? { aliasMergedIds } : {}),
   };
+}
+
+function mergeOneStudent(courses: readonly ISourceCourse[], idScope: string): IMergedCourse[] {
+  const groups = new Map<string, IAnnotatedCourse[]>();
+  for (const source of courses) {
+    const reconciled = reconcileCourse(source.title, source.teacherName);
+    const matchKey = buildMatchKey(reconciled);
+    const list = groups.get(matchKey) ?? [];
+    list.push({ source, reconciled });
+    groups.set(matchKey, list);
+  }
+
+  const subGroups: ISubGroup[] = [];
+  for (const [matchKey, group] of groups) {
+    const parts = splitConflicting(group);
+    const wasSplit = parts.length > 1;
+    for (const members of parts) {
+      subGroups.push({
+        members,
+        mergedId: buildMergedId(matchKey, members, wasSplit, idScope),
+        sourceKeys: new Set(members.map(sourceKey)),
+      });
+    }
+  }
+
+  return joinOnPeriodAndTeacher(subGroups).map(buildJoinedCourse);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,36 +452,33 @@ function buildMergedCourse(
  * Merge courses from multiple sources into unified groups.
  *
  * Algorithm:
- * 1. Reconcile each title via `reconcileCourse()`.
- * 2. Group by match key: `normalizedTitle | subject.area | subject.subArea`.
- * 3. Within each group, split when both period and teacher differ
+ * 1. When the courses name more than one student, merge each student's courses on their own
+ *    (courses without a student form one more group) and scope the IDs to the student.
+ * 2. Reconcile each title via `reconcileCourse()`.
+ * 3. Group by match key: `normalizedTitle | subject.area | subject.subArea`.
+ * 4. Within each group, split when both period and teacher differ
  *    (indicates genuinely different courses that happened to normalize the same).
- * 4. Build an {@link IMergedCourse} per resulting sub-group.
+ * 5. Join groups from different sources that share one period and a teacher (one class the
+ *    gradebook and a class feed name differently). The joined class keeps the gradebook's ID
+ *    and lists the others in `aliasMergedIds`.
+ * 6. Build an {@link IMergedCourse} per resulting class.
  */
 export function mergeCourses(courses: readonly ISourceCourse[]): readonly IMergedCourse[] {
   if (courses.length === 0) return [];
 
-  const annotated: IAnnotatedCourse[] = courses.map((source) => {
-    const reconciled = reconcileCourse(source.title, source.teacherName);
-    return { source, reconciled, matchKey: buildMatchKey(reconciled) };
-  });
-
-  const groups = new Map<string, IAnnotatedCourse[]>();
-  for (const a of annotated) {
-    const list = groups.get(a.matchKey) ?? [];
-    list.push(a);
-    groups.set(a.matchKey, list);
+  const students = new Set(courses.map((c) => c.studentExternalId).filter(Boolean));
+  const byStudent = new Map<string, ISourceCourse[]>();
+  for (const course of courses) {
+    const student = students.size > 1 ? (course.studentExternalId ?? '') : '';
+    const list = byStudent.get(student) ?? [];
+    list.push(course);
+    byStudent.set(student, list);
   }
 
   const result: IMergedCourse[] = [];
-  for (const [matchKey, group] of groups) {
-    const subGroups = splitConflicting(group);
-    const wasSplit = subGroups.length > 1;
-    for (const sub of subGroups) {
-      result.push(buildMergedCourse(sub, matchKey, wasSplit));
-    }
+  for (const [student, list] of byStudent) {
+    result.push(...mergeOneStudent(list, student ? `${student}|` : ''));
   }
-
   return result;
 }
 

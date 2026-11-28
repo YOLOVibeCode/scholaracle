@@ -213,6 +213,123 @@ describe('runBatchMaterialMatching', () => {
     expect(result.llmCallCount).toBe(0);
   });
 
+  it("offers each student's files only that student's assignments when siblings share a class name", async () => {
+    const complete = jest.fn().mockResolvedValue({
+      content: '[]',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    const llm = { complete } as unknown as LlmClient;
+
+    const materials = [
+      {
+        externalId: 'mat-a',
+        userId: 'user-1',
+        studentExternalId: 'stu-a',
+        courseExternalId: 'course-a',
+        record: { title: 'Glaze notes.pdf' },
+      },
+      {
+        externalId: 'mat-b',
+        userId: 'user-1',
+        studentExternalId: 'stu-b',
+        courseExternalId: 'course-b',
+        record: { title: 'Kiln log.pdf' },
+      },
+    ];
+    const courses = [
+      {
+        externalId: 'course-a',
+        userId: 'user-1',
+        studentExternalId: 'stu-a',
+        provider: 'canvas',
+        sourceId: 'src-a',
+        record: { title: 'Pottery' },
+      },
+      {
+        externalId: 'course-b',
+        userId: 'user-1',
+        studentExternalId: 'stu-b',
+        provider: 'canvas',
+        sourceId: 'src-b',
+        record: { title: 'Pottery' },
+      },
+    ];
+    const assignments = [
+      {
+        externalId: 'asg-a',
+        userId: 'user-1',
+        studentExternalId: 'stu-a',
+        courseExternalId: 'course-a',
+        record: { title: 'Glaze test' },
+      },
+      {
+        externalId: 'asg-b',
+        userId: 'user-1',
+        studentExternalId: 'stu-b',
+        courseExternalId: 'course-b',
+        record: { title: 'Kiln firing' },
+      },
+    ];
+    const matchesFilter = (doc: Record<string, unknown>, filter: Record<string, unknown>) =>
+      Object.entries(filter).every(([field, want]) => {
+        if (field === 'deletedAt') return true;
+        if (want != null && typeof want === 'object' && '$in' in want) {
+          return (want as { $in: unknown[] }).$in.includes(doc[field]);
+        }
+        return doc[field] === want;
+      });
+
+    const database = {
+      collection: (name: string) => {
+        if (name === 'consents') {
+          return mockConsentsCollection('user-1');
+        }
+        if (name === 'slc_course_materials') {
+          return {
+            find: () => ({ toArray: async () => materials }),
+            updateOne: jest.fn().mockResolvedValue({}),
+          };
+        }
+        const docs: Record<string, unknown>[] | undefined =
+          name === 'slc_courses' ? courses : name === 'slc_assignments' ? assignments : undefined;
+        if (docs) {
+          return {
+            find: (filter: Record<string, unknown>) => ({
+              project: () => ({
+                toArray: async () => docs.filter((d) => matchesFilter(d, filter)),
+              }),
+            }),
+          };
+        }
+        throw new Error(`unexpected ${name}`);
+      },
+    };
+
+    await runBatchMaterialMatching({
+      database: database as never,
+      userId: 'user-1',
+      llmClient: llm,
+    });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    const prompt = (complete.mock.calls[0]![0] as Array<{ content: string }>)[0]!.content;
+    const payload = JSON.parse(prompt.slice(prompt.indexOf('['))) as Array<{
+      assignments: Array<{ id: string }>;
+      files: Array<{ id: string }>;
+    }>;
+    const offered = payload.map((c) => ({
+      files: c.files.map((f) => f.id),
+      assignments: c.assignments.map((a) => a.id),
+    }));
+    expect(offered).toEqual(
+      expect.arrayContaining([
+        { files: ['mat-a'], assignments: ['asg-a'] },
+        { files: ['mat-b'], assignments: ['asg-b'] },
+      ])
+    );
+    expect(offered).toHaveLength(2);
+  });
+
   it('skips LLM when server AI consent is off', async () => {
     const complete = jest.fn();
     const llm = { complete } as unknown as LlmClient;

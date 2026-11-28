@@ -31,7 +31,9 @@ Scholaracle aggregates academic data from multiple sources per student. When dat
 
 When merging courses from multiple sources:
 
-1. **Match courses** by normalized title, subject, teacher, and period
+1. **Match courses** by normalized title, subject, teacher, and period. Courses of different
+   students never merge. A class that two sources name differently joins when both give the
+   same period and teacher; the joined class keeps the SIS course's merged ID.
 2. **Select primary source** using this logic:
    - Sort sources by priority (SIS > LMS)
    - Within the same priority tier, prefer sources with grade data
@@ -68,6 +70,7 @@ The reconciliation engine normalizes period formats to match courses across syst
 - `"p04"` (Canvas) ↔ `"4"` (Skyward)
 - `"p05"` ↔ `"5C"`
 - Ignores case and leading zeros
+- `"2nd"` and `"Period 2"` ↔ `"2"` when joining a class that two sources name differently
 
 ---
 

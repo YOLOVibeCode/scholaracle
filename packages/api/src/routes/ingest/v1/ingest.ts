@@ -62,13 +62,11 @@ import { IngestMissingBindingError } from '../../../services/ingest/IngestMissin
 import { INGEST_MISSING_BINDING_CODE } from '@scholaracle/contracts';
 import type { MongoQueue } from '@scholaracle/agents';
 import { AssetRepository } from '../../../services/assets/AssetRepository';
+import type { IAssignmentMatch, ISourceCourse } from '@scholaracle/connector';
 import {
-  mergeCourses,
-  reconcileAssignments,
-  type IAssignmentForReconciliation,
-  type IAssignmentMatch,
-  type ISourceCourse,
-} from '@scholaracle/connector';
+  reconcileAssignmentsByStudent,
+  type IStudentAssignment,
+} from '../../../services/courses/reconcileAssignmentsByStudent';
 import { logger } from '../../../logger';
 
 /** Reject ingest that lacks a portal-account binding only once bindings are backfilled. */
@@ -253,7 +251,7 @@ function validateOp(op: ISlcDeltaOp): { valid: boolean; error?: string } {
   return { valid: true };
 }
 
-/** Run assignment reconciliation (Canvas missing vs Skyward graded) and persist to slc_assignment_reconciliation. */
+/** Run assignment reconciliation (Canvas missing vs Skyward graded) per student and persist to slc_assignment_reconciliation. */
 async function runAssignmentReconciliation(params: {
   readonly database: Db;
   readonly userId: string;
@@ -262,7 +260,7 @@ async function runAssignmentReconciliation(params: {
     .collection('slc_courses')
     .find({ userId: params.userId, deletedAt: null })
     .toArray();
-  const sources: ISourceCourse[] = courseDocs.map((c) => {
+  const courses: ISourceCourse[] = courseDocs.map((c) => {
     const rec = (c['record'] as Record<string, unknown>) ?? {};
     return {
       externalId: (c['externalId'] as string) ?? '',
@@ -271,30 +269,22 @@ async function runAssignmentReconciliation(params: {
       title: (rec['title'] as string) ?? (rec['name'] as string) ?? '',
       teacherName: rec['teacherName'] as string | undefined,
       period: rec['period'] as string | undefined,
+      studentExternalId: (c['studentExternalId'] as string | null) ?? undefined,
     };
   });
-  const merged = mergeCourses(sources);
-  const extIdToMergedId = new Map<string, string>();
-  for (const group of merged) {
-    for (const src of group.sources) {
-      extIdToMergedId.set(src.externalId, group.mergedId);
-    }
-  }
 
   const assignmentDocs = await params.database
     .collection('slc_assignments')
     .find({ userId: params.userId, deletedAt: null })
     .toArray();
 
-  const toForReconciliation = (doc: Record<string, unknown>): IAssignmentForReconciliation => {
+  const toForReconciliation = (doc: Record<string, unknown>): IStudentAssignment => {
     const rec = (doc['record'] as Record<string, unknown>) ?? {};
-    const courseExtId = (doc['courseExternalId'] as string) ?? '';
-    const mergedCourseId = extIdToMergedId.get(courseExtId) ?? courseExtId;
     return {
       externalId: (doc['externalId'] as string) ?? '',
       title: (rec['title'] as string) ?? '',
-      courseExternalId: courseExtId,
-      mergedCourseId,
+      courseExternalId: (doc['courseExternalId'] as string) ?? '',
+      studentExternalId: (doc['studentExternalId'] as string | null) ?? undefined,
       status: (rec['status'] as string) ?? '',
       dueAt: rec['dueAt'] as string | undefined,
       pointsPossible: rec['pointsPossible'] as number | undefined,
@@ -325,7 +315,7 @@ async function runAssignmentReconciliation(params: {
     )
     .map((d) => toForReconciliation(d as Record<string, unknown>));
 
-  const matches = reconcileAssignments(lms, sis);
+  const matches = reconcileAssignmentsByStudent({ courses, lms, sis });
   const now = new Date();
 
   // Log reconciliation summary to activity log

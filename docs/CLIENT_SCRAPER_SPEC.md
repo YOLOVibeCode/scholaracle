@@ -221,8 +221,11 @@ Layer 1  Subject classification
 
 Layer 2  Cross-provider course merge
          packages/connector/.../course-reconciler.ts
+         Never across students (studentExternalId)
          Group by normalizedTitle|area|subArea
          Split when BOTH period AND teacher differ
+         Join groups from different sources that share one period and a
+         teacher (one class named differently); keeps the SIS group's mergedId
          mergedId = 12-char hash (grades API only)
 
 Layer 3  Material → assignment (same course, same provider)
