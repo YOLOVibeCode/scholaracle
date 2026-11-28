@@ -1,4 +1,9 @@
-import { mergeCourses, titleSimilarity, type ISourceCourse } from './course-reconciler';
+import {
+  mergeCourses,
+  teachersAgree,
+  titleSimilarity,
+  type ISourceCourse,
+} from './course-reconciler';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -14,6 +19,28 @@ function makeSource(
     ...overrides,
   };
 }
+
+/** One class as the gradebook names it and as the school's class feed names it. */
+const sisBand = makeSource({
+  provider: 'aeries',
+  title: 'CHAMBER WINDS',
+  teacherName: 'Rivera, Ana',
+  period: '2',
+  grade: 96,
+  letterGrade: 'A',
+});
+const feedBand = makeSource({
+  provider: 'parentsquare',
+  title: 'Jazz Band',
+  teacherName: 'Ana Rivera',
+  period: '2',
+});
+const pottery = makeSource({
+  provider: 'canvas',
+  title: 'Pottery',
+  teacherName: 'Tomas Okafor',
+  period: '4',
+});
 
 // ---------------------------------------------------------------------------
 // mergeCourses
@@ -209,6 +236,193 @@ describe('mergeCourses', () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]!.primarySourceId).toBe('src-skyward');
+  });
+});
+
+describe('mergeCourses — one class named differently by two sources', () => {
+  it('joins the class when period and teacher agree', () => {
+    const merged = mergeCourses([sisBand, feedBand]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.sources.map((s) => s.provider).sort()).toEqual(['aeries', 'parentsquare']);
+  });
+
+  it('keeps the ID and title of the gradebook source and lists the other ID as an alias', () => {
+    const sisAlone = mergeCourses([sisBand])[0]!;
+    const feedAlone = mergeCourses([feedBand])[0]!;
+
+    const joined = mergeCourses([feedBand, sisBand]);
+
+    expect(joined).toHaveLength(1);
+    expect(joined[0]!.mergedId).toBe(sisAlone.mergedId);
+    expect(joined[0]!.normalizedTitle).toBe(sisAlone.normalizedTitle);
+    expect(joined[0]!.aliasMergedIds).toEqual([feedAlone.mergedId]);
+    expect(joined[0]!.primarySourceId).toBe('src-aeries');
+    expect(joined[0]!.bestGrade).toBe(96);
+  });
+
+  it('joins on a co-teacher that the other source lists', () => {
+    const sisTeam = makeSource({
+      provider: 'aeries',
+      title: 'FENCING 8TH PERIOD',
+      teacherName: 'Okafor, Tomas',
+      period: '8',
+    });
+    const feedTeam = makeSource({
+      provider: 'parentsquare',
+      title: 'Archery',
+      teacherName: 'Ana Lindqvist',
+      coTeacherNames: ['Tomas Okafor', 'Ana Moreno'],
+      period: '8',
+    });
+
+    expect(mergeCourses([sisTeam, feedTeam])).toHaveLength(1);
+  });
+
+  it('joins when one source writes the period as an ordinal', () => {
+    expect(mergeCourses([sisBand, { ...feedBand, period: '2nd' }])).toHaveLength(1);
+  });
+
+  it('does not join when the teachers differ', () => {
+    const merged = mergeCourses([sisBand, { ...feedBand, teacherName: 'Ana Moreno' }]);
+
+    expect(merged).toHaveLength(2);
+    expect(merged.every((m) => m.aliasMergedIds === undefined)).toBe(true);
+  });
+
+  it('does not join when the periods differ', () => {
+    expect(mergeCourses([sisBand, { ...feedBand, period: '5' }])).toHaveLength(2);
+  });
+
+  it('does not join when one side has no period', () => {
+    expect(mergeCourses([sisBand, { ...feedBand, period: undefined }])).toHaveLength(2);
+  });
+
+  it('does not join two classes from the same source', () => {
+    const stagecraft = makeSource({
+      provider: 'aeries',
+      title: 'STAGECRAFT',
+      teacherName: 'Rivera, Ana',
+      period: '2',
+    });
+
+    expect(mergeCourses([sisBand, stagecraft])).toHaveLength(2);
+  });
+
+  it('does not guess when the other source has two candidate classes', () => {
+    const secondFeedClass = makeSource({
+      provider: 'parentsquare',
+      title: 'Stagecraft',
+      teacherName: 'Ana Rivera',
+      period: '2',
+    });
+
+    expect(mergeCourses([sisBand, feedBand, secondFeedClass])).toHaveLength(3);
+  });
+
+  it('does not treat a placeholder teacher as a match', () => {
+    const merged = mergeCourses([
+      { ...sisBand, teacherName: 'Staff' },
+      { ...feedBand, teacherName: 'Staff' },
+    ]);
+
+    expect(merged).toHaveLength(2);
+  });
+
+  it('leaves the IDs of classes that are not joined unchanged', () => {
+    const alone = mergeCourses([pottery])[0]!.mergedId;
+
+    const merged = mergeCourses([sisBand, pottery, feedBand]);
+
+    expect(merged.find((m) => m.sources.includes(pottery))?.mergedId).toBe(alone);
+  });
+});
+
+describe('mergeCourses — students', () => {
+  it("never merges two students' classes, even with the same name and teacher", () => {
+    const merged = mergeCourses([
+      { ...pottery, externalId: 'ext-a', studentExternalId: 'stu-a' },
+      { ...pottery, externalId: 'ext-b', studentExternalId: 'stu-b' },
+    ]);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]!.mergedId).not.toBe(merged[1]!.mergedId);
+    expect(merged.map((m) => m.sources.map((s) => s.studentExternalId))).toEqual([
+      ['stu-a'],
+      ['stu-b'],
+    ]);
+  });
+
+  it('never joins on period and teacher across students', () => {
+    const merged = mergeCourses([
+      { ...sisBand, studentExternalId: 'stu-a' },
+      { ...feedBand, studentExternalId: 'stu-b' },
+    ]);
+
+    expect(merged).toHaveLength(2);
+  });
+
+  it('gives one student the same IDs whether or not the student is named', () => {
+    const courses = [sisBand, pottery];
+
+    const unnamed = mergeCourses(courses).map((m) => m.mergedId);
+    const named = mergeCourses(courses.map((c) => ({ ...c, studentExternalId: 'stu-a' }))).map(
+      (m) => m.mergedId
+    );
+
+    expect(named).toEqual(unnamed);
+  });
+
+  it('merges a course saved without a student into the only named student', () => {
+    const merged = mergeCourses([
+      makeSource({ provider: 'canvas', title: 'Pottery', studentExternalId: 'stu-a' }),
+      makeSource({ provider: 'skyward', title: 'POTTERY' }),
+    ]);
+
+    expect(merged).toHaveLength(1);
+  });
+
+  it('keeps IDs unique when unnamed courses sit beside several students', () => {
+    const merged = mergeCourses([
+      { ...pottery, externalId: 'ext-a', studentExternalId: 'stu-a' },
+      { ...pottery, externalId: 'ext-b', studentExternalId: 'stu-b' },
+      makeSource({ provider: 'skyward', title: 'POTTERY', externalId: 'ext-legacy' }),
+    ]);
+
+    const ids = merged.map((m) => m.mergedId);
+    expect(merged).toHaveLength(3);
+    expect(new Set(ids).size).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// teachersAgree
+// ---------------------------------------------------------------------------
+
+describe('teachersAgree', () => {
+  it.each([
+    ['Rivera, Ana', 'Ana Rivera'],
+    ['Rivera, A', 'Ana Rivera'],
+    ['Mrs. Rivera', 'Ana Rivera'],
+    ['Dr. Rivera', 'Rivera, Ana'],
+    ['arivera', 'Ana Rivera'],
+    ['ARIVERA', 'Rivera, Ana'],
+    ['Lindqvist Okafor, Ana', 'Ana Lindqvist Okafor'],
+    ['Ana Rivera', 'ana rivera'],
+  ])('treats "%s" and "%s" as the same teacher', (a, b) => {
+    expect(teachersAgree(a, b)).toBe(true);
+    expect(teachersAgree(b, a)).toBe(true);
+  });
+
+  it.each([
+    ['Rivera, Ana', 'Ben Rivera'],
+    ['Ana Rivera', 'Ana Moreno'],
+    ['Staff', 'Staff'],
+    ['TBA', 'TBA'],
+    ['', 'Ana Rivera'],
+  ])('does not treat "%s" and "%s" as the same teacher', (a, b) => {
+    expect(teachersAgree(a, b)).toBe(false);
+    expect(teachersAgree(b, a)).toBe(false);
   });
 });
 

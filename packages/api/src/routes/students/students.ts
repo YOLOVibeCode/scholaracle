@@ -61,6 +61,7 @@ import { signAssetUrl } from '../../services/assets/signedUrl';
 import { resolveApiBaseUrl, signOwnAssetAttachments } from './attachmentSigning';
 import { loadStudentMaterials } from '../../services/materials/loadStudentMaterials';
 import { buildMergedCourseScheduleMaps } from '../../services/courses/courseScheduleForGrades';
+import { adoptJoinedTutorialOverrides } from '../../services/courses/adoptJoinedTutorialOverrides';
 import { StudentProvisioner } from '../../services/provision/StudentProvisioner';
 import { MongoStudentLoginAudit } from '../../services/provision/MongoStudentLoginAudit';
 import { StudentMagicLink } from '../../services/provision/StudentMagicLink';
@@ -1508,9 +1509,13 @@ export function studentsRouter(config: IStudentsRouterConfig): Router {
         userId: dataUserId,
         studentId: studentDbIdStr,
       });
-      const tutorialOverrideByMerged = new Map(
-        tutorialOverrides.map((o) => [o.mergedCourseId, o] as const)
-      );
+      const tutorialOverrideByMerged = await adoptJoinedTutorialOverrides({
+        groups: mergedGroups,
+        overrides: tutorialOverrides,
+        repo: tutorialOverrideRepo,
+        userId: dataUserId,
+        studentId: studentDbIdStr,
+      });
       const mergedScheduleById = buildMergedCourseScheduleMaps({
         courseRecordsByExternalId,
         mergedIdToSources,

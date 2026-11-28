@@ -22,6 +22,15 @@ function assignmentListHash(assignments: readonly { id: string; title: string }[
   return hashPayload(normalized);
 }
 
+function studentOf(doc: Record<string, unknown>): string {
+  const student = doc['studentExternalId'];
+  return typeof student === 'string' ? student : '';
+}
+
+function studentCourseKey(student: string, courseExternalId: string): string {
+  return `${student}\u0000${courseExternalId}`;
+}
+
 function materialFingerprint(params: {
   readonly fileName: string;
   readonly extractedText: string | undefined;
@@ -71,7 +80,7 @@ export async function runBatchMaterialMatching(params: {
   ];
   const courseDocs = await coursesColl
     .find({ userId: params.userId, externalId: { $in: courseIds } })
-    .project({ externalId: 1, provider: 1, sourceId: 1, 'record.title': 1 })
+    .project({ externalId: 1, studentExternalId: 1, provider: 1, sourceId: 1, 'record.title': 1 })
     .toArray();
   const sourceCourses: ISourceCourse[] = courseDocs.map((c) => {
     const rec = (c['record'] as Record<string, unknown>) ?? {};
@@ -80,13 +89,14 @@ export async function runBatchMaterialMatching(params: {
       sourceId: (c['sourceId'] as string) ?? '',
       provider: (c['provider'] as string) ?? '',
       title: (rec['title'] as string) ?? '',
+      studentExternalId: studentOf(c) || undefined,
     };
   });
   const mergedGroups = mergeCourses(sourceCourses);
   const extToMerged = new Map<string, string>();
   for (const g of mergedGroups) {
     for (const s of g.sources) {
-      extToMerged.set(s.externalId, g.mergedId);
+      extToMerged.set(studentCourseKey(s.studentExternalId ?? '', s.externalId), g.mergedId);
     }
   }
 
@@ -96,21 +106,28 @@ export async function runBatchMaterialMatching(params: {
     files: { id: string; name: string; description?: string; fingerprint: string }[];
   }> = [];
 
-  const byMerged = new Map<string, typeof unmatched>();
+  const byMerged = new Map<
+    string,
+    { mergedCourseId: string; student: string; materials: typeof unmatched }
+  >();
   for (const m of unmatched) {
     const cid = m['courseExternalId'] as string;
-    const merged = extToMerged.get(cid) ?? cid;
-    if (!byMerged.has(merged)) byMerged.set(merged, []);
-    byMerged.get(merged)!.push(m);
+    const student = studentOf(m);
+    const mergedCourseId = extToMerged.get(studentCourseKey(student, cid)) ?? cid;
+    const key = studentCourseKey(student, mergedCourseId);
+    const group = byMerged.get(key) ?? { mergedCourseId, student, materials: [] };
+    group.materials.push(m);
+    byMerged.set(key, group);
   }
 
-  for (const [mergedCourseId, materials] of byMerged) {
+  for (const { mergedCourseId, student, materials } of byMerged.values()) {
     const courseExtIds = [...new Set(materials.map((m) => m['courseExternalId'] as string))];
     const assignments = await assignmentsColl
       .find({
         userId: params.userId,
         deletedAt: null,
         courseExternalId: { $in: courseExtIds },
+        ...(student ? { studentExternalId: student } : {}),
       })
       .project({ externalId: 1, 'record.title': 1 })
       .toArray();
